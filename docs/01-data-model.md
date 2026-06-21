@@ -1,0 +1,156 @@
+# 01 — Data Model (core domain)
+
+เอกสารนี้คือ **แกนกลาง** ของทั้งระบบ ทุก feature อ้างอิงโมเดลนี้
+
+## 1. โมเดลสินค้า 5 ชั้น
+
+```
+Channel listing   →   Sellable SKU   →   Bundle composition   →   Inventory item
+(ราย platform/acc)    (สิ่งที่ขาย)        (สูตรตัดสต๊อก)            (ของจริง: สต๊อก+ต้นทุน)
+        ↑
+     Product (กลุ่มสินค้าธุรกิจ)
+```
+
+| ชั้น | Entity | คำอธิบาย | เก็บสต๊อก? | เก็บต้นทุน? |
+|------|--------|----------|-----------|------------|
+| 1 | `Product` | กลุ่มสินค้าธุรกิจ (SPU) เช่น "A01 ชุดเสื้อผ้า" | ❌ | ❌ |
+| 2 | `SellableSku` | variant ที่ขายได้ เช่น `A01-เสื้อ+กระโปรง` | ❌ (คำนวณสด) | ❌ |
+| 3 | `BundleComponent` | บรรทัดสูตร: sellable ตัดอะไรกี่ชิ้น | — | — |
+| 4 | `InventoryItem` | ของจริงที่นับสต๊อก เช่น `เสื้อ A01` | ✅ | ✅ |
+| 5 | `ChannelListing` | แมป sellable → account บน platform (external IDs) | ❌ | ❌ |
+
+### กฎเหล็ก
+1. **ทุก SellableSku มี composition เสมอ** แม้ตัวเดี่ยว (`A01-เฉพาะเสื้อ` = เสื้อ A01 ×1) → โค้ดเส้นทางเดียว ไม่มี special case
+2. **SellableSku ไม่เก็บตัวเลขสต๊อก** → `available = min(floor(inventoryItem.available / qty))` ของทุก component
+3. **InventoryItem ↔ SellableSku เป็น many-to-many** ผ่าน `BundleComponent` (component ใช้ซ้ำข้าม sellable/product ได้)
+4. **ต้นทุนอยู่ที่ InventoryItem เท่านั้น** (weighted-average) → COGS ของ sellable = Σ(component.unitCost × qty)
+5. **Bundle เป็น virtual** (default) — ตัด component ตอนขาย ไม่ต้องมีสต๊อก "เซต" จริง
+
+## 2. Entities (ร่าง schema — Prisma-style, PostgreSQL)
+
+> ทุก entity ในโดเมนผูก `organizationId` (multi-tenant) ยกเว้น entity ระดับ platform/แพ็กเกจ
+
+### Tenancy & Auth
+```
+Organization   id, name, planId, createdAt
+User           id, email, passwordHash, ...
+Membership     id, organizationId, userId, role (OWNER|ADMIN|STAFF|ACCOUNTANT), permissions[]
+SubscriptionPlan / Subscription   (billing — ดู docs/02)
+```
+
+### Product / Inventory (โมเดล 5 ชั้น)
+```
+Product         id, orgId, code (A01), name, status
+SellableSku     id, orgId, productId, code (A01-เสื้อ+กระโปรง), name, barcode?,
+                basePrice (numeric)              // ราคาขายตั้งต้น (override ต่อ channel ได้)
+InventoryItem   id, orgId, sku (เสื้อ-A01), name,
+                avgUnitCost (numeric), trackStock (bool),
+                lowStockThreshold (int?)        // แตะแล้วเข้าโหมดระวัง/dynamic switching (docs/03)
+BundleComponent id, orgId, sellableSkuId, inventoryItemId, quantity (int)
+                @@unique([sellableSkuId, inventoryItemId])
+
+Warehouse       id, orgId, name, isDefault
+StockLevel      id, orgId, warehouseId, inventoryItemId,
+                onHand (int), reserved (int)        // available = onHand - reserved
+                @@unique([warehouseId, inventoryItemId])
+```
+
+### Stock ledger (immutable — audit trail)
+```
+StockMovement   id, orgId, inventoryItemId, warehouseId,
+                type (PURCHASE_IN | SALE_OUT | ADJUST | TRANSFER | RETURN | ASSEMBLY),
+                quantity (+/-), unitCost?, refType, refId,   // เช่น refType=ORDER refId=...
+                balanceAfter (int), createdAt, createdBy
+```
+> **ห้าม update/delete** movement — แก้ยอดด้วยการเพิ่ม `ADJUST` ใหม่ `StockLevel` เป็น projection ที่ derive จาก movement
+
+### Channel (marketplace)
+```
+Channel         id, key (shopee|lazada|tiktok), displayName     // master ระดับระบบ
+ChannelAccount  id, orgId, channelKey, shopName, externalShopId,
+                authData (encrypted: access/refresh token, expiry), status
+ChannelListing  id, orgId, channelAccountId, sellableSkuId,
+                externalItemId, externalSkuId, externalStatus,
+                allocationMode (FULL | BUFFER | FIXED | DYNAMIC), allocationValue?,
+                priceOverride (numeric?),         // ราคาเฉพาะ channel นี้ (ว่าง = ใช้ basePrice)
+                lastSyncedStock (int), lastSyncedPrice (numeric?), lastSyncedAt
+                @@unique([channelAccountId, externalSkuId])
+```
+
+### Orders
+```
+Order       id, orgId, channelAccountId, externalOrderId, status,
+            buyerName, total, shippingFee, platformFee, paidAt, ...
+            @@unique([channelAccountId, externalOrderId])   // idempotency
+OrderItem   id, orderId, sellableSkuId?, externalSkuId, qty, unitPrice
+```
+> ตอน order เข้า: หา ChannelListing → SellableSku → BundleComponent → สร้าง `SALE_OUT` movement ต่อ component
+
+### Accounting (ดูรายละเอียด docs/04)
+```
+PurchaseDocument / PurchaseItem        // ซื้อเข้า → PURCHASE_IN + อัปเดต avgUnitCost
+AccountingDocument                     // invoice | receipt | payment_voucher | substitute_receipt
+```
+
+### Entitlements & Usage metering (stub — Phase 5, ดู F-082..F-086)
+> วาง **ตะเข็บ** ไว้ตั้งแต่ตอนนี้เพราะปะทีหลังแพง (แทรกถึง billing + ทุก write path) — schema จริงเติมตอน Phase 5
+```
+PlanDefinition  id, key (free|starter|growth|business), name, version,
+                limits (jsonb)        // map ปลายเปิด เช่น { "orders": 1000, "ai.image": 30 }
+                                      // เพิ่ม meter ใหม่ = เพิ่ม key ไม่ใช่ migration
+OrgEntitlement  id, orgId, planDefinitionId,
+                overrides (jsonb?)    // ดีลพิเศษ/comp ราย org เช่น { "ai.image": 200 }
+                                      // resolved limit = plan.limits + overrides
+                @@unique([orgId])     // 1 org = 1 entitlement ที่ active
+
+UsageEvent      id, orgId, meter (orders|sync|ai.text|ai.image|...),
+                quantity (int), cost (numeric?),    // cost เป็น Decimal — ห้าม float (กฎทอง 7)
+                refType, refId, occurredAt, createdBy
+
+Subscription    id, orgId, planDefinitionId, status (active|past_due|grace|canceled),
+                method (card|promptpay), currentPeriodEnd, pendingPlanId?,  // pendingPlanId = downgrade ที่รอสิ้นรอบ
+                gatewayRef (customer/subscription id)
+                @@unique([orgId])
+Payment         id, orgId, subscriptionId?, kind (subscription|credit_pack),
+                amount (numeric), status (pending|paid|failed),
+                gatewayPaymentId, paidAt
+                @@unique([gatewayPaymentId])        // idempotency — กัน apply ซ้ำ
+```
+> **UsageEvent เป็น immutable append** เหมือน `StockMovement` (กฎทอง 2) — ไม่ update/delete
+> ยอดใช้ปัจจุบัน = aggregate UsageEvent ตามรอบ; quota check ถาม **entitlements service** จุดเดียว (`can(orgId, meter)`)
+> flow กันต้นทุนรั่ว: `check → reserve → ทำงาน → emit UsageEvent → commit` (reserve **ก่อน** ยิง provider)
+> `Organization.planId` (ข้างบน) จะ resolve ผ่าน `OrgEntitlement` แทนเมื่อขึ้น Phase 5
+
+## 3. การคำนวณสำคัญ (ต้องมี unit test)
+
+### สต๊อกที่ขายได้ของ SellableSku
+```ts
+available(sellable) = min(
+  components.map(c => floor(stockLevel(c.inventoryItemId).available / c.quantity))
+)
+// ถ้าไม่มี component / component ใด trackStock=false → ข้ามจากการคำนวณตามนิยามที่ตกลง
+```
+
+### ต้นทุน weighted-average ตอนซื้อเข้า
+```ts
+newAvg = (onHand * oldAvg + qtyIn * unitCostIn) / (onHand + qtyIn)
+```
+
+### COGS ตอนขาย sellable 1 หน่วย
+```ts
+cogs(sellable) = sum(components.map(c => inventoryItem(c).avgUnitCost * c.quantity))
+```
+
+## 4. Import จาก platform (ทิศทางข้อมูล)
+1. ดึง product/variant จาก Shopee (parent SKU + sub-SKU)
+2. สร้าง `Product` + `SellableSku` ต่อ variant
+3. **default: สร้าง InventoryItem 1 ตัวต่อ 1 sellable + composition ×1** (เคสปกติ)
+4. ผู้ใช้ค่อยแก้ทีหลังให้ sellable ที่เป็นเซต ชี้ไป InventoryItem หลายตัว
+5. สร้าง `ChannelListing` ผูก external IDs ไว้ sync
+
+## 5. Edge cases ที่ต้องรองรับ
+- component ใช้ซ้ำหลาย sellable (เปลี่ยนสต๊อก/ต้นทุนกระทบหลาย listing)
+- ขายพร้อมกันหลาย channel → กัน oversell (docs/03)
+- คืนสินค้า/ยกเลิกออเดอร์ → movement `RETURN` คืนสต๊อก
+- (อนาคต) physical assembly: จัดเซตจริง = movement `ASSEMBLY` แปลง component → finished item
+- หลาย warehouse (เริ่มจาก default เดียวก่อน)

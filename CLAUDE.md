@@ -1,0 +1,43 @@
+# CLAUDE.md
+
+แนวทางสำหรับ AI agent ที่ทำงานในโปรเจกต์นี้ อ่านก่อนเริ่มทุกครั้ง
+
+## โปรเจกต์นี้คืออะไร
+OmniStock — แพลตฟอร์มรวม **Inventory + Marketplace Sync (Shopee/Lazada/TikTok) + Thai Cloud Accounting**
+multi-tenant, dogfood ก่อนแล้วเปิดขาย รายละเอียดทั้งหมดอยู่ใน [docs/](docs/) — เริ่มที่ [docs/00-overview.md](docs/00-overview.md)
+
+## Stack
+Turborepo + pnpm · NestJS (API) · PostgreSQL + Prisma · Redis + BullMQ · Next.js (web) · Flutter (mobile) · OpenAPI เป็นสัญญากลาง
+โครงสร้าง monorepo + เหตุผล: [docs/02-architecture.md](docs/02-architecture.md)
+
+## กฎทอง (ห้ามแหก)
+1. **Source of truth = ระบบเรา** — platform เป็นปลายทางที่เรา push ไป
+2. **Inventory ledger เป็น immutable** — แก้ยอดด้วยการเพิ่ม `StockMovement` ใหม่ ไม่ใช่ update/delete
+3. **ทุก query โดเมนต้องกรอง `organizationId`** (multi-tenant)
+4. **โค้ดที่แตะเงินหรือสต๊อก ต้องมี unit test** ก่อน merge
+5. **write ที่กระทบสต๊อก/เงิน อยู่ใน DB transaction + เขียน ledger เสมอ**
+6. business logic แกนอยู่ใน `packages/core-domain` (pure function ไม่พึ่ง framework/DB)
+7. เงินใช้ Decimal/numeric — **ห้าม float**; สต๊อกเป็น integer
+
+## โมเดลแกน (ต้องเข้าใจก่อนแก้สินค้า/สต๊อก)
+5 ชั้น: `Product → SellableSku → BundleComponent → InventoryItem` + `ChannelListing` (แมป platform/account)
+- SellableSku ไม่เก็บสต๊อก → `available = min(floor(item.available / qty))`
+- ต้นทุนอยู่ที่ InventoryItem (weighted-average); COGS ของ sellable = Σ(component cost × qty)
+- bundle เป็น virtual (ตัด component ตอนขาย)
+รายละเอียด: [docs/01-data-model.md](docs/01-data-model.md)
+
+## สถานะปัจจุบัน
+Phase 0 — Foundation/Spec (ยังไม่มีโค้ด app) connector ตัวแรก = **Shopee**
+roadmap: [docs/00-overview.md](docs/00-overview.md)
+
+## วิธีทำงาน: feature-driven
+งานแตกเป็น feature (F-XXX) ดู backlog + workflow ที่ [docs/features/README.md](docs/features/README.md)
+ต่อ 1 feature: draft spec → **user review user-stories/AC** → เติม data model/API/UI → task list + test plan → build → verify
+spec แต่ละตัวใช้ [docs/features/_TEMPLATE.md](docs/features/_TEMPLATE.md)
+
+## เมื่อจะลงมือ
+1. อ่าน docs ที่เกี่ยว (เสมอ: 01 data-model) + spec ของ feature นั้น
+2. เช็คว่าไม่ละเมิดกฎทอง
+3. เขียน/อัปเดต test ของ business logic
+4. รัน test + lint แล้ว **รายงานผลตามจริง**
+5. commit/push เมื่อผู้ใช้สั่งเท่านั้น, ทำบน branch
