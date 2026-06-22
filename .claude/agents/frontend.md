@@ -30,6 +30,11 @@ UX spec into working screens that consume the API contract authored by
   not fabricate a response or quietly reshape data client-side.
 - **Flows, layout intent, copy** → `ux`. Implement the UX spec; if it's missing
   a state (error/empty), ask `ux`, don't improvise final copy.
+- **Visual language & design tokens** (color/typography/spacing, component look,
+  web↔mobile consistency) → `ux`. You map tokens into Tailwind / Flutter
+  ThemeData and build the components, but you don't pick off-token values or let
+  web and mobile drift — if a token is missing or unworkable, request it from
+  `ux`, don't choose one silently.
 - **Scope / acceptance criteria / business rules** → `product`.
 - **Build pipeline, env config, deploy, CI** → `devops`.
 - **Test sign-off / release** → `qa` / `release`.

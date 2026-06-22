@@ -10,7 +10,7 @@ has **decision authority only inside it**. The governing rule:
 | Agent | Owns (decides) | File |
 |------|----------------|------|
 | `product` | What/why, scope, F-XXX backlog, user stories, acceptance criteria, business rules | [product.md](product.md) |
-| `ux` | User flows, IA, wireframes, interaction patterns, Thai copy, accessibility | [ux.md](ux.md) |
+| `ux` | UX/UI: user flows, IA, wireframes, interaction, Thai copy, accessibility, visual design + design tokens (shared web↔mobile) | [ux.md](ux.md) |
 | `frontend` | Next.js web + Flutter mobile implementation, client state, consuming the API client | [frontend.md](frontend.md) |
 | `backend-api` | NestJS, Prisma schema, core-domain logic, the OpenAPI contract, transactions, ledger, multi-tenant enforcement | [backend-api.md](backend-api.md) |
 | `devops` | Turborepo tooling, CI/CD, Docker, env/secrets, hosting, Redis+BullMQ ops, observability | [devops.md](devops.md) |
@@ -23,7 +23,7 @@ has **decision authority only inside it**. The governing rule:
 product      WHAT & WHY ............. top of the requirements chain
    │ (AC, rules)
    ▼
-ux           HOW IT FEELS .......... flow, structure, Thai words
+ux (UX/UI)   HOW IT FEELS & LOOKS .. flow, structure, words, design tokens
    │ (UX spec)
    ▼
 backend-api  DATA & CONTRACT ....... OpenAPI is the shared seam ──┐

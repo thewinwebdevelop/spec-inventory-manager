@@ -25,6 +25,22 @@
   (`available = min(floor(item.available / qty))`) ห้ามทำให้ผู้ใช้เข้าใจผิด
 - **ภาษาไทยเป็นภาษาหลักของผู้ใช้** — copy/microcopy ต้องชัดและเป็นธรรมชาติ
 
+### Language policy (กติกาภาษา — ใช้ร่วมทุก agent)
+ภาษาของไฟล์ instruction ไม่ใช่ตัวกำหนดภาษาที่ agent ต้องผลิต — ยึดตามนี้:
+
+| สิ่งที่ผลิต | ภาษา |
+|-----------|------|
+| สื่อสารกับผู้ใช้ (คำอธิบาย, คำถาม, สรุป) | **ไทย** |
+| UI copy / microcopy / error message ที่ผู้ใช้เห็น | **ไทย** |
+| spec ฝั่ง user-facing (user story, AC ที่อ่านร่วมกับ user) | **ไทย** |
+| โค้ด, identifier, ชื่อไฟล์, type/field name | **อังกฤษ** |
+| OpenAPI contract, schema, enum value | **อังกฤษ** |
+| commit message, branch name, changelog, code comment | **อังกฤษ** |
+| ไฟล์ instruction ของ agent (`.claude/agents/*.md`) | **อังกฤษ** (token-lean) |
+
+เหตุผล: โมเดลอ่านไทย/อังกฤษแม่นเท่ากัน แต่ instruction ที่โหลดบ่อยใช้อังกฤษเพื่อ
+ประหยัด token; ส่วน output ที่ผู้ใช้สัมผัสต้องเป็นไทยเสมอ ไม่ว่า prompt จะภาษาอะไร
+
 วิธีทำงานคือ **feature-driven**: งานแตกเป็น feature `F-XXX` แต่ละตัวไหลผ่าน
 workflow เดียวกัน (ดูส่วนที่ 3)
 
@@ -38,7 +54,7 @@ workflow เดียวกัน (ดูส่วนที่ 3)
 | Agent | ตัดสินใจ (โดเมน) | ไม่ตัดสินใจ — ส่งต่อให้ |
 |-------|------------------|------------------------|
 | **product** | scope, F-XXX backlog, user stories, **acceptance criteria**, business rules | UI→ux · feasibility/contract→backend-api · timing→release |
-| **ux** | user flows, IA, wireframes, interaction, **Thai copy**, accessibility | scope/rules→product · data shape→backend-api · prod code→frontend |
+| **ux** (UX/UI) | user flows, IA, wireframes, interaction, **Thai copy**, accessibility, **visual design + design tokens** (shared web↔mobile) | scope/rules→product · data shape→backend-api · code/token-impl→frontend |
 | **backend-api** | NestJS, Prisma schema, core-domain logic, **OpenAPI contract**, transaction, ledger, multi-tenant | scope→product · UI→ux/frontend · infra→devops |
 | **frontend** | Next.js (web) + Flutter (mobile), client state, consume API client | contract→backend-api · flow/copy→ux · scope→product |
 | **devops** | Turborepo/pnpm, CI/CD, Docker, env/secrets, hosting, Redis+BullMQ ops, observability | features→product · schema→backend-api · release policy→release |
