@@ -1,0 +1,91 @@
+# OmniStock Agents
+
+Seven specialized subagents, one per discipline. Each owns a single domain and
+has **decision authority only inside it**. The governing rule:
+
+> **If a decision isn't in my domain, I stop and escalate — I never guess.**
+
+## The agents
+
+| Agent | Owns (decides) | File |
+|------|----------------|------|
+| `product` | What/why, scope, F-XXX backlog, user stories, acceptance criteria, business rules | [product.md](product.md) |
+| `ux` | User flows, IA, wireframes, interaction patterns, Thai copy, accessibility | [ux.md](ux.md) |
+| `frontend` | Next.js web + Flutter mobile implementation, client state, consuming the API client | [frontend.md](frontend.md) |
+| `backend-api` | NestJS, Prisma schema, core-domain logic, the OpenAPI contract, transactions, ledger, multi-tenant enforcement | [backend-api.md](backend-api.md) |
+| `devops` | Turborepo tooling, CI/CD, Docker, env/secrets, hosting, Redis+BullMQ ops, observability | [devops.md](devops.md) |
+| `qa` | Test strategy, unit/E2E plans, verification vs. AC, quality gates, pass/fail verdict | [qa.md](qa.md) |
+| `release` | Versioning, changelog, branch/merge strategy, phase/release gating, rollout & rollback | [release.md](release.md) |
+
+## Decision boundaries at a glance
+
+```
+product      WHAT & WHY ............. top of the requirements chain
+   │ (AC, rules)
+   ▼
+ux           HOW IT FEELS .......... flow, structure, Thai words
+   │ (UX spec)
+   ▼
+backend-api  DATA & CONTRACT ....... OpenAPI is the shared seam ──┐
+   │                                                              │
+frontend     CLIENT IMPL ........... consumes the contract ◄──────┘
+   │
+devops       WHERE IT RUNS ......... runtime, pipeline, infra
+   │
+qa           IS IT CORRECT ......... verifies against AC + rules
+   │
+release      WHEN IT SHIPS ......... gates on qa + devops, sequences rollout
+```
+
+Key seams:
+- **product → everyone**: acceptance criteria are the scope contract.
+- **backend-api ↔ frontend**: the **OpenAPI contract** is fixed; frontend
+  requests contract changes, never works around them.
+- **qa ← product + backend-api**: "correct" = product's AC + backend-api's rules;
+  qa verifies, it does not redefine.
+- **release ← qa + devops**: release gates on qa's green verdict and devops'
+  environment-ready signal.
+
+## Escalation protocol
+
+Subagents can't call each other directly — they return to the orchestrator
+(the main session). When an agent hits a question outside its domain it emits
+this block **and stops**:
+
+```
+🚧 BLOCKED — needs a decision from: @<agent>
+Question: <one precise question>
+Why I stopped: outside my domain (<agent> owns <X> only)
+Options I see (if any): <a / b / c with trade-offs>
+What I'll do once answered: <next concrete step>
+```
+
+The orchestrator reads the block, routes the question to the named agent
+(usually by invoking it), and feeds the answer back. This keeps every decision
+with its rightful owner instead of letting an agent improvise outside its lane.
+
+## Shared ground rules (all agents)
+
+All seven inherit the project's golden rules from
+[CLAUDE.md](../../CLAUDE.md) and the data model in
+[docs/01-data-model.md](../../docs/01-data-model.md):
+
+1. Source of truth = our system; platforms are push targets.
+2. Inventory ledger is immutable (adjust via new `StockMovement`).
+3. Every domain query filters `organizationId` (multi-tenant).
+4. Money/stock code ships with unit tests before merge.
+5. Stock/money writes run in a DB transaction + write the ledger.
+6. Core logic lives in `packages/core-domain` (pure functions).
+7. Money = Decimal/numeric (never float); stock = integer.
+
+Plus: report results truthfully; commit/push only when the user asks; work on a
+branch.
+
+## Notes
+- `description` fields are written to drive auto-delegation — they state both
+  what the agent is for and what it explicitly does **not** decide.
+- **Models are pinned** by stakes, not split evenly: `product`, `backend-api`,
+  `qa` → **opus** (top of the chain + money/stock correctness — costly to get
+  wrong); `ux`, `frontend`, `devops`, `release` → **sonnet** (execute against a
+  spec already decided upstream). Change the `model:` line in a file's
+  frontmatter to re-tune cost vs. capability.
