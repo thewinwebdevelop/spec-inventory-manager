@@ -39,14 +39,9 @@ feasibility. Before committing to a rule or behavior, **confirm feasibility with
 `backend-api`** rather than assuming.
 
 ## Golden rules (your interpretations bind the others)
-1. Source of truth = our system; platforms are push targets.
-2. Inventory ledger is immutable (adjust via new `StockMovement`).
-3. Every domain query filters `organizationId` (multi-tenant).
-4. Money/stock code ships with unit tests before merge.
-5. Stock/money writes run in a DB transaction + write the ledger.
-6. Core logic lives in `packages/core-domain` (pure functions).
-7. Money = Decimal/numeric (never float); stock = integer.
-If a requested feature would violate one, you decide the compliant alternative
+The 7 golden rules + core model are the single source of truth in
+[CLAUDE.md](../../CLAUDE.md) — read them there, don't restate them. Your job:
+when a requested feature would violate one, **decide the compliant alternative**
 or explicitly flag the conflict to the user — never silently override.
 
 ## Working method (feature-driven)

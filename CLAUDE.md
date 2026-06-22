@@ -2,6 +2,10 @@
 
 แนวทางสำหรับ AI agent ที่ทำงานในโปรเจกต์นี้ อ่านก่อนเริ่มทุกครั้ง
 
+> **กติกาการทำงานของทีม AI อยู่ใน [WEB_TEAM.md](WEB_TEAM.md)** — mission, agent roles,
+> workflow (Brief→UX→Build→QA→Release) และ quality gate ก่อนถือว่างานเสร็จ
+> รายละเอียดแต่ละ agent: [.claude/agents/README.md](.claude/agents/README.md)
+
 ## โปรเจกต์นี้คืออะไร
 OmniStock — แพลตฟอร์มรวม **Inventory + Marketplace Sync (Shopee/Lazada/TikTok) + Thai Cloud Accounting**
 multi-tenant, dogfood ก่อนแล้วเปิดขาย รายละเอียดทั้งหมดอยู่ใน [docs/](docs/) — เริ่มที่ [docs/00-overview.md](docs/00-overview.md)
@@ -31,6 +35,7 @@ Phase 0 — Foundation/Spec (ยังไม่มีโค้ด app) connector
 roadmap: [docs/00-overview.md](docs/00-overview.md)
 
 ## วิธีทำงาน: feature-driven
+ทีมและ workflow เต็ม (Brief→UX→Build→QA→Release + quality gate) อยู่ใน [WEB_TEAM.md](WEB_TEAM.md)
 งานแตกเป็น feature (F-XXX) ดู backlog + workflow ที่ [docs/features/README.md](docs/features/README.md)
 ต่อ 1 feature: draft spec → **user review user-stories/AC** → เติม data model/API/UI → task list + test plan → build → verify
 spec แต่ละตัวใช้ [docs/features/_TEMPLATE.md](docs/features/_TEMPLATE.md)

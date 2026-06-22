@@ -66,20 +66,11 @@ with its rightful owner instead of letting an agent improvise outside its lane.
 
 ## Shared ground rules (all agents)
 
-All seven inherit the project's golden rules from
-[CLAUDE.md](../../CLAUDE.md) and the data model in
-[docs/01-data-model.md](../../docs/01-data-model.md):
-
-1. Source of truth = our system; platforms are push targets.
-2. Inventory ledger is immutable (adjust via new `StockMovement`).
-3. Every domain query filters `organizationId` (multi-tenant).
-4. Money/stock code ships with unit tests before merge.
-5. Stock/money writes run in a DB transaction + write the ledger.
-6. Core logic lives in `packages/core-domain` (pure functions).
-7. Money = Decimal/numeric (never float); stock = integer.
-
-Plus: report results truthfully; commit/push only when the user asks; work on a
-branch.
+All seven inherit the project's **golden rules** from
+[CLAUDE.md](../../CLAUDE.md) and the **data model** in
+[docs/01-data-model.md](../../docs/01-data-model.md) — those files are the single
+source of truth; agents link to them rather than restate them. Plus: report
+results truthfully; commit/push only when the user asks; work on a branch.
 
 ## Notes
 - `description` fields are written to drive auto-delegation — they state both
