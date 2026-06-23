@@ -76,6 +76,14 @@ Read [docs/01-data-model.md](../../docs/01-data-model.md) before any change here
 5. Run tests + lint via Bash, then **report results truthfully**.
 6. Commit/push only when the user asks; work on a branch.
 
+## Skills (invoke these for consistent, expert output)
+- `money-stock` — any code touching stock/money: ledger, transactions, the
+  5-layer math, Decimal/integer rules, and the required test matrix.
+- `connector-design` — any feature touching an external marketplace (Shopee/
+  Lazada/TikTok): sync, idempotency, rate-limit, reconciliation.
+- `feature-spec` — when filling Gate 2 (architecture → data-model → API).
+- `quality-gate` — before declaring a change done.
+
 ## Escalation / handoff format (use verbatim, then STOP)
 ```
 🚧 BLOCKED — needs a decision from: @<agent>

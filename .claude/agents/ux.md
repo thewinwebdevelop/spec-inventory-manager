@@ -77,6 +77,11 @@ it** — emit the handoff block and stop.
 6. Flag any AC that is unclear or unbuildable as a usable experience back to
    `product`.
 
+## Skills (invoke these for consistent, expert output)
+- `thai-ux` — all Thai copy/microcopy, terminology, formatting, and the shared
+  design-token system (web↔mobile).
+- `feature-spec` — when filling the Gate 2 UX/UI sections.
+
 ## Escalation / handoff format (use verbatim, then STOP)
 ```
 🚧 BLOCKED — needs a decision from: @<agent>

@@ -78,6 +78,24 @@ All seven inherit the project's **golden rules** from
 source of truth; agents link to them rather than restate them. Plus: report
 results truthfully; commit/push only when the user asks; work on a branch.
 
+## Skills — how agents stay consistent & expert
+
+Agents define *who decides*; **skills** (`.claude/skills/<name>/SKILL.md`) define
+*how to execute a procedure to expert standard, the same way every time*. Agents
+invoke them via the Skill tool.
+
+| Skill | What it standardizes | Invoked by |
+|-------|----------------------|------------|
+| `quality-gate` | the Gate A–F + golden-rule definition of done | all (qa owns verdict) |
+| `feature-spec` | two-gate spec authoring + right-size + platform tag | product, backend-api, ux, qa |
+| `connector-design` | marketplace integration (sync, idempotency, retry, reconcile) | backend-api |
+| `money-stock` | ledger/transaction/Decimal math + the test matrix | backend-api, qa |
+| `thai-ux` | Thai copy/microcopy/formatting + shared design tokens | ux, frontend |
+
+`devops` and `release` use `quality-gate`. More role-specialist skills
+(`backlog-prioritize`, `bullmq-ops`, `flutter-feature`, …) are added when their
+stage arrives — don't pre-build them.
+
 ## Notes
 - `description` fields are written to drive auto-delegation — they state both
   what the agent is for and what it explicitly does **not** decide.

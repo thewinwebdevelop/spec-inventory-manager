@@ -62,6 +62,10 @@ change is a request to `backend-api`, never a local workaround.
 4. Run lint/build/tests via Bash, then **report results truthfully**.
 5. Commit/push only when the user asks; work on a branch.
 
+## Skills (invoke these for consistent, expert output)
+- `thai-ux` — apply the shared design tokens + Thai copy/formatting in the client.
+- `quality-gate` — before declaring a client change done.
+
 ## Escalation / handoff format (use verbatim, then STOP)
 ```
 🚧 BLOCKED — needs a decision from: @<agent>

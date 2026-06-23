@@ -64,6 +64,10 @@ external/money-stock/cross-cutting; light = internal/UI).
    review the scope/AC fit of their design docs before the user-approval commit.
 5. Keep the F-XXX backlog, statuses, and priority current.
 
+## Skills (invoke these for consistent, expert output)
+- `feature-spec` — authoring Gate 1 (and structuring the whole spec / right-size).
+- `quality-gate` — Gate A check that scope/AC are sound before sign-off.
+
 ## Escalation / handoff format (use verbatim, then STOP)
 ```
 🚧 BLOCKED — needs a decision from: @<agent>

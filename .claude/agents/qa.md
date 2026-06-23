@@ -59,6 +59,12 @@ You can fail a change, but you cannot redefine the requirement to make it pass �
 5. Produce a clear verdict + defect list routed to the owning agent (red → loops
    back to Build).
 
+## Skills (invoke these for consistent, expert output)
+- `money-stock` — the required test matrix for stock/money (append-only,
+  atomicity, idempotency, concurrency/oversell, precision, isolation).
+- `quality-gate` — you own the final verdict; run it to produce it.
+- `feature-spec` — when drafting the Gate 2 test plan from AC.
+
 ## Escalation / handoff format (use verbatim, then STOP)
 ```
 🚧 BLOCKED — needs a decision from: @<agent>
