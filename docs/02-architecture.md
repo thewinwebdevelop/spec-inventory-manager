@@ -27,9 +27,10 @@
 ```
 /
 ├── apps/
-│   ├── api/            # NestJS — REST + webhooks + workers
-│   ├── web/            # Next.js admin
-│   └── mobile/         # Flutter (แยก toolchain)
+│   ├── api/            # NestJS — REST + webhooks + workers (tenant /... + /admin/...)
+│   ├── web/            # Next.js — Tenant app (ลูกค้าจัดการร้านตัวเอง, กรอง org)
+│   ├── mobile/         # Flutter — Tenant app (client หลักฝั่ง use)
+│   └── back-office/    # Next.js — Back-office Console (พวกเรา, ข้าม org, internal) ดู §5
 ├── packages/
 │   ├── core-domain/    # business logic บริสุทธิ์: inventory math, COGS, allocation (มี test หนัก)
 │   ├── db/             # Prisma schema + client + migrations
@@ -88,6 +89,10 @@ interface ChannelConnector {
 - secrets ผ่าน env (zod-validated) ไม่ commit
 - rate-limit ฝั่งเราต่อ org + เคารพ rate-limit ของแต่ละ platform
 - **Back-office / super-admin = ข้อยกเว้นเดียวที่ query ข้าม `organizationId`** → ต้องเป็น role แยก (นอก RBAC ของ tenant), บังคับผ่าน guard เฉพาะ + audit ทุกครั้ง ไม่ใช้ Prisma middleware เส้นเดียวกับ tenant
+- **แยกเป็นแอปต่างหาก** (`apps/back-office`, Next.js) ไม่ใช่แค่ซ่อนเมนูใน tenant app —
+  คนละ deploy / คนละ domain / จำกัด IP-VPN-SSO ภายใน, endpoint ใต้ `/admin/...` มี
+  super-admin guard เฉพาะ → ลด blast radius (บั๊ก tenant รั่วข้าม org ไม่ได้). tenant app
+  (web + mobile) กับ back-office เป็น **2 audience** แต่ใช้ **API + core-domain ตัวเดียวกัน**
 
 ## 6. หลักการออกแบบ
 - **Source of truth = ระบบเรา** เสมอ, platform = ปลายทาง
@@ -118,3 +123,23 @@ interface ChannelConnector {
 - **apply policy:** Upgrade = **ทันที + prorate** · Downgrade = **สิ้นรอบบิล** (เก็บไว้ที่ `Subscription.pendingPlanId`)
 - **credit pack (AI):** จ่ายครั้งเดียว → webhook → บวก credit เข้า entitlement ทันที
 - **จ่ายไม่ผ่าน/หมดอายุ:** `active → past_due → grace (เช่น 7 วัน) → downgrade เป็น free` ไม่ตัดทันที
+
+### 7.2 Client / transport evolution (decision — กันที่ไว้, contract เดียวก่อน)
+> **invariant:** business logic อยู่ที่ `core-domain` ที่เดียว · transport (API/endpoint/
+> gateway/BFF) บางและเติมเป็นชั้นตามโหลด — **ไม่แยก backend ต่อ client** และ **ไม่กระโดด
+> microservices ก่อนเวลา** ตราบใดที่ logic ไม่รั่วออกจาก core ก็เปลี่ยนรูป transport ทีหลังได้เสมอ
+
+mobile (Flutter) เป็น **client หลักฝั่ง use**; web (Next.js) เป็น admin console ฝั่ง setup —
+ทั้งคู่กิน **OpenAPI contract เดียว** ผ่าน generated client (Dart/TS) วิวัฒนาการเป็นชั้น:
+
+1. **ตอนนี้:** NestJS API เดียว + contract เดียว + BullMQ workers — ไม่มี proxy แยกต่อ client
+2. **เมื่อ mobile chatty / payload หนัก:** เพิ่ม **mobile-tailored endpoint ใน API เดิม**
+   (เช่น `GET /mobile/dashboard` aggregate ช็อตเดียว) — ได้ ~80% ของ BFF โดยไม่ deploy แยก
+3. **เมื่อ scale (Productize):** + **API Gateway** ที่ edge (TLS, auth, rate-limit ต่อ org, WAF)
+   + แยก **sync/connector workers** เป็น deployable ของตัวเอง (โหลด queue คนละ profile กับ
+   request API) + multi-tenant hardening → **F-087**
+4. **ถ้า mobile แตกต่างหนักจริง / คนละทีมดูแล:** ยก tailored layer เป็น **Mobile BFF** บางๆ ที่
+   consume core services เดิม (ไม่มี logic ของตัวเอง) → **F-095** (icebox, optional)
+
+> เงื่อนไขจะแยกจริง = วัดจาก **metric** (latency / round-trip / payload size) ไม่ใช่เดา;
+> ตอนแยกทุกขั้น **`core-domain` ห้ามแตะ**
