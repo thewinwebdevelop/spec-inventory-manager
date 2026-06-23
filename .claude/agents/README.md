@@ -20,15 +20,16 @@ has **decision authority only inside it**. The governing rule:
 ## Decision boundaries at a glance
 
 ```
-product      WHAT & WHY ............. top of the requirements chain
+product      WHAT & WHY ............. top of the requirements chain (Gate 1 = AC)
    │ (AC, rules)
    ▼
-ux (UX/UI)   HOW IT FEELS & LOOKS .. flow, structure, words, design tokens
-   │ (UX spec)
-   ▼
-backend-api  DATA & CONTRACT ....... OpenAPI is the shared seam ──┐
-   │                                                              │
-frontend     CLIENT IMPL ........... consumes the contract ◄──────┘
+backend-api  ARCHITECTURE, DATA &     architecture (right-sized) → data-model →
+   │         CONTRACT ............... OpenAPI contract = the shared seam ──┐
+   ▼                                                                       │
+ux (UX/UI)   HOW IT FEELS & LOOKS .. designs against the settled contract  │
+   │ (UX/UI spec)                     flow, structure, words, design tokens │
+   ▼                                                                       │
+frontend     CLIENT IMPL ........... consumes the contract ◄───────────────┘
    │
 devops       WHERE IT RUNS ......... runtime, pipeline, infra
    │
@@ -36,9 +37,14 @@ qa           IS IT CORRECT ......... verifies against AC + rules
    │
 release      WHEN IT SHIPS ......... gates on qa + devops, sequences rollout
 ```
+> Order shown is the Gate-2 design sequence: architecture/contract precede UX so
+> the experience is designed against real constraints. Full workflow (Portfolio →
+> 2 gates → Build → QA → Release): [WEB_TEAM.md](../../WEB_TEAM.md) §3.
 
 Key seams:
-- **product → everyone**: acceptance criteria are the scope contract.
+- **product → everyone**: Gate-1 acceptance criteria are the scope contract.
+- **backend-api → ux**: UX is designed against the settled API/architecture, not
+  guesses; ux confirms data shape with backend-api before finalizing.
 - **backend-api ↔ frontend**: the **OpenAPI contract** is fixed; frontend
   requests contract changes, never works around them.
 - **qa ← product + backend-api**: "correct" = product's AC + backend-api's rules;

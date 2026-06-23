@@ -55,7 +55,7 @@ workflow เดียวกัน (ดูส่วนที่ 3)
 |-------|------------------|------------------------|
 | **product** | scope, F-XXX backlog, user stories, **acceptance criteria**, business rules | UI→ux · feasibility/contract→backend-api · timing→release |
 | **ux** (UX/UI) | user flows, IA, wireframes, interaction, **Thai copy**, accessibility, **visual design + design tokens** (shared web↔mobile) | scope/rules→product · data shape→backend-api · code/token-impl→frontend |
-| **backend-api** | NestJS, Prisma schema, core-domain logic, **OpenAPI contract**, transaction, ledger, multi-tenant | scope→product · UI→ux/frontend · infra→devops |
+| **backend-api** | NestJS, Prisma schema, core-domain logic, **OpenAPI contract**, **technical/architecture design** (right-sized), transaction, ledger, multi-tenant | scope→product · UI→ux/frontend · infra→devops |
 | **frontend** | Next.js (web) + Flutter (mobile), client state, consume API client | contract→backend-api · flow/copy→ux · scope→product |
 | **devops** | Turborepo/pnpm, CI/CD, Docker, env/secrets, hosting, Redis+BullMQ ops, observability | features→product · schema→backend-api · release policy→release |
 | **qa** | test strategy, unit/E2E plan, verify vs AC, quality gate verdict | "ถูกคืออะไร"→product+backend-api · CI wiring→devops · ship-decision→release |
@@ -76,53 +76,62 @@ What I'll do once answered: <ขั้นต่อไป>
 
 ---
 
-## 3. Workflow — Brief → UX → Build → QA → Release
+## 3. Workflow — Portfolio → Spec (2 gates) → Build → QA → Release
 
-งานทุก feature ไหลตามลำดับนี้ แต่ละด่านมี "ของที่ส่งต่อ" (handoff artifact)
-ที่ด่านถัดไปใช้เป็นสัญญา
+งานไหล 2 ระดับ: **Portfolio** (วางแผนรวม ทำเป็นรอบ) แล้วจึง **per-feature**
+(หยิบทีละตัวจาก backlog) แต่ละด่านมี "ของที่ส่งต่อ" (handoff artifact)
+
+### Portfolio — วางแผนรวม (เจ้าภาพ: `product`)
+1. **Epic** — list feature หลักทั้งหมด
+2. **แตกเป็น feature ย่อย + tag platform** (web / mobile / both) — *ไม่* แตกเป็น
+   คนละ feature ต่อ platform; ส่วนที่ใช้ร่วม (contract / data-model / business rule)
+   เขียนครั้งเดียว แยกเฉพาะ UX/UI + navigation + ความสามารถเฉพาะ platform
+3. **เรียง priority** → ได้ backlog ([docs/features/README.md](docs/features/README.md))
+
+### Per-feature — หยิบจากบนสุดของ backlog
 
 ```
-Brief ──► UX ──► Build ──► QA ──► Release
-(product)(ux)  (backend-api    (qa)   (release)
-              + frontend
-              + devops)
+Gate 1 ──► Gate 2 ──► ✋commit ──► Build ──► QA ──► Release
+(req)      (design)    (คุณ)      (impl)
 ```
 
-1. **Brief — `product`**
-   อ่าน docs ที่เกี่ยว (เสมอ: [docs/01-data-model.md](docs/01-data-model.md)) →
-   ร่าง spec จาก [docs/features/_TEMPLATE.md](docs/features/_TEMPLATE.md):
-   user stories + **acceptance criteria**
-   → **ต้องให้ user review user-stories/AC ก่อนไปด่านถัดไป**
-   **ส่งต่อ:** AC ที่ตกลงแล้ว = สัญญาของ scope
+1. **Gate 1 — Requirement** (`product`) — *ถูก เปลี่ยนง่าย*
+   req spec · use case · user story · **AC**
+   → ✋ **คุณ + product เคาะก่อน** ไม่ผ่านไม่ไป Gate 2 (กันเขียน design แล้วทิ้ง)
 
-2. **UX — `ux`**
-   เปลี่ยน AC เป็น flow + wireframe + Thai copy ครบทุก state
-   (empty/loading/error) ระบุ data dependency ทุกตัว ไม่ชัวร์เรื่องข้อมูล →
-   ถาม backend-api ก่อน
-   **ส่งต่อ:** UX spec ที่ frontend นำไป implement ได้
+2. **Gate 2 — Design** (ต่อยอดจาก Gate 1 ที่อนุมัติแล้ว)
+   - **Architecture / tech design** — `backend-api`
+     *เฉพาะ feature ที่แตะ external service / sync / queue / money-stock ซับซ้อน
+     — feature ภายในง่ายๆ ข้ามได้* ครอบคลุม: push vs poll, idempotency,
+     rate-limit, retry/backoff (BullMQ), reconciliation, partial-failure,
+     mapping `ChannelListing`
+   - **Data model → API design** — `backend-api` (data-model ขับ api)
+   - **UX wireframe → UI** — `ux` (ออกแบบบน constraint ของ api ที่นิ่งแล้ว)
+   - **Test plan** จาก AC — `qa`
+   → **review เจาะจงเจ้าของแต่ละส่วน** (ไม่ใช่ทุกคน review ทุกอย่าง):
+   architecture/api/data-model → `backend-api` · wireframe/UI → `ux` ·
+   testability → `qa` · infra impact → `devops` · scope/AC → `product`
 
-3. **Build — `backend-api` → `frontend` (+ `devops`)**
-   - `backend-api` ออกแบบ/ขยาย **OpenAPI contract ก่อน** (seam กลาง) →
-     เขียน domain logic ใน `packages/core-domain` เป็น pure function +
-     unit test → write ผ่าน transaction + เขียน ledger เสมอ
-   - `frontend` generate API client → build ตาม UX spec + contract
-     (ห้าม reshape data เอง — ถ้าต้องการ field/endpoint ใหม่ = ขอ backend-api)
-   - `devops` เตรียม pipeline/env/queue ให้รันได้
-   **ส่งต่อ:** โค้ดที่ build + test ผ่าน local
+3. **✋ commit — คุณอนุมัติ**
+   เอกสารผ่าน review ครบ → **คุณเคาะ → commit เอกสารทั้งหมดบน branch**
+   = human gate ก่อนเขียนโค้ด
 
-4. **QA — `qa`**
-   map ทุก AC → test case, รัน unit + E2E, ตรวจ golden rules
-   (money/stock มีเทสต์, ledger append-only, org isolation, Decimal/integer)
-   → ออก **verdict + defect list** route กลับเจ้าของโค้ด
-   **ส่งต่อ:** เขียว/แดง พร้อมหลักฐาน (รายงานตามจริงเสมอ)
+4. **Build** — `backend-api` → `frontend` (+ `devops`)
+   `backend-api` ทำ contract/core-domain ตาม design + **unit test ไปพร้อมโค้ด**
+   (กฎทองข้อ 4 ไม่ดองไว้ทีหลัง) → `frontend` consume client + build UI
+   (ห้าม reshape data เอง — ขอ backend-api) → `devops` pipeline/env/queue
 
-5. **Release — `release`**
-   เช็ค scope นิ่ง (product) + qa เขียว + devops env พร้อม → bump version,
-   เขียน changelog, กำหนด merge/rollout + **rollback plan** → go/no-go
-   **ส่งต่อ:** release ที่ย้อนกลับได้ (dogfood ก่อน แล้วค่อยลูกค้านอก)
+5. **QA** — `qa`
+   automated (unit + integration + E2E) **+ manual** → verify vs AC + quality
+   gate → ออก **verdict + defect list** route กลับเจ้าของโค้ด (รายงานตามจริง)
 
-> ไหลย้อนได้: ถ้า QA เจอ defect → กลับ Build; ถ้า AC กำกวม → กลับ Brief
-> ไม่มีด่านไหน "เดาแทน" ด่านก่อนหน้า — กำกวมเมื่อไหร่ ส่ง escalation ขึ้นไป
+6. **Release** — `release`
+   version · changelog · rollout (**dogfood ก่อน**) · **rollback plan** → go/no-go
+
+> **Right-size:** feature ที่แตะ external/money-stock/cross-cutting = ทำเอกสารเต็ม;
+> CRUD ภายใน/แก้ UI เล็ก = ข้าม architecture + ลดเอกสาร อย่าให้ gate หนักถ่วงงานง่าย
+> **Loopback:** QA แดง → กลับ Build · review ขัดแย้ง / AC กำกวม → กลับ gate ก่อนหน้า
+> ไม่มีด่านไหน "เดาแทน" ด่านก่อน — กำกวมเมื่อไหร่ใช้ escalation block
 
 ---
 
@@ -130,11 +139,19 @@ Brief ──► UX ──► Build ──► QA ──► Release
 
 งานจะปิดได้ต่อเมื่อ **ผ่านครบทุกข้อ** ข้อไหนไม่ผ่าน = ยังไม่เสร็จ ห้าม merge
 
-### Gate A — Scope & Spec (เจ้าภาพ: product)
-- [ ] มี user stories + acceptance criteria ที่ user review แล้ว
-- [ ] ทุก AC มี test case รองรับ (ตรวจร่วมกับ qa)
+### Gate A — Requirement / Gate 1 (เจ้าภาพ: product)
+- [ ] มี user stories + acceptance criteria ที่ **user เคาะแล้ว** ก่อนเริ่ม design
+- [ ] ระบุ **platform** (web/mobile/both) + **right-size** (full / light)
 
-### Gate B — Domain & Data (เจ้าภาพ: backend-api)
+### Gate B — Design & sign-off / Gate 2 (เจ้าภาพ: backend-api + ux + qa)
+- [ ] (ถ้าแตะ external/sync/queue/money-stock) มี **architecture/tech design**:
+      push vs poll, idempotency, rate-limit, retry/backoff, reconciliation, mapping
+- [ ] data-model + API design + wireframe/UI ครบ (data-model ขับ api, api ขับ UX)
+- [ ] **test plan จาก AC** ครบ (qa) — ทุก AC มี test case รองรับ
+- [ ] เอกสาร review โดยเจ้าของแต่ละส่วนแล้ว
+- [ ] ✋ **user อนุมัติ + commit เอกสารบน branch ก่อน implement**
+
+### Gate C — Domain & Data (เจ้าภาพ: backend-api)
 - [ ] ทุก query โดเมนกรอง `organizationId` (multi-tenant) — มีเทสต์ isolation
 - [ ] write ที่กระทบสต๊อก/เงินอยู่ใน DB transaction **และ** เขียน `StockMovement`
 - [ ] ปรับสต๊อกแบบ append-only — ไม่มี update/delete ยอดเดิม
@@ -142,18 +159,18 @@ Brief ──► UX ──► Build ──► QA ──► Release
 - [ ] เงินใช้ Decimal/numeric (ไม่มี float), สต๊อกเป็น integer
 - [ ] OpenAPI contract อัปเดต + client generate ใหม่แล้ว
 
-### Gate C — Experience (เจ้าภาพ: ux + frontend)
+### Gate D — Experience (เจ้าภาพ: ux + frontend)
 - [ ] ครบทุก state: empty / loading / error + Thai copy ชัดเจน
 - [ ] UI ไม่บิดความจริงของโมเดล (เช่น ไม่ทำให้ SellableSku ดูเหมือนมีสต๊อกเอง)
 - [ ] frontend ไม่มี money math บน float — แสดงค่าที่ server คำนวณมา
 
-### Gate D — Quality (เจ้าภาพ: qa)
+### Gate E — Quality (เจ้าภาพ: qa)
 - [ ] **โค้ดที่แตะเงิน/สต๊อกมี unit test ผ่านก่อน merge** (กฎทองข้อ 4)
 - [ ] unit + E2E เขียวทั้งหมด, lint ผ่าน — รายงานผลตามจริง (fail ก็บอกว่า fail)
 - [ ] regression สำคัญไม่พัง
 - [ ] verdict เป็นลายลักษณ์: เขียว/แดง + defect ที่ค้าง (ถ้ามี)
 
-### Gate E — Release (เจ้าภาพ: release)
+### Gate F — Release (เจ้าภาพ: release)
 - [ ] version bump + changelog
 - [ ] merge/branch ตามนโยบาย, ทำบน branch (commit/push เมื่อ user สั่งเท่านั้น)
 - [ ] มี rollback plan ชัดเจนก่อน go

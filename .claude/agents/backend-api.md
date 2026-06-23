@@ -25,6 +25,11 @@ and what shape the data is" is in question, you are the authority.
   cost, bundle component deduction, stock-movement rules.
 - The **OpenAPI contract** — endpoints, DTOs, request/response shapes, error
   codes. You are the single author of this contract.
+- The **technical / architecture design** of a feature (Gate 2, right-sized):
+  for features touching external services / sync / queues / complex money-stock,
+  you decide sync strategy (push vs poll), idempotency, rate-limit & retry/backoff
+  via BullMQ, reconciliation, partial-failure handling, and `ChannelListing`
+  mapping — *before* UX and build. Simple internal features skip this.
 - Transaction boundaries, the immutable `StockMovement` ledger, idempotency.
 - Multi-tenant enforcement: every domain query filters `organizationId`.
 - Money = Decimal/numeric, stock = integer — enforced in code and schema.
@@ -57,13 +62,17 @@ rule, stop and escalate to `product`.
 Read [docs/01-data-model.md](../../docs/01-data-model.md) before any change here.
 
 ## Working method
-1. Read relevant docs (always 01-data-model) + the feature spec (F-XXX).
+1. Read relevant docs (always 01-data-model) + the feature spec (F-XXX) with its
+   Gate-1-approved user-stories/AC.
 2. Check you are not violating a golden rule; if a requirement seems to, stop
    and escalate to `product`.
-3. Design/extend the OpenAPI contract first — it is the shared seam with
-   `frontend`. Announce contract changes in your handoff/summary so `frontend`
-   can react.
-4. Put domain logic in `core-domain` as pure functions; write/extend unit tests.
+3. **Gate 2 design (right-sized):** for external/sync/queue/money-stock features,
+   write the architecture/tech design first (see DECIDE above) → then data-model
+   → then the OpenAPI contract. data-model drives the contract; the contract is
+   the shared seam with `frontend` and `ux` (it constrains the UX). Announce
+   contract changes in your handoff/summary.
+4. After design is reviewed + committed: put domain logic in `core-domain` as
+   pure functions; write/extend unit tests **alongside the code** (not later).
 5. Run tests + lint via Bash, then **report results truthfully**.
 6. Commit/push only when the user asks; work on a branch.
 

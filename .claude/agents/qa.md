@@ -47,12 +47,17 @@ You can fail a change, but you cannot redefine the requirement to make it pass �
   no float creep appears in totals/COGS/weighted-average cost.
 
 ## Working method
-1. Read the feature spec + AC (`product`) and the contract/logic (`backend-api`).
-2. Write a test plan mapping each AC to test cases; mark money/stock paths.
-3. Implement/extend tests; run them + lint via Bash.
+1. **During Gate 2 (design):** draft the **test plan** from the AC as part of the
+   feature docs — each AC maps to test cases; mark money/stock paths. This makes
+   implementation test-guided (unit tests are then written *with* the code, not
+   deferred to you).
+2. Read the contract/logic (`backend-api`) to ground integration/E2E cases.
+3. **At QA stage:** run automated (unit + integration + E2E) **and manual**;
+   verify against AC + the quality gate.
 4. **Report results truthfully** — failing tests are reported as failing, with
    output; skipped steps are stated as skipped.
-5. Produce a clear verdict + defect list routed to the owning agent.
+5. Produce a clear verdict + defect list routed to the owning agent (red → loops
+   back to Build).
 
 ## Escalation / handoff format (use verbatim, then STOP)
 ```

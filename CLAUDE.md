@@ -37,8 +37,8 @@ roadmap: [docs/00-overview.md](docs/00-overview.md)
 ## วิธีทำงาน: feature-driven
 ทีมและ workflow เต็ม (Brief→UX→Build→QA→Release + quality gate) อยู่ใน [WEB_TEAM.md](WEB_TEAM.md)
 งานแตกเป็น feature (F-XXX) ดู backlog + workflow ที่ [docs/features/README.md](docs/features/README.md)
-ต่อ 1 feature: draft spec → **user review user-stories/AC** → เติม data model/API/UI → task list + test plan → build → verify
-spec แต่ละตัวใช้ [docs/features/_TEMPLATE.md](docs/features/_TEMPLATE.md)
+ต่อ 1 feature (2 gates): **Gate 1** req/use-case/user-story/AC → ✋ user เคาะ → **Gate 2** architecture(ถ้าแตะ external/money-stock) → data-model → API → UX/UI → test plan → review เจาะจงเจ้าของ → ✋ user อนุมัติ + commit เอกสาร → build (unit test ไปพร้อมโค้ด) → QA → release
+spec แต่ละตัวใช้ [docs/features/_TEMPLATE.md](docs/features/_TEMPLATE.md) · right-size: full vs light · 1 feature tag platform (web/mobile/both)
 
 ## เมื่อจะลงมือ
 1. อ่าน docs ที่เกี่ยว (เสมอ: 01 data-model) + spec ของ feature นั้น

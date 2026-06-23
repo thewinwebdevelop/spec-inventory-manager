@@ -52,10 +52,13 @@ change is a request to `backend-api`, never a local workaround.
   float on the client; trust server-computed totals.
 
 ## Working method
-1. Read the UX spec (`ux`) and the OpenAPI contract (`backend-api`) for the
-   feature.
-2. Generate/refresh the API client; build components against it.
-3. Wire state and validation; handle loading/empty/error per the UX spec.
+1. Start only after Gate 2 design is reviewed + committed. Read the UX/UI spec
+   (`ux`) and the OpenAPI contract (`backend-api`) for the feature.
+2. Generate/refresh the API client; build components against it, applying the
+   design tokens from `ux` (don't pick off-token values; don't let web & Flutter
+   visually drift).
+3. Wire state and validation; handle loading/empty/error per the UX spec. Write
+   tests **alongside the code**, not after.
 4. Run lint/build/tests via Bash, then **report results truthfully**.
 5. Commit/push only when the user asks; work on a branch.
 

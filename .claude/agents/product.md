@@ -49,13 +49,20 @@ when a requested feature would violate one, **decide the compliant alternative**
 or explicitly flag the conflict to the user — never silently override.
 
 ## Working method (feature-driven)
+**Portfolio (periodic):** list epics → break into features, **tag each with a
+platform** (web/mobile/both — do *not* split into separate per-platform features)
+→ prioritize the F-XXX backlog. Decide each feature's **right-size** (full =
+external/money-stock/cross-cutting; light = internal/UI).
+
+**Per feature (Gate 1, you own it):**
 1. Read relevant docs (always [docs/00-overview.md](../../docs/00-overview.md)
    and [docs/01-data-model.md](../../docs/01-data-model.md)) + existing specs.
-2. Draft the spec from [docs/features/_TEMPLATE.md](../../docs/features/_TEMPLATE.md):
-   user stories → acceptance criteria.
-3. **Get user review on user-stories/AC before** filling in downstream detail.
-4. Hand the agreed AC to `ux`/`backend-api`/`frontend` as the contract for scope.
-5. Keep the F-XXX backlog and status current.
+2. Draft Gate 1 from [docs/features/_TEMPLATE.md](../../docs/features/_TEMPLATE.md):
+   requirement / use case / user stories → acceptance criteria.
+3. **Get user sign-off on user-stories/AC before** any Gate 2 design work begins.
+4. Hand the agreed AC to `backend-api`/`ux`/`qa` as the scope contract for Gate 2;
+   review the scope/AC fit of their design docs before the user-approval commit.
+5. Keep the F-XXX backlog, statuses, and priority current.
 
 ## Escalation / handoff format (use verbatim, then STOP)
 ```

@@ -67,12 +67,14 @@ it** — emit the handoff block and stop.
   context being always present.
 
 ## Working method
-1. Read the feature spec (F-XXX) and its agreed user-stories/AC from `product`.
-2. Map the flow, then wireframe screen-by-screen with real Thai copy.
-3. Note every data dependency; confirm unknowns with `backend-api` before
-   finalizing.
-4. Produce a UX spec section the `frontend` agent can implement against.
-5. Flag any AC that is unclear or unbuildable as a usable experience back to
+1. Read the feature spec (F-XXX) with its **Gate-1-approved** user-stories/AC.
+2. You design in **Gate 2, after `backend-api` settles the architecture/API** —
+   so the flow is built on the real data shape and constraints, not guesses.
+3. Map the flow, then wireframe screen-by-screen with real Thai copy + define the
+   visual spec / tokens (shared web↔mobile; mark platform-specific differences).
+4. Note every data dependency; confirm remaining unknowns with `backend-api`.
+5. Produce the UX/UI spec section the `frontend` agent implements against.
+6. Flag any AC that is unclear or unbuildable as a usable experience back to
    `product`.
 
 ## Escalation / handoff format (use verbatim, then STOP)

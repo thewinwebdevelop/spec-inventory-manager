@@ -3,22 +3,29 @@
 ที่นี่คือศูนย์รวม feature ทั้งหมด แต่ละ feature มีโฟลเดอร์/ไฟล์ spec ของตัวเอง
 
 ## Workflow ต่อ 1 feature
-ทำทีละ feature ตามลำดับนี้ (ห้ามข้าม — โดยเฉพาะ step 2 review):
+> **workflow เต็ม (Portfolio → 2 gates → Build → QA → Release) + เจ้าภาพแต่ละด่าน
+> + quality gate อยู่ใน [WEB_TEAM.md](../../WEB_TEAM.md) ส่วนที่ 3-4** ที่นี่คือฉบับย่อ
+
+ทำทีละ feature จากบนสุดของ backlog ตามลำดับนี้ (ห้ามข้าม — โดยเฉพาะ 2 จุดที่ user เคาะ):
 
 ```
-1. draft     เขียน spec จาก _TEMPLATE.md  (overview, user stories, AC, scope)
-2. reviewed  user ยืนยัน user stories + AC ว่าเข้าใจตรงกัน  ✅ ด่านสำคัญ
-3. design    เติม data model / API / UI ลง spec + sync กลับ docs/01,02
-4. tasks     แตก implementation task list + test plan (unit + E2E)
-5. build     ลงมือ: backend → API → UI พร้อมเขียน test
-6. verify    รัน unit + E2E ผ่าน → mark done
+1. draft           เขียน Gate 1 จาก _TEMPLATE.md  (overview, user stories, AC, scope)
+2. gate1-approved  ✋ user + product เคาะ user-stories/AC  ← กันเขียน design แล้วทิ้ง
+3. designed        Gate 2: architecture(ถ้า full) → data-model → api → UX/UI → test plan
+                   → review เจาะจงเจ้าของแต่ละส่วน → ✋ user อนุมัติ → commit เอกสาร
+4. in-progress     build: backend → API → UI พร้อม unit test (กฎทองข้อ 4)
+5. qa              automated (unit+integration+E2E) + manual → verdict vs AC
+6. done            ผ่าน quality gate → release
 ```
 
-> spec แต่ละ feature **รวมทุกมิติไว้ในไฟล์เดียว** (data model/API/UI/test/tasks) ตาม [_TEMPLATE.md](_TEMPLATE.md)
-> ส่วนกลางที่กระทบหลาย feature (เช่น schema รวม) ให้ sync กลับไปที่ [docs/01-data-model.md](../01-data-model.md) / [docs/02-architecture.md](../02-architecture.md)
+> **Right-size:** _full_ (external/sync/queue/money-stock/cross-cutting) ทำเอกสารครบ
+> รวม architecture; _light_ (CRUD ภายใน/UI เล็ก) ข้าม architecture + ลดเอกสาร
+> **Platform:** 1 feature tag web/mobile/both — ไม่แตกเป็นคนละ feature ต่อ platform
+> spec รวมทุกมิติไว้ในไฟล์เดียวตาม [_TEMPLATE.md](_TEMPLATE.md); ส่วนกลางที่กระทบหลาย
+> feature sync กลับ [docs/01-data-model.md](../01-data-model.md) / [docs/02-architecture.md](../02-architecture.md)
 
 ## Backlog (เรียงตาม phase)
-สถานะ: ⬜ ยังไม่เริ่ม · 🟡 draft · 🔵 reviewed · 🟢 done
+สถานะ: ⬜ ยังไม่เริ่ม · 🟡 draft · 🔵 gate1-approved · 🟣 designed · 🟢 done
 
 ### Phase 0 — Foundation
 | ID | Feature | สถานะ | ขึ้นกับ |
