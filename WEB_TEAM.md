@@ -31,7 +31,7 @@
 | สิ่งที่ผลิต | ภาษา |
 |-----------|------|
 | สื่อสารกับผู้ใช้ (คำอธิบาย, คำถาม, สรุป) | **ไทย** |
-| UI copy / microcopy / error message ที่ผู้ใช้เห็น | **ไทย** |
+| UI copy / microcopy / error message ที่ผู้ใช้เห็น | **i18n: ไทย (default) + อังกฤษ** — copy เป็น key, ไทยครบก่อน, อังกฤษ progressive (ดู [docs/design-system.md](docs/design-system.md)) |
 | spec ฝั่ง user-facing (user story, AC ที่อ่านร่วมกับ user) | **ไทย** |
 | โค้ด, identifier, ชื่อไฟล์, type/field name | **อังกฤษ** |
 | OpenAPI contract, schema, enum value | **อังกฤษ** |

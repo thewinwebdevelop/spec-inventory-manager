@@ -47,4 +47,4 @@
 1. **API-first เป็นข้อบังคับ** — ทุกงานจำเป็นต้องมี API สะอาดที่ web + mobile ใช้ร่วมกันผ่าน OpenAPI ([docs/02](02-architecture.md)) ห้ามมี logic ฝังเฉพาะ web
 2. **ทุก feature spec ของงานจำเป็น ต้องออกแบบ UI ทั้ง web + mobile** (mobile เน้น flow ย่อ/จอเล็ก/ออฟไลน์ชั่วคราว)
 3. mobile ต้องเผื่อ **สภาพเน็ตไม่ดี** (retry, optimistic UI, sync เมื่อกลับมาออนไลน์)
-4. ลำดับสร้าง: dogfood บน **web ก่อน** (iterate เร็ว) แต่ออกแบบ API ให้รองรับ mobile ตั้งแต่วันแรก → mobile = "อีก client หนึ่ง" ที่ต่อ API เดิม ไม่ต้องรื้อ
+4. ลำดับสร้าง (อัปเดต): **Mobile-parity-first** — สร้างบนมือถือให้ครบก่อน, **tenant Web app พักไว้** กลับมาทำหลัง mobile MVP (ดู [features/README.md](features/README.md) §3-track + wave plan). Backend เป็น contract เดียว build เต็มต่อ feature → web กลับมาทำ = งาน frontend ล้วน · ออกแบบ API รองรับทั้ง 2 client ตั้งแต่วันแรก

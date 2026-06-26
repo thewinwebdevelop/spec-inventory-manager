@@ -7,6 +7,7 @@ feature แต่ละตัวอยู่บน surface ไหนบ้าง
   ตั้งเป้า **parity** (มือถือจัดการได้เท่าเว็บ)
 - **Back-office** (พวกเรา): Console แยก (Next.js `apps/back-office`, web-only, ข้าม org) — ดู [docs/02 §5](../02-architecture.md)
 
+> **Tier:** F-004b/F-040/F-041/F-042/F-043/F-031 = 🟣 Full (gated `can(org,'accounting')`) · ที่เหลือ = 🔵 Sync (ทุก tier) — ดู [README](README.md)
 > ✅ full manage · 🟡 มือถือ: ดู/แก้แบบเบา (งานหนัก—ฟอร์มยาว/พิมพ์/export—ทำบน web สะดวกกว่า
 > แต่ยังทำบนมือถือได้) · 🔧 backend (ไม่มี UI ตรง) · ➖ ไม่มีบน surface นี้
 
@@ -16,13 +17,15 @@ feature แต่ละตัวอยู่บน surface ไหนบ้าง
 | F-001 Auth / login | ✅ | ✅ | |
 | F-002 Organization & membership | ✅ | ✅ | |
 | F-003 Roles & permissions (RBAC) | ✅ | ✅ | |
-| F-004 Settings & org config | ✅ | ✅ | |
+| F-004 Settings & org config (ops) | ✅ | ✅ | tax settings → F-004b (Full) |
 | F-005 Audit log (ของ org ตัวเอง) | ✅ | ✅ | view/filter |
-| F-006 Mobile app shell | ➖ | ✅ | ฐานแอป (auth/nav/Dart client/push/theme) — ทุกจอ mobile ต่อจากนี้ |
+| F-006 Mobile app shell | ➖ | ✅ | ฐานแอป (auth/nav/Dart client/push/theme/i18n) — ทุกจอ mobile ต่อจากนี้ |
+| F-007 Tier & entitlements core | 🔧 | 🔧 | tier engine — client ใช้ผ่าน FeatureGate (ไม่มี UI ตรง) |
 | F-010 Product & Sellable SKU | ✅ | ✅ | |
 | F-011 Inventory item / warehouse / ledger | ✅ | ✅ | |
 | F-012 Bundle composition | ✅ | 🟡 | หลาย component — มือถือหลายสเต็ป |
 | F-013 Stock adjustment & ledger | ✅ | ✅ | core mobile |
+| F-014 Stock-in (light) + cost | ✅ | ✅ | รับเข้า+ต้นทุน (Sync tier) |
 | F-020 Shopee connect (OAuth) | ✅ | 🟡 | มือถือผ่าน webview; setup นานๆครั้ง |
 | F-021 Product import | ✅ | ✅ | trigger + review |
 | F-022 Channel listing mapping | ✅ | 🟡 | ตารางจับคู่เยอะ → web สะดวก |
@@ -34,7 +37,8 @@ feature แต่ละตัวอยู่บน surface ไหนบ้าง
 | F-028 Notifications & alerts center | ✅ | ✅ | |
 | F-029 Price management & per-channel sync | ✅ | 🟡 | รายตัวบนมือถือได้; bulk → web |
 | F-030 Dashboard | ✅ | ✅ | |
-| F-040 Purchase document → stock-in | ✅ | 🟡 | เอกสารฟอร์มยาว → web |
+| F-004b Tax settings (VAT/WHT/เลขเอกสาร) | ✅ | 🟡 | **Full tier** · ฟอร์มยาว → web |
+| F-040 Purchase document → stock-in | ✅ | 🟡 | **Full tier** · เอกสารฟอร์มยาว → web |
 | F-041 COGS & P&L | ✅ | 🟡 | รายงานจอใหญ่ดีกว่า; มือถือดูสรุป |
 | F-042 Sales documents (ใบกำกับ/เสร็จ) | ✅ | 🟡 | ออก+พิมพ์ → web; มือถือออกเร็ว+แชร์ PDF |
 | F-043 ภาษีไทย (VAT/WHT) + รายงาน | ✅ | 🟡 | รายงาน/export → web |
