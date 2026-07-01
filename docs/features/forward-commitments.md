@@ -94,3 +94,10 @@
 | สิ่งที่เลื่อน | หมายเหตุ |
 |---|---|
 | Object storage: แยก prefix ราย org + **lifecycle-ready** | เงื่อนไขให้ retention/archive ทำงานได้ |
+
+## → deferred จาก F-000 (D-004 · Gate 1 sign-off 2026-07-02)
+| สิ่งที่เลื่อน | ปลายทาง build | seam ที่ F-000 วางแล้ว |
+|---|---|---|
+| Dart OpenAPI client **green/compile** | **F-006** (mobile shell) | F-000 wire Dart codegen pipeline (AC11) |
+| Object storage **concrete backend** (local/minio → prod) | **F-040** (attachment) | F-000 วาง stub interface + org-prefix seam |
+| **transaction+ledger write primitive** (write-in-tx + StockMovement) — กฎทอง 5 | **F-011** (inventory + ledger) | F-000 วาง trigger (AC8) + schema; helper define ตอน write จริง |
