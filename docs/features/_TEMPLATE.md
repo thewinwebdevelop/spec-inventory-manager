@@ -1,3 +1,11 @@
+---
+status: draft        # draft→G1→G1✓→G2→G2✓→build→qa✓→release→done
+owner_now: "@product"
+waiting_on: null     # เช่น "D-007 (product)" หรือ null
+platform: both       # web | mobile | both
+size: full           # full | light
+---
+
 # [F-XXX] <ชื่อ feature>
 
 > สถานะ: `draft` | `gate1-approved` | `designed` | `in-progress` | `done`
@@ -42,6 +50,8 @@
 # ══ Gate 2 — Design ══
 > *ต่อยอดจาก Gate 1 ที่อนุมัติแล้ว* — review เจาะจงเจ้าของแต่ละส่วน แล้ว ✋ user
 > อนุมัติ + commit เอกสารทั้งหมด **ก่อน** implement
+> feature **full**: แยกเอกสาร Gate 2 เป็นไฟล์ต่อทีมใน `docs/features/F-XXX/` (คัดจาก
+> `docs/features/_gate2/`) — sign off ทีละฉบับ (ดู [WEB_TEAM.md](../../WEB_TEAM.md))
 
 ## 5. Architecture / Technical design  _(เฉพาะ full — light ข้ามได้)_
 > เจ้าภาพ: `backend-api` · ทำก่อน data-model/api/UX สำหรับงานที่แตะ external service

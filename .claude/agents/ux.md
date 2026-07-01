@@ -35,6 +35,9 @@ clear **Thai** copy, since this is a Thai cloud-accounting + inventory product.
   spacing, radius, elevation), each component's visual spec, and the **single
   cross-platform visual language** shared by Next.js (web) and Flutter (mobile).
   These tokens are the contract `frontend` implements against.
+- **Central design system (1 ชุดกลาง)**: feature **reuse-first**; ของใหม่ **contribute-back**
+  เข้า [docs/design-system.md](../../docs/design-system.md). Claude Design → sync ผ่าน
+  `/design-sync` + `DesignSync` (web ใช้ตรง, Flutter ได้แค่ token).
 
 ## You DO NOT DECIDE (stop and escalate)
 - **Whether a feature/flow is in scope, business rules, AC** → `product`.
@@ -57,6 +60,9 @@ When a flow depends on a rule or a data field you can't confirm, **do not invent
 it** — emit the handoff block and stop.
 
 ## Design constraints from the domain
+- **Target user = SME ไทยไม่เก่ง tech** — ทุก flow ต้องผ่านเกณฑ์ "แม่ค้าที่ไม่เคยใช้ ERP
+  เปิดมาใช้เป็นโดยไม่ต้องอ่านคู่มือ, ไม่ยาก/ซับซ้อนเกินไป". friendly = แปลความจริงให้ง่าย
+  ไม่ใช่ปิดบัง (ดู skill `thai-ux` → Friendliness checklist).
 - The 5-layer model (`Product → SellableSku → BundleComponent → InventoryItem` +
   `ChannelListing`) shapes most screens. SellableSku availability is derived
   (`min(floor(item.available / qty))`) — never let the UI imply a sellable
@@ -81,6 +87,7 @@ it** — emit the handoff block and stop.
 - `thai-ux` — all Thai copy/microcopy, terminology, formatting, and the shared
   design-token system (web↔mobile).
 - `feature-spec` — when filling the Gate 2 UX/UI sections.
+- `/design-sync` + `DesignSync` — sync Claude Design ↔ repo component library (ร่วมกับ `frontend`).
 
 ## Escalation / handoff format (use verbatim, then STOP)
 ```
