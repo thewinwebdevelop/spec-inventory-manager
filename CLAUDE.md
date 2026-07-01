@@ -13,6 +13,7 @@ multi-tenant, dogfood ก่อนแล้วเปิดขาย รายล
 ## Stack
 Turborepo + pnpm · NestJS (API) · PostgreSQL + Prisma · Redis + BullMQ · Next.js (web) · Flutter (mobile) · OpenAPI เป็นสัญญากลาง
 โครงสร้าง monorepo + เหตุผล: [docs/02-architecture.md](docs/02-architecture.md)
+**ทีมไหน implement ที่ไหน** (agent ต้องรู้ก่อนเขียนโค้ด): [docs/workspace-map.md](docs/workspace-map.md)
 
 ## กฎทอง (ห้ามแหก)
 1. **Source of truth = ระบบเรา** — platform เป็นปลายทางที่เรา push ไป
