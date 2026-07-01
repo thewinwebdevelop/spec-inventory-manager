@@ -69,6 +69,8 @@ What I'll do once answered: <next concrete step>
 The orchestrator reads the block, routes the question to the named agent
 (usually by invoking it), and feeds the answer back. This keeps every decision
 with its rightful owner instead of letting an agent improvise outside its lane.
+Every cross-team resolution is logged append-only in
+[docs/DECISIONS.md](../../docs/DECISIONS.md) (D-XXX).
 
 ## Shared ground rules (all agents)
 
@@ -95,6 +97,8 @@ invoke them via the Skill tool.
 `devops` and `release` use `quality-gate`. More role-specialist skills
 (`backlog-prioritize`, `bullmq-ops`, `flutter-feature`, …) are added when their
 stage arrives — don't pre-build them.
+
+**Full skill map** (step × team × skill, superpowers line): [docs/SKILL_MAP.md](../../docs/SKILL_MAP.md).
 
 ## Notes
 - `description` fields are written to drive auto-delegation — they state both
