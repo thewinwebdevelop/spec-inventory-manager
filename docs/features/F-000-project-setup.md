@@ -1,6 +1,6 @@
 ---
-status: gate1-approved
-owner_now: "@backend-api"   # next: Gate 2 (schema/contracts/CI) — backend-api + devops
+status: G2✓
+owner_now: "@backend-api"   # Gate 2 signed off (2026-07-02) — ready for Build
 waiting_on: null
 platform: none              # infra, no end-user UI
 size: full                  # infra but substantial (schema + guards + CI + contracts)
