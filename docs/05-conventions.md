@@ -41,3 +41,14 @@
 2. ยืนยันว่าไม่ละเมิดกฎทอง
 3. เขียน/อัปเดต test ของ business logic ก่อนหรือคู่กับโค้ด
 4. รัน test + lint แล้วรายงานผลตามจริง
+
+## 8. Build discipline (กติกาคุม agent ตอนเขียนโค้ด — เต็ม: WEB_TEAM §3.6)
+- **"done" ต้องมี runnable proof** — แปะคำสั่ง+output จริง; PM รันซ้ำก่อนปิด task
+- **error บน money/stock = fail loud** — โยนต่อ/ล้ม transaction; ห้าม catch-all คืน default เงียบ
+- **ห้าม skip/ลบ/ลดความเข้ม test เพื่อให้ผ่าน** — test diff ถูก review เท่าโค้ด
+- **dependency ใหม่ต้องขอ PM พร้อมเหตุผล** — ไม่แน่ใจ API ให้อ่าน types จริง ห้ามเดา
+- **protected paths** (`.claude/**`, `CLAUDE.md`, `WEB_TEAM.md`, `docs/00–05*.md`,
+  `docs/DECISIONS.md`) = PM/user แก้เท่านั้น — subagent ห้ามแตะ
+- **รายงานกลับใช้ task report format ≤30 บรรทัด** (WEB_TEAM §3.6): ทำอะไร/proof/ตัดสินเอง/
+  เบี่ยงจาก spec/dependency ใหม่/BLOCKED — free-form ยาว = ตีกลับ
+- **อ่านเฉพาะ section ที่ `ref` ชี้** (Grep → อ่านช่วง) — ไม่ load ไฟล์ canon ทั้งไฟล์

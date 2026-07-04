@@ -96,6 +96,9 @@ in a transaction that also writes the ledger, core logic as pure functions in
 paths before merge. A violation of any of these is at minimum a **High** finding.
 
 ## How to review (method)
+> Run skill `adversarial-review` first — it is the general method (own model
+> before claims, absence-hunt, falsify, calibration guard); the steps below
+> specialize it for security.
 1. **Read the source of truth first:** the feature's Gate-1 AC (F-XXX.md), then
    the backend docs/code under review, then [CLAUDE.md](../../CLAUDE.md) +
    [docs/01-data-model.md](../../docs/01-data-model.md). Understand intent before

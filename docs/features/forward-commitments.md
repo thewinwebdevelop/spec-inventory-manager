@@ -113,6 +113,8 @@
 | `support` agent + `/triage` | มี user นอกทีม | [§B5](../superpowers/plans/2026-07-04-team-upgrade-plan.md) |
 | Observability section ใน Gate-2 architecture + DR drill | ก่อน F-020 | [§B6](../superpowers/plans/2026-07-04-team-upgrade-plan.md) |
 | Launch-readiness (PDPA, pen test, load test, status page, help content) | ก่อนขายนอก dogfood | [§B7–B8](../superpowers/plans/2026-07-04-team-upgrade-plan.md) |
+| Enforcement ladder — ย้ายกฎทองจาก prose → CI check (org-filter middleware, float ban, protected-path diff check, lockfile-diff) **+ rulebook consistency scan** (blindspot-scan pass 6 กับ workflow docs เอง — จับกติกาขัดกันเอง) | หลัง F-000 CI เขียว + ทุกจบ phase | [§B9](../superpowers/plans/2026-07-04-team-upgrade-plan.md) |
+| **`pnpm verify` คำสั่งเดียวที่ root** (+ `--filter=<workspace>`) รันชุดเดียวกับ CI เป๊ะ — ทำให้ PM รันซ้ำตาม Build discipline ข้อ 1 ได้ด้วยคำสั่งเดียว และ runnable proof ของทุก agent อ้างคำสั่งเดียวกัน | F-000 Gate 2 (devops วาง script) | [§B10](../superpowers/plans/2026-07-04-team-upgrade-plan.md) |
 
 ## → deferred จาก F-000 (D-004 · Gate 1 sign-off 2026-07-02)
 | สิ่งที่เลื่อน | ปลายทาง build | seam ที่ F-000 วางแล้ว |

@@ -50,6 +50,9 @@ but **state why** you skipped — never silently.
 - [ ] **Queries are bound:** any new query on growth tables (movements, orders,
   listings, usage) has a supporting index and no unbounded scan / N+1 — state
   how it's bound, verified at data-model review.
+- [ ] **Fail-loud:** no catch-all that swallows errors or returns silent defaults
+  on money/stock paths — errors propagate / abort the transaction. A quiet
+  fallback that keeps the app "not crashing" while stock drifts = instant fail.
 - [ ] OpenAPI contract updated + client regenerated.
 
 ## Gate D — Experience
@@ -62,6 +65,15 @@ but **state why** you skipped — never silently.
 ## Gate E — Quality
 - [ ] **Money/stock code has passing unit tests before merge** (golden rule 4).
 - [ ] unit + integration + E2E green; lint clean — report real output (fail = fail).
+- [ ] **Runnable proof:** the "done" claim includes the actual commands + output,
+  and the orchestrator (PM) re-ran them independently with matching results —
+  a done claim without reproducible proof is NOT done.
+- [ ] **Test integrity:** no test was skipped/deleted/weakened to get green
+  (allowed only with stated reason + reviewer sign-off) · ★ tasks show
+  red→green evidence (the test fails without the fix).
+- [ ] **Diff hygiene:** no new dependency without PM approval + reason · diff does
+  not touch protected paths (`.claude/**`, `CLAUDE.md`, `WEB_TEAM.md`,
+  `docs/00–05*.md`, `docs/DECISIONS.md` — PM/user only).
 - [ ] Key regressions don't break.
 - [ ] Manual pass on the primary user flow.
 
@@ -70,6 +82,8 @@ but **state why** you skipped — never silently.
 - [ ] on a branch; commit/push only on user request.
 - [ ] explicit rollback plan; rollout dogfood-first.
 - [ ] go/no-go cites qa-green + devops-env-ready (never override a fail to ship).
+- [ ] **micro-retro logged:** PM appended the 5-line retro to `docs/RETRO.md`
+  (what was slow, rule gaps, review misses, dispatch fit, keep/stop).
 
 ## Verdict block (always output)
 ```

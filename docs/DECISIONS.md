@@ -13,6 +13,10 @@ Rationale: <เหตุผล>
 Affects: contract / data-model / UX / AC ...
 Status: decided          # decided | superseded-by D-0xx
 
+> **tag `[auto]`** ท้ายบรรทัด Decision = PM ตัดสินเองตาม Decision protocol (WEB_TEAM §2 —
+> Type 2: ย้อนได้ถูก) โดยไม่รอ user · user audit ย้อนหลังได้ ไม่เห็นด้วย = เพิ่ม entry supersede
+> Type 1 (ย้อนยาก/แพง) ห้ามใช้ `[auto]` — ต้องมี user เป็น Owner เสมอ
+
 ---
 
 ### D-000 · 2026-06-29 · —

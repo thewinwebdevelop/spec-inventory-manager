@@ -63,6 +63,48 @@
 2. skill ใหม่ `ux-heuristic-review` (ux, ใช้**ก่อนเสนอ user ทุกครั้ง**): (ก) **SME persona walkthrough** — เดิน flow เป็น "แม่ค้าที่ไม่เคยใช้ ERP" ทีละจอ: รู้ไหมว่าต้องกดอะไรต่อ, ศัพท์เข้าใจไหม (เทียบ glossary ใน thai-ux), พลาดแล้วกู้ยังไง (ข) **heuristic checklist**: state ครบ 4 (design-system §2), error บอกทางแก้, ไม่มี dead-end, การกระทำทำลายมี confirm+consequence, ความจริงของโมเดลไม่ถูกบิด (SellableSku ฯลฯ), จำนวน step ต่อ task หลัก ≤ ที่จำเป็น (ค) output: ตาราง finding + fix ก่อน submit — แนบท้าย ux-wireframe.md
 3. wire: ux.md Skills section + SKILL_MAP (Gate 2 แถว ux) + gate2.md step ux (เพิ่ม "ผ่าน ux-heuristic-review ก่อนเสนอ")
 
+### A6. Build discipline — กติกาคุม subagent ตอน build ✅ 2026-07-04
+7 กติกา (user เคาะ "เอา"): (1) verify-don't-trust — done ต้องมี runnable proof + PM รัน test/lint ซ้ำเอง
+(2) test integrity — ห้าม skip/ลบ/ลดความเข้ม test เพื่อให้ผ่าน, ★ ต้องมี red→green evidence
+(3) fail-loud บน money/stock — ห้าม catch-all กลืน error (4) dependency ใหม่ = ขอ PM + เหตุผล, API ไม่แน่ใจ = อ่าน types ห้ามเดา
+(5) task sizing ≈ ครึ่งวัน/≤400 บรรทัด diff (6) protected paths (`.claude/**`, CLAUDE.md, WEB_TEAM.md,
+docs/00–05, DECISIONS.md) = PM/user เท่านั้น (7) reviewer ได้ diff+AC+spec — ไม่ได้ self-summary ของ builder
+ลงที่: WEB_TEAM §3.4/§3.6 (block "Build discipline") + Gate C (fail-loud) + Gate E (proof/integrity) ·
+quality-gate SKILL (Gate C/E + diff hygiene) · docs/05 §8 · `_gate2/tasks.md` (sizing+proof note)
+
+### A7. ถอดกระบวนการคิด fable → 3 thinking skills ✅ 2026-07-04
+user ขอ "ถอดแนวคิด fable เป็น skill ให้ model อื่นคิดใกล้เคียง": สร้าง
+`adversarial-review` (วิธีรีวิว — own model ก่อนอ่าน claim, ล่าสิ่งที่**ขาด**, falsify ทุก claim,
+rank ตาม blast radius, calibration guard) · `blindspot-scan` (วิธีหาจุดบอด — 6 passes:
+promise-vs-owner, follow-the-data, walk-the-user's-day, timeline collision, absence catalog,
+cross-artifact diff — อ้าง gap-scan 2026-07-04 เป็น worked example) · `decompose-plan`
+(วิธีแตกแพลน — outcome-first, seam-cut, ★-mark ก่อน dispatch, sizing, Batch A/B trigger-bound)
+wire: SKILL_MAP (PM/Portfolio/review rows) + agents README + product/qa/security-reviewer
+**ขีดจำกัดที่บันทึกไว้:** skill ถ่ายทอด*กระบวนการ*ได้ ~70-80% แต่ถ่ายทอด*วิจารณญาณ*ไม่ได้ —
+จึงยังคง model pinning (fable/opus) ที่จุดตัดสินสูงสุดตาม README
+
+### A8. PM effectiveness (R1–R4, user เคาะ "เอาทั้งหมด") ✅ 2026-07-04
+- **R2 Decision protocol** ✅: WEB_TEAM §2 — Type 1 (ย้อนยาก/แพง) = ✋ user เสมอ · Type 2 (ย้อนได้ถูก)
+  = PM ตัดสินเอง + log D-XXX tag `[auto]` (อธิบาย tag ใน DECISIONS.md header) · ก้ำกึ่ง = Type 1
+- **R3 Micro-retro** ✅: `docs/RETRO.md` (append-only, 5 บรรทัด/feature) + checkbox ใน Gate F
+  (WEB_TEAM + quality-gate skill) + SKILL_MAP Release · pattern ซ้ำ 2 feature = เสนอแก้ workflow
+  · **เสริม (user ขอ 2026-07-04): friction log** — PM จด 1 บรรทัด**ทันทีที่เจอ**อาการ process
+  มีปัญหา (ตาราง 7 signals ใน RETRO.md: กติกาไม่ถูกอ่าน, bounce, BLOCKED ถามของที่มีใน ref,
+  proof ปลอม, กติกาไม่กันของที่ควรกัน ฯลฯ) · micro-retro สังเคราะห์จาก log ไม่ใช่ความจำ ·
+  จังหวะ report: ทันที (block/เสี่ยงเงิน-ข้อมูล) → จบ feature → ซ้ำ×2 → จบ phase
+- **R1 `pnpm verify`** → Batch B10 (trigger: F-000 Gate 2) — ทำให้ verify-don't-trust ถูกจริง
+- **R4 Rulebook consistency scan** → ผนวกเข้า B9 (blindspot-scan pass 6 กับ workflow docs ทุกจบ phase)
+- ที่เสนอแล้วตัดทิ้ง (บันทึกกันเสนอซ้ำ): process metrics แบบเก็บตัวเลข (overhead ไม่คุ้มจนกว่ารันหลาย
+  feature ขนาน) · formalize session-handoff เพิ่ม (plan files + task board + memory พิสูจน์แล้วว่าพอ)
+
+### A9. Token economy (T1–T5, user เคาะ "เอา") ✅ 2026-07-04
+- **T1 ref ระดับ section** ✅: `ref` ชี้ `ไฟล์ §section` ไม่ใช่ทั้งไฟล์ (WEB_TEAM §3.4 + tasks template) + วินัยอ่านเป็นช่วง (conventions §8, §3.8)
+- **T2 task report format ≤30 บรรทัด** ✅: ทำอะไร/proof/ตัดสินเอง/เบี่ยงจาก spec/dep ใหม่/BLOCKED (WEB_TEAM §3.6 + conventions §8) — free-form ยาว = ตีกลับ
+- **T3 cheap tier** ✅: งานช่างล้วน → qwen-agent/haiku ในตาราง model ต่อ task + SKILL_MAP — ห้าม ★/logic
+- **T4 session hygiene** ✅: WEB_TEAM §3.8 — 1 session ≈ 1 gate/1 build batch, session ใหม่เริ่มจากไฟล์
+- **T5 rule-budget guard** ✅: CLAUDE.md แช่แข็งขนาด · skill ≤100 บรรทัด · rulebook scan (B9) เสนอตัดกติกาที่ไม่เคยจับอะไร (agents README + §3.8)
+- **หลักที่ประกาศไว้:** นี่คือชุด proactive ชุดสุดท้าย — การจูน process ต่อจากนี้ต้องมาจากข้อมูล retro (R3/RETRO.md) ไม่ใช่จากการคิดเพิ่มเอง
+
 ---
 
 ## Batch B — ผูก trigger (จาก priority list ข้อ 5–11 ของ review)
@@ -94,6 +136,29 @@ checklist ตายตัว: PDPA audit (skill A3) · pen test (จ้างห
 
 ### B8. Help content ไทย ต่อ feature — **trigger: เริ่ม Phase 1 (สะสมทีละ feature)** ⬜
 deliverable เพิ่มของ ux ต่อ feature ที่มี UI: help article สั้นภาษาไทย — กันต้องย้อนเขียน 30 features ตอน launch
+
+### B9. Enforcement ladder — ย้ายกฎจาก prose → CI check — **trigger: หลัง F-000 CI เขียว, ไต่ต่อเนื่อง** ⬜
+หลักคิด: *กฎที่ model เล็กแหกไม่ได้ = กฎที่ CI บล็อกทางกายภาพ* — ทำตารางติดตามว่ากฎทองแต่ละข้อ
+enforce ที่ชั้นไหน (prose → review checklist → CI/machine) แล้วไต่ขึ้นเมื่อมีโอกาส:
+| กฎ | สถานะตอน F-000 | เป้าถัดไป |
+|---|---|---|
+| ข้อ 2 ledger immutable | ✅ CI (DB trigger — F-000 AC8) | — |
+| ข้อ 6 core-domain pure | ✅ CI (dependency-cruiser — AC9) | — |
+| contract ไม่ break | ✅ CI (`openapi-diff` — skill contract-evolution) | — |
+| ข้อ 3 org filter ทุก query | prose + isolation test ราย feature | Prisma client extension บังคับ where org + eslint rule ห้าม raw query ตรง |
+| ข้อ 7 เงินห้าม float | prose + schema check (AC7) | eslint ban `parseFloat`/`Number()` บน money fields + typecheck Decimal |
+| protected paths (A6 ข้อ 6) | prose + review | CI diff-check (รวมกับ B2 path-boundary) |
+| dependency ใหม่ต้องขอ (A6 ข้อ 4) | prose + review | CI: lockfile-diff แจ้งเตือน dep ใหม่ใน PR |
+เจ้าของ: devops (CI) + backend-api (Prisma/eslint) · review ตารางนี้ทุกครั้งที่จบ phase
+**+ R4 (user เคาะ 2026-07-04):** จังหวะเดียวกันทุกจบ phase — รัน `blindspot-scan` **pass 6
+(cross-artifact diff) กับ workflow docs เอง** (CLAUDE.md, WEB_TEAM, skills, conventions, gate
+commands, agent files ~12+ ไฟล์): กติกาที่ขัดกันเอง = agent ทำตามไฟล์ที่บังเอิญอ่าน — จับก่อนสอนผิด
+
+### B10. `pnpm verify` คำสั่งเดียวทั้ง repo — **trigger: F-000 Gate 2 (devops)** ⬜
+script ที่ root: `pnpm verify` = lint + typecheck + test ชุด**เดียวกับที่ CI รันเป๊ะ** ·
+`pnpm verify --filter=<workspace>` ราย app · เหตุผล: Build discipline ข้อ 1 (PM รันซ้ำเองทุก task)
+จะแพงจนไม่มีใครทำจริง ถ้าต้องรู้ toolchain ของ 3 apps + N packages — คำสั่งเดียว = ตรวจได้จริงทุกครั้ง
+และ runnable proof ของ builder อ้างคำสั่งเดียวกัน เทียบ output กันได้ตรงๆ (user เคาะ 2026-07-04)
 
 ---
 

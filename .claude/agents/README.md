@@ -107,11 +107,20 @@ invoke them via the Skill tool.
 | `observability-standard` | per-feature logs/metrics/alerts/runbook | devops |
 | `backup-dr` | backup policy + scheduled restore drills, RPO/RTO | devops |
 | `compliance-checklist` | PDPA pass at Gate 1 for personal-data features | product |
+| `adversarial-review` | HOW to review (own model first, absence-hunt, falsify, blast-radius rank) — distilled fable method | every reviewer (qa, security-reviewer, doc owners) |
+| `blindspot-scan` | HOW to find what's missing (promise-vs-owner, follow-the-data, timeline collision) — distilled fable method | PM, product |
+| `decompose-plan` | HOW to split epics/features/tasks (seam-cut, ★-mark, sizing, trigger-bound batching) — distilled fable method | PM, product |
 
 `release` uses `quality-gate`. More role-specialist skills
 (`backlog-prioritize`, `bullmq-ops`, `flutter-feature` — deferred to F-006 so
 it's written from real code, …) are added when their stage arrives — don't
 pre-build them.
+
+**Skill budget (WEB_TEAM §3.8):** each skill ≤ ~100 lines — longer means split
+or cut. New workflow rules go into a skill or WEB_TEAM, **never CLAUDE.md**
+(it auto-loads into every agent on every dispatch — its size is frozen). At
+each phase-end rulebook scan, rules that never caught anything get proposed
+for deletion.
 
 **Full skill map** (step × team × skill, superpowers line): [docs/SKILL_MAP.md](../../docs/SKILL_MAP.md).
 

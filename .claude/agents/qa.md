@@ -60,6 +60,8 @@ You can fail a change, but you cannot redefine the requirement to make it pass �
    back to Build).
 
 ## Skills (invoke these for consistent, expert output)
+- `adversarial-review` — HOW to verify someone else's work: own model before
+  claims, hunt absence, falsify, rank by blast radius (core for every review).
 - `money-stock` — the required test matrix for stock/money (append-only,
   atomicity, idempotency, concurrency/oversell, precision, isolation).
 - `regression-curation` — what enters the permanent pack, smoke/full tiers,

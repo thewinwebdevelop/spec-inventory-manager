@@ -8,14 +8,16 @@
 | เมื่อไหร่ | skill |
 |---------|-------|
 | เริ่มงาน creative | `superpowers:brainstorming` |
+| **แตกแพลน/feature/epic เป็น task** | `decompose-plan` (**core** — seam-cut, ★-mark, sizing, Batch A/B) |
 | แตกงาน parallel | `superpowers:dispatching-parallel-agents` · `superpowers:subagent-driven-development` |
 | หลัง G2 → ก่อน build | `superpowers:writing-plans` → `superpowers:executing-plans` |
+| **หา gap/ของตกหล่นใน backlog/plan** | `blindspot-scan` (sit: ก่อนเปิด phase / เมื่อถูกถาม "ขาดอะไร") |
 | รายงาน user | `product-management:stakeholder-update` · `9arm-skills:management-talk` |
 | งานช่างกลถูกๆ | `anthropic-skills:qwen-agent` |
 | ก่อนเคาะเสร็จ | `superpowers:verification-before-completion` · `anthropic-skills:scrutinize` |
 
 ### Portfolio (product)
-`product-management:product-brainstorming` (core) · `synthesize-research` (sit) · `competitive-brief` (sit) · `roadmap-update` (core) · `sprint-planning` (sit)
+`product-management:product-brainstorming` (core) · `decompose-plan` (core: แตก epic→features) · `blindspot-scan` (sit: scan backlog เป็นระยะ) · `synthesize-research` (sit) · `competitive-brief` (sit) · `roadmap-update` (core) · `sprint-planning` (sit)
 
 ### Gate 1 — Requirement + Product Advisory (product)
 `feature-spec` G1 (**core**) · `product-management:write-spec` (core) · `domain-modeling` (sit: มีศัพท์ใหม่) · `compliance-checklist` (sit: แตะ personal data — orders/buyer, เอกสาร, notification, export, AI)
@@ -32,7 +34,7 @@
 | self-review ก่อนเสนอ user (**core**) | ux | `ux-heuristic-review` (SME persona walkthrough + checklist) |
 | UI design (visual) | ux→FE | `/design-sync` + `DesignSync` (ดู §8) |
 | test plan จาก AC | qa | `feature-spec` · `money-stock` |
-| review เอกสาร | เจ้าของส่วน | `anthropic-skills:scrutinize` · `review` |
+| review เอกสาร | เจ้าของส่วน | `adversarial-review` (**core** — วิธีรีวิว) · `anthropic-skills:scrutinize` · `review` |
 | security review spec (full/auth-token-money) | security-reviewer | → `security-review.md` · verdict ประกบ sign-off |
 | สรุปภาษาคนประกบ sign-off เอกสารเทคนิค | PM | `9arm-skills:management-talk` (**core**) |
 
@@ -49,16 +51,19 @@
 | รัน/ส่องแอปจริง | FE | `run` · `verify` · `mcp__Claude_Preview__*` |
 | isolation workspace | build | `superpowers:using-git-worktrees` (sit) |
 | ขอ/รับ review ก่อน merge | build | `superpowers:requesting-code-review` · `superpowers:receiving-code-review` · `code-review` |
+| ฝั่งผู้รีวิว (ทุก reviewer ทุกระดับ) | reviewer | `adversarial-review` (**core** — absence-hunt, falsify claims, rank by blast radius) |
 | review ก่อน merge — right-size ตาม risk (WEB_TEAM §3.6) | PM route | ★ money/stock/auth/token/tenant → **security-reviewer บังคับ** · backend/contract → medium · UI/copy → `code-review` low หรือ CI พอ |
 | dispatch task ★ | PM | model override → **opus** (แม้ agent pin sonnet) |
+| dispatch งานช่างล้วน (ไม่มี judgment/logic) | PM | `anthropic-skills:qwen-agent` หรือ haiku — ห้าม ★/logic · proof+review ตามปกติ (WEB_TEAM §3.6) |
 | ลดความซับซ้อน | build | `simplify` (sit) |
 | debug | build | `superpowers:systematic-debugging` (sit) |
 
 ### QA (qa)
-`quality-gate` (**core**) · `feature-spec`+`money-stock` (verify AC+matrix) · `regression-curation` (core เมื่อปิด defect/จบ feature/CI ช้า) · `qa` skill (Browser Use track 2) · `verify`·`run` · `security-review` (core เมื่อแตะ auth/token/เงิน) · `superpowers:systematic-debugging` · `anthropic-skills:post-mortem` (sit)
+`quality-gate` (**core**) · `adversarial-review` (core เมื่อ verify งานคนอื่น) · `feature-spec`+`money-stock` (verify AC+matrix) · `regression-curation` (core เมื่อปิด defect/จบ feature/CI ช้า) · `qa` skill (Browser Use track 2) · `verify`·`run` · `security-review` (core เมื่อแตะ auth/token/เงิน) · `superpowers:systematic-debugging` · `anthropic-skills:post-mortem` (sit)
 
 ### Release (release)
-`superpowers:finishing-a-development-branch` (core) · `quality-gate` (core) · `product-management:metrics-review` (sit หลัง dogfood)
+`superpowers:finishing-a-development-branch` (core) · `quality-gate` (core) · **micro-retro → docs/RETRO.md** (core, PM เขียนหลัง Gate F) · `product-management:metrics-review` (sit หลัง dogfood)
+> จบ phase: PM รัน `blindspot-scan` pass 6 กับ workflow docs เอง (rulebook consistency — team-upgrade-plan §B9)
 
 ### DevOps (สนับสนุน)
 `observability-standard` (**core** ต่อ feature full sync/queue) · `backup-dr` (**core** เมื่อ env มีข้อมูลจริง + drill ตาม schedule) · `setup-pre-commit` (sit) · `git-guardrails-claude-code` (sit) · `resolving-merge-conflicts` (sit)
