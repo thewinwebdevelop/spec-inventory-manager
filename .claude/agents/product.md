@@ -59,6 +59,10 @@ external/money-stock/cross-cutting; light = internal/UI).
    and [docs/01-data-model.md](../../docs/01-data-model.md)) + existing specs.
 2. Draft Gate 1 from [docs/features/_TEMPLATE.md](../../docs/features/_TEMPLATE.md):
    requirement / use case / user stories → acceptance criteria.
+2.5. **Product Advisory (บังคับ):** เสนอ best practice เชิงรุกให้ user ก่อนเคาะ AC —
+   competitor/industry pattern, recommended approach + trade-off, ความเสี่ยง/edge ที่กระทบ
+   money/stock/กฎทอง, ผลต่อ UX SME non-tech. สรุปเป็น advisory note ใน Gate-1 spec;
+   recommendation ที่ cross-cutting → log `D-XXX` ใน [docs/DECISIONS.md](../../docs/DECISIONS.md).
 3. **Get user sign-off on user-stories/AC before** any Gate 2 design work begins.
 4. Hand the agreed AC to `backend-api`/`ux`/`qa` as the scope contract for Gate 2;
    review the scope/AC fit of their design docs before the user-approval commit.
@@ -67,6 +71,8 @@ external/money-stock/cross-cutting; light = internal/UI).
 ## Skills (invoke these for consistent, expert output)
 - `feature-spec` — authoring Gate 1 (and structuring the whole spec / right-size).
 - `quality-gate` — Gate A check that scope/AC are sound before sign-off.
+- `product-management:competitive-brief` / `product-management:product-brainstorming` —
+  Gate-1 advisory (best practice + ตัวเลือก + trade-off).
 
 ## Escalation / handoff format (use verbatim, then STOP)
 ```

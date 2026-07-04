@@ -89,3 +89,18 @@ must not drift.**
 A UX/UI spec section the `frontend` agent implements against: flow + Thai copy for
 every state + the token set + per-platform notes. If a flow needs data you can't
 confirm exists, stop and ask `backend-api` — don't invent fields.
+
+## Friendliness checklist (SME ไทยไม่สาย tech — ผ่านทุกข้อก่อนปิด UX)
+Target user = **เจ้าของร้าน/แม่ค้า SME ไทยที่ไม่เก่ง tech** — เกณฑ์: "เปิดมาใช้เป็นโดยไม่ต้องอ่านคู่มือ, ไม่ยาก/ซับซ้อนเกินไป"
+- ภาษาคน ไม่ใช่ภาษาระบบ — **ห้ามโชว์ identifier ดิบ** (SellableSku/StockMovement/ChannelListing) → ใช้ term ใน glossary
+- progressive disclosure — ซ่อนความซับซ้อน ขยายเมื่อผู้ใช้ขอ
+- default ฉลาด — ลดการตัดสินใจ/การกรอกให้เหลือน้อยสุด
+- forgiving — undo / ยืนยันก่อนทำสิ่งย้อนไม่ได้ / กันพลาด
+- ทุก state (empty/loading/error) บอก **"ขั้นต่อไป"** ไม่ใช่แค่บอกว่าเกิดอะไร
+- mobile-first — ปุ่มใหญ่พอแตะ
+- คำเพิ่มใน glossary: `ChannelListing → สินค้าบนช่องทาง (Shopee/…)` · `sync failed → อัปเดตไปช่องทางไม่สำเร็จ`
+
+## Friendly ปะทะ "UI พูดความจริงของโมเดล" — reconcile
+**friendly = แปลความจริงให้เข้าใจง่าย ไม่ใช่ปิดบัง/โกหก**
+เช่น `available = min(floor(item.available/qty))` → แสดง **"ขายได้อีก 12 ชิ้น"** + แตะดู *ทำไม* ได้
+(ห้ามซ่อนความจริงจนผู้ใช้เข้าใจผิดเรื่องสต๊อก/เงิน)

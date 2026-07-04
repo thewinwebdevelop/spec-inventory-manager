@@ -25,6 +25,8 @@
 > feature sync กลับ [docs/01-data-model.md](../01-data-model.md) / [docs/02-architecture.md](../02-architecture.md)
 
 ## โมเดลการส่งมอบ: 3 tracks (FE/BE แยก · mobile-first ฝั่ง use)
+> **⚠️ กลยุทธ์ execution ปัจจุบัน (override): Mobile-parity-first + tenant Web พักไว้** — สร้างบนมือถือให้ครบทุก feature (รวม setup/บัญชี) ก่อน แล้วกลับมาทำ Web app หลัง mobile MVP (ดู wave plan ท้ายส่วนนี้). กฎ track ด้านล่าง (โดยเฉพาะ "setup→web ก่อน") เป็นโมเดล FE/BE-split ตั้งต้นที่ยังถูกต้องเชิงสถาปัตยกรรม แต่ลำดับลงมือตอนนี้ = **B (mobile) นำ · C (web) พัก · D (back-office) ท้ายสุด**.
+
 backend ใช้ร่วมกัน — contract เดียว, ไม่แยก backend ต่อ client (ดู [docs/02 §7.2](../02-architecture.md)).
 งานทุก feature แตกเป็น 3 track:
 
@@ -63,25 +65,35 @@ cross-cutting, เอกสารครบ) · `light` (CRUD/UI เล็ก) ·
 
 ## Backlog (เรียงตาม phase)
 สถานะ: ⬜ ยังไม่เริ่ม · 🟡 draft · 🔵 gate1-approved · 🟣 designed · 🟢 done
+Tier: ⚙️ core/infra · 🔵 Sync (ได้ทุก tier) · 🟣 Full (ต้อง Full tier — gated `can(org,'accounting')`)
+
+> **Tier model (Sync / Full) เป็นแกน product** — ดู [F-007](F-007-tier-entitlements-core.md):
+> Sync = ops + ต้นทุน + COGS + กำไรหลังหักค่าช่องทาง (ไม่มีเอกสารภาษี) · Full = + TIN + เอกสาร + VAT/WHT + กำไรสุทธิ
+> **หนี้ในอนาคต ("seam now, build later") รวมที่ [forward-commitments.md](forward-commitments.md)** ·
+> มาตรฐานออกแบบร่วม web↔mobile ที่ [docs/design-system.md](../design-system.md)
+> ไฟล์ spec ต่อ feature: `F-XXX-<feature-name>.md`
 
 ### Phase 0 — Foundation
-| ID | Feature | Platform | Size | สถานะ | ขึ้นกับ |
-|----|---------|----------|------|-------|---------|
-| F-000 | Project setup (monorepo scaffold, CI, Prisma + schema โมเดล 5 ชั้น + ledger, env) | — | infra | ⬜ | — |
-| F-001 | Authentication (สมัคร/เข้าสู่ระบบ, JWT + refresh) | web | full | ⬜ | F-000 |
-| F-002 | Organization & membership (หลายผู้ใช้ต่อองค์กร) | web | full | ⬜ | F-001 |
-| F-003 | Roles & permissions (RBAC) | web | full | ⬜ | F-002 |
-| F-004 | Settings & org config (VAT, เลขรันเอกสาร, allocation default, warehouse) | web | full | ⬜ | F-002 |
-| F-005 | Audit log (action สำคัญ: แก้สต๊อก/ออกเอกสาร/back-office — วางตั้งแต่แรก) | web | full | ⬜ | F-003 |
-| F-006 | Mobile app shell — ฐาน Flutter ที่ทุกจอมือถือต่อจากนี้: auth + secure token/refresh, navigation/shell, Dart client gen (OpenAPI), push (FCM/APNs), theme/design tokens, env + crash reporting | mobile | full | ⬜ | F-001 |
+| ID | Feature | Platform | Size | Tier | สถานะ | ขึ้นกับ |
+|----|---------|----------|------|------|-------|---------|
+| [F-000](F-000-project-setup.md) | Project setup (monorepo scaffold, CI Node+Flutter, Prisma schema 5 ชั้น + ledger trigger, core-domain purity gate, contracts codegen, env, **per-app CLAUDE.md — ดู D-001**) | — | infra | ⚙️ | 🔵 | — |
+| [F-001](F-001-authentication.md) | Authentication (email+password, JWT + refresh rotation/reuse-detection, identifier นามธรรม) | both | full | ⚙️ | 🔵 | F-000 |
+| [F-002](F-002-organization-license-membership.md) | Organization · License · Membership (1 license=1 org=1 TIN, 1 user หลาย org, org switcher, deactivate-not-delete) | both | full | ⚙️ | 🔵 | F-001 |
+| [F-007](F-007-tier-entitlements-core.md) | **Tier & entitlements core** (`can()`/`canAdd()`, plan/entitlement, itemized grants, FeatureGate, retention policy) | — | full | ⚙️ | 🔵 | F-002 |
+| [F-003](F-003-roles-permissions.md) | Roles & permissions (editable roles ราย org + capability registry + Owner ล็อก) | both | full | ⚙️ | 🔵 | F-002, F-007 |
+| [F-004](F-004-settings-org-config.md) | Settings & org config (ops: profile, default warehouse, allocation/inventory defaults) — *tax settings → F-004b/Phase 2* | both | light | ⚙️ | 🔵 | F-002 |
+| [F-005](F-005-audit-log.md) | Audit log (append-only, action registry, cross-org seam — แยกจาก domain ledger) | both | full | ⚙️ | 🔵 | F-003 |
+| [F-006](F-006-mobile-app-shell.md) | Mobile app shell (auth/secure token, org switcher, Dart client, FeatureGate, push, theme/i18n, skeleton, force-update) | mobile | full | ⚙️ | 🔵 | F-000, F-001, F-002, F-007 |
 
-### Phase 1 — Core Inventory & Sync (หัวใจ / dogfood critical path)
+### Phase 1 — Core Inventory & Sync = **Sync tier MVP** (dogfood operate ได้ + ขายเป็น Sync plan ได้)
+> ทุกตัวใน Phase 1 = 🔵 Sync · จบ Phase นี้ = milestone **M-Sync** (เปิดร้าน+เห็นกำไรหลังหักค่าช่องทาง จบในมือถือ)
 | ID | Feature | Platform | Size | สถานะ | ขึ้นกับ |
 |----|---------|----------|------|-------|---------|
-| F-010 | Product & Sellable SKU management | web | full | ⬜ | F-003 |
-| F-011 | Inventory Item, Warehouse, Stock level + Ledger | web | full | ⬜ | F-003 |
-| F-012 | Bundle composition (BOM) | web | full | ⬜ | F-010, F-011 |
+| F-010 | Product & Sellable SKU management | both | full | ⬜ | F-003 |
+| F-011 | Inventory Item, Warehouse, Stock level + Ledger | both | full | ⬜ | F-003 |
+| F-012 | Bundle composition (BOM) | both | full | ⬜ | F-010, F-011 |
 | F-013 | Stock adjustment & ledger view | both | full | ⬜ | F-011 |
+| F-014 | **Stock-in (light) + cost** — รับของเข้า+ใส่ต้นทุนเอง (ไม่มีเอกสาร) → PURCHASE_IN + weighted-avg | both | full | ⬜ | F-011 |
 | F-020 | Channel account connect (Shopee OAuth) | web | full | ⬜ | F-003 |
 | F-021 | Product import จาก Shopee | web | full | ⬜ | F-010, F-020 |
 | F-022 | Channel listing mapping | web | full | ⬜ | F-021 |
@@ -92,16 +104,17 @@ cross-cutting, เอกสารครบ) · `light` (CRUD/UI เล็ก) ·
 | F-027 | Sync health & connection status (งาน fail, token re-auth) | both | full | ⬜ | F-023, F-024 |
 | F-028 | Notifications & Alerts center (push/LINE infra, low-stock, re-auth) | both | full | ⬜ | F-024 |
 | F-029 | Price management & per-channel price sync | web | full | ⬜ | F-022 |
-| F-030 | Dashboard ยอดขาย/สต๊อก เบื้องต้น | both | full | ⬜ | F-024 |
+| F-030 | Dashboard: ยอดขาย/สต๊อก/COGS/**กำไรหลังหักค่าช่องทาง** (platform fee+ค่าส่ง auto จาก F-024) | both | full | ⬜ | F-014, F-024 |
 
-### Phase 2 — Cloud Accounting
-| ID | Feature | Platform | Size | สถานะ | ขึ้นกับ |
-|----|---------|----------|------|-------|---------|
-| F-040 | Purchase document → stock-in + cost | web | full | ⬜ | F-011 |
-| F-041 | COGS & P&L | web | full | ⬜ | F-040, F-024 |
-| F-042 | Sales documents (invoice/receipt/voucher/substitute) | web | full | ⬜ | F-024 |
-| F-043 | ภาษีไทย (VAT, WHT) + รายงาน | web | full | ⬜ | F-042 |
-| F-031 | Reporting & export (P&L ราย account/platform/ช่วงเวลา, export นักบัญชี) | web | full | ⬜ | F-041 |
+### Phase 2 — Cloud Accounting = **Full tier** (gated `can(org,'accounting')`, ต้องมี TIN) — จบ = milestone **M-Full** (dogfood ครบ)
+| ID | Feature | Platform | Size | Tier | สถานะ | ขึ้นกับ |
+|----|---------|----------|------|------|-------|---------|
+| F-004b | Tax settings (VAT/WHT, **เลขรันเอกสารภาษี** atomic, tax handling ราย channel) | web | full | 🟣 | ⬜ | F-004, F-002 |
+| F-040 | Purchase document (supplier+VAT, file attachment, **ใบรับรองแทนใบเสร็จ**) → stock-in เต็ม | web | full | 🟣 | ⬜ | F-011, F-007 |
+| F-042 | Sales documents (ใบกำกับ/เสร็จ ฝั่งขาย) | web | full | 🟣 | ⬜ | F-024 |
+| F-041 | P&L เต็ม (opex + กำไรสุทธิ) | web | full | 🟣 | ⬜ | F-040, F-024 |
+| F-043 | ภาษีไทย (VAT, WHT) + รายงานภาษี | web | full | 🟣 | ⬜ | F-042 |
+| F-031 | Reporting & export (ภาษี/บัญชี เชิงลึก, export นักบัญชี) | web | full | 🟣 | ⬜ | F-041 |
 
 ### Phase 3 — Ops Boosters
 | ID | Feature | Platform | Size | สถานะ | ขึ้นกับ |
@@ -124,7 +137,7 @@ cross-cutting, เอกสารครบ) · `light` (CRUD/UI เล็ก) ·
 
 | ID | Feature | Platform | Size | สถานะ | ขึ้นกับ |
 |----|---------|----------|------|-------|---------|
-| F-082 | Entitlements & plan definitions — `PlanDefinition` + limits map (ปลายเปิด เพิ่ม meter ใหม่ได้), **apply package → org**, override ราย org, grandfathering | web | full | ⬜ | F-003, F-004 |
+| F-082 | Plan/entitlement **admin เต็ม** — plan management UI, apply package→org, override, grandfathering (ต่อยอด **core ที่ย้ายขึ้น F-007**) | web | full | ⬜ | F-007 |
 | F-083 | Usage metering & **quota counting** — `UsageEvent` **immutable ledger** (กฎทอง 2), นับราย meter, reserve→commit, **hard cap** กันใช้ทะลุ, cost เป็น Decimal | — | full | ⬜ | F-082 |
 | F-084 | **Quota alerts** — แจ้งเตือนใกล้หมด/เกินโควต้า บน **web + app** (ต่อยอด infra จาก F-028) | both | full | ⬜ | F-083, F-028 |
 | F-085 | **Back-office Console** — **แอปแยก `apps/back-office`** (Next.js, internal, web-only): จัดการ org · plan · usage · support, **query ข้าม-org** (ข้อยกเว้นเดียว) + audit ทุก action + super-admin guard (ดู docs/02 §5) | back-office | full | ⬜ | F-003, F-082, F-083 |

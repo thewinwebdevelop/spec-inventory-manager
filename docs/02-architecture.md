@@ -53,7 +53,8 @@ orders · dashboard
 accounting · documents
 ops (label-print, promotions, alerts)
 notifications (line)
-entitlements · usage-metering · back-office   // (Phase 5 — ดู §7)
+entitlements   // core (can/canAdd + plan binding) = Phase 0 F-007 · plan-admin/metering/back-office = Phase 5 (§7)
+usage-metering · back-office   // (Phase 5 — ดู §7)
 ai   // (Phase 5 — บาง ผูก packages/ai, ทุก call เป็น job ผ่าน BullMQ)
 ```
 
@@ -100,10 +101,11 @@ interface ChannelConnector {
 - งานคุยกับ external API = async ผ่าน queue (retry/idempotent) ไม่ทำใน request หลัก
 - core business logic แยกจาก I/O → test ได้โดยไม่ต้องต่อ DB/เน็ต
 
-## 7. Scale seams — entitlements / metering / AI (Phase 5, กันที่ไว้ตั้งแต่ Phase 0)
-> ไม่ build ตอนนี้ แต่ออกแบบไม่ให้ปะทีหลังต้องรื้อ billing/write path ดู backlog **F-082..F-086** + data model [docs/01](01-data-model.md#) (stub `PlanDefinition`/`OrgEntitlement`/`UsageEvent`)
+## 7. Scale seams — entitlements / metering / AI
+> **อัปเดต:** entitlements **core** (`can()`/`canAdd()` + bind plan ตอนสร้าง org) ถูกดึงขึ้น **Phase 0 = [F-007](features/F-007-tier-entitlements-core.md)** เพราะ tier model (Sync/Full) + accounting gate พึ่งมัน · ที่ยัง Phase 5 = **plan-admin (F-082) · metering (F-083) · billing (F-080) · back-office (F-085) · AI (F-086)**
+> ออกแบบไม่ให้ปะทีหลังต้องรื้อ billing/write path · data model [docs/01](01-data-model.md#) (`PlanDefinition`/`OrgEntitlement` grants/`UsageEvent`)
 
-- **Entitlements service** = จุดเดียวตอบ `can(orgId, meter)` — ฟีเจอร์ห้ามอ่าน plan/limits ตรงๆ ทุกอย่างผ่าน service นี้ (resolved = plan.limits + org overrides)
+- **Entitlements service** = จุดเดียวตอบ `can(orgId, feature)` / `canAdd(orgId, resource)` — ฟีเจอร์ห้ามอ่าน plan/features ตรงๆ ทุกอย่างผ่าน service นี้ (resolved = plan.features + itemized grants; gate แยก read/write)
 - **Usage metering** = emit `UsageEvent` **immutable** ทุก action ที่อาจคิดเงิน (วันนี้: orders/sync · วันหน้า: ai.*) → ได้ COGS แยกบรรทัดฟรี
 - **AI provider port** — interface กลางใน `packages/ai`, สลับผู้ให้บริการได้โดยไม่แตะ business logic; แยก text (ถูก) กับ image (แพง) เป็นคนละ meter
   ```ts

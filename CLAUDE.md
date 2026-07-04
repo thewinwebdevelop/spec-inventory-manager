@@ -13,6 +13,7 @@ multi-tenant, dogfood ก่อนแล้วเปิดขาย รายล
 ## Stack
 Turborepo + pnpm · NestJS (API) · PostgreSQL + Prisma · Redis + BullMQ · Next.js (web) · Flutter (mobile) · OpenAPI เป็นสัญญากลาง
 โครงสร้าง monorepo + เหตุผล: [docs/02-architecture.md](docs/02-architecture.md)
+**ทีมไหน implement ที่ไหน** (agent ต้องรู้ก่อนเขียนโค้ด): [docs/workspace-map.md](docs/workspace-map.md)
 
 ## กฎทอง (ห้ามแหก)
 1. **Source of truth = ระบบเรา** — platform เป็นปลายทางที่เรา push ไป
@@ -37,6 +38,7 @@ roadmap: [docs/00-overview.md](docs/00-overview.md)
 ## วิธีทำงาน: feature-driven
 ทีมและ workflow เต็ม (Brief→UX→Build→QA→Release + quality gate) อยู่ใน [WEB_TEAM.md](WEB_TEAM.md)
 งานแตกเป็น feature (F-XXX) ดู backlog + workflow ที่ [docs/features/README.md](docs/features/README.md)
+เริ่มงาน: **/gate1 \<F-XXX\>** (req+AC+advisory) → **/gate2 \<F-XXX\>** (เอกสารต่อทีม+task) · decision → [docs/DECISIONS.md](docs/DECISIONS.md) · skill ต่อ step → [docs/SKILL_MAP.md](docs/SKILL_MAP.md)
 ต่อ 1 feature (2 gates): **Gate 1** req/use-case/user-story/AC → ✋ user เคาะ → **Gate 2** architecture(ถ้าแตะ external/money-stock) → data-model → API → UX/UI → test plan → review เจาะจงเจ้าของ → ✋ user อนุมัติ + commit เอกสาร → build (unit test ไปพร้อมโค้ด) → QA → release
 spec แต่ละตัวใช้ [docs/features/_TEMPLATE.md](docs/features/_TEMPLATE.md) · right-size: full vs light · 1 feature tag platform (web/mobile/both)
 

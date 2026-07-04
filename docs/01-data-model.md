@@ -31,11 +31,21 @@ Channel listing   →   Sellable SKU   →   Bundle composition   →   Inventor
 > ทุก entity ในโดเมนผูก `organizationId` (multi-tenant) ยกเว้น entity ระดับ platform/แพ็กเกจ
 
 ### Tenancy & Auth
+> **1 License = 1 Organization = (ถ้าทำบัญชี) 1 TIN** · 1 User → หลาย Org ได้ (org switcher) · ดู F-001/F-002/F-003/F-007
 ```
-Organization   id, name, planId, createdAt
-User           id, email, passwordHash, ...
-Membership     id, organizationId, userId, role (OWNER|ADMIN|STAFF|ACCOUNTANT), permissions[]
-SubscriptionPlan / Subscription   (billing — ดู docs/02)
+Organization   id, name, logo?, timezone, currency (THB), createdAt
+               taxProfile?: { entityType (personal|company), taxId(13), vatRegistered(bool), branchCode? }
+                            // optional — บังคับเมื่อเปิด Full tier (accounting). 1 org = 1 TIN
+User           id, email, passwordHash, verified(bool), ...
+               // identifier นามธรรม (เผื่อ phone+OTP); auth ไม่ผูก organizationId
+Membership     id, organizationId, userId, roleId, status (active|invited|revoked)
+               // role/permission เป็นของราย org (ผ่าน roleId) — deactivate ไม่ delete
+Role           id, organizationId, name, isSystem (Owner=ล็อก), capabilities[]  // editable ราย org
+               // capability registry (open-ended): full_access, manage_members, manage_org_settings,
+               // manage_billing, manage_products, manage_stock, manage_channels, manage_orders,
+               // view_financials, access_accounting(Full tier) ...
+Invitation     id, organizationId, email, roleId, status (pending|accepted|expired), token, expiresAt
+RefreshToken   id, userId, deviceId, rotatedFrom?, revokedAt?   // rotation + reuse detection (F-001)
 ```
 
 ### Product / Inventory (โมเดล 5 ชั้น)
@@ -95,13 +105,18 @@ AccountingDocument                     // invoice | receipt | payment_voucher | 
 ### Entitlements & Usage metering (stub — Phase 5, ดู F-082..F-086)
 > วาง **ตะเข็บ** ไว้ตั้งแต่ตอนนี้เพราะปะทีหลังแพง (แทรกถึง billing + ทุก write path) — schema จริงเติมตอน Phase 5
 ```
-PlanDefinition  id, key (free|starter|growth|business), name, version,
-                limits (jsonb)        // map ปลายเปิด เช่น { "orders": 1000, "ai.image": 30 }
-                                      // เพิ่ม meter ใหม่ = เพิ่ม key ไม่ใช่ migration
+PlanDefinition  id, key (comp_full|full|sync|free), name, version, tierLabel,
+                features (jsonb)      // map ปลายเปิด — 3 ชนิด:
+                                      //  boolean: { "accounting": true, "marketplace_sync": true }
+                                      //  static cap: { "max_users": 5, "max_channel_accounts": 3 }
+                                      //  metered (นับจริง = F-083): { "orders_per_month": 1000, "storage_mb": 500 }
+                                      // เพิ่ม feature ใหม่ = เพิ่ม key ไม่ migrate
 OrgEntitlement  id, orgId, planDefinitionId,
-                overrides (jsonb?)    // ดีลพิเศษ/comp ราย org เช่น { "ai.image": 200 }
-                                      // resolved limit = plan.limits + overrides
-                @@unique([orgId])     // 1 org = 1 entitlement ที่ active
+                grants (jsonb?)       // itemized: [{ feature, value, source(plan|addon|comp|grandfather), ref? }]
+                                      // resolved = พับ grants ทับ plan.features → ตอบได้ว่า add-on มาจากไหน
+                @@unique([orgId])     // 1 org = 1 entitlement active
+                // F-007 ทำ stub นี้เป็นจริง: can(org,feature) / canAdd(org,resource) จุดเดียว
+                // gate แยก read/write (downgrade ไม่ลบข้อมูล) · feature code ห้ามอ่าน plan ตรงๆ
 
 UsageEvent      id, orgId, meter (orders|sync|ai.text|ai.image|...),
                 quantity (int), cost (numeric?),    // cost เป็น Decimal — ห้าม float (กฎทอง 7)
@@ -117,9 +132,10 @@ Payment         id, orgId, subscriptionId?, kind (subscription|credit_pack),
                 @@unique([gatewayPaymentId])        // idempotency — กัน apply ซ้ำ
 ```
 > **UsageEvent เป็น immutable append** เหมือน `StockMovement` (กฎทอง 2) — ไม่ update/delete
-> ยอดใช้ปัจจุบัน = aggregate UsageEvent ตามรอบ; quota check ถาม **entitlements service** จุดเดียว (`can(orgId, meter)`)
+> ยอดใช้ปัจจุบัน = aggregate UsageEvent ตามรอบ; quota check ถาม **entitlements service** จุดเดียว (`can(org, feature)` / `canAdd(org, resource)` — F-007)
 > flow กันต้นทุนรั่ว: `check → reserve → ทำงาน → emit UsageEvent → commit` (reserve **ก่อน** ยิง provider)
-> `Organization.planId` (ข้างบน) จะ resolve ผ่าน `OrgEntitlement` แทนเมื่อขึ้น Phase 5
+> org ผูก plan ผ่าน `OrgEntitlement` เสมอ (invariant) — **core ทำจริงตั้งแต่ Phase 0 (F-007)** ไม่ใช่ Phase 5;
+> Subscription/Payment/metering (F-080/083) ค่อยมาเติม productize
 
 ## 3. การคำนวณสำคัญ (ต้องมี unit test)
 
