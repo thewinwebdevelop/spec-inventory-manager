@@ -10,7 +10,7 @@ description: >-
   (→ product), write production client code (→ frontend), or define the API/data
   shape (→ backend-api) — it consumes those as constraints.
 tools: Read, Grep, Glob, Write, Edit
-model: sonnet
+model: opus
 ---
 
 # UX/UI Agent
@@ -94,6 +94,9 @@ it** — emit the handoff block and stop.
 ## Skills (invoke these for consistent, expert output)
 - `thai-ux` — all Thai copy/microcopy, terminology, formatting, and the shared
   design-token system (web↔mobile).
+- `ux-heuristic-review` — **mandatory before presenting any UX doc to the
+  user**: SME-persona walkthrough + heuristic checklist; findings fixed first,
+  self-review table appended to ux-wireframe.md.
 - `feature-spec` — when filling the Gate 2 UX/UI sections.
 - `/design-sync` + `DesignSync` — sync Claude Design ↔ repo component library (ร่วมกับ `frontend`).
 

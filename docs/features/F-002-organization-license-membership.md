@@ -2,6 +2,7 @@
 
 > สถานะ: `gate1-approved` · Phase: 0 · ขึ้นกับ (depends on): F-001 · เจ้าของ: product
 > **Platform:** both (จัดการเต็มบน web · มือถือ: สร้าง/สลับ org + จัดการสมาชิกพื้นฐาน) · **ขนาดงาน:** full
+> **แก้หลัง sign-off:** US-3/US-4 ปรับตาม **D-012** (invite = copy link ใน MVP — ไม่มี email infra จนถึง F-081)
 
 ---
 
@@ -35,9 +36,12 @@
 
 - **US-3:** ในฐานะ Owner/Admin ฉันต้องการ **เชิญสมาชิก**
   - [ ] AC: เชิญด้วย email + **บังคับเลือก role ตอนเชิญ** → Invitation สถานะ `pending` + วันหมดอายุ (เช่น 7 วัน)
-  - [ ] AC: re-send ได้ · ยกเลิกคำเชิญที่ค้างได้
+  - [ ] AC (**D-012 — MVP ไม่มี email infra**): ระบบสร้าง **invite link** ให้ Owner/Admin **copy ส่งเอง**
+        (LINE/แชต) — ไม่มีการส่ง email อัตโนมัติ (email = identifier ของคำเชิญ ไม่ใช่ช่องทางส่ง) ·
+        ส่งอัตโนมัติ → F-081/SMTP (forward-commitments)
+  - [ ] AC: re-send = เรียกดู/copy ลิงก์ของคำเชิญที่ค้างได้อีก (token/อายุเดิม) · ยกเลิกคำเชิญที่ค้างได้
   - [ ] AC: เชิญ email ที่เป็นสมาชิกอยู่แล้ว → ปฏิเสธ · มี pending invite อยู่ → แจ้งว่าค้าง (ไม่สร้างซ้ำ)
-  - [ ] AC: email normalize (lowercase, trim) ก่อนเทียบ
+  - [ ] AC: email normalize (lowercase, trim) ก่อนเทียบ · invite token = ความลับ (สุ่มพอ, หมดอายุ, ผูกกับ email ที่เชิญ)
 
 - **US-4:** ในฐานะผู้ถูกเชิญ ฉันต้องการ **ตอบรับคำเชิญ**
   - [ ] AC: มีบัญชีแล้ว → กดรับ → ได้ Membership ด้วย role ที่กำหนดทันที
@@ -66,7 +70,7 @@
 | อยู่ใน scope (In) | ไม่อยู่ใน scope (Out / ภายหลัง) |
 |---|---|
 | สร้าง org + ผูก entitlement, 1 user หลาย org, org switcher | ลบ org ถาวร / โอนขาดเจ้าของแบบเต็ม → productize |
-| เชิญ/ตอบรับ/re-send/ยกเลิก/ถอน (revoke) สมาชิก | seat limit enforcement → F-082 |
+| เชิญ/ตอบรับ/re-send/ยกเลิก/ถอน (revoke) สมาชิก — **invite ผ่าน copy link (D-012)** | **ส่ง email คำเชิญอัตโนมัติ → F-081/SMTP** · seat limit enforcement → F-082 |
 | Owner ≥1 + ยกเป็น Owner ได้ | ทีม/แผนก/สาขาย่อยหลายชั้นใน org |
 | ประกาศ tax profile (1 TIN) เพื่อเปิด Full tier | per-warehouse/per-channel scoped membership |
 | tax profile optional (Sync tier ไม่ต้องมี) | หลาย TIN ใน org เดียว (ตัดสินแล้ว: คนละ license) |

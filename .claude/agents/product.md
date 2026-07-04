@@ -69,7 +69,14 @@ external/money-stock/cross-cutting; light = internal/UI).
 5. Keep the F-XXX backlog, statuses, and priority current.
 
 ## Skills (invoke these for consistent, expert output)
+- `decompose-plan` — breaking epics → features (and any plan → tasks): seam-cut,
+  risk-mark, do-now vs trigger-bound.
+- `blindspot-scan` — periodic backlog/spec-set gap scan ("what are we missing?"):
+  promise-vs-owner, follow-the-data, timeline collisions.
 - `feature-spec` — authoring Gate 1 (and structuring the whole spec / right-size).
+- `compliance-checklist` — Gate 1 of any feature touching personal data
+  (accounts, orders/buyer data, documents, notifications, exports, AI) →
+  produces the spec's Compliance note.
 - `quality-gate` — Gate A check that scope/AC are sound before sign-off.
 - `product-management:competitive-brief` / `product-management:product-brainstorming` —
   Gate-1 advisory (best practice + ตัวเลือก + trade-off).

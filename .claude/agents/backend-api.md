@@ -82,6 +82,10 @@ Read [docs/01-data-model.md](../../docs/01-data-model.md) before any change here
 - `connector-design` — any feature touching an external marketplace (Shopee/
   Lazada/TikTok): sync, idempotency, rate-limit, reconciliation.
 - `feature-spec` — when filling Gate 2 (architecture → data-model → API).
+- `contract-evolution` — any change to an already-shipped contract surface
+  (additive-only, deprecation, versioned breaking changes).
+- `prisma-migration` — every migration once data exists (expand→migrate→
+  contract, ledger protections, rollback path).
 - `quality-gate` — before declaring a change done.
 
 ## Escalation / handoff format (use verbatim, then STOP)

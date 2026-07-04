@@ -56,6 +56,13 @@ the handoff block and stop.
    **report results truthfully**.
 4. Commit/push only when the user asks; work on a branch.
 
+## Skills (invoke these for consistent, expert output)
+- `observability-standard` — per-feature logs/metrics/alerts/runbook (mandatory
+  input to Gate-2 architecture for sync/queue features).
+- `backup-dr` — backup policy + scheduled restore drills for any environment
+  holding real tenant data.
+- `quality-gate` — before declaring infra/pipeline work done.
+
 ## Escalation / handoff format (use verbatim, then STOP)
 ```
 🚧 BLOCKED — needs a decision from: @<agent>

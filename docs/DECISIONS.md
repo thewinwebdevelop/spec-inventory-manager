@@ -13,6 +13,10 @@ Rationale: <เหตุผล>
 Affects: contract / data-model / UX / AC ...
 Status: decided          # decided | superseded-by D-0xx
 
+> **tag `[auto]`** ท้ายบรรทัด Decision = PM ตัดสินเองตาม Decision protocol (WEB_TEAM §2 —
+> Type 2: ย้อนได้ถูก) โดยไม่รอ user · user audit ย้อนหลังได้ ไม่เห็นด้วย = เพิ่ม entry supersede
+> Type 1 (ย้อนยาก/แพง) ห้ามใช้ `[auto]` — ต้องมี user เป็น Owner เสมอ
+
 ---
 
 ### D-000 · 2026-06-29 · —
@@ -131,4 +135,24 @@ Asked by: @backend-reviewer (advisory)   Owner: @backend-api (in-domain decision
 Decision: **Option (a) — bounded ~60s reuse-leeway window.** presenting immediate-predecessor token ภายใน ~60 วินาทีหลัง rotation = benign retry → ตอบ generic `401 INVALID_REFRESH` **โดยไม่ revoke family**; token ที่เก่ากว่า 60 วิ หรือ ancestor ลึกกว่า immediate-predecessor ยัง trip full family revocation ตามเดิม
 Rationale: strict zero-grace เปลี่ยน 2 pattern ที่ถูกต้อง (lost-response retry, multi-tab race) เป็น logout ทั้งที่ทิศทาง fail ปลอดภัย · window แคบ absorb เคสพวกนี้ได้ ขณะที่ attacker replay token เก่า/ไม่ใช่ immediate ยังถูกจับ · industry pattern (Auth0)
 Affects: architecture §3.5(new)/§3.1/§3.3/§11 · data-model §2.4 · api-spec §2.3 · qa test (leeway benign-retry case)
+Status: decided
+
+---
+
+### D-012 · 2026-07-04 · F-002
+Q: (gap-scan G-1) F-002 สัญญาเชิญสมาชิกทาง email (+re-send) แต่ email infra อยู่ F-081 (Phase 5) — MVP ส่งคำเชิญยังไง?
+Asked by: @claude (PM gap-scan)   Owner: @user (delegate ให้ PM เลือกตามสมควร)
+Decision: **MVP = copy invite link** — ระบบสร้างลิงก์ให้ Owner/Admin copy ส่งเองทาง LINE/แชต · email เป็น identifier ของคำเชิญ ไม่ใช่ช่องทางส่ง · re-send = copy ลิงก์เดิม · ส่งอัตโนมัติ → F-081/SMTP
+Rationale: ตรงกับความจริงของ infra (ไม่มี SMTP จนถึง Phase 5) · dogfood ส่งลิงก์ทางแชตธรรมชาติกว่า email อยู่แล้ว · ดึง SMTP เข้า Phase 0 = scope บวมแบบเดียวกับที่ D-005 ปฏิเสธ
+Affects: F-002 US-3/US-4 AC + scope table · ux flow (จุด copy link) · forward-commitments (F-081)
+Status: decided
+
+---
+
+### D-013 · 2026-07-04 · —
+Q: gap-scan 2026-07-04 ข้อ G-2..G-9 (docs/superpowers/plans/2026-07-04-backlog-gap-scan.md) รับข้อไหนบ้าง?
+Asked by: @claude (PM gap-scan)   Owner: @user (delegate ให้ PM เลือกตามสมควร)
+Decision: **G-2 (PDPA/ToS):** ยังไม่ build ตอนนี้ — `compliance-checklist` บังคับใน /gate1 สำหรับ feature แตะ personal data (มีผลตั้งแต่ F-024) · ToS/consent + PDPA เต็ม = launch-readiness ก่อนรับ user นอกทีม · **G-3:** fake-Shopee adapter → เข้า F-020 Gate 2 (forward-commitments) · **G-4:** drift-transparency AC → F-023/F-027 Gate 1 (forward-commitments) · **G-5:** F-092 CSV import icebox→Phase 3 + mark launch-blocker · **G-6:** F-093 stock take icebox→Phase 3 · **G-7:** รูปสินค้า F-021 = ตัดสิน hotlink-vs-storage ตอน Gate 1 (forward-commitments) · **G-8:** แก้ backlog deps F-004 = F-002,F-003 · **G-9:** ประกาศ THB-only ใน docs/05
+Rationale: ทุกข้อเป็น seam/ordering ที่ตัดสินตอนนี้ถูก แต่ build ตามจังหวะเดิม — ไม่ดึงงานเข้า Phase 0 เพิ่ม (ยกเว้นการแก้เอกสาร) · dogfood users = พวกเราเอง จึงเลื่อน ToS/consent ได้โดยความเสี่ยงต่ำ
+Affects: backlog README (F-092/F-093/F-004) · forward-commitments (F-020/F-021/F-023/F-027/F-081/PDPA) · docs/05 · /gate1 command
 Status: decided
