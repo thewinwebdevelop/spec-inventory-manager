@@ -6,6 +6,15 @@ signoff: pending      # pending | approved
 # [F-XXX] UX wireframe & flow
 > เจ้าภาพ: `ux` · ออกแบบบน constraint ของ API ที่นิ่งแล้ว
 
-- flow + หน้าจอที่เกี่ยวข้อง (list ชื่อหน้า + การกระทำหลัก)
-- state สำคัญ (empty / loading / error / success) + **Thai copy**
-- (แนบ mockup/wireframe ถ้ามี)
+- flow map ภาพรวม (หน้าจอที่เกี่ยวข้อง + การกระทำหลัก)
+
+## ต่อ 1 screen — ทำครบทุกจอ
+> **บังคับ (ทุก feature เสมอ):** ทุก screen ต้องมี **wireframe sketch (low-fidelity)**
+> **ประกบกับรายละเอียดของจอนั้น** — วาง sketch ไว้ **ติดกัน** ในหัวข้อของ screen เดียวกัน
+> (ไม่แยกไปกองรวมท้ายไฟล์ · ผู้อ่านต้องเห็นภาพ + รายละเอียดของจอพร้อมกัน)
+
+### <ชื่อจอ> (`/path`)
+- **Wireframe:** low-fi ASCII/box-drawing — วางองค์ประกอบจริง (header, fields, buttons, banner, list rows, dialog)
+- องค์ประกอบ + การกระทำหลัก
+- state: empty / loading / error / success + **Thai copy**
+- platform note: web (centered card) vs mobile (full-screen) — ถ้าต่าง

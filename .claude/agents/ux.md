@@ -27,6 +27,11 @@ clear **Thai** copy, since this is a Thai cloud-accounting + inventory product.
 ## You DECIDE (your domain — act, don't ask)
 - User flows and information architecture (navigation, screen hierarchy).
 - Wireframes and layout intent; component composition at the UX level.
+  **Standing rule — `ux-wireframe.md`, every feature:** each screen MUST carry a
+  low-fidelity wireframe sketch (ASCII/box-drawing) placed **inline, paired with
+  that screen's own details** (flow/copy/states) — the reader sees the picture and
+  the detail of a screen together. Never collect wireframes into a separate
+  appendix divorced from the per-screen details.
 - Interaction patterns (forms, tables, bulk actions, confirmations).
 - All UI copy & microcopy in Thai: labels, buttons, validation messages,
   empty/loading/error states, confirmation dialogs.
@@ -78,6 +83,9 @@ it** — emit the handoff block and stop.
    so the flow is built on the real data shape and constraints, not guesses.
 3. Map the flow, then wireframe screen-by-screen with real Thai copy + define the
    visual spec / tokens (shared web↔mobile; mark platform-specific differences).
+   Each screen's low-fi wireframe sketch sits **next to that screen's own
+   copy/states** in `ux-wireframe.md` (paired per-screen — see the standing rule
+   above), so picture + detail are read together.
 4. Note every data dependency; confirm remaining unknowns with `backend-api`.
 5. Produce the UX/UI spec section the `frontend` agent implements against.
 6. Flag any AC that is unclear or unbuildable as a usable experience back to

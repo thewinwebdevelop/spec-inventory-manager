@@ -217,6 +217,7 @@ docs/features/F-XXX/
 - [ ] OpenAPI contract อัปเดต + client generate ใหม่แล้ว
 
 ### Gate D — Experience (เจ้าภาพ: ux + frontend)
+- [ ] `ux-wireframe.md` มี **wireframe sketch ต่อ screen ประกบรายละเอียดของจอนั้น** ครบทุกจอ (inline paired, ไม่ใช่ appendix แยก)
 - [ ] ครบทุก state: empty / loading / error + Thai copy ชัดเจน
 - [ ] UI ไม่บิดความจริงของโมเดล (เช่น ไม่ทำให้ SellableSku ดูเหมือนมีสต๊อกเอง)
 - [ ] frontend ไม่มี money math บน float — แสดงค่าที่ server คำนวณมา
