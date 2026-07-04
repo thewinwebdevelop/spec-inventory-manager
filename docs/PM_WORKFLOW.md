@@ -177,6 +177,25 @@ brief:
 - **ตรวจ AC coverage:** ทุก AC มี test case ที่ pass ไหม
 - **defect list:** ถ้ามีให้นับตัว (backlog หรือ fix ขณะนี้?)
 
+### ถ้า verdict แดง — Defect loop (วนจนเขียว)
+
+1. **QA ส่ง defect list** — ต่อ defect: repro steps + expected vs actual + AC ข้อที่ fail
+   (defect ที่ repro ไม่ได้ = ตีกลับ qa ไม่ใช่ส่ง builder)
+2. **PM triage แยก 3 ชนิด** (สำคัญ — ยาคนละตัว):
+   - **Bug** (โค้ดไม่ตรง AC ที่เคาะแล้ว) → แก้เลย ไม่ต้องถาม user (AC คือคำสั่งที่เคาะไปแล้ว)
+   - **Spec ผิด/กำกวม** (โค้ดตรง spec แต่ spec ผิด) → product ตัดสิน → D-XXX → แก้ spec ก่อนแก้โค้ด
+   - **ของใหม่นอก AC** → ไม่ใช่ defect — เข้า backlog, ไม่ block release
+3. **เปิด defect task บน task board** — `T-XXX-D01, D02, …` ระบุ ref = defect report + AC ·
+   ทีมเจ้าของโค้ด (backend-api/frontend) เป็นคนแก้ · แตะเงิน/สต๊อก/auth = ★ ตามปกติ
+4. **กติกาแก้ bug (บังคับ):** เขียน **regression test ที่ reproduce bug ก่อน** (เห็นแดง) →
+   แก้โค้ด → test เขียว — ส่ง proof ทั้ง red→green · test นี้เข้า permanent pack ตลอดไป
+   (skill `regression-curation` — bug เดิมห้ามกลับมาเงียบๆ)
+5. **PM verify ซ้ำ** (`pnpm verify`) → **QA re-verify** เฉพาะ defect + smoke regression → เขียวค่อยไป release
+6. **จด friction log:** defect ที่ review รอบแรก**ควรจับได้แต่ไม่จับ** = signal ลง RETRO ทันที
+   (@ทีม reviewer + กติกาที่ควรกัน) — นี่คือ input หลักของ learning loop
+
+> defect ค้างที่ไม่ block (คุณเคาะให้ ship ได้) → ลง backlog พร้อม tag ว่ามาจาก F-XXX QA — ห้ามหายเงียบ
+
 ### quality-gate checklist
 
 PM ใช้ skill `/quality-gate` ก่อน ปิด feature:
