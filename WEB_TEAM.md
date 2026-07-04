@@ -171,11 +171,14 @@ docs/features/F-XXX/
 > user = **A** ที่ human gate: G1 sign-off · G2 sign-off (ทีละฉบับ) · Release · Portfolio
 > map skill ต่อ step: [docs/SKILL_MAP.md](docs/SKILL_MAP.md)
 
-### 3.4 Task board — `docs/features/F-XXX/tasks.md` (block ต่อ task, หลัง G2✓)
+### 3.4 Task board — `docs/features/F-XXX/tasks.md` (table แยกต่อทีม, หลัง G2✓)
 เจ้าของ task **update status ของตัวเอง** (`todo→in_progress→done` + `updated_by`) → PM dispatch task ที่ deps=done ครบ
+แยก section ต่อทีม (backend-api / ux / devops / frontend / qa) · 1 แถว = 1 task:
 ```
-## T-XXX-01 · backend · <ชื่อสั้น>
-- desc: <ทำอะไร> · ref: <เอกสาร Gate-2 + target path (apps/api…)> · deps: <T-…/G2✓> · status: todo · updated_by: —
+## <team>
+| ID | งาน | ref → target | deps | status | updated_by |
+|----|-----|--------------|------|--------|------------|
+| T-XXX-01 | <ทำอะไร> | <Gate-2 doc + target path (apps/api…)> | <T-…/G2✓> | todo | — |
 ```
 
 ### 3.5 Concurrency — contract = เส้นแบ่ง
