@@ -1,0 +1,16 @@
+{
+  "name": "@omnistock/connectors",
+  "private": true,
+  "version": "0.0.0",
+  "main": "dist/index.js",
+  "types": "dist/index.d.ts",
+  "scripts": {
+    "build": "tsc -p tsconfig.json",
+    "lint": "echo ok",
+    "typecheck": "tsc -p tsconfig.json --noEmit",
+    "test": "echo ok"
+  },
+  "devDependencies": {
+    "typescript": "^5.7.2"
+  }
+}

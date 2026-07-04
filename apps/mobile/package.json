@@ -1,0 +1,12 @@
+{
+  "name": "mobile",
+  "private": true,
+  "version": "0.0.0",
+  "comment": "Turborepo adapter shim only — mobile is a Flutter/Dart app, not a Node package. See docs/features/F-000/infra.md §6/§7.",
+  "scripts": {
+    "build": "echo 'apps/mobile: Flutter placeholder — real `flutter build` wiring lands in T-000-09'",
+    "lint": "echo 'apps/mobile: Flutter placeholder — real `flutter analyze` wiring lands in T-000-09'",
+    "typecheck": "echo ok",
+    "test": "echo 'apps/mobile: Flutter placeholder — real `flutter test` wiring lands in T-000-09'"
+  }
+}
