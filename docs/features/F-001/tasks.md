@@ -13,9 +13,9 @@
 | T-001-02 | Prisma migration — RefreshToken deltas: `familyId`, `tokenHash @unique` (HMAC), `expiresAt`, `familyExpiresAt` (90d cap, inherited), `lastUsedAt?` + indexes · no backfill | data-model §2/§3 → `packages/db` | G2✓ | todo | — |
 | T-001-03 | password hashing (argon2id) — OWASP params + verify (constant-time) + rehash-on-login + dummy-verify | architecture §5/§9 → `apps/api` | T-001-01 | todo | — |
 | T-001-04 | JWT access token + guard — HS256 15m, claims `sub` only, `typ`/alg pin, `JwtAuthGuard` | architecture §2.2 → `apps/api` | G2✓ | todo | — |
-| T-001-05 | refresh service — opaque + `tokenHash=HMAC-SHA-256` (L-3); rotation txn row-lock; reuse→committed family revoke (H-3) +60s leeway (D-011); `familyExpiresAt` guard (D-007) | architecture §3/§4 · data-model §2.4 → `apps/api` + `packages/core-domain` | T-001-01, T-001-02 | todo | — |
+| T-001-05 | ★ refresh service — opaque + `tokenHash=HMAC-SHA-256` (L-3); rotation txn row-lock; reuse→committed family revoke (H-3) +60s leeway (D-011); `familyExpiresAt` guard (D-007) | architecture §3/§4 · data-model §2.4 → `apps/api` + `packages/core-domain` | T-001-01, T-001-02 | todo | — |
 | T-001-06 | throttle & rate-limit (Redis) — IP+account backoff, always `429+Retry-After` (M-1); fail-open + degraded limiter + log (M-7); `/auth/refresh` IP cap (L-5); change-pw throttle (N-2) | architecture §8 · data-model §4 → `apps/api` | T-001-02 | todo | — |
-| T-001-07 | auth endpoints (8) + DTOs — signup, login (transport-decl H-1), refresh (dual + CSRF + 415 L-2), logout (+familyId ownership M-3), logout-all, sessions, change-password (US-6 + N-1/N-2), admin-reset (active-status H-2); cookie `Path=/auth` (C-1) | api-spec ทั้งฉบับ → `apps/api` | T-001-03, T-001-04, T-001-05, T-001-06 | todo | — |
+| T-001-07 | ★ auth endpoints (8) + DTOs — signup, login (transport-decl H-1), refresh (dual + CSRF + 415 L-2), logout (+familyId ownership M-3), logout-all, sessions, change-password (US-6 + N-1/N-2), admin-reset (active-status H-2); cookie `Path=/auth` (C-1) | api-spec ทั้งฉบับ → `apps/api` | T-001-03, T-001-04, T-001-05, T-001-06 | todo | — |
 | T-001-08 | security event emission (F-005 seam) — `reuse_detected`, `admin_reset`, `self_changed`, `fail_open` (post-commit) | architecture §3.3/§10 → `apps/api` | T-001-07 | todo | — |
 | T-001-09 | OpenAPI contract + client codegen — publish 8 endpoints → gen TS (web) + Dart (mobile) client | api-spec → `packages/contracts` | T-001-07 | todo | — |
 
@@ -39,8 +39,8 @@
 | ID | งาน | ref → target | deps | status | updated_by |
 |----|-----|--------------|------|--------|------------|
 | T-001-15 | web auth screens + components — signup, login (+throttle countdown), help, sessions, change-password; states + i18n `auth.*`; consume generated client (ห้าม reshape) | ux-wireframe · ui.md → `apps/web` | T-001-09, T-001-10 | todo | — |
-| T-001-16 | web token/cookie refresh flow — httpOnly cookie refresh, access in-memory, silent refresh on 401 + retry-once, `X-CSRF-Token` | api-spec §0 · ux-wireframe §7 → `apps/web` | T-001-09 | todo | — |
-| T-001-17 | mobile auth + secure storage — Flutter screens + refresh ใน Keychain/Keystore, body-transport refresh loop, clear-on-logout (ประสาน F-006) | ux-wireframe §8 · api-spec §0 → `apps/mobile` | T-001-09, T-001-10 | todo | — |
+| T-001-16 | ★ web token/cookie refresh flow — httpOnly cookie refresh, access in-memory, silent refresh on 401 + retry-once, `X-CSRF-Token` | api-spec §0 · ux-wireframe §7 → `apps/web` | T-001-09 | todo | — |
+| T-001-17 | ★ mobile auth + secure storage — Flutter screens + refresh ใน Keychain/Keystore, body-transport refresh loop, clear-on-logout (ประสาน F-006) | ux-wireframe §8 · api-spec §0 → `apps/mobile` | T-001-09, T-001-10 | todo | — |
 
 ## qa
 
@@ -51,5 +51,6 @@
 
 ---
 
+> **★** = money/stock/auth/token ตาม WEB_TEAM §3.4 (dispatch opus + security-reviewer ก่อน merge) — T-001-01 มีแต่แรก; T-001-05/07/16/17 retro-tag 2026-07-04
 > **Dispatch แรกที่ปลดล็อกทันที (deps=G2✓):** T-001-01, T-001-02, T-001-04, T-001-10, T-001-11, T-001-12, T-001-14
 > **Critical path:** T-001-01/02 → 05 → 07 → 09 → (15/16/17 frontend) → 18 qa

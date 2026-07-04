@@ -21,7 +21,7 @@ only inside it**) plus one **advisory reviewer**. The governing rule for owners:
 
 | Agent | Advises on | File |
 |------|-----------|------|
-| `backend-reviewer` | Senior review & security consult of backend **spec + implementation**: gaps/omissions, best-practice & project-fit, and backend security (authn/authz, tenant isolation, tokens, injection, secrets, rate-limit). Produces severity-ranked findings; **`backend-api` owns the contract and decides adoption** — the reviewer never edits owned files or blocks a gate alone. Not `qa` (which owns the test verdict). | [backend-reviewer.md](backend-reviewer.md) |
+| `security-reviewer` | Senior review & security consult, **full-stack** (formerly `backend-reviewer`): Gate-2 backend **specs**, backend **implementation** (gaps/omissions, best-practice & project-fit, authn/authz, tenant isolation, tokens, injection, secrets, rate-limit), **and client-side security surfaces** (web token/cookie/CSRF/XSS/CSP, mobile secure storage & deep links) — mandatory on ★ tasks (auth/token/money). Produces severity-ranked findings; **the owning agent (`backend-api`/`frontend`) decides adoption** — the reviewer never edits owned files or blocks a gate alone. Not `qa` (which owns the test verdict). | [security-reviewer.md](security-reviewer.md) |
 
 ## Decision boundaries at a glance
 
@@ -99,10 +99,19 @@ invoke them via the Skill tool.
 | `connector-design` | marketplace integration (sync, idempotency, retry, reconcile) | backend-api |
 | `money-stock` | ledger/transaction/Decimal math + the test matrix | backend-api, qa |
 | `thai-ux` | Thai copy/microcopy/formatting + shared design tokens | ux, frontend |
+| `contract-evolution` | safe contract change after clients ship (additive-only, deprecate, version) | backend-api |
+| `prisma-migration` | expand→migrate→contract, ledger protections, rollback path | backend-api |
+| `client-security` | client-side token/auth/XSS/secure-storage discipline (★ tasks) | frontend |
+| `ux-heuristic-review` | SME-persona walkthrough + checklist before presenting UX docs | ux |
+| `regression-curation` | permanent pack membership, smoke/full tiers, flaky policy | qa |
+| `observability-standard` | per-feature logs/metrics/alerts/runbook | devops |
+| `backup-dr` | backup policy + scheduled restore drills, RPO/RTO | devops |
+| `compliance-checklist` | PDPA pass at Gate 1 for personal-data features | product |
 
-`devops` and `release` use `quality-gate`. More role-specialist skills
-(`backlog-prioritize`, `bullmq-ops`, `flutter-feature`, …) are added when their
-stage arrives — don't pre-build them.
+`release` uses `quality-gate`. More role-specialist skills
+(`backlog-prioritize`, `bullmq-ops`, `flutter-feature` — deferred to F-006 so
+it's written from real code, …) are added when their stage arrives — don't
+pre-build them.
 
 **Full skill map** (step × team × skill, superpowers line): [docs/SKILL_MAP.md](../../docs/SKILL_MAP.md).
 
@@ -110,9 +119,15 @@ stage arrives — don't pre-build them.
 - `description` fields are written to drive auto-delegation — they state both
   what the agent is for and what it explicitly does **not** decide.
 - **Models are pinned** by stakes, not split evenly: `product`, `backend-api`,
-  `qa` → **opus** (top of the chain + money/stock correctness — costly to get
-  wrong); `ux`, `frontend`, `devops`, `release` → **sonnet** (execute against a
-  spec already decided upstream); `backend-reviewer` → **fable** (deep,
+  `qa`, `ux` → **opus** (top of the chain + money/stock correctness + UX is the
+  product's differentiator for a non-tech user who can't deep-review it);
+  `frontend`, `devops`, `release` → **sonnet** (execute against a
+  spec already decided upstream); `security-reviewer` → **fable** (deep,
   independent review & threat-modeling — a different model from the author it
   reviews, so it catches what the writer's own reasoning missed). Change the
   `model:` line in a file's frontmatter to re-tune cost vs. capability.
+- **Per-task model override (★ risk marker):** the PM may override the model at
+  dispatch time (the Agent tool's `model` param) per task row. Tasks marked
+  **★** in `tasks.md` (money/stock/auth/tenant-isolation/concurrency) are
+  dispatched on **opus** even to a sonnet-pinned agent, and get a mandatory
+  `security-reviewer` pass before merge. See WEB_TEAM §3.4/§3.6.

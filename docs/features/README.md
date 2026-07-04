@@ -81,7 +81,7 @@ Tier: ⚙️ core/infra · 🔵 Sync (ได้ทุก tier) · 🟣 Full (ต
 | [F-002](F-002-organization-license-membership.md) | Organization · License · Membership (1 license=1 org=1 TIN, 1 user หลาย org, org switcher, deactivate-not-delete) | both | full | ⚙️ | 🔵 | F-001 |
 | [F-007](F-007-tier-entitlements-core.md) | **Tier & entitlements core** (`can()`/`canAdd()`, plan/entitlement, itemized grants, FeatureGate, retention policy) | — | full | ⚙️ | 🔵 | F-002 |
 | [F-003](F-003-roles-permissions.md) | Roles & permissions (editable roles ราย org + capability registry + Owner ล็อก) | both | full | ⚙️ | 🔵 | F-002, F-007 |
-| [F-004](F-004-settings-org-config.md) | Settings & org config (ops: profile, default warehouse, allocation/inventory defaults) — *tax settings → F-004b/Phase 2* | both | light | ⚙️ | 🔵 | F-002 |
+| [F-004](F-004-settings-org-config.md) | Settings & org config (ops: profile, default warehouse, allocation/inventory defaults) — *tax settings → F-004b/Phase 2* | both | light | ⚙️ | 🔵 | F-002, F-003 |
 | [F-005](F-005-audit-log.md) | Audit log (append-only, action registry, cross-org seam — แยกจาก domain ledger) | both | full | ⚙️ | 🔵 | F-003 |
 | [F-006](F-006-mobile-app-shell.md) | Mobile app shell (auth/secure token, org switcher, Dart client, FeatureGate, push, theme/i18n, skeleton, force-update) | mobile | full | ⚙️ | 🔵 | F-000, F-001, F-002, F-007 |
 
@@ -122,6 +122,8 @@ Tier: ⚙️ core/infra · 🔵 Sync (ได้ทุก tier) · 🟣 Full (ต
 | F-050 | พิมพ์ใบแปะหน้า (เริ่ม Shopee → ขยายทุก platform ตาม connector) | both | full | ⬜ | F-024 |
 | F-051 | Shopee auto-promote ทุก 4 ชม. | web | full | ⬜ | F-020 |
 | F-052 | แจ้งเตือนค่าส่งผิดปกติ | both | full | ⬜ | F-024 |
+| F-092 | Bulk import/export CSV (สินค้า/สต๊อก — เข้าออกผ่าน ledger) — **launch-blocker ก่อนเปิดขาย** (D-013: ย้ายจาก icebox) | web | full | ⬜ | F-010, F-011 |
+| F-093 | Stock take / cycle count (นับจริง vs ระบบ → ปรับผ่าน ledger `ADJUSTMENT`) (D-013: ย้ายจาก icebox — ความเชื่อมั่นสต๊อก = value prop) | both | full | ⬜ | F-013 |
 
 ### Phase 4 — Channels & Mobile
 | ID | Feature | Platform | Size | สถานะ | ขึ้นกับ |
@@ -151,8 +153,6 @@ Tier: ⚙️ core/infra · 🔵 Sync (ได้ทุก tier) · 🟣 Full (ต
 |----|---------|----------|----------|
 | F-090 | โอนสต๊อกข้าม warehouse (TRANSFER) | web | เมื่อมีหลายคลัง |
 | F-091 | Physical assembly (จัดเซตจริงเก็บเป็นชิ้น) | web | ต่อยอดจาก virtual bundle |
-| F-092 | Bulk import/export CSV (สินค้า/สต๊อก) | web | ช่วยร้านที่มีข้อมูลเดิมเยอะ |
-| F-093 | Stock take / cycle count (นับสต๊อกจริง vs ระบบ → ปรับผ่าน ledger) | both | เพิ่มความเชื่อมั่นสต๊อก; ต่อ F-013 |
 | F-094 | Barcode/QR scan ตอนหยิบ-แพ็ก | mobile | ลดหยิบผิด; คู่กับ F-024/F-050 บนมือถือ |
 | F-095 | Mobile BFF (แยก transport layer ให้มือถือ) | — | optional scale seam — เมื่อ mobile diverge หนัก/คนละทีม (ดู docs/02 §7.2) |
 

@@ -32,7 +32,11 @@ but **state why** you skipped — never silently.
   (sync strategy, idempotency, rate-limit, retry, reconciliation, mapping).
 - [ ] data-model → API design → wireframe/UI present and internally consistent.
 - [ ] test plan derived from AC (every AC maps to ≥1 case).
-- [ ] design docs reviewed by each section's owner; **user-approved + committed before implement**.
+- [ ] design docs reviewed by each section's owner; full/auth-token-money features
+  have a `security-reviewer` verdict; **user-approved + committed before implement**.
+- [ ] **Sync-back done:** shared schema/contract/token changes are reflected in
+  `docs/01-data-model.md` / `docs/02-architecture.md` / `docs/design-system.md`
+  — or the spec explicitly states "no shared impact". Silent drift = fail.
 
 ## Gate C — Domain & Data (golden rules in code)
 - [ ] Every domain query filters `organizationId` — proven by a **cross-tenant
@@ -43,6 +47,9 @@ but **state why** you skipped — never silently.
 - [ ] Core business logic lives in `packages/core-domain` as **pure functions**.
 - [ ] Money is **Decimal/numeric (no float)**; stock is **integer** — checked in
   schema + code; precision/rounding test exists.
+- [ ] **Queries are bound:** any new query on growth tables (movements, orders,
+  listings, usage) has a supporting index and no unbounded scan / N+1 — state
+  how it's bound, verified at data-model review.
 - [ ] OpenAPI contract updated + client regenerated.
 
 ## Gate D — Experience

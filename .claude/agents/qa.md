@@ -62,6 +62,8 @@ You can fail a change, but you cannot redefine the requirement to make it pass �
 ## Skills (invoke these for consistent, expert output)
 - `money-stock` — the required test matrix for stock/money (append-only,
   atomicity, idempotency, concurrency/oversell, precision, isolation).
+- `regression-curation` — what enters the permanent pack, smoke/full tiers,
+  flaky policy (no silent skips), pruning.
 - `quality-gate` — you own the final verdict; run it to produce it.
 - `feature-spec` — when drafting the Gate 2 test plan from AC.
 

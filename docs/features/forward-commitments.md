@@ -7,6 +7,14 @@
 
 ---
 
+## → F-020 / F-021 / F-023 / F-027 (Phase 1 — Gate 1/2 ของ sync ต้องรับเข้า, D-013)
+| สิ่งที่ต้องรับเข้า | ที่มา |
+|---|---|
+| **fake-Shopee adapter** (test double ใน `packages/connectors`) สำหรับ integration/E2E/seed/Track-2 — ระบุใน F-020 Gate 2 architecture | gap-scan G-3 |
+| **รูปสินค้า F-021**: ตัดสินตอน Gate 1 — hotlink URL platform (ยอมรับรูปหายถ้า listing ถูกลบ) vs ดึง storage ขึ้นมาก่อน F-040 | gap-scan G-7 |
+| **stock-drift transparency**: F-023 detect expected-vs-actual ก่อน push · F-027 แสดง drift event ("มีคนแก้สต๊อกบน platform") — ใส่เป็น AC ตอน Gate 1 | gap-scan G-4 |
+| **compliance-checklist ที่ Gate 1 ของ F-024/F-028** (buyer PII เข้าระบบครั้งแรก) | gap-scan G-2, D-013 |
+
 ## → F-024 / F-026 / F-030 (Phase 1 — ตอน build จริง)
 | สิ่งที่เลื่อน | seam ที่วางแล้ว |
 |---|---|
@@ -61,6 +69,8 @@
 | **Sync→Full upgrade wizard** (แยก tax entity: ร้าน/สต๊อกที่ไม่ใช่ TIN นี้ต้องย้าย license) | จุดยากที่ระบุไว้ชัด |
 | Self-serve password reset (เมื่อมี SMTP) | F-001 admin-reset ก่อน · `verified` flag |
 | Email verification | F-001 `verified=false` flag ติดไว้ |
+| **ส่งคำเชิญสมาชิกทาง email อัตโนมัติ** (D-012: F-002 MVP = copy invite link) | F-002 Invitation token + link flow พร้อม — เติมแค่ transport |
+| **ToS/consent ตอน signup + Privacy policy + PDPA baseline เต็ม** (D-013: dogfood = พวกเราเอง ยังไม่บังคับ) | skill `compliance-checklist` คุมราย feature ไปพลาง · เต็ม = launch-readiness |
 | **Email sending infra (SMTP)** — ปลดล็อก reset+verify+notification | track เป็น infra dependency (devops) |
 
 ## → F-061 (Phase 4 — Mobile public release & polish)
@@ -94,6 +104,15 @@
 | สิ่งที่เลื่อน | หมายเหตุ |
 |---|---|
 | Object storage: แยก prefix ราย org + **lifecycle-ready** | เงื่อนไขให้ retention/archive ทำงานได้ |
+
+## → Team/workflow upgrades (จาก PM review 2026-07-04) — ดูแผนละเอียด
+| สิ่งที่เลื่อน | trigger | รายละเอียด |
+|---|---|---|
+| Pin client stack (per-app CLAUDE.md + D-XXX) · CI path-boundary check · exemplar conventions | F-000 / F-006 / จบ build feature แรก | [team-upgrade-plan §B1–B3](../superpowers/plans/2026-07-04-team-upgrade-plan.md) |
+| skill `flutter-feature` (เขียนจากโค้ดจริง) | F-006 เสร็จ | [§B4](../superpowers/plans/2026-07-04-team-upgrade-plan.md) |
+| `support` agent + `/triage` | มี user นอกทีม | [§B5](../superpowers/plans/2026-07-04-team-upgrade-plan.md) |
+| Observability section ใน Gate-2 architecture + DR drill | ก่อน F-020 | [§B6](../superpowers/plans/2026-07-04-team-upgrade-plan.md) |
+| Launch-readiness (PDPA, pen test, load test, status page, help content) | ก่อนขายนอก dogfood | [§B7–B8](../superpowers/plans/2026-07-04-team-upgrade-plan.md) |
 
 ## → deferred จาก F-000 (D-004 · Gate 1 sign-off 2026-07-02)
 | สิ่งที่เลื่อน | ปลายทาง build | seam ที่ F-000 วางแล้ว |

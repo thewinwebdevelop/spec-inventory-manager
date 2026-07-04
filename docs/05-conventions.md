@@ -15,6 +15,7 @@
 - เงิน/ต้นทุนใช้ `numeric`/Decimal — **ห้ามใช้ float** กับเงิน
 - จำนวนสต๊อกเป็น integer (หน่วยชิ้น)
 - เวลาเก็บ UTC, แสดงผล timezone `Asia/Bangkok`
+- **สกุลเงิน = THB เดียวทั้งระบบ** — multi-currency อยู่นอก scope ถาวรจนกว่าจะมี D-XXX ใหม่ (D-013: ห้ามเผื่อ abstraction ที่ไม่มีใครขอ)
 
 ## 3. Testing
 - core-domain (inventory math, COGS, allocation, VAT): **unit test คลุมทุกเคส + edge**

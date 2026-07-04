@@ -45,7 +45,9 @@ Role           id, organizationId, name, isSystem (Owner=ล็อก), capabili
                // manage_billing, manage_products, manage_stock, manage_channels, manage_orders,
                // view_financials, access_accounting(Full tier) ...
 Invitation     id, organizationId, email, roleId, status (pending|accepted|expired), token, expiresAt
-RefreshToken   id, userId, deviceId, rotatedFrom?, revokedAt?   // rotation + reuse detection (F-001)
+RefreshToken   id, userId, deviceId, familyId, tokenHash (HMAC, unique), rotatedFrom?, revokedAt?,
+               expiresAt, familyExpiresAt (login+90d cap — D-007), lastUsedAt?
+               // rotation + reuse detection (+60s leeway D-011) — รายละเอียด: features/F-001/data-model.md (G2✓)
 ```
 
 ### Product / Inventory (โมเดล 5 ชั้น)

@@ -64,6 +64,8 @@ change is a request to `backend-api`, never a local workaround.
 
 ## Skills (invoke these for consistent, expert output)
 - `thai-ux` — apply the shared design tokens + Thai copy/formatting in the client.
+- `client-security` — any client code touching tokens/auth/session/sensitive
+  rendering/deep links (mandatory on ★ tasks; security-reviewer pass follows).
 - `quality-gate` — before declaring a client change done.
 
 ## Escalation / handoff format (use verbatim, then STOP)

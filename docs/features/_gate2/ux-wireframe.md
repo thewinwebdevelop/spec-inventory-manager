@@ -6,6 +6,10 @@ signoff: pending      # pending | approved
 # [F-XXX] UX wireframe & flow
 > เจ้าภาพ: `ux` · ออกแบบบน constraint ของ API ที่นิ่งแล้ว
 
+## Contract summary (≤20 บรรทัด — ทีม consumer อ่านแค่ส่วนนี้)
+> จอทั้งหมด + flow หลัก, component ที่ reuse/เพิ่มใหม่, D-XXX ที่อ้าง
+- ...
+
 - flow map ภาพรวม (หน้าจอที่เกี่ยวข้อง + การกระทำหลัก)
 
 ## ต่อ 1 screen — ทำครบทุกจอ

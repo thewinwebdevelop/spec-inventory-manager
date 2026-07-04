@@ -70,6 +70,9 @@ external/money-stock/cross-cutting; light = internal/UI).
 
 ## Skills (invoke these for consistent, expert output)
 - `feature-spec` — authoring Gate 1 (and structuring the whole spec / right-size).
+- `compliance-checklist` — Gate 1 of any feature touching personal data
+  (accounts, orders/buyer data, documents, notifications, exports, AI) →
+  produces the spec's Compliance note.
 - `quality-gate` — Gate A check that scope/AC are sound before sign-off.
 - `product-management:competitive-brief` / `product-management:product-brainstorming` —
   Gate-1 advisory (best practice + ตัวเลือก + trade-off).
