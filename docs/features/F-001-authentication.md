@@ -1,6 +1,6 @@
 # F-001 Authentication
 
-> สถานะ: `gate1-approved` · Phase: 0 · ขึ้นกับ (depends on): F-000 · เจ้าของ: product
+> สถานะ: `gate2-approved` · Phase: 0 · ขึ้นกับ (depends on): F-000 · เจ้าของ: product
 > **Platform:** both (Gate-1 ใช้ร่วม mobile ผ่าน F-006) · **ขนาดงาน:** full (cross-cutting/security)
 
 ---
@@ -28,8 +28,9 @@
   - [ ] AC: rate-limit ระดับ IP + ระดับ account
 
 - **US-3:** ในฐานะผู้ใช้มือถือ ฉันต้องการ **คงสถานะล็อกอินไว้นานๆ** เพื่อไม่ต้องกรอกรหัสทุกครั้ง
-  - [ ] AC: access token (~15 นาที) หมดอายุ → ใช้ refresh token (~30–90 วัน) ขอใหม่ได้โดยไม่ต้องล็อกอินซ้ำ
+  - [ ] AC: access token (~15 นาที) หมดอายุ → ใช้ refresh token ขอใหม่ได้โดยไม่ต้องล็อกอินซ้ำ
   - [ ] AC: refresh token หมุน (rotate) ทุกครั้งที่ใช้ — ตัวเก่าใช้ไม่ได้อีก
+  - [ ] AC: **session (refresh family) มีเพดานอายุสัมบูรณ์ = login + 90 วัน (D-007)** — refresh หมุนต่อได้ภายในเพดานนี้; เลย 90 วันนับจาก login → บังคับล็อกอินใหม่ (ไม่ใช่ sliding-forever) · แสดงผลฝั่ง client แบบ session หมดอายุปกติ
   - [ ] AC: ตรวจพบ refresh token reuse → เพิกถอนทั้งสาย (กัน token ถูกขโมย)
   - [ ] AC: ผูก refresh token กับ device/session (เห็นเข้าจากกี่เครื่อง, logout รายเครื่องได้)
 
@@ -40,7 +41,15 @@
 - **US-5:** ในฐานะผู้ใช้ที่ลืมรหัส ฉันต้องการ **กู้บัญชี** เพื่อกลับเข้าใช้งาน
   - [ ] AC: MVP = Owner/Admin รีเซ็ตรหัสให้สมาชิกได้ (ไม่ต้องมี email infra)
   - [ ] AC: self-serve reset ผ่านอีเมล = fast-follow เมื่อมี email infra (ดู forward-commitments → F-081)
-  - [ ] AC: **ห้ามมีเคสล็อกตัวเองออกถาวร**
+  - [ ] AC: **ห้ามมีเคสล็อกตัวเองออกถาวร** — throttle/backoff ต้อง self-heal เสมอ (ชั่วคราว ไม่ใช่ถาวร); ห้ามมีสถานะที่ต้อง action จากคนอื่นถึงจะกลับเข้าได้เป็นทางเดียว
+  - [ ] AC: **เคส solo owner (org มี owner คนเดียว) ลืม/พิมพ์รหัสผิดจนโดน throttle:** ยอมรับว่า MVP ต้อง **รอ backoff หายเอง (~15 นาที)** เป็นทางกลับเข้า — ถือว่า "ชั่วคราว" ผ่านกฎห้ามล็อกถาวร · UX ต้องแสดงเวลานับถอยหลัง/ข้อความว่ารอได้กี่นาที (ห้ามให้ผู้ใช้เดา) → ส่งต่อ `ux`
+  - [ ] AC: self-serve email reset (F-081) = **prioritized fast-follow** ปิดช่องนี้ให้ solo owner ไม่ต้องรอ — ดึงขึ้นก่อนได้ถ้า customer risk สูง (ผูกกับการมี SMTP infra)
+
+- **US-6:** ในฐานะผู้ใช้ที่ล็อกอินอยู่ ฉันต้องการ **เปลี่ยนรหัสผ่านของตัวเอง** เพื่อหมุนรหัส (โดยเฉพาะหลัง admin reset ให้) โดยไม่ต้องรอ email infra *(เพิ่มจาก D-008)*
+  - [ ] AC: `POST /auth/change-password { currentPassword, newPassword }` (auth: Bearer) — ต้องยืนยัน `currentPassword` ถูกก่อน
+  - [ ] AC: `newPassword` ต้องผ่านนโยบายเดิม (≥8 / NIST list รหัสรั่ว) มิฉะนั้นปฏิเสธพร้อมเหตุผล
+  - [ ] AC: เปลี่ยนสำเร็จ → เพิกถอน refresh family อื่นทั้งหมด (ยกเว้นเครื่องปัจจุบัน) — กันเครื่องที่รู้รหัสเก่า (รวมกรณี admin ที่ตั้งรหัสให้) ค้าง session
+  - [ ] AC: `currentPassword` ผิด → ปฏิเสธด้วยข้อความกลางๆ (ไม่รั่ว) — ไม่กระทบ session ปัจจุบัน
 
 ## 3. ขอบเขต (Scope)
 
@@ -51,7 +60,8 @@
 | throttle/backoff + rate-limit | SSO/SAML → productize |
 | password hashing (argon2id, เคาะ Gate 2) + นโยบายรหัส ≥8 | email verification → F-081 (`verified` flag ติดไว้) |
 | Admin reset (recovery MVP) | self-serve password reset → F-081 (เมื่อมี SMTP) |
-| identifier นามธรรม (`identifier + type`) เผื่อ phone+OTP | phone + OTP + SMS provider → productize |
+| **self-serve change-own-password** (verify current → หมุนรหัส, D-008) | — |
+| identifier นามธรรม (`identifier + type`) — **seam ที่ service-layer, schema เดิม `User.email`** (D-009) | Identifier table / phone + OTP + SMS provider → productize |
 
 ## 4. Business rules & edge cases
 - **Auth แยกจาก membership:** 1 User ล็อกอินได้แม้ยังไม่สังกัด org ใด — User เป็น entity ระดับระบบ ไม่ผูก `organizationId`
@@ -60,8 +70,10 @@
 - edge: ขอ reset ด้วยอีเมลที่ไม่มีในระบบ → ตอบแบบเดียวกับมี (ไม่รั่วว่ามีบัญชีไหม)
 - edge: token ของ user ที่ถูกถอดออกจากทุก org → ล็อกอินได้แต่ไม่เห็นข้อมูล org (เชื่อม F-002/003)
 - normalize email (lowercase, trim) ก่อนเทียบ
+- **admin-reset ต้อง target ที่ `status=active` ใน org นั้นเท่านั้น** (fix H-2) — กัน ex-member (`revoked`/`invited`) ถูก reset ข้าม-tenant
+- **known multi-tenant trade-off (D-010):** `User.passwordHash` เป็น global (1 credential/หลาย org) → admin ที่ reset สมาชิก active ที่ใช้ร่วมกัน จะรู้ credential ที่ใช้ได้ใน org อื่นของสมาชิกด้วย · ยอมรับช่วง dogfood · บรรเทาด้วย change-password (US-6) ให้สมาชิกหมุนเองทันที · structural fix = F-081 self-serve reset
 
-> ✋ **Gate 1 sign-off:** user + product เคาะ user-stories/AC แล้ว → `gate1-approved`
+> ✋ **Gate 1 sign-off:** user + product เคาะ user-stories/AC แล้ว → `gate2-approved`
 
 ---
 

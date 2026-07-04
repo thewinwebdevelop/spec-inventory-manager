@@ -1,7 +1,7 @@
 # OmniStock Agents
 
-Seven specialized subagents, one per discipline. Each owns a single domain and
-has **decision authority only inside it**. The governing rule:
+Seven domain-owner subagents (one per discipline, each with **decision authority
+only inside it**) plus one **advisory reviewer**. The governing rule for owners:
 
 > **If a decision isn't in my domain, I stop and escalate — I never guess.**
 
@@ -16,6 +16,12 @@ has **decision authority only inside it**. The governing rule:
 | `devops` | Turborepo tooling, CI/CD, Docker, env/secrets, hosting, Redis+BullMQ ops, observability | [devops.md](devops.md) |
 | `qa` | Test strategy, unit/E2E plans, verification vs. AC, quality gates, pass/fail verdict | [qa.md](qa.md) |
 | `release` | Versioning, changelog, branch/merge strategy, phase/release gating, rollout & rollback | [release.md](release.md) |
+
+### Advisory (reviews, does not own)
+
+| Agent | Advises on | File |
+|------|-----------|------|
+| `backend-reviewer` | Senior review & security consult of backend **spec + implementation**: gaps/omissions, best-practice & project-fit, and backend security (authn/authz, tenant isolation, tokens, injection, secrets, rate-limit). Produces severity-ranked findings; **`backend-api` owns the contract and decides adoption** — the reviewer never edits owned files or blocks a gate alone. Not `qa` (which owns the test verdict). | [backend-reviewer.md](backend-reviewer.md) |
 
 ## Decision boundaries at a glance
 
@@ -106,5 +112,7 @@ stage arrives — don't pre-build them.
 - **Models are pinned** by stakes, not split evenly: `product`, `backend-api`,
   `qa` → **opus** (top of the chain + money/stock correctness — costly to get
   wrong); `ux`, `frontend`, `devops`, `release` → **sonnet** (execute against a
-  spec already decided upstream). Change the `model:` line in a file's
-  frontmatter to re-tune cost vs. capability.
+  spec already decided upstream); `backend-reviewer` → **fable** (deep,
+  independent review & threat-modeling — a different model from the author it
+  reviews, so it catches what the writer's own reasoning missed). Change the
+  `model:` line in a file's frontmatter to re-tune cost vs. capability.

@@ -77,7 +77,7 @@ Tier: ⚙️ core/infra · 🔵 Sync (ได้ทุก tier) · 🟣 Full (ต
 | ID | Feature | Platform | Size | Tier | สถานะ | ขึ้นกับ |
 |----|---------|----------|------|------|-------|---------|
 | [F-000](F-000-project-setup.md) | Project setup (monorepo scaffold, CI Node+Flutter, Prisma schema 5 ชั้น + ledger trigger, core-domain purity gate, contracts codegen, env, **per-app CLAUDE.md — ดู D-001**) | — | infra | ⚙️ | 🔵 | — |
-| [F-001](F-001-authentication.md) | Authentication (email+password, JWT + refresh rotation/reuse-detection, identifier นามธรรม) | both | full | ⚙️ | 🔵 | F-000 |
+| [F-001](F-001-authentication.md) | Authentication (email+password, JWT + refresh rotation/reuse-detection, identifier นามธรรม) | both | full | ⚙️ | 🟣 | F-000 |
 | [F-002](F-002-organization-license-membership.md) | Organization · License · Membership (1 license=1 org=1 TIN, 1 user หลาย org, org switcher, deactivate-not-delete) | both | full | ⚙️ | 🔵 | F-001 |
 | [F-007](F-007-tier-entitlements-core.md) | **Tier & entitlements core** (`can()`/`canAdd()`, plan/entitlement, itemized grants, FeatureGate, retention policy) | — | full | ⚙️ | 🔵 | F-002 |
 | [F-003](F-003-roles-permissions.md) | Roles & permissions (editable roles ราย org + capability registry + Owner ล็อก) | both | full | ⚙️ | 🔵 | F-002, F-007 |
