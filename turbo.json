@@ -6,6 +6,7 @@
       "outputs": ["dist/**", ".next/**", "!.next/cache/**"]
     },
     "db:generate": {
+      "inputs": ["prisma/schema.prisma"],
       "outputs": ["src/generated/client/**"],
       "cache": true
     },
@@ -22,6 +23,7 @@
       "outputs": ["coverage/**"]
     },
     "gen:contracts": {
+      "inputs": ["openapi/openapi.yaml"],
       "outputs": ["src/generated/ts/**", "../../apps/mobile/lib/generated/api/**"],
       "cache": true
     },
