@@ -8,9 +8,16 @@
     "build": "tsc -p tsconfig.json",
     "lint": "echo ok",
     "typecheck": "tsc -p tsconfig.json --noEmit",
-    "test": "echo ok"
+    "test": "vitest run",
+    "depcruise": "omnistock-purity-gate"
+  },
+  "dependencies": {
+    "decimal.js": "10.4.3"
   },
   "devDependencies": {
-    "typescript": "^5.7.2"
+    "@omnistock/config": "workspace:*",
+    "dependency-cruiser": "16.7.0",
+    "typescript": "^5.7.2",
+    "vitest": "^2.1.8"
   }
 }

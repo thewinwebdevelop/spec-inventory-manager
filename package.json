@@ -11,6 +11,7 @@
     "lint": "turbo lint",
     "typecheck": "turbo typecheck",
     "test": "turbo test",
+    "depcruise": "turbo depcruise",
     "validate": "turbo validate",
     "gen:contracts": "turbo gen:contracts",
     "dev": "turbo dev"

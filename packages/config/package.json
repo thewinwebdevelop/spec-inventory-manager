@@ -4,10 +4,16 @@
   "version": "0.0.0",
   "main": "src/index.ts",
   "types": "src/index.ts",
+  "bin": {
+    "omnistock-purity-gate": "./depcruise/run-purity-gate.mjs"
+  },
   "scripts": {
     "build": "echo ok",
     "lint": "echo ok",
     "typecheck": "echo ok",
     "test": "echo ok"
+  },
+  "devDependencies": {
+    "dependency-cruiser": "16.7.0"
   }
 }
