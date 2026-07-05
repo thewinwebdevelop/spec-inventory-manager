@@ -26,7 +26,9 @@ jobs:
       - run: pnpm install --frozen-lockfile
       # AC2: assert every workspace is in the build graph before building (no silent skip).
       - name: AC2 — build graph covers all workspaces
-        run: pnpm exec turbo build --dry=json | node -e "const g=JSON.parse(require('fs').readFileSync(0));const names=new Set(g.tasks.map(t=>t.package));for(const p of ['@omnistock/core-domain','@omnistock/db','@omnistock/connectors','@omnistock/contracts','@omnistock/config','api','web','mobile','back-office']){if(!names.has(p)){console.error('::error::workspace missing from build graph: '+p);process.exit(1)}}console.log('all workspaces present')"
+        # block scalar on purpose: the inline JS contains ": " which is illegal in a YAML plain scalar
+        run: |
+          pnpm exec turbo build --dry=json | node -e "const g=JSON.parse(require('fs').readFileSync(0));const names=new Set(g.tasks.map(t=>t.package));for(const p of ['@omnistock/core-domain','@omnistock/db','@omnistock/connectors','@omnistock/contracts','@omnistock/config','api','web','mobile','back-office']){if(!names.has(p)){console.error('::error::workspace missing from build graph: '+p);process.exit(1)}}console.log('all workspaces present')"
       - run: pnpm turbo lint typecheck test --filter='!./apps/mobile'
 
   # AC4/AC5/AC6/AC7/AC8 — one ephemeral Postgres, empty → migrated → introspected → trigger-armed (§3).
