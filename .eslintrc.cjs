@@ -14,5 +14,9 @@ module.exports = {
     "packages/db/src/generated",
     "packages/contracts/src/generated",
     "apps/mobile/lib/generated",
+    // Next.js's own auto-generated stub (apps/web) — its header says "should
+    // not be edited"; the triple-slash reference it emits is Next.js's
+    // required convention, not something we can fix in our source.
+    "apps/web/next-env.d.ts",
   ],
 };

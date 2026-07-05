@@ -3,16 +3,22 @@
   "private": true,
   "version": "0.0.0",
   "scripts": {
-    "build": "tsc -p tsconfig.json",
+    "build": "next build",
     "lint": "eslint \"src/**/*.{ts,tsx}\"",
     "typecheck": "tsc -p tsconfig.json --noEmit",
     "test": "echo ok",
-    "dev": "echo 'apps/web dev placeholder — Next.js shell lands in T-000-09'"
+    "dev": "next dev"
   },
   "dependencies": {
-    "@omnistock/contracts": "workspace:*"
+    "@omnistock/contracts": "workspace:*",
+    "next": "^15.5.20",
+    "react": "^18.3.1",
+    "react-dom": "^18.3.1"
   },
   "devDependencies": {
+    "@types/node": "^22.10.2",
+    "@types/react": "^18.3.18",
+    "@types/react-dom": "^18.3.5",
     "typescript": "^5.7.2"
   }
 }

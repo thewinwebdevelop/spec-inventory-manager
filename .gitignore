@@ -7,6 +7,7 @@ dist/
 .next/
 .turbo/
 build/
+*.tsbuildinfo
 
 # env & secrets
 .env
@@ -20,6 +21,7 @@ packages/db/src/generated/
 # flutter
 apps/mobile/.dart_tool/
 apps/mobile/build/
+apps/mobile/.fvm/flutter_sdk
 
 # misc
 .DS_Store
