@@ -24,7 +24,8 @@ NestJS 11 · TypeScript · รันด้วย `tsx` (dev) · consume `@omnist
 - ทุก query โดเมนต้องผ่าน `withOrgScope`/กรอง `organizationId`
 - อย่า bypass `PrismaService` (guarded client) เพื่อเขียน ledger
 - เปลี่ยน request/response shape → แก้ที่ contract (`packages/contracts`) ก่อน แล้ว regen — อย่า hand-write
-- โค้ดแตะเงิน/สต๊อก: logic อยู่ `packages/core-domain` (pure) + ต้องมี unit test
+- **ทุก task ที่ implement ต้องมี unit test ประกบเสมอ** (D-014) — เขียนโค้ดให้ testable (pure fn/DI); test: `pnpm --filter api test` (vitest)
+- โค้ดแตะเงิน/สต๊อก: logic อยู่ `packages/core-domain` (pure) + unit test = ขั้นต่ำห้ามแหก
 
 ## คำสั่ง (source nvm→node22 + `corepack` ก่อน)
 

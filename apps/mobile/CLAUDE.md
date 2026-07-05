@@ -25,6 +25,7 @@ Flutter **3.27.3** (Dart 3.6) — pin ผ่าน **FVM** (`.fvm/`) + `apps/mob
 - คุยกับ API ผ่าน generated Dart client เท่านั้น; เปลี่ยน contract ที่ `packages/contracts`
 - secure storage / deep link / token: ทำตาม skill `client-security` (บังคับบน ★ task)
 - อย่าตัดสิน API/data shape เอง (→ backend-api) · flow/copy → ux
+- **ทุก task ที่ implement ต้องมี unit/widget test ประกบเสมอ** (D-014) — test: `fvm flutter test` (required ใน CI flutter-ci)
 
 ## คำสั่ง
 

@@ -6,7 +6,7 @@
     "build": "tsc -p tsconfig.json",
     "lint": "eslint \"src/**/*.{ts,tsx}\"",
     "typecheck": "tsc -p tsconfig.json --noEmit",
-    "test": "echo ok",
+    "test": "vitest run",
     "dev": "tsx watch src/main.ts",
     "start": "node dist/main.js",
     "check-env": "tsx scripts/check-env.ts"
@@ -28,6 +28,7 @@
     "@types/express": "^5.0.0",
     "@types/node": "^22.10.2",
     "typescript": "^5.7.2",
-    "tsx": "^4.19.2"
+    "tsx": "^4.19.2",
+    "vitest": "^2.1.8"
   }
 }

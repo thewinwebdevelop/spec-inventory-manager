@@ -86,7 +86,8 @@ export class HealthService {
 
 const HEALTH_CHECK_TIMEOUT_MS = 1500;
 
-function withTimeout<T>(promise: Promise<T>, ms: number): Promise<T> {
+// exported for unit tests (D-014) — pure helper, no Nest/DB dependency
+export function withTimeout<T>(promise: Promise<T>, ms: number): Promise<T> {
   return new Promise<T>((resolve, reject) => {
     const timer = setTimeout(() => reject(new Error(`health check timed out after ${ms}ms`)), ms);
     promise.then(

@@ -12,12 +12,13 @@
     "gen:contracts:dart": "bash scripts/gen-dart-client.sh",
     "lint": "eslint \"src/**/*.{ts,tsx}\" --ignore-pattern \"src/generated/**\"",
     "typecheck": "tsc -p tsconfig.json --noEmit",
-    "test": "echo ok"
+    "test": "vitest run --passWithNoTests"
   },
   "devDependencies": {
     "@openapitools/openapi-generator-cli": "^2.39.1",
     "@redocly/cli": "^2.37.0",
-    "openapi-typescript": "^7.13.0"
+    "openapi-typescript": "^7.13.0",
+    "vitest": "^2.1.8"
   },
   "dependencies": {
     "openapi-fetch": "^0.17.0"
