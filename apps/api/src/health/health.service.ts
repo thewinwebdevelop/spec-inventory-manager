@@ -40,20 +40,20 @@ export class HealthService {
   ) {}
 
   async check(): Promise<HealthCheckResult> {
-    const [db, redis] = await Promise.all([
-      this.checkDb(),
-      this.checkRedis(),
-    ]);
+    const [db, redis] = await Promise.all([this.checkDb(), this.checkRedis()]);
 
-    const status: HealthCheckResult["status"] =
-      db === "ok" && redis === "ok" ? "ok" : "degraded";
+    const status: HealthCheckResult["status"] = db === "ok" && redis === "ok" ? "ok" : "degraded";
 
     return { status, checks: { db, redis } };
   }
 
   private async checkDb(): Promise<CheckStatus> {
     try {
-      await this.prisma.ping();
+      // Bounded by the same timeout as the Redis check (see checkRedis below)
+      // so a hung/packet-dropping DB can never stall /health — it fails clean
+      // within HEALTH_CHECK_TIMEOUT_MS instead of hanging on the underlying
+      // driver's own (much longer) connection/query timeout.
+      await withTimeout(this.prisma.ping(), HEALTH_CHECK_TIMEOUT_MS);
       return "ok";
     } catch (err) {
       this.logger.warn(`db health check failed: ${(err as Error).message}`);
@@ -88,10 +88,7 @@ const HEALTH_CHECK_TIMEOUT_MS = 1500;
 
 function withTimeout<T>(promise: Promise<T>, ms: number): Promise<T> {
   return new Promise<T>((resolve, reject) => {
-    const timer = setTimeout(
-      () => reject(new Error(`health check timed out after ${ms}ms`)),
-      ms,
-    );
+    const timer = setTimeout(() => reject(new Error(`health check timed out after ${ms}ms`)), ms);
     promise.then(
       (value) => {
         clearTimeout(timer);

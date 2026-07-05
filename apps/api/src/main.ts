@@ -11,7 +11,6 @@ import { loadEnv } from "@omnistock/config";
 // providers constructing a Redis connection).
 const env = loadEnv(process.env);
 
-/* eslint-disable @typescript-eslint/no-var-requires */
 async function bootstrap(): Promise<void> {
   // Deferred imports: NestFactory/AppModule are only loaded after env
   // validation succeeds, so a missing var never surfaces as a framework

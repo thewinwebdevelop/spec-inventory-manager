@@ -2,6 +2,7 @@
 README.md
 analysis_options.yaml
 doc/HealthResponse.md
+doc/HealthResponseChecks.md
 doc/SystemApi.md
 lib/omnistock_api_client.dart
 lib/src/api.dart
@@ -15,5 +16,6 @@ lib/src/auth/oauth.dart
 lib/src/date_serializer.dart
 lib/src/model/date.dart
 lib/src/model/health_response.dart
+lib/src/model/health_response_checks.dart
 lib/src/serializers.dart
 pubspec.yaml

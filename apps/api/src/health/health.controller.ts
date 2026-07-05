@@ -1,10 +1,11 @@
 // F-000 · T-000-08 — GET /health. Spec: architecture.md + infra.md §9.
-// Contract alignment (AC11): imports the generated `components["schemas"]["HealthResponse"]`
-// from @omnistock/contracts so api and contract can't drift on the committed
-// `status: "ok" | "error"` field. `checks` is an additive field on top of
-// that shape (contract-evolution: additive-only against an already-shipped
-// surface) — a future contract revision can promote it into the OpenAPI spec
-// once a consumer needs it typed.
+// Contract alignment (AC11, fix pass): imports the generated
+// `components["schemas"]["HealthResponse"]` from @omnistock/contracts, which
+// now declares `checks: { db, redis }` as an additive optional field
+// (openapi.yaml, fix-pass regen) — so the controller's return type and the
+// committed contract genuinely cannot drift; there is no longer a
+// hand-maintained intersection type bridging "what the contract says" and
+// "what we actually return".
 //
 // AC3: GET /health -> 200 {status:"ok", ...} on the happy path.
 // AC15: response reflects Redis/BullMQ connectivity via `checks.redis`; when a
@@ -15,23 +16,17 @@ import type { Response } from "express";
 import type { components } from "@omnistock/contracts";
 import { HealthService } from "./health.service";
 
-type ContractHealthResponse = components["schemas"]["HealthResponse"];
-
 /**
- * Full /health payload: the contract's committed `status` field plus the
- * additive `checks` block (infra.md §9). `status` here is derived from the
- * richer internal "ok"|"degraded" result, collapsed to the contract's
- * "ok"|"error" enum so the wire shape matches openapi.yaml exactly.
+ * The full /health payload, imported directly from the generated contract
+ * type — `checks` (db/redis) is now part of `HealthResponse` itself (not a
+ * hand-authored addition bolted on in this file), so the API and the contract
+ * cannot silently diverge on this shape.
  */
-type HealthResponsePayload = ContractHealthResponse & {
-  checks: { db: "ok" | "fail"; redis: "ok" | "fail" };
-};
+type HealthResponsePayload = components["schemas"]["HealthResponse"];
 
 @Controller("health")
 export class HealthController {
-  constructor(
-    @Inject(HealthService) private readonly healthService: HealthService,
-  ) {}
+  constructor(@Inject(HealthService) private readonly healthService: HealthService) {}
 
   @Get()
   @HttpCode(HttpStatus.OK)

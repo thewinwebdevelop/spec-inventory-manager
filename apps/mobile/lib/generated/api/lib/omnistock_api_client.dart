@@ -13,4 +13,5 @@ export 'package:omnistock_api_client/src/model/date.dart';
 export 'package:omnistock_api_client/src/api/system_api.dart';
 
 export 'package:omnistock_api_client/src/model/health_response.dart';
+export 'package:omnistock_api_client/src/model/health_response_checks.dart';
 

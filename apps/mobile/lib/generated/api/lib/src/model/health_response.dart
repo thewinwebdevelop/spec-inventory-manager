@@ -3,6 +3,7 @@
 //
 
 // ignore_for_file: unused_element
+import 'package:omnistock_api_client/src/model/health_response_checks.dart';
 import 'package:built_collection/built_collection.dart';
 import 'package:built_value/built_value.dart';
 import 'package:built_value/serializer.dart';
@@ -13,12 +14,16 @@ part 'health_response.g.dart';
 ///
 /// Properties:
 /// * [status] - Literal \"ok\" when the service is healthy, \"error\" when one or more dependency checks fail (returned with HTTP 503). 
+/// * [checks] 
 @BuiltValue()
 abstract class HealthResponse implements Built<HealthResponse, HealthResponseBuilder> {
   /// Literal \"ok\" when the service is healthy, \"error\" when one or more dependency checks fail (returned with HTTP 503). 
   @BuiltValueField(wireName: r'status')
   HealthResponseStatusEnum get status;
   // enum statusEnum {  ok,  error,  };
+
+  @BuiltValueField(wireName: r'checks')
+  HealthResponseChecks? get checks;
 
   HealthResponse._();
 
@@ -48,6 +53,13 @@ class _$HealthResponseSerializer implements PrimitiveSerializer<HealthResponse> 
       object.status,
       specifiedType: const FullType(HealthResponseStatusEnum),
     );
+    if (object.checks != null) {
+      yield r'checks';
+      yield serializers.serialize(
+        object.checks,
+        specifiedType: const FullType(HealthResponseChecks),
+      );
+    }
   }
 
   @override
@@ -77,6 +89,13 @@ class _$HealthResponseSerializer implements PrimitiveSerializer<HealthResponse> 
             specifiedType: const FullType(HealthResponseStatusEnum),
           ) as HealthResponseStatusEnum;
           result.status = valueDes;
+          break;
+        case r'checks':
+          final valueDes = serializers.deserialize(
+            value,
+            specifiedType: const FullType(HealthResponseChecks),
+          ) as HealthResponseChecks;
+          result.checks.replace(valueDes);
           break;
         default:
           unhandled.add(key);

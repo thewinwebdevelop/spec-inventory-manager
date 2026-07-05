@@ -4,8 +4,21 @@
 // F-000 SCOPE: registered globally but a NO-OP — it does not resolve org
 // membership from a JWT (there is no auth runtime yet, that's F-001/F-002)
 // and does not reject any request. Its only job today is to exist as the
-// named place F-002/F-003 fill in: "resolve org from membership/JWT, then
-// call `OrgContextStore.run(ctx, () => ...)` around the rest of the request."
+// named place F-002/F-003 fill in: "resolve org from membership/JWT".
+//
+// Fix-pass correction: a `CanActivate` guard cannot be the thing that wraps
+// downstream request handling in `OrgContextStore.run(ctx, () => ...)` — a
+// guard only returns a boolean from `canActivate`; any AsyncLocalStorage scope
+// entered *inside* it ends the moment `canActivate` returns, before the route
+// handler ever runs (`.run()`'s callback would need to synchronously contain
+// the rest of the request, which a guard has no hook for). F-002/F-003 must
+// instead do this in NestJS **middleware** (whose `next()` continuation does
+// wrap the rest of the pipeline), or, if a middleware seam turns out
+// impractical for some route, fall back to
+// `AsyncLocalStorage#enterWith(ctx)` — which mutates the *current* async
+// context in place instead of scoping a callback and has weaker cleanup
+// semantics, so that should be a deliberate, documented choice, not the
+// default path.
 import { Injectable, type CanActivate, type ExecutionContext } from "@nestjs/common";
 
 @Injectable()

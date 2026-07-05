@@ -15,11 +15,13 @@ import 'package:omnistock_api_client/src/date_serializer.dart';
 import 'package:omnistock_api_client/src/model/date.dart';
 
 import 'package:omnistock_api_client/src/model/health_response.dart';
+import 'package:omnistock_api_client/src/model/health_response_checks.dart';
 
 part 'serializers.g.dart';
 
 @SerializersFor([
   HealthResponse,
+  HealthResponseChecks,
 ])
 Serializers serializers = (_$serializers.toBuilder()
       ..add(const OneOfSerializer())

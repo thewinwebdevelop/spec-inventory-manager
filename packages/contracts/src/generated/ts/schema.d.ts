@@ -34,6 +34,19 @@ export interface components {
              * @enum {string}
              */
             status: "ok" | "error";
+            /** @description Additive (T-000-08): per-dependency readiness detail backing `status`. Optional so existing consumers of the AC11 minimal seam are unaffected (contract-evolution: additive-only against an already-shipped surface). */
+            checks?: {
+                /**
+                 * @description Postgres reachability via PrismaService's `SELECT 1`.
+                 * @enum {string}
+                 */
+                db?: "ok" | "fail";
+                /**
+                 * @description Redis/BullMQ reachability via the ioredis connection's PING + a BullMQ queue call.
+                 * @enum {string}
+                 */
+                redis?: "ok" | "fail";
+            };
         };
     };
     responses: never;

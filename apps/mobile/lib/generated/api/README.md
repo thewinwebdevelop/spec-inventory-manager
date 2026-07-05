@@ -71,6 +71,7 @@ Class | Method | HTTP request | Description
 ## Documentation For Models
 
  - [HealthResponse](doc/HealthResponse.md)
+ - [HealthResponseChecks](doc/HealthResponseChecks.md)
 
 
 ## Documentation For Authorization

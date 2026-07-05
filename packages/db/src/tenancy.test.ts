@@ -5,7 +5,7 @@
 // (Prisma's `$extends` composition is testable without `$connect`).
 
 import { describe, expect, it } from "vitest";
-import { PrismaClient } from "./generated/client";
+import { Prisma, PrismaClient } from "./generated/client";
 import { withOrgScope } from "./tenancy";
 
 describe("withOrgScope (F-000 pass-through stub)", () => {
@@ -14,19 +14,21 @@ describe("withOrgScope (F-000 pass-through stub)", () => {
     const scoped = withOrgScope(base, { organizationId: "org_123" });
 
     const receivedArgs: unknown[] = [];
-    const probe = scoped.$extends({
-      name: "test-probe",
-      query: {
-        $allModels: {
-          $allOperations({ args, query: _query }) {
-            receivedArgs.push(args);
-            // Short-circuit before hitting a real DB — we only care that
-            // withOrgScope did not mutate `args` on the way through.
-            return Promise.resolve(undefined);
+    const probe = scoped.$extends(
+      Prisma.defineExtension({
+        name: "test-probe",
+        query: {
+          $allModels: {
+            $allOperations({ args, query: _query }) {
+              receivedArgs.push(args);
+              // Short-circuit before hitting a real DB — we only care that
+              // withOrgScope did not mutate `args` on the way through.
+              return Promise.resolve(undefined);
+            },
           },
         },
-      },
-    });
+      }),
+    );
 
     const inputArgs = { where: { id: "abc" } };
     await probe.stockLevel.findFirst(inputArgs as never);

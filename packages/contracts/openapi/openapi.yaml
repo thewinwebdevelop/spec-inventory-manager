@@ -45,7 +45,6 @@ components:
   schemas:
     HealthResponse:
       type: object
-      additionalProperties: false
       required:
         - status
       properties:
@@ -57,6 +56,28 @@ components:
           description: >
             Literal "ok" when the service is healthy, "error" when one or
             more dependency checks fail (returned with HTTP 503).
+        checks:
+          type: object
+          description: >
+            Additive (T-000-08): per-dependency readiness detail backing
+            `status`. Optional so existing consumers of the AC11 minimal seam
+            are unaffected (contract-evolution: additive-only against an
+            already-shipped surface).
+          properties:
+            db:
+              type: string
+              enum:
+                - ok
+                - fail
+              description: Postgres reachability via PrismaService's `SELECT 1`.
+            redis:
+              type: string
+              enum:
+                - ok
+                - fail
+              description: >
+                Redis/BullMQ reachability via the ioredis connection's PING +
+                a BullMQ queue call.
   securitySchemes:
     bearerAuth:
       type: http
