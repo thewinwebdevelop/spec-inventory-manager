@@ -33,6 +33,14 @@
 | **ปฏิบัติการ** | พิมพ์ใบแปะหน้าทุก platform, Shopee auto-promote ทุก 4 ชม., แจ้งเตือนค่าส่งผิดปกติ |
 | **บัญชี (Cloud Accounting)** | เอกสารซื้อเข้า→สต๊อก+ต้นทุน, COGS, ใบ invoice/ใบสำคัญจ่าย/ใบรับรองแทนใบเสร็จ, ภาษีไทย |
 
+## 4.1 Product tier (Sync / Full)
+ระบบขายเป็น 2 tier (gated ด้วย entitlements — ดู [features/F-007](features/F-007-tier-entitlements-core.md)):
+- **Sync** = ops + สต๊อก + multi-channel sync + ต้นทุน/COGS/**กำไรหลังหักค่าช่องทาง** (ไม่มีเอกสารภาษี)
+- **Full** = Sync + ประกาศ TIN + เอกสารซื้อ-ขาย + VAT/WHT + กำไรสุทธิ
+
+**1 License = 1 Org = (Full) 1 TIN** · 1 User ถือได้หลาย license
+backlog ที่ resequence แบบ **tier-aware + mobile-parity-first** (web พักไว้) อยู่ที่ [features/README.md](features/README.md)
+
 ## 5. Roadmap (ตัดสโคปเด็ดขาด — dogfood ขับเคลื่อน)
 
 > หลักการ: แต่ละ phase ต้อง "ใช้งานจริงกับร้านของเราได้" ก่อนไป phase ถัดไป

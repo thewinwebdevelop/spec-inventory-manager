@@ -1,0 +1,90 @@
+openapi: 3.1.0
+info:
+  title: OmniStock API
+  description: >
+    OmniStock — Inventory + Marketplace Sync + Thai Cloud Accounting platform.
+    This spec is the single source of truth for the API contract shared by
+    apps/api (NestJS, implements it), apps/web (Next.js, consumes the
+    generated TS client), and apps/mobile (Flutter, consumes the generated
+    Dart client). See docs/02-architecture.md and
+    docs/features/F-000/architecture.md §4.
+  version: 0.0.1
+servers:
+  - url: http://localhost:3000
+    description: Local development
+paths:
+  /health:
+    get:
+      operationId: getHealth
+      summary: Liveness/readiness probe
+      description: >
+        F-000 seed endpoint — proves the contracts codegen pipeline end to
+        end. Implemented by apps/api in T-000-08 (incl. redis/bullmq probe,
+        AC15). Response shape here covers the minimal AC11 seam; richer probe
+        detail is added by T-000-08 without breaking this shape (additive
+        only, see contract-evolution skill).
+      tags:
+        - system
+      security: []
+      responses:
+        "200":
+          description: Service is healthy
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/HealthResponse"
+        "503":
+          description: >
+            Service is unhealthy — one or more dependencies (e.g. Redis/BullMQ,
+            see T-000-08) failed their readiness check.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/HealthResponse"
+components:
+  schemas:
+    HealthResponse:
+      type: object
+      required:
+        - status
+      properties:
+        status:
+          type: string
+          enum:
+            - ok
+            - error
+          description: >
+            Literal "ok" when the service is healthy, "error" when one or
+            more dependency checks fail (returned with HTTP 503).
+        checks:
+          type: object
+          description: >
+            Additive (T-000-08): per-dependency readiness detail backing
+            `status`. Optional so existing consumers of the AC11 minimal seam
+            are unaffected (contract-evolution: additive-only against an
+            already-shipped surface).
+          properties:
+            db:
+              type: string
+              enum:
+                - ok
+                - fail
+              description: Postgres reachability via PrismaService's `SELECT 1`.
+            redis:
+              type: string
+              enum:
+                - ok
+                - fail
+              description: >
+                Redis/BullMQ reachability via the ioredis connection's PING +
+                a BullMQ queue call.
+  securitySchemes:
+    bearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+      description: >
+        Default auth scheme for OmniStock API endpoints. Individual public
+        endpoints (e.g. /health) opt out via an operation-level `security: []`.
+security:
+  - bearerAuth: []

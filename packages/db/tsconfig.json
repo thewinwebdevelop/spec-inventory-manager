@@ -1,0 +1,17 @@
+{
+  "extends": "../config/tsconfig/base.json",
+  "compilerOptions": {
+    "noEmit": true,
+    "rootDir": "src",
+    "types": []
+  },
+  "include": [
+    "src/index.ts",
+    "src/ledger-guard.ts",
+    "src/ledger-guard.test.ts",
+    "src/tenancy.ts",
+    "src/tenancy.test.ts",
+    "src/tenancy.compile-test.ts"
+  ],
+  "exclude": ["src/generated", "node_modules", "dist"]
+}

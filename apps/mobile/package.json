@@ -1,0 +1,12 @@
+{
+  "name": "mobile",
+  "private": true,
+  "version": "0.0.0",
+  "comment": "Turborepo adapter shim only — mobile is a Flutter/Dart app, not a Node package. See docs/features/F-000/infra.md §6/§7. Scripts shell out to `flutter` (T-000-09); `./scripts/flutter.sh` picks `fvm flutter` when an fvm project pin exists (this dev machine), else plain `flutter` on PATH (CI, via subosito/flutter-action pinned by .flutter-version).",
+  "scripts": {
+    "build": "./scripts/flutter.sh build apk --debug",
+    "lint": "./scripts/flutter.sh analyze",
+    "typecheck": "echo ok",
+    "test": "./scripts/flutter.sh test"
+  }
+}

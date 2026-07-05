@@ -7,6 +7,7 @@ dist/
 .next/
 .turbo/
 build/
+*.tsbuildinfo
 
 # env & secrets
 .env
@@ -15,12 +16,56 @@ build/
 
 # prisma
 *.db
+packages/db/src/generated/
 
 # flutter
 apps/mobile/.dart_tool/
 apps/mobile/build/
+apps/mobile/.fvm/flutter_sdk
 
 # misc
 .DS_Store
 *.log
 coverage/
+
+# --- Managed agent skills (vendored from mattpocock/skills) ---
+# Reinstallable from skills-lock.json via the setup-matt-pocock-skills skill.
+# Lockfile is committed as the source of truth; the skill folders are not.
+# Project-authored skills (feature-spec, connector-design, money-stock,
+# thai-ux, quality-gate) are tracked and unaffected.
+.agents/
+.claude/skills/ask-matt
+.claude/skills/codebase-design
+.claude/skills/decision-mapping
+.claude/skills/design-an-interface
+.claude/skills/diagnosing-bugs
+.claude/skills/domain-modeling
+.claude/skills/edit-article
+.claude/skills/git-guardrails-claude-code
+.claude/skills/grill-me
+.claude/skills/grill-with-docs
+.claude/skills/grilling
+.claude/skills/handoff
+.claude/skills/implement
+.claude/skills/improve-codebase-architecture
+.claude/skills/loop-me
+.claude/skills/migrate-to-shoehorn
+.claude/skills/obsidian-vault
+.claude/skills/prototype
+.claude/skills/qa
+.claude/skills/request-refactor-plan
+.claude/skills/resolving-merge-conflicts
+.claude/skills/review
+.claude/skills/scaffold-exercises
+.claude/skills/setup-matt-pocock-skills
+.claude/skills/setup-pre-commit
+.claude/skills/tdd
+.claude/skills/teach
+.claude/skills/to-issues
+.claude/skills/to-prd
+.claude/skills/triage
+.claude/skills/ubiquitous-language
+.claude/skills/writing-beats
+.claude/skills/writing-fragments
+.claude/skills/writing-great-skills
+.claude/skills/writing-shape

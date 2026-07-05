@@ -1,0 +1,23 @@
+{
+  "name": "@omnistock/core-domain",
+  "private": true,
+  "version": "0.0.0",
+  "main": "dist/index.js",
+  "types": "dist/index.d.ts",
+  "scripts": {
+    "build": "tsc -p tsconfig.json",
+    "lint": "eslint \"src/**/*.{ts,tsx}\" --ignore-pattern \"src/__purity_fixtures__/**\"",
+    "typecheck": "tsc -p tsconfig.json --noEmit",
+    "test": "vitest run",
+    "depcruise": "omnistock-purity-gate"
+  },
+  "dependencies": {
+    "decimal.js": "10.4.3"
+  },
+  "devDependencies": {
+    "@omnistock/config": "workspace:*",
+    "dependency-cruiser": "16.7.0",
+    "typescript": "^5.7.2",
+    "vitest": "^2.1.8"
+  }
+}
