@@ -11,6 +11,8 @@
     "lint": "turbo lint",
     "typecheck": "turbo typecheck",
     "test": "turbo test",
+    "validate": "turbo validate",
+    "gen:contracts": "turbo gen:contracts",
     "dev": "turbo dev"
   },
   "devDependencies": {

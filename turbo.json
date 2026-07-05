@@ -27,6 +27,10 @@
       "outputs": ["src/generated/ts/**", "../../apps/mobile/lib/generated/api/**"],
       "cache": true
     },
+    "validate": {
+      "inputs": ["openapi/openapi.yaml"],
+      "outputs": []
+    },
     "depcruise": {
       "dependsOn": ["^build"],
       "outputs": []

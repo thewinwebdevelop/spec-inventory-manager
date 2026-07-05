@@ -1,0 +1,47 @@
+openapi: 3.1.0
+info:
+  title: OmniStock API
+  description: >
+    OmniStock — Inventory + Marketplace Sync + Thai Cloud Accounting platform.
+    This spec is the single source of truth for the API contract shared by
+    apps/api (NestJS, implements it), apps/web (Next.js, consumes the
+    generated TS client), and apps/mobile (Flutter, consumes the generated
+    Dart client). See docs/02-architecture.md and
+    docs/features/F-000/architecture.md §4.
+  version: 0.0.1
+servers:
+  - url: http://localhost:3000
+    description: Local development
+paths:
+  /health:
+    get:
+      operationId: getHealth
+      summary: Liveness/readiness probe
+      description: >
+        F-000 seed endpoint — proves the contracts codegen pipeline end to
+        end. Implemented by apps/api in T-000-08 (incl. redis/bullmq probe,
+        AC15). Response shape here covers the minimal AC11 seam; richer probe
+        detail is added by T-000-08 without breaking this shape (additive
+        only, see contract-evolution skill).
+      tags:
+        - system
+      responses:
+        "200":
+          description: Service is healthy
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/HealthResponse"
+components:
+  schemas:
+    HealthResponse:
+      type: object
+      additionalProperties: false
+      required:
+        - status
+      properties:
+        status:
+          type: string
+          enum:
+            - ok
+          description: Literal "ok" when the service is healthy.

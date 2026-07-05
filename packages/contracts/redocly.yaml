@@ -1,0 +1,13 @@
+extends:
+  - recommended
+
+rules:
+  # /health is intentionally unauthenticated (liveness/readiness probe) and
+  # returns 200 only — no 4xx is meaningful for a probe endpoint. Real
+  # business endpoints added in later features must define security + error
+  # responses; do not extend this override beyond /health.
+  security-defined: off
+  operation-4xx-response: off
+  # F-000 is pre-product; license/localhost checks are not meaningful yet.
+  info-license: off
+  no-server-example.com: off
