@@ -12,30 +12,36 @@
 // missing var can never surface as an unhandled framework stack trace.
 import { z } from "zod";
 
-export const envSchema = z.object({
-  DATABASE_URL: z
-    .string({ required_error: "DATABASE_URL is required" })
-    .min(1, "DATABASE_URL is required")
-    .url("DATABASE_URL must be a valid connection string URL"),
-  REDIS_URL: z
-    .string({ required_error: "REDIS_URL is required" })
-    .min(1, "REDIS_URL is required")
-    .url("REDIS_URL must be a valid connection string URL"),
-  JWT_ACCESS_SECRET: z
-    .string({ required_error: "JWT_ACCESS_SECRET is required" })
-    .min(1, "JWT_ACCESS_SECRET is required"),
-  JWT_REFRESH_SECRET: z
-    .string({ required_error: "JWT_REFRESH_SECRET is required" })
-    .min(1, "JWT_REFRESH_SECRET is required"),
-  PORT: z
-    .string({ required_error: "PORT is required" })
-    .min(1, "PORT is required")
-    .regex(/^\d+$/, "PORT must be numeric"),
-  NODE_ENV: z.enum(["development", "test", "production"], {
-    required_error: "NODE_ENV is required",
-    invalid_type_error: "NODE_ENV must be one of development|test|production",
-  }),
-});
+export const envSchema = z
+  .object({
+    DATABASE_URL: z
+      .string({ required_error: "DATABASE_URL is required" })
+      .min(1, "DATABASE_URL is required")
+      .url("DATABASE_URL must be a valid connection string URL"),
+    REDIS_URL: z
+      .string({ required_error: "REDIS_URL is required" })
+      .min(1, "REDIS_URL is required")
+      .url("REDIS_URL must be a valid connection string URL"),
+    JWT_ACCESS_SECRET: z
+      .string({ required_error: "JWT_ACCESS_SECRET is required" })
+      .min(32, "JWT_ACCESS_SECRET must be at least 32 chars (256-bit random) — F-001 I-4"),
+    JWT_REFRESH_SECRET: z
+      .string({ required_error: "JWT_REFRESH_SECRET is required" })
+      .min(32, "JWT_REFRESH_SECRET must be at least 32 chars (256-bit random) — F-001 I-4"),
+    PORT: z
+      .string({ required_error: "PORT is required" })
+      .min(1, "PORT is required")
+      .regex(/^\d+$/, "PORT must be numeric"),
+    NODE_ENV: z.enum(["development", "test", "production"], {
+      required_error: "NODE_ENV is required",
+      invalid_type_error: "NODE_ENV must be one of development|test|production",
+    }),
+  })
+  .refine((env) => env.JWT_ACCESS_SECRET !== env.JWT_REFRESH_SECRET, {
+    message:
+      "JWT_ACCESS_SECRET and JWT_REFRESH_SECRET must differ (F-001 I-4) — using the same value for both defeats the separate-scope guarantee (architecture.md §9)",
+    path: ["JWT_REFRESH_SECRET"],
+  });
 
 export type Env = z.infer<typeof envSchema>;
 
@@ -48,9 +54,7 @@ export type Env = z.infer<typeof envSchema>;
  * This is the seam every app boot (apps/api's main.ts, T-000-08) calls
  * before `NestFactory.create(...)`.
  */
-export function loadEnv(
-  source: NodeJS.ProcessEnv = process.env,
-): Env {
+export function loadEnv(source: NodeJS.ProcessEnv = process.env): Env {
   const result = envSchema.safeParse(source);
 
   if (!result.success) {

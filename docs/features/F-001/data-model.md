@@ -1,7 +1,7 @@
 ---
 doc: F-001 data-model — auth deltas (RefreshToken family/hash/expiry; User unchanged)
 owner: "@backend-api"
-signoff: approved     # pending | approved
+signoff: approved # pending | approved
 ---
 
 # F-001 — Data model (Gate 2)
@@ -20,7 +20,8 @@ signoff: approved     # pending | approved
 
 F-000 shipped `User { id, email @unique, passwordHash, verified @default(false),
 createdAt, updatedAt, memberships[], refreshTokens[] }`. F-001 **adds no columns** — it
-only *uses* these:
+only _uses_ these:
+
 - `email` — normalized (lowercase + trim, Gate 1 §4) at the **service layer** before it
   reaches the existing `@unique(email)` constraint. Normalization is behavior, not schema —
   no new column, no citext for MVP (we normalize on write and on lookup consistently).
@@ -45,6 +46,7 @@ only *uses* these:
 ## 2. `RefreshToken` — deltas required by F-001
 
 F-000 shipped the structural stub:
+
 ```prisma
 model RefreshToken {
   id          String    @id @default(cuid())
@@ -60,6 +62,7 @@ model RefreshToken {
 ```
 
 ### 2.1 Target schema (F-001)
+
 ```prisma
 model RefreshToken {
   id          String    @id @default(cuid())
@@ -67,7 +70,7 @@ model RefreshToken {
   familyId    String                          // NEW — rotation-chain / session id (arch §3)
   tokenHash   String    @unique               // NEW — HMAC-SHA-256(JWT_REFRESH_SECRET, tokenValue) (arch §2.3, L-3)
   deviceId    String?                         // client-supplied session label (arch §4)
-  rotatedFrom String?                         // previous RefreshToken.id — chain link
+  rotatedFrom String?   @unique               // NEW constraint (I-5) — previous RefreshToken.id — chain link, ≤1 successor enforced at DB
   expiresAt   DateTime                        // NEW — per-token 60-day expiry, SLIDES on rotation (arch §2.3)
   familyExpiresAt DateTime                     // NEW — absolute family-lifetime cap, login+90d, INHERITED unchanged on rotation (D-007, arch §2.3)
   lastUsedAt  DateTime?                        // NEW (optional) — for session-list UX (arch §4)
@@ -79,22 +82,38 @@ model RefreshToken {
   @@index([userId])
   @@index([rotatedFrom])
   @@index([familyId])                          // NEW — family-wide revoke + session list
-  @@index([userId, revokedAt])                 // NEW — list live sessions for a user
+  @@index([userId, revokedAt])                 // NEW — list live sessions for a user + D-017 cap-20 count-per-user query
 }
 ```
 
+**`rotatedFrom` is `@unique` (I-5).** Postgres allows multiple `NULL`s under a unique
+constraint (only non-NULL values must be distinct), so this does **not** block the many rows
+with `rotatedFrom = null` (every family's first token) — it only forbids **two rows pointing
+at the same predecessor**. Rationale: the rotation chain's invariant is "a token has **at most
+one** successor" (arch §3.2 "consumed" state = a successor exists); today that invariant is
+enforced by the row-lock + in-transaction check in the rotate step (data-model §2.4). This
+`@unique` constraint makes the same invariant a **database-level guarantee** — if a future
+code path ever inserts a successor without going through the locked rotate transaction (a bug,
+a new endpoint, a script), the second insert now fails with a unique-constraint violation
+instead of silently creating two "successors" of one token, which would corrupt the reuse-
+detection logic (a stale reader might treat a stray duplicate as evidence of reuse, or worse,
+miss real reuse). A code-only invariant can drift silently; a constraint violation cannot.
+
 ### 2.2 Field rationale
-| Field | Type | Why |
-|---|---|---|
-| `familyId` | `String` (cuid, **not** `@id`) | Groups every token in one rotation chain = one device session. Family-wide revoke on reuse (arch §3.3) and logout (arch §4) filter on this. Assigned fresh on **login**; **inherited** on rotation. Many rows share one `familyId`. |
-| `tokenHash` | `String @unique` | Lookup key. We store **`HMAC-SHA-256(JWT_REFRESH_SECRET, tokenValue)`** (a **keyed** hash — L-3, arch §2.3), never plaintext. A plain SHA-256 would suffice against a DB dump *alone* (the token is high-entropy random), but keying it with the F-000 `JWT_REFRESH_SECRET` env secret is free hardening: an attacker with only a DB dump **cannot even verify** a guessed token without also holding the env secret (offline verification requires both). Lookup = compute the HMAC of the presented plaintext, match by `tokenHash`. `@unique` because a token value maps to exactly one row. *(This repurposes the otherwise-idle `JWT_REFRESH_SECRET` — the refresh token is opaque, not a JWT, so the secret is no longer a JWT signer; see arch §9.)* |
-| `expiresAt` | `DateTime` | **Per-token** 60-day expiry (arch §2.3), independent of `revokedAt`. **Slides:** each rotation mints a *new* successor row with a fresh `now()+60d`. Bounds how long a single un-rotated token is usable. |
-| `familyExpiresAt` | `DateTime` | **NEW (D-007).** **Absolute family-lifetime cap** = the login instant + **90d**. Unlike `expiresAt` it is **inherited unchanged** on every rotation (the successor copies the predecessor's `familyExpiresAt` verbatim — it does **not** slide), so the whole rotation chain dies 90d after the original login no matter how often it refreshes. Rotation is refused once `now() > familyExpiresAt` → forces re-login (arch §3.1). This gives the Gate-1 30–90d band a real ceiling instead of sliding-forever; a stolen-but-unnoticed device session ages out. |
-| `lastUsedAt` | `DateTime?` | Nice-to-have for "last active" in the session list UX (arch §4). Not security-critical; nullable, set on each successful rotation. Can drop if it complicates MVP. |
+
+| Field             | Type                           | Why                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                         |
+| ----------------- | ------------------------------ | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `familyId`        | `String` (cuid, **not** `@id`) | Groups every token in one rotation chain = one device session. Family-wide revoke on reuse (arch §3.3) and logout (arch §4) filter on this. Assigned fresh on **login**; **inherited** on rotation. Many rows share one `familyId`.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                         |
+| `tokenHash`       | `String @unique`               | Lookup key. We store **`HMAC-SHA-256(JWT_REFRESH_SECRET, tokenValue)`** (a **keyed** hash — L-3, arch §2.3), never plaintext. A plain SHA-256 would suffice against a DB dump _alone_ (the token is high-entropy random), but keying it with the F-000 `JWT_REFRESH_SECRET` env secret is free hardening: an attacker with only a DB dump **cannot even verify** a guessed token without also holding the env secret (offline verification requires both). Lookup = compute the HMAC of the presented plaintext, match by `tokenHash`. `@unique` because a token value maps to exactly one row. _(This repurposes the otherwise-idle `JWT_REFRESH_SECRET` — the refresh token is opaque, not a JWT, so the secret is no longer a JWT signer; see arch §9.)_ |
+| `expiresAt`       | `DateTime`                     | **Per-token** 60-day expiry (arch §2.3), independent of `revokedAt`. **Slides:** each rotation mints a _new_ successor row with a fresh `now()+60d`. Bounds how long a single un-rotated token is usable.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                   |
+| `familyExpiresAt` | `DateTime`                     | **NEW (D-007).** **Absolute family-lifetime cap** = the login instant + **90d**. Unlike `expiresAt` it is **inherited unchanged** on every rotation (the successor copies the predecessor's `familyExpiresAt` verbatim — it does **not** slide), so the whole rotation chain dies 90d after the original login no matter how often it refreshes. Rotation is refused once `now() > familyExpiresAt` → forces re-login (arch §3.1). This gives the Gate-1 30–90d band a real ceiling instead of sliding-forever; a stolen-but-unnoticed device session ages out.                                                                                                                                                                                             |
+| `lastUsedAt`      | `DateTime?`                    | Nice-to-have for "last active" in the session list UX (arch §4). Not security-critical; nullable, set on each successful rotation. Can drop if it complicates MVP.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                          |
 
 ### 2.3 Derived state (NOT columns — arch §3.2)
+
 A token's logical state is **derived**, never stored redundantly (consistent with the
 schema-vs-logic rule F-000 follows):
+
 - **current** — newest in family: `revokedAt IS NULL` AND `expiresAt > now()` AND
   `familyExpiresAt > now()` (family cap not reached — D-007) AND no other row has
   `rotatedFrom = this.id`. Only a current token may be exchanged.
@@ -108,10 +127,12 @@ presented row + its family rows as plain values and returns `{ ALLOW_ROTATE | RE
 | REJECT_EXPIRED }`.
 
 ### 2.4 Concurrency — how the rotate txn stays deterministic (answers QA Q1)
+
 The rotate step (arch §3.1) runs in a Prisma `$transaction`. To make concurrent refreshes of
 the **same** token deterministic (not serializable-retry-dependent), the txn takes a
 **row lock on the presented `RefreshToken` row** (`SELECT ... FOR UPDATE`, via a raw locked
 read or Prisma's interactive txn) before checking/consuming it:
+
 1. `SELECT ... FOR UPDATE WHERE tokenHash = :h` (where `:h = HMAC-SHA-256(JWT_REFRESH_SECRET, presentedTokenValue)`, L-3) → locks the row.
 2. Re-check state under the lock (current? not revoked? not expired? **family cap not
    reached — `familyExpiresAt > now()`, D-007**? no successor yet?). If `familyExpiresAt`
@@ -122,19 +143,20 @@ read or Prisma's interactive txn) before checking/consuming it:
    `rotatedFrom = presented.id`, `expiresAt = now()+60d`), set `lastUsedAt`, commit.
 
 **Reuse path — the family revocation MUST commit (H-3).** A naïve implementation that wraps
-steps 1–4 in one `$transaction` and *throws* to signal reuse (the natural NestJS
+steps 1–4 in one `$transaction` and _throws_ to signal reuse (the natural NestJS
 `throw UnauthorizedException` → 401 pattern) would **roll back the family-wide `revokedAt`
 update** — leaving the family's current token (which the attacker may hold) alive: detection
 without response, silently failing US-3. So the reuse branch is structured to guarantee the
 revoke survives:
+
 - **Distinguish leeway from reuse first.** If the presented token is the **immediate
   predecessor** of the current token (`∃ current row WHERE rotatedFrom = presented.id`) **and**
   that successor was minted within the **reuse-leeway window** (`now() − successor.createdAt
-  ≤ 60s`, arch §3.5), this is a benign retry (lost response / multi-tab): **do NOT revoke the
+≤ 60s`, arch §3.5), this is a benign retry (lost response / multi-tab): **do NOT revoke the
   family** — release the lock and return `401 INVALID_REFRESH`. No audit event.
 - **Otherwise it is reuse** (an older predecessor, any deeper ancestor, or an already-revoked
   token): the family revoke runs in a transaction that **commits** — either (a) commit the
-  rotation txn that also sets `revokedAt = now()` on **all** `WHERE familyId = F` rows, *then*
+  rotation txn that also sets `revokedAt = now()` on **all** `WHERE familyId = F` rows, _then_
   return the 401; or (b) release the rotation lock and run the family revoke in its **own
   committed** `$transaction`, then return the 401. **Do not signal reuse by throwing inside
   the txn that carries the revoke.** The `auth.refresh.reuse_detected` audit event is emitted
@@ -145,10 +167,37 @@ first wins and creates the successor; the second, on acquiring the lock, sees a 
 successor (< leeway) → benign `401 INVALID_REFRESH`, family stays alive (the winner's session
 survives — this is the M-2 fix for web multi-tab / mobile lost-response). A **stale**
 predecessor or deeper ancestor replayed later still trips the committed family revoke. **No
-serializable-retry loop needed.** *(QA: (a) two parallel `/auth/refresh` with the same token
+serializable-retry loop needed.** _(QA: (a) two parallel `/auth/refresh` with the same token
 → 1×200 + 1×401 `INVALID_REFRESH`, family **NOT** revoked, winner's successor still valid;
 (b) replay a consumed token **after** the leeway window → 1×401 + family `revokedAt`
-committed on all rows + audit event emitted.)*
+committed on all rows + audit event emitted.)_
+
+### 2.5 Live-family cap query — 20/user (D-017)
+
+On **login**, before minting the new family, count the user's current **live** families —
+"live" here means at least one **non-revoked, non-expired** `RefreshToken` row exists for that
+`familyId` (i.e. a `DISTINCT familyId` count under the same "current" predicate as §2.3):
+
+```sql
+SELECT COUNT(DISTINCT "familyId")
+FROM "RefreshToken"
+WHERE "userId" = :userId
+  AND "revokedAt" IS NULL
+  AND "expiresAt" > now()
+  AND "familyExpiresAt" > now();
+```
+
+If the count is **≥ 20**, revoke the **oldest** live family first (by the `MIN(createdAt)`
+of its rows, i.e. the family's original login time) in its own committed transaction, **then**
+proceed to create the new family (same insert as §2.1/arch §3.1). This runs inside (or
+immediately before) the same login transaction that mints the new family — login as a whole
+still commits atomically per user-visible outcome (new family always created).
+
+**Index support:** `@@index([userId, revokedAt])` (already added for the session list, §2.1)
+covers the `userId` + `revokedAt IS NULL` predicate above; the `expiresAt`/`familyExpiresAt`
+filters are applied on the already-narrowed row set from that index, so no additional index is
+needed for the cap-20 count to stay cheap at MVP scale (≤20 live families × a handful of
+consumed-but-not-yet-pruned rows per user).
 
 ---
 
@@ -156,8 +205,13 @@ committed on all rows + audit event emitted.)*
 
 - **One additive migration** on top of F-000's `RefreshToken`:
   - add `familyId String NOT NULL`, `tokenHash String NOT NULL UNIQUE`, `expiresAt DateTime
-    NOT NULL`, `familyExpiresAt DateTime NOT NULL` (D-007), `lastUsedAt DateTime NULL`;
-  - add indexes `@@index([familyId])`, `@@index([userId, revokedAt])`.
+NOT NULL`, `familyExpiresAt DateTime NOT NULL` (D-007), `lastUsedAt DateTime NULL`;
+  - **add `UNIQUE` to the existing `rotatedFrom` column (I-5)** — Postgres unique constraints
+    permit multiple `NULL`s, so this is safe even though most rows (every family's first
+    token) have `rotatedFrom = null`; it only rejects two rows sharing the same non-null
+    `rotatedFrom` (≥1 successor per token, enforced at the DB per §2.1 rationale above);
+  - add indexes `@@index([familyId])`, `@@index([userId, revokedAt])` (the latter also serves
+    the D-017 cap-20 live-family count, §2.5 below).
 - **No data backfill needed** — F-000 ships an empty `RefreshToken` table (no rows in any
   environment yet; auth issues the first tokens in F-001). So the new `NOT NULL` columns are
   safe without a default/backfill step. If any env somehow has rows, they are pre-auth test
@@ -172,11 +226,11 @@ committed on all rows + audit event emitted.)*
 > Not a Postgres schema, but listed so `data-model` is the one place all F-001 persistent
 > state is described. TTL'd, non-authoritative (arch §7/§8).
 
-| Key pattern | Value | TTL | Purpose |
-|---|---|---|---|
-| `throttle:ip:{ip}` | counter | sliding ~5 min | IP-level attempt cap on `/auth/login`, `/auth/signup` **and `/auth/refresh`** (arch §8.1). Refresh is included as plain IP-level hygiene (L-5) — a coarse cap so the endpoint can't be run as a free DB-lookup treadmill; refresh needs **no** account dimension (256-bit token brute-force is infeasible), so it reuses the existing IP sliding-window key only. Trip → `429 + Retry-After`. |
-| `throttle:acct:{emailNorm}` | counter | window / backoff ceiling (~15 min) | account-level consecutive-failure backoff on **login** (arch §8.2); keyed on the **submitted** normalized email **whether or not a `User` exists** (M-1 — no 429-differential enumeration oracle); cleared on successful login / admin reset |
-| `throttle:acct:{userId}` | counter | window / backoff ceiling (~15 min) | account-level backoff on **`POST /auth/change-password`** `currentPassword` checks (N-2, arch §8.1); keyed on the **authenticated** `userId` (identity already proven by Bearer, no enumeration concern); incremented on wrong `currentPassword`, cleared on success |
+| Key pattern                 | Value   | TTL                                | Purpose                                                                                                                                                                                                                                                                                                                                                                                       |
+| --------------------------- | ------- | ---------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `throttle:ip:{ip}`          | counter | sliding ~5 min                     | IP-level attempt cap on `/auth/login`, `/auth/signup` **and `/auth/refresh`** (arch §8.1). Refresh is included as plain IP-level hygiene (L-5) — a coarse cap so the endpoint can't be run as a free DB-lookup treadmill; refresh needs **no** account dimension (256-bit token brute-force is infeasible), so it reuses the existing IP sliding-window key only. Trip → `429 + Retry-After`. |
+| `throttle:acct:{emailNorm}` | counter | window / backoff ceiling (~15 min) | account-level consecutive-failure backoff on **login** (arch §8.2); keyed on the **submitted** normalized email **whether or not a `User` exists** (M-1 — no 429-differential enumeration oracle); cleared on successful login / admin reset                                                                                                                                                  |
+| `throttle:acct:{userId}`    | counter | window / backoff ceiling (~15 min) | account-level backoff on **`POST /auth/change-password`** `currentPassword` checks (N-2, arch §8.1); keyed on the **authenticated** `userId` (identity already proven by Bearer, no enumeration concern); incremented on wrong `currentPassword`, cleared on success                                                                                                                          |
 
 Redis-down ⇒ throttle **fails open** (arch §8.3) with a best-effort **in-process** IP limiter
 as degraded fallback, and every fail-open decision is **logged** (Redis-down alerting is
@@ -199,6 +253,7 @@ as degraded fallback, and every fail-open decision is **logged** (Redis-down ale
 ---
 
 ## 6. Impact / hand-off
+
 - **Enables** `api-spec.md` (next) — endpoints operate on this schema.
 - **F-002/F-003** read `Membership`/`Role` (F-000) — unaffected by these deltas.
 - **F-005 audit-log** consumes auth events (not stored in these tables) — no schema coupling.

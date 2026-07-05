@@ -1,7 +1,7 @@
 ---
 doc: F-001 architecture — authentication (JWT access/refresh, rotation + reuse detection, throttle, argon2id)
 owner: "@backend-api"
-signoff: approved     # pending | approved
+signoff: approved # pending | approved
 ---
 
 # F-001 — Architecture (Gate 2)
@@ -11,7 +11,7 @@ signoff: approved     # pending | approved
 > Infra already provisioned by F-000: Redis + `JWT_ACCESS_SECRET`, `JWT_REFRESH_SECRET`, `REDIS_URL` env ([F-000/infra.md](../F-000/infra.md) §8/§9).
 > Authoritative model = [docs/01-data-model.md](../../01-data-model.md) §Tenancy & Auth.
 
-**Scope of this doc:** the *technical & security design* — token model, rotation/reuse
+**Scope of this doc:** the _technical & security design_ — token model, rotation/reuse
 algorithm, throttle model, hashing choice, admin-reset flow, storage split. It is FIRST
 of the Gate-2 chain → drives `data-model.md` (the `RefreshToken`/`User` deltas I flag in
 §6 become concrete Prisma there) → drives `api-spec.md` (the endpoints in §7). No
@@ -19,7 +19,7 @@ implementation code here (brief pseudocode only where an algorithm needs it). UX
 test plan (§11) are owned by `ux` / `qa`.
 
 **Golden-rule note:** auth touches no stock/money ledger, so golden rules 2/5/7 (ledger,
-money-stock txn, Decimal) do not apply. The rules that *do* bite here: **#3 org-scoping** —
+money-stock txn, Decimal) do not apply. The rules that _do_ bite here: **#3 org-scoping** —
 and the key architectural constraint is that **auth is the one place org-scoping does NOT
 apply** (User is system-wide, see §1.1); **#4 unit tests on security-critical logic**
 (rotation/reuse/hash-verify) before merge; **#6 pure functions in `core-domain`** for the
@@ -30,8 +30,9 @@ token-family reuse-detection decision logic.
 ## 1. Core constraint: auth ≠ membership (org-scoping boundary)
 
 ### 1.1 Where `organizationId` enters (and where it must NOT)
+
 `User` is a **system-wide identity** — no `organizationId` (F-000 AC6 allowlist, D-004).
-A user can log in while belonging to **0..* organizations**. This produces a hard
+A user can log in while belonging to _*0..* organizations_*. This produces a hard
 architectural seam:
 
 ```
@@ -63,23 +64,25 @@ architectural seam:
   special handling** for it. Login itself must never check membership.
 
 ### 1.2 What F-001 owns vs defers
-| Owns (F-001) | Defers |
-|---|---|
-| signup / login / logout / refresh | membership resolution, org switch (F-002) |
-| issue + verify + rotate tokens, reuse detection | capability/permission checks (F-003) |
-| password hashing + policy | self-serve email reset (F-081 — no SMTP yet) |
-| IP + account throttle | 2FA/OTP, social login, SSO (out, Gate 1 §3) |
-| admin reset (owner/admin sets member pw) | audit-log emission wiring (F-005 consumes our events) |
-| self-serve change-password (US-6, D-008) | self-serve *forgot*-password via email (F-081) |
+
+| Owns (F-001)                                    | Defers                                                |
+| ----------------------------------------------- | ----------------------------------------------------- |
+| signup / login / logout / refresh               | membership resolution, org switch (F-002)             |
+| issue + verify + rotate tokens, reuse detection | capability/permission checks (F-003)                  |
+| password hashing + policy                       | self-serve email reset (F-081 — no SMTP yet)          |
+| IP + account throttle                           | 2FA/OTP, social login, SSO (out, Gate 1 §3)           |
+| admin reset (owner/admin sets member pw)        | audit-log emission wiring (F-005 consumes our events) |
+| self-serve change-password (US-6, D-008)        | self-serve _forgot_-password via email (F-081)        |
 
 ### 1.3 Identifier abstraction (D-009 — doc-note, no schema/contract change)
+
 Gate-1 §3 promised an abstract identifier (`identifier + type`, seam for future phone+OTP).
 **Decision D-009:** honor it as a **service-layer abstraction only** — the login/lookup path
 treats the credential as an `identifier { type, value }` where `type = "email"` is the sole
 type in MVP; normalization and throttle keys are expressed in terms of that abstraction. The
 **database stays `User.email`** (no `Identifier` table, no schema change, no contract change —
 requests still send `email`). Adding a second type (e.g. `phone`) later plugs in at the
-service layer; only *then* would a schema change be evaluated, and that is out of F-001. This
+service layer; only _then_ would a schema change be evaluated, and that is out of F-001. This
 keeps the scope promise honest without shipping an empty table. (data-model §1 carries the
 same note.)
 
@@ -88,15 +91,16 @@ same note.)
 ## 2. Token strategy
 
 ### 2.1 Two-token model (why, not just "JWT is standard")
+
 We split a **short-lived stateless access token** from a **long-lived stateful refresh
 token** because the two have opposite requirements:
 
-- **Access token** is checked on *every* API request → must be verifiable **without a DB
+- **Access token** is checked on _every_ API request → must be verifiable **without a DB
   hit** (latency budget). → **stateless JWT**, signed, ~15 min TTL. We accept that it
   cannot be revoked mid-life; the short TTL bounds the blast radius of a leaked access
   token to ≤15 min. We do **not** run an access-token blacklist in the hot path (a
   per-request Redis lookup would defeat the point of a stateless token); "logout" and
-  "revoke" act on the *refresh* side (§4), and the access token simply expires.
+  "revoke" act on the _refresh_ side (§4), and the access token simply expires.
 - **Refresh token** is presented rarely (only when access expires, ~every 15 min per
   device) → we can afford a DB round-trip → **stateful, stored, revocable, rotated**. This
   is where all the security machinery lives (rotation, reuse detection, per-device/per-
@@ -106,6 +110,7 @@ This asymmetry is the whole point: cheap stateless checks on the frequent path, 
 stateful control on the rare path.
 
 ### 2.2 Access token — JWT structure
+
 - **Type:** signed JWT (JWS), **HS256** for MVP. Rationale: single API service signs and
   verifies (no third party needs to verify our tokens), so a shared secret (`JWT_ACCESS_SECRET`,
   already in F-000 env) is simpler than key distribution. **Migration path to RS256/EdDSA**
@@ -123,17 +128,22 @@ stateful control on the rare path.
     as an access token and vice-versa (checked on verify; defends against type confusion).
 - **Verification (hot path):** signature + `exp` + `typ==="access"` only. No I/O. A NestJS
   `JwtAuthGuard` (passport-jwt strategy, §7 tech stack) populates `req.user = { userId }`.
+- **Signing-secret strength (I-4):** `JWT_ACCESS_SECRET` and `JWT_REFRESH_SECRET` must each be
+  **≥256-bit (32+ char) random** values, enforced at boot by the shared env schema (min length
+  32, and the two must differ) — see `packages/config/src/env.ts`. Secret **generation** (how
+  a real deployment mints/rotates these) is owned by **@devops**; F-001 only consumes them.
 
 ### 2.3 Refresh token — value & storage
+
 - **The token value is a high-entropy opaque random string** (≥256 bits from a CSPRNG),
   **not a JWT.** Rationale: a refresh token's authority comes from matching a stored
   server-side record, not from self-contained claims — making it a JWT would add parsing
   surface and tempt us to trust its claims. Opaque + server lookup is simpler and safer.
 - **We store only a keyed hash of the token** — **`HMAC-SHA-256(JWT_REFRESH_SECRET,
-  tokenValue)`** (L-3). We don't need a *slow* password hash (the token is already high-entropy
+tokenValue)`** (L-3). We don't need a _slow_ password hash (the token is already high-entropy
   random, so a fast hash gives "DB leak ≠ usable tokens"), but we **key** the fast hash with the
   F-000 `JWT_REFRESH_SECRET` env secret as free hardening: with plain SHA-256 an attacker holding
-  only a DB dump could still *verify* guessed tokens offline; with an HMAC key held in the env
+  only a DB dump could still _verify_ guessed tokens offline; with an HMAC key held in the env
   (not the DB), a dump **alone** cannot even verify a guess — offline attack now requires both the
   DB and the env secret. This also gives the otherwise-idle `JWT_REFRESH_SECRET` a real purpose
   (the refresh token is opaque, not a JWT, so the secret is no longer a JWT signer — see §9). The
@@ -144,7 +154,7 @@ stateful control on the rare path.
   usable, not the session as a whole.
 - **Absolute family-lifetime cap (D-007):** **90 days** from the original login
   (`familyExpiresAt` = login time + 90d), **inherited unchanged on every rotation** (unlike
-  `expiresAt`, it does *not* slide). Rotation is refused once `now() > familyExpiresAt`
+  `expiresAt`, it does _not_ slide). Rotation is refused once `now() > familyExpiresAt`
   (§3.1), so a rotation chain — however often it refreshes — dies at most 90 days after login
   and the user must re-login. This gives the Gate-1 30–90d band a real ceiling instead of
   sliding-forever, and ages out a stolen-but-unnoticed device session. Surfaced to the client
@@ -158,7 +168,8 @@ stateful control on the rare path.
 
 ## 3. Refresh-token rotation + reuse detection (the security core)
 
-### 3.1 Token *family* (chain) model
+### 3.1 Token _family_ (chain) model
+
 Every login creates a new **family** (a rotation chain) bound to one device/session. Each
 refresh mints the next token in the same family and invalidates the current one:
 
@@ -168,26 +179,33 @@ login → RT1 ─rotate→ RT2 ─rotate→ RT3 ─rotate→ RT4  (family F, dev
 ```
 
 - On **login:** create `RefreshToken{ familyId: new, rotatedFrom: null, deviceId,
-  expiresAt: now()+60d, familyExpiresAt: now()+90d }`. The new `familyId` groups the whole
+expiresAt: now()+60d, familyExpiresAt: now()+90d }`. The new `familyId` groups the whole
   chain and `familyExpiresAt` fixes its absolute death (D-007); both are F-001 deltas to the
   F-000 schema — see §6 / data-model §2.1.
+- **Live-family cap — 20/user (D-017):** before minting the new family, login counts the
+  user's current live families; if the count is already at the cap, the **oldest live family
+  (LRU by `createdAt`) is revoked first**, then the new family is created — login itself never
+  fails because of the cap. Bounds unbounded family growth and keeps `/auth/sessions` (api-spec
+  §2.6) genuinely bounded.
 - On **refresh (rotation):** in **one DB transaction** (row-locked on the presented token,
-  data-model §2.4) — (a) verify the presented token is the *current, non-revoked, non-expired*
+  data-model §2.4) — (a) verify the presented token is the _current, non-revoked, non-expired_
   member of its family **and that the family cap has not been reached** (`familyExpiresAt >
-  now()`, D-007 — else refuse rotation → generic `401`, ordinary session expiry, no family
+now()`, D-007 — else refuse rotation → generic `401`, ordinary session expiry, no family
   revocation); (b) mark it rotated/consumed; (c) insert the successor `RefreshToken{ familyId:
-  same, rotatedFrom: presentedId, deviceId, expiresAt: now()+60d, familyExpiresAt: inherited
-  unchanged }`; (d) return the new access + new refresh token. Rotation is atomic so two
+same, rotatedFrom: presentedId, deviceId, expiresAt: now()+60d, familyExpiresAt: inherited
+unchanged }`; (d) return the new access + new refresh token. Rotation is atomic so two
   concurrent refreshes can't both "win" (the `rotatedFrom`/consumed check inside the txn
   serializes them — the loser sees an already-consumed token → **within the reuse-leeway
   window** it's a benign retry (§3.5), else treated as reuse (§3.3)).
 - **The reuse branch does NOT roll the rotation txn back onto itself.** Signalling reuse by
-  *throwing* inside the rotation `$transaction` would undo the family revocation (H-3) — so
+  _throwing_ inside the rotation `$transaction` would undo the family revocation (H-3) — so
   the family-wide `revokedAt` is written in a transaction that **commits** and the 401 is
-  returned *after* the commit. Exact structure + the leeway carve-out are in data-model §2.4.
+  returned _after_ the commit. Exact structure + the leeway carve-out are in data-model §2.4.
 
 ### 3.2 Consumed vs current
+
 A stored token is in exactly one state, derived (no redundant column beyond what's needed):
+
 - **current** — newest in family, `revokedAt = null`, not yet superseded, not expired → the
   only token that may be exchanged.
 - **consumed** — already rotated (a successor with `rotatedFrom = thisId` exists). Presenting
@@ -195,16 +213,17 @@ A stored token is in exactly one state, derived (no redundant column beyond what
 - **revoked** — `revokedAt != null` (logout, family revocation, or admin action).
 
 ### 3.3 Reuse detection → family revocation
-**Invariant:** a correctly-behaving client only ever holds the *current* token — after
+
+**Invariant:** a correctly-behaving client only ever holds the _current_ token — after
 rotation it discards the old one. Therefore **presentation of a consumed (or revoked) token
 means the chain leaked** (an attacker used a token the legit client already rotated past, or
 the legit client is racing an attacker). Response:
 
-1. **Revoke the *entire family*** (`revokedAt = now()` on all `RefreshToken` where
+1. **Revoke the _entire family_** (`revokedAt = now()` on all `RefreshToken` where
    `familyId = F`) — including the current one. This logs the legitimate client out of that
    device too, which is correct: we cannot tell attacker from victim, so we burn the whole
    session and force a fresh login. **This revoke MUST commit** — it runs in a transaction
-   that is committed *before* the 401 is returned (never a throw-to-rollback inside the
+   that is committed _before_ the 401 is returned (never a throw-to-rollback inside the
    rotation txn), otherwise reuse detection is detection-without-response (H-3; see the exact
    two-option structure in data-model §2.4).
 2. **Do not** revoke other families → other devices stay logged in (per-device isolation).
@@ -212,7 +231,7 @@ the legit client is racing an attacker). Response:
    for F-005 audit-log to consume — emitted **post-commit** so it is never lost with a
    rollback.
 
-**Scope of "reuse":** presenting a consumed/revoked token is the reuse signal *only outside*
+**Scope of "reuse":** presenting a consumed/revoked token is the reuse signal _only outside_
 the reuse-leeway window (§3.5). A just-rotated immediate predecessor replayed within the
 window is a benign client retry, not an attack, and does **not** trigger family revocation.
 
@@ -222,12 +241,14 @@ plain values and returns an action enum, so it is unit-testable without a DB (go
 #4). The service layer executes the returned action inside the transaction.
 
 ### 3.4 Why chain-based, not a simple deny-list
+
 Chain/family revocation gives **automatic compromise containment**: we don't need to know
-*which* token leaked or maintain a global blacklist — the first replay of any superseded
+_which_ token leaked or maintain a global blacklist — the first replay of any superseded
 token trips the wire and nukes the session. It also self-limits storage (one live token per
 family; consumed rows are prunable after `expiresAt`).
 
 ### 3.5 Reuse-leeway window — DECISION (M-2, logged as D-011)
+
 **Decision: adopt a bounded reuse-leeway window (option (a) in the review), ~60s.**
 Presenting the **immediate predecessor** of the current token — i.e. `∃ current row WHERE
 rotatedFrom = presented.id` — **within 60s** of that successor's creation is treated as a
@@ -237,7 +258,7 @@ Anything **older** (predecessor replayed after the window) or any **deeper ances
 grandparent+ token, which a correct client never holds) still trips the full family
 revocation of §3.3.
 
-**Rationale.** Strict zero-grace rotation turns two *legitimate* patterns into forced logout:
+**Rationale.** Strict zero-grace rotation turns two _legitimate_ patterns into forced logout:
 (1) mobile on a flaky link commits the rotation server-side but the response is lost → the
 client retries with the only token it has, now consumed; (2) web multi-tab shares one
 `omni_rt` cookie and two tabs refresh at access-expiry → the loser burns the family for both.
@@ -249,7 +270,7 @@ non-immediate ancestor, is still caught and the family is burned. The window is 
 small, so the widened race surface (attacker + victim both refreshing the same token inside
 60s) only costs one side a benign `401`, never a missed compromise of a stale token.
 
-*Alternative rejected:* strict rotation + mandatory frontend single-flight + mobile
+_Alternative rejected:_ strict rotation + mandatory frontend single-flight + mobile
 retry-then-relogin — pushes correctness onto every client and still self-DoSes on genuine
 lost responses. **Logged in DECISIONS.md as D-011;**
 frontend informed (client still single-flights as defense-in-depth, but is no longer required
@@ -260,11 +281,14 @@ to be flawless to avoid logout).
 ## 4. Session / device tracking
 
 - **Each family = one device session.** `deviceId` (already on `RefreshToken`) is supplied
-  by the client at login: a stable per-install id (mobile: from secure storage; web: a
-  persisted random id in an httpOnly cookie or localStorage). It is a **convenience label
-  for "log out this device", not a security boundary** — we never grant authority based on a
-  client-claimed `deviceId` (it's spoofable); authority always comes from possessing the
-  current token of a non-revoked family.
+  by the client at login: a stable per-install id (mobile: from secure storage; **web: a
+  persisted random id in `localStorage`** — M-8 wording fix: an httpOnly cookie is not
+  actually usable here, since the client must be able to **read** `deviceId` in JS to include
+  it in the `/auth/login` request body (§0/api-spec §2.2); httpOnly means "never
+  JS-readable," which is incoherent for a value the client itself must send). It is a
+  **convenience label for "log out this device", not a security boundary** — we never grant
+  authority based on a client-claimed `deviceId` (it's spoofable); authority always comes from
+  possessing the current token of a non-revoked family.
 - **Multi-device login:** N logins = N families for the same user, each independently
   rotating and revocable.
 - **List sessions:** query live families for `userId` (current token per family +
@@ -276,16 +300,17 @@ to be flawless to avoid logout).
 - **Logout all devices** (Gate 1 US-4, also the natural response to "I think I'm hacked"):
   revoke **all** families for `userId`. Also the correct action after an **admin password
   reset** (§5) — resetting the password revokes every family so old sessions die.
-- **Change own password** (US-6, D-008): revoke **all families *except* the caller's current
+- **Change own password** (US-6, D-008): revoke **all families _except_ the caller's current
   one** — a self-initiated password change should evict other devices (natural "secure my
   account" moment) without logging the user out of the device they're actively on. Contrast
-  with admin-reset, which revokes *all* families (the target isn't the one initiating).
+  with admin-reset, which revokes _all_ families (the target isn't the one initiating).
 
 ---
 
 ## 5. Password hashing & policy
 
 ### 5.1 Algorithm — argon2id (decided Gate 1, params decided here)
+
 - **argon2id** (hybrid: resists both GPU and side-channel/cache-timing attacks) via the
   `argon2` native binding. Chosen over bcrypt (72-byte truncation, weaker against GPU) and
   scrypt; argon2id is the OWASP/PHC first recommendation.
@@ -301,6 +326,7 @@ to be flawless to avoid logout).
   us raise cost over time without a mass migration.
 
 ### 5.2 Policy — NIST SP 800-63B (Gate 1 §4)
+
 - **Minimum length 8** (US-1 AC); allow long passphrases (cap ~64–128 to bound hashing cost);
   accept all Unicode incl. spaces; **no composition rules** (no forced upper/digit/symbol —
   they harm usability without helping, per 800-63B).
@@ -314,11 +340,12 @@ to be flawless to avoid logout).
 
 ## 6. Data-model deltas this architecture requires (hand-off to data-model.md)
 
-> This is the *architectural requirement list*, not the final schema — `data-model.md`
+> This is the _architectural requirement list_, not the final schema — `data-model.md`
 > (next in the Gate-2 chain) makes these concrete Prisma + migration. F-000 shipped the
 > base `RefreshToken{ id, userId, deviceId, rotatedFrom?, revokedAt?, createdAt }`.
 
 **`RefreshToken` — add:**
+
 - `familyId String` (indexed) — groups a rotation chain for family-wide revocation (§3).
   On login `familyId` = a fresh id; on rotation, inherited from predecessor.
 - `tokenHash String @unique` — **`HMAC-SHA-256(JWT_REFRESH_SECRET, tokenValue)`** (keyed hash,
@@ -333,7 +360,7 @@ to be flawless to avoid logout).
   keep existing `@@index([rotatedFrom])`.
 
 **`User` — no structural change required.** `email`, `passwordHash`, `verified` already
-exist (F-000). We only *use* them. Email is normalized (lowercase+trim, Gate 1 §4) **before**
+exist (F-000). We only _use_ them. Email is normalized (lowercase+trim, Gate 1 §4) **before**
 hitting the existing `@unique(email)` — normalization is a service-layer concern, not a new
 column.
 
@@ -344,15 +371,15 @@ column.
 
 ## 7. Tech stack & storage split
 
-| Concern | Choice | Why |
-|---|---|---|
-| Framework wiring | NestJS **guards + passport** (`passport-jwt` for access, custom strategy for refresh) | idiomatic Nest; guard is the single choke-point that populates `req.user` |
-| Access-token sign/verify | `@nestjs/jwt` (HS256, `JWT_ACCESS_SECRET`) | already an env in F-000; no extra infra |
-| Refresh token value | Node `crypto.randomBytes` (opaque, ≥256-bit) + **HMAC-SHA-256(`JWT_REFRESH_SECRET`, value)** for storage (L-3) | not a JWT (§2.3); keyed hash so a DB dump alone can't verify guesses |
-| Password hash | `argon2` (argon2id) | §5.1 |
-| Throttle / rate-limit state | **Redis** (atomic `INCR`+TTL / sliding window) | F-000 already boots Redis; counters are ephemeral & must be shared across API instances |
-| Refresh-token store | **Postgres** (`RefreshToken`) | stateful, needs the rotation chain + family joins + durability |
-| Reuse-decision logic | **`packages/core-domain`** pure fn | golden rules #4/#6 |
+| Concern                     | Choice                                                                                                         | Why                                                                                     |
+| --------------------------- | -------------------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------- |
+| Framework wiring            | NestJS **guards + passport** (`passport-jwt` for access, custom strategy for refresh)                          | idiomatic Nest; guard is the single choke-point that populates `req.user`               |
+| Access-token sign/verify    | `@nestjs/jwt` (HS256, `JWT_ACCESS_SECRET`)                                                                     | already an env in F-000; no extra infra                                                 |
+| Refresh token value         | Node `crypto.randomBytes` (opaque, ≥256-bit) + **HMAC-SHA-256(`JWT_REFRESH_SECRET`, value)** for storage (L-3) | not a JWT (§2.3); keyed hash so a DB dump alone can't verify guesses                    |
+| Password hash               | `argon2` (argon2id)                                                                                            | §5.1                                                                                    |
+| Throttle / rate-limit state | **Redis** (atomic `INCR`+TTL / sliding window)                                                                 | F-000 already boots Redis; counters are ephemeral & must be shared across API instances |
+| Refresh-token store         | **Postgres** (`RefreshToken`)                                                                                  | stateful, needs the rotation chain + family joins + durability                          |
+| Reuse-decision logic        | **`packages/core-domain`** pure fn                                                                             | golden rules #4/#6                                                                      |
 
 **Storage split rationale — Postgres vs Redis:** durable, relational, must-survive-restart
 state (the refresh chain, who's logged in where) → **Postgres**. Ephemeral, high-write,
@@ -370,7 +397,8 @@ in family") is atomic — no window where zero or two current tokens exist.
 ## 8. Rate-limiting & brute-force protection
 
 ### 8.1 Two independent dimensions (both required, Gate 1 US-2 AC)
-- **IP-level** (defends the *endpoint* against volumetric brute-force / credential
+
+- **IP-level** (defends the _endpoint_ against volumetric brute-force / credential
   stuffing): sliding-window cap on `POST /auth/login`, `/auth/signup` **and `/auth/refresh`**
   per source IP — e.g. **~20 attempts / 5 min / IP**, then throttle. Coarse; a shared NAT/office
   IP tolerates several users. **`/auth/refresh` is included as plain hygiene (L-5):** token
@@ -378,7 +406,7 @@ in family") is atomic — no window where zero or two current tokens exist.
   just a coarse IP cap (reusing the same `throttle:ip:{ip}` sliding window, data-model §4) so
   the endpoint can't be run as a free DB-lookup treadmill. Trip → `429 + Retry-After` like the
   other pre-auth endpoints.
-- **Account-level** (defends a *specific account* against targeted guessing): counter keyed
+- **Account-level** (defends a _specific account_ against targeted guessing): counter keyed
   by the **submitted normalized email**, incremented on each failed login for that submitted
   identity **whether or not it resolves to a real `User`** (M-1 — if the counter only
   incremented for existing users, the differential `429`-vs-`401` on the Nth attempt would be
@@ -395,6 +423,7 @@ in family") is atomic — no window where zero or two current tokens exist.
   (api-spec §2.7).
 
 ### 8.2 Threshold + backoff curve (not hard-lock)
+
 - After **5** consecutive failures for an account (Gate 1 US-2), apply **exponential backoff**
   on subsequent attempts for that account: e.g. delay/deny windows growing
   `~1s → 2s → 4s → 8s …` capped at a ceiling (e.g. 15 min). Backoff is enforced by "reject
@@ -404,21 +433,22 @@ in family") is atomic — no window where zero or two current tokens exist.
   is **self-healing**: the window always expires, and a successful login (or admin reset,
   §5) clears the counter. This is the explicit anti-lockout guarantee.
 - **Throttle is always its own response: `429 RATE_LIMITED` + `Retry-After`** — it is **not**
-  folded into the credential-failure `401` (M-1: a self-contradictory "throttled ⇒ 401 *and*
+  folded into the credential-failure `401` (M-1: a self-contradictory "throttled ⇒ 401 _and_
   429" is an enumeration trap and UX needs the 429 countdown, D-005). The enumeration
-  guarantee is therefore scoped precisely: **the *credential* failures are indistinguishable**
+  guarantee is therefore scoped precisely: **the _credential_ failures are indistinguishable**
   — wrong password vs unknown email both return the identical `401 INVALID_CREDENTIALS` shape
-  + timing (§9). Throttle does **not** need to hide behind that shape, **provided it cannot
-  itself become an existence oracle**: the account counter keys on the **submitted normalized
-  email whether or not a `User` exists** and returns identical `429` behavior either way (see
-  §8.1), so a nonexistent email and a real one throttle identically. We never emit a distinct
-  "this account is locked" message (that *would* leak existence) — only the generic
-  `429 + Retry-After`.
+  - timing (§9). Throttle does **not** need to hide behind that shape, **provided it cannot
+    itself become an existence oracle**: the account counter keys on the **submitted normalized
+    email whether or not a `User` exists** and returns identical `429` behavior either way (see
+    §8.1), so a nonexistent email and a real one throttle identically. We never emit a distinct
+    "this account is locked" message (that _would_ leak existence) — only the generic
+    `429 + Retry-After`.
 
 ### 8.3 Distributed / edge cases
+
 - **Distributed IP attack (botnet):** IP throttle is useless when each attempt comes from a
-  fresh IP → the **account-level** counter is the backstop, since it keys on the *target
-  identity* not the source. This is precisely why both dimensions exist.
+  fresh IP → the **account-level** counter is the backstop, since it keys on the _target
+  identity_ not the source. This is precisely why both dimensions exist.
 - **Account-level DoS (attacker locks out a victim by failing on purpose):** mitigated by
   choosing **backoff, not lock** (victim can still get in once the short window passes, and
   a correct password is what matters), and by the counter being consecutive-failure based
@@ -451,13 +481,18 @@ in family") is atomic — no window where zero or two current tokens exist.
 
 - **Account-enumeration resistance (Gate 1 §4):** identical generic response + timing for
   (a) wrong password, (b) unknown email, (c) throttled — all return the same "invalid
-  credentials" shape. Signup with a duplicate email is the one *necessary* leak (the user
+  credentials" shape. Signup with a duplicate email is the one _necessary_ leak (the user
   must be told the email is taken) — Gate 1 accepts this ("ไม่รั่ว privacy เกินจำเป็น"); we
   keep the message minimal. **Admin reset & (future) self-serve reset** always respond
   success-shaped whether or not the target exists (Gate 1 §4).
 - **Timing attacks:** (a) argon2 verify is constant-time. (b) **On unknown email we still
   perform a dummy argon2 verify** against a fixed dummy hash so the login path takes the
   same time whether or not the account exists (prevents "fast reject ⇒ no such user").
+  **(M-10) The dummy hash must be regenerated from the CURRENT argon2 params config whenever
+  those params change (§5.1)** — a stale dummy hash encoded with old (lower) params verifies
+  faster than a real hash under the new (higher) params, silently re-opening the same timing
+  differential the dummy-verify exists to close. Treat "bump argon2 params" and "regenerate
+  the dummy hash fixture" as one atomic change, not two independent ones.
 - **`alg` confusion / token forgery:** verifier pins the expected algorithm (HS256) and the
   `typ` claim (§2.2); never accept `alg: none` or a client-chosen `alg`. **Only the access token
   is a JWT** (`JWT_ACCESS_SECRET` signs/verifies it). The refresh token is an **opaque random
@@ -465,7 +500,7 @@ in family") is atomic — no window where zero or two current tokens exist.
   **not** a JWT-signing key. Instead it is repurposed (L-3) as the **HMAC key for `tokenHash`**:
   `tokenHash = HMAC-SHA-256(JWT_REFRESH_SECRET, tokenValue)` (§2.3). Keeping the two env secrets
   in **separate scopes** still holds — the access-JWT signing secret and the refresh-hash HMAC
-  key are distinct, so compromising one does not grant the other — but the two are *not* "two JWT
+  key are distinct, so compromising one does not grant the other — but the two are _not_ "two JWT
   signers" (that was a stale F-000 assumption; the refresh token was never a JWT once §2.3 made it
   opaque). `JWT_REFRESH_SECRET` already exists in F-000 env, so this repurpose adds no new secret.
 - **Refresh-token leakage:** rotation + reuse detection (§3) is the primary containment —
@@ -485,7 +520,7 @@ in family") is atomic — no window where zero or two current tokens exist.
   yet), so a cross-site auto-submitting HTML form could otherwise log a victim into an
   **attacker's** account. Defense: **all `/auth/*` POSTs require strict
   `Content-Type: application/json`** → non-JSON (form-encoded/multipart) is rejected `415`
-  *before* credential processing (api-spec §3). An HTML form can't emit that content-type, and a
+  _before_ credential processing (api-spec §3). An HTML form can't emit that content-type, and a
   cross-origin `fetch` with it triggers a CORS preflight the API won't allow — so no cross-site
   form-POST reaches these endpoints. This complements the `SameSite=Strict` cookie defense on the
   refresh path (§9 transport) and is enforced uniformly across auth POSTs.
@@ -497,6 +532,7 @@ in family") is atomic — no window where zero or two current tokens exist.
 ## 10. Admin reset flow (recovery MVP) — scope
 
 **In MVP (F-001):**
+
 - An **Owner/Admin of an org the target user is a member of** can set/reset that member's
   password (Gate 1 US-5 AC). Flow: privileged endpoint (capability-checked via F-003, e.g.
   `manage_members`) → set a new `passwordHash` (argon2id) for the target `User` → **revoke
@@ -505,10 +541,10 @@ in family") is atomic — no window where zero or two current tokens exist.
 - **Authorization is org-scoped, and both memberships must be `status = active` (H-2).** The
   acting admin must hold the capability via an **`active`** `Membership(callerUserId, orgId)`
   **and** the target must have an **`active`** `Membership(targetUserId, orgId)`. Because
-  `User` is system-wide, an admin resets a member **through the shared *active* org
+  `User` is system-wide, an admin resets a member **through the shared _active_ org
   membership**, never a global "reset any user" power. Pinning to `active` is load-bearing,
   not cosmetic: F-000 keeps membership rows on removal (`MembershipStatus { active invited
-  revoked }`, "deactivate ไม่ delete"), so a mere *existence* check would let Org A's admin
+revoked }`, "deactivate ไม่ delete"), so a mere _existence_ check would let Org A's admin
   reset the **global** `passwordHash` of a **revoked** ex-member who now works only at Org B —
   handing Org A a credential valid in Org B (cross-tenant account takeover). Same hole for an
   `invited` target who never accepted. Any failure (caller not active / lacks capability, or
@@ -516,11 +552,11 @@ in family") is atomic — no window where zero or two current tokens exist.
   The capability check itself is F-003's guard; F-001 defines the reset effect + the
   active-status precondition.
 - **Residual trade-off + its structural fix (D-008/D-010):** even with the active-status fix,
-  resetting a shared *active* member briefly gives the admin a credential valid in that
+  resetting a shared _active_ member briefly gives the admin a credential valid in that
   member's other orgs (`passwordHash` is global). The structural fix is now **in scope**:
   the member can immediately call **`POST /auth/change-password`** (US-6, D-008 — Bearer,
-  verify current, set new, revoke all *other* families) to rotate the admin-chosen password
-  and evict any lingering admin knowledge. The only remaining sliver — a member who *never*
+  verify current, set new, revoke all _other_ families) to rotate the admin-chosen password
+  and evict any lingering admin knowledge. The only remaining sliver — a member who _never_
   changes it — is a known, small dogfood trade-off logged as **D-010** (product accepts;
   F-081 self-serve email reset later removes even the admin-chosen-password step).
 - **No email infrastructure required** — the new password is delivered out-of-band by the
@@ -532,8 +568,8 @@ F-001 sets it, F-081 flips it.
 
 **Anti-lockout guarantee (Gate 1 US-5 AC "ห้ามล็อกตัวเองออกถาวร"):** the Owner role is
 system/locked (F-000 `Role.isSystem`), and admin-reset + self-healing throttle (§8.2) mean
-there is always a path back in. The one residual risk — *a sole Owner forgets their own
-password before F-081 ships* — is a known MVP gap; mitigation options (a break-glass
+there is always a path back in. The one residual risk — _a sole Owner forgets their own
+password before F-081 ships_ — is a known MVP gap; mitigation options (a break-glass
 support-side reset, or making F-081 a fast-follow) are a **product** call, flagged below.
 
 ---
@@ -601,17 +637,19 @@ support-side reset, or making F-081 a fast-follow) are a **product** call, flagg
   (golden rule #4).
 
 ### Product scope decisions folded in (M-4 / M-5 / M-6 → D-007 / D-008 / D-009)
+
 Product resolved the three seams; all are now decided and incorporated in these specs:
+
 - **M-4 → D-007 (absolute session cap): ADOPTED.** `RefreshToken.familyExpiresAt` = login +
   90d, inherited unchanged on rotation; rotation refused once passed → force re-login (§2.3,
   §3.1; data-model §2.1/§2.4). Additive NOT-NULL column on the still-empty table (no backfill).
 - **M-5 → D-008 (self-serve change-password): IN SCOPE (US-6).** New `POST /auth/change-password`
-  (Bearer; verify current pw, enforce signup policy, set new hash, revoke all *other* families
+  (Bearer; verify current pw, enforce signup policy, set new hash, revoke all _other_ families
   — caller's current session survives). This is the structural fix for the admin-reset
   residual (§10, D-010). No schema change. See api-spec §1 (endpoint 7) + §2.7.
 - **M-6 → D-009 (identifier abstraction): DOC-NOTE ONLY, no schema/contract change.**
   Authentication resolves a **service-layer `identifier { type, value }`** abstraction with
   `email` as the only `type` in MVP; the DB stays `User.email` (no `Identifier` table). This
   keeps the Gate-1 §3 "identifier นามธรรม" scope promise honest without an empty table; a
-  future phone/OTP type slots in at the service layer, and only *then* would a schema change
+  future phone/OTP type slots in at the service layer, and only _then_ would a schema change
   be considered (out of F-001). See §1.3 below + data-model §1.
