@@ -73,14 +73,15 @@
 
 ## → F-081 (Phase 5 — Onboarding) + email infra
 
-| สิ่งที่เลื่อน                                                                                              | seam ที่วางแล้ว                                                              |
-| ---------------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------- |
-| **Sync→Full upgrade wizard** (แยก tax entity: ร้าน/สต๊อกที่ไม่ใช่ TIN นี้ต้องย้าย license)                 | จุดยากที่ระบุไว้ชัด                                                          |
-| Self-serve password reset (เมื่อมี SMTP)                                                                   | F-001 admin-reset ก่อน · `verified` flag                                     |
-| Email verification                                                                                         | F-001 `verified=false` flag ติดไว้                                           |
-| **ส่งคำเชิญสมาชิกทาง email อัตโนมัติ** (D-012: F-002 MVP = copy invite link)                               | F-002 Invitation token + link flow พร้อม — เติมแค่ transport                 |
-| **ToS/consent ตอน signup + Privacy policy + PDPA baseline เต็ม** (D-013: dogfood = พวกเราเอง ยังไม่บังคับ) | skill `compliance-checklist` คุมราย feature ไปพลาง · เต็ม = launch-readiness |
-| **Email sending infra (SMTP)** — ปลดล็อก reset+verify+notification                                         | track เป็น infra dependency (devops)                                         |
+| สิ่งที่เลื่อน                                                                                                                                                 | seam ที่วางแล้ว                                                              |
+| ------------------------------------------------------------------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------- |
+| **Sync→Full upgrade wizard** (แยก tax entity: ร้าน/สต๊อกที่ไม่ใช่ TIN นี้ต้องย้าย license)                                                                    | จุดยากที่ระบุไว้ชัด                                                          |
+| Self-serve password reset (เมื่อมี SMTP)                                                                                                                      | F-001 admin-reset ก่อน · `verified` flag                                     |
+| Email verification                                                                                                                                            | F-001 `verified=false` flag ติดไว้                                           |
+| **ส่งคำเชิญสมาชิกทาง email อัตโนมัติ** (D-012: F-002 MVP = copy invite link)                                                                                  | F-002 Invitation token + link flow พร้อม — เติมแค่ transport                 |
+| **Invitation token hash-at-rest** (D-018: required ใน F-002 Gate-2 data-model — ห้ามเขียน invite token จริงก่อน hash; F-000 ship raw `@unique` ตาราง ยังว่าง) | แนวเดียวกับ RefreshToken `tokenHash` (F-001 T-001-02)                        |
+| **ToS/consent ตอน signup + Privacy policy + PDPA baseline เต็ม** (D-013: dogfood = พวกเราเอง ยังไม่บังคับ)                                                    | skill `compliance-checklist` คุมราย feature ไปพลาง · เต็ม = launch-readiness |
+| **Email sending infra (SMTP)** — ปลดล็อก reset+verify+notification                                                                                            | track เป็น infra dependency (devops)                                         |
 
 ## → F-061 (Phase 4 — Mobile public release & polish)
 
