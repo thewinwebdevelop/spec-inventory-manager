@@ -12,13 +12,13 @@ part 'health_response.g.dart';
 /// HealthResponse
 ///
 /// Properties:
-/// * [status] - Literal \"ok\" when the service is healthy.
+/// * [status] - Literal \"ok\" when the service is healthy, \"error\" when one or more dependency checks fail (returned with HTTP 503). 
 @BuiltValue()
 abstract class HealthResponse implements Built<HealthResponse, HealthResponseBuilder> {
-  /// Literal \"ok\" when the service is healthy.
+  /// Literal \"ok\" when the service is healthy, \"error\" when one or more dependency checks fail (returned with HTTP 503). 
   @BuiltValueField(wireName: r'status')
   HealthResponseStatusEnum get status;
-  // enum statusEnum {  ok,  };
+  // enum statusEnum {  ok,  error,  };
 
   HealthResponse._();
 
@@ -109,9 +109,12 @@ class _$HealthResponseSerializer implements PrimitiveSerializer<HealthResponse> 
 
 class HealthResponseStatusEnum extends EnumClass {
 
-  /// Literal \"ok\" when the service is healthy.
+  /// Literal \"ok\" when the service is healthy, \"error\" when one or more dependency checks fail (returned with HTTP 503). 
   @BuiltValueEnumConst(wireName: r'ok')
   static const HealthResponseStatusEnum ok = _$healthResponseStatusEnum_ok;
+  /// Literal \"ok\" when the service is healthy, \"error\" when one or more dependency checks fail (returned with HTTP 503). 
+  @BuiltValueEnumConst(wireName: r'error')
+  static const HealthResponseStatusEnum error = _$healthResponseStatusEnum_error;
 
   static Serializer<HealthResponseStatusEnum> get serializer => _$healthResponseStatusEnumSerializer;
 

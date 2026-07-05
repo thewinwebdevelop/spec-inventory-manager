@@ -25,9 +25,18 @@ paths:
         only, see contract-evolution skill).
       tags:
         - system
+      security: []
       responses:
         "200":
           description: Service is healthy
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/HealthResponse"
+        "503":
+          description: >
+            Service is unhealthy — one or more dependencies (e.g. Redis/BullMQ,
+            see T-000-08) failed their readiness check.
           content:
             application/json:
               schema:
@@ -44,4 +53,17 @@ components:
           type: string
           enum:
             - ok
-          description: Literal "ok" when the service is healthy.
+            - error
+          description: >
+            Literal "ok" when the service is healthy, "error" when one or
+            more dependency checks fail (returned with HTTP 503).
+  securitySchemes:
+    bearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+      description: >
+        Default auth scheme for OmniStock API endpoints. Individual public
+        endpoints (e.g. /health) opt out via an operation-level `security: []`.
+security:
+  - bearerAuth: []

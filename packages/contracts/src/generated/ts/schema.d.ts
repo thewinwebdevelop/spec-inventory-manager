@@ -30,10 +30,10 @@ export interface components {
     schemas: {
         HealthResponse: {
             /**
-             * @description Literal "ok" when the service is healthy.
+             * @description Literal "ok" when the service is healthy, "error" when one or more dependency checks fail (returned with HTTP 503).
              * @enum {string}
              */
-            status: "ok";
+            status: "ok" | "error";
         };
     };
     responses: never;
@@ -55,6 +55,15 @@ export interface operations {
         responses: {
             /** @description Service is healthy */
             200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HealthResponse"];
+                };
+            };
+            /** @description Service is unhealthy — one or more dependencies (e.g. Redis/BullMQ, see T-000-08) failed their readiness check. */
+            503: {
                 headers: {
                     [name: string]: unknown;
                 };
