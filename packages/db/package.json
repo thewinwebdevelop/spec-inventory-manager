@@ -10,6 +10,7 @@
     "db:migrate": "prisma migrate dev",
     "db:migrate:deploy": "prisma migrate deploy",
     "db:migrate:status": "prisma migrate status",
+    "verify:ac": "tsx src/verify-ac.ts",
     "lint": "eslint \"src/**/*.{ts,tsx}\" --ignore-pattern \"src/generated/**\"",
     "typecheck": "tsc -p tsconfig.json --noEmit",
     "test": "vitest run"
@@ -23,6 +24,7 @@
   "devDependencies": {
     "@omnistock/config": "workspace:*",
     "prisma": "^5.22.0",
+    "tsx": "^4.19.2",
     "typescript": "^5.7.2",
     "vitest": "^2.1.8"
   }
