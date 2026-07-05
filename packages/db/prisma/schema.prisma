@@ -5,7 +5,9 @@
 // NO computed/generated columns for derived values (available, onHand−reserved,
 // weighted-average, COGS, resolved entitlement). StockMovement.balanceAfter is a
 // stored audit snapshot (spec §2.1 exception), NOT derived.
-// Ledger immutability trigger (StockMovement/UsageEvent) lands in T-000-05 — not here.
+// Ledger immutability trigger (StockMovement/UsageEvent) is NOT declarative Prisma:
+// it ships as the raw-SQL migration `*_ledger_immutability` (T-000-05), which
+// rejects UPDATE/DELETE/TRUNCATE. App-side Layer-1 guard: src/ledger-guard.ts.
 
 generator client {
   provider = "prisma-client-js"

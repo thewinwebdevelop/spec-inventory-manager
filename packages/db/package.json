@@ -11,8 +11,8 @@
     "db:migrate:deploy": "prisma migrate deploy",
     "db:migrate:status": "prisma migrate status",
     "lint": "echo ok",
-    "typecheck": "echo ok",
-    "test": "echo ok"
+    "typecheck": "tsc -p tsconfig.json --noEmit",
+    "test": "vitest run"
   },
   "prisma": {
     "schema": "prisma/schema.prisma"
@@ -21,6 +21,9 @@
     "@prisma/client": "^5.22.0"
   },
   "devDependencies": {
-    "prisma": "^5.22.0"
+    "@omnistock/config": "workspace:*",
+    "prisma": "^5.22.0",
+    "typescript": "^5.7.2",
+    "vitest": "^2.1.8"
   }
 }
