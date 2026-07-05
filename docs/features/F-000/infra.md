@@ -337,15 +337,29 @@ services:
       POSTGRES_DB: omnistock_dev
     ports: ['5432:5432']
     volumes: ['pgdata:/var/lib/postgresql/data']
+    healthcheck:
+      test: ['CMD-SHELL', 'pg_isready -U omnistock -d omnistock_dev']
+      interval: 5s
+      timeout: 5s
+      retries: 10
   redis:
     image: redis:7
     ports: ['6379:6379']
     volumes: ['redisdata:/data']
+    healthcheck:
+      test: ['CMD', 'redis-cli', 'ping']
+      interval: 5s
+      timeout: 5s
+      retries: 10
 
 volumes:
   pgdata:
   redisdata:
 ```
+
+> Healthchecks added during the T-000-02 build to match the CI `db-migrate`
+> job's service-container healthcheck pattern (§2.3), so `pnpm dev` waits for
+> Postgres/Redis to be ready before `migrate deploy` / `turbo dev`.
 
 - `pnpm dev` (documented root script) is: `docker compose up -d` →
   `pnpm --filter @omnistock/db exec prisma migrate deploy` → `turbo dev`. This is
