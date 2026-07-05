@@ -42,7 +42,7 @@
 ## T-000-08 · backend-api · apps/api skeleton
 - desc: NestJS skeleton, GET /health (200 {status:ok} + redis/bullmq probe AC15), org-scope seam stub (withOrgScope), consume packages/db + contracts
 - ref: architecture.md, infra.md · → apps/api
-- deps: T-000-04, T-000-07   · status: todo   · updated_by: —
+- deps: T-000-04, T-000-07   · status: done   · updated_by: backend-api
 
 ## T-000-09 · frontend · app shells (web + mobile)
 - desc: apps/web Next.js placeholder (consume TS client, dev 200) + apps/mobile Flutter placeholder (analyze/build, consume Dart client wired) (AC3)

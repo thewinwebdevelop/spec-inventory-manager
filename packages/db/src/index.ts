@@ -15,3 +15,9 @@ export {
   ledgerGuardExtension,
 } from "./ledger-guard";
 export type { LedgerModel, ForbiddenLedgerOperation } from "./ledger-guard";
+
+// organizationId scoping seam (F-000 · T-000-08 · golden rule 3).
+// STUB ONLY — pass-through today; F-002/F-003 implement real enforcement.
+// See architecture.md §5 and ./tenancy.ts's header comment.
+export { withOrgScope } from "./tenancy";
+export type { OrgScopeContext } from "./tenancy";
