@@ -4,7 +4,7 @@
   "version": "0.0.0",
   "scripts": {
     "build": "tsc -p tsconfig.json",
-    "lint": "echo ok",
+    "lint": "eslint \"src/**/*.{ts,tsx}\"",
     "typecheck": "tsc -p tsconfig.json --noEmit",
     "test": "echo ok",
     "dev": "echo 'apps/back-office dev placeholder — Phase 5, see docs/02-architecture.md §5/§7'"

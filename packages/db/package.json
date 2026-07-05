@@ -10,7 +10,7 @@
     "db:migrate": "prisma migrate dev",
     "db:migrate:deploy": "prisma migrate deploy",
     "db:migrate:status": "prisma migrate status",
-    "lint": "echo ok",
+    "lint": "eslint \"src/**/*.{ts,tsx}\" --ignore-pattern \"src/generated/**\"",
     "typecheck": "tsc -p tsconfig.json --noEmit",
     "test": "vitest run"
   },

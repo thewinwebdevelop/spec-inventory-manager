@@ -18,7 +18,7 @@ describe("withOrgScope (F-000 pass-through stub)", () => {
       name: "test-probe",
       query: {
         $allModels: {
-          $allOperations({ args, query }) {
+          $allOperations({ args, query: _query }) {
             receivedArgs.push(args);
             // Short-circuit before hitting a real DB — we only care that
             // withOrgScope did not mutate `args` on the way through.
@@ -35,8 +35,7 @@ describe("withOrgScope (F-000 pass-through stub)", () => {
     // Pass-through stub: no organizationId injected into where clause.
     expect(receivedArgs[0]).toMatchObject({ where: { id: "abc" } });
     expect(
-      (receivedArgs[0] as { where?: Record<string, unknown> }).where
-        ?.organizationId,
+      (receivedArgs[0] as { where?: Record<string, unknown> }).where?.organizationId,
     ).toBeUndefined();
   });
 

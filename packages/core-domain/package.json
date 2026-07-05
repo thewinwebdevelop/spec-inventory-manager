@@ -6,7 +6,7 @@
   "types": "dist/index.d.ts",
   "scripts": {
     "build": "tsc -p tsconfig.json",
-    "lint": "echo ok",
+    "lint": "eslint \"src/**/*.{ts,tsx}\" --ignore-pattern \"src/__purity_fixtures__/**\"",
     "typecheck": "tsc -p tsconfig.json --noEmit",
     "test": "vitest run",
     "depcruise": "omnistock-purity-gate"
