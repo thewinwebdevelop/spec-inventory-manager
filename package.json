@@ -16,9 +16,22 @@
     "gen:contracts": "turbo gen:contracts",
     "db:up": "docker compose up -d",
     "db:down": "docker compose down",
-    "dev": "pnpm db:up && pnpm --filter @omnistock/db exec prisma migrate deploy && turbo dev"
+    "dev": "pnpm db:up && pnpm --filter @omnistock/db exec prisma migrate deploy && turbo dev",
+    "prepare": "husky"
   },
   "devDependencies": {
+    "eslint": "^8.57.0",
+    "husky": "^9.1.7",
+    "lint-staged": "^17.0.8",
+    "prettier": "^3.4.2",
     "turbo": "^2.3.3"
+  },
+  "lint-staged": {
+    "*.{ts,tsx,js}": [
+      "eslint --fix"
+    ],
+    "*.{ts,tsx,js,json,md}": [
+      "prettier --write"
+    ]
   }
 }
