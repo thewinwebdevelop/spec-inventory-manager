@@ -56,6 +56,8 @@ jobs:
           node-version-file: ".nvmrc"
       - uses: pnpm/action-setup@v4
       - run: pnpm install --frozen-lockfile
+      - name: generate Prisma client (gitignored — verify:ac imports it)
+        run: pnpm --filter @omnistock/db exec prisma generate
       - name: AC4 — migrate deploy from empty
         run: pnpm --filter @omnistock/db exec prisma migrate deploy
       - name: AC4 — migrate status in sync (no drift)
