@@ -11,7 +11,7 @@
  * Exit 0 = all pass; exit 1 = one or more AC failed (prints an AC-by-AC verdict).
  */
 import { PrismaClient } from "./generated/client";
-import { ledgerGuardExtension } from "./ledger-guard";
+import { ledgerGuardExtension, LedgerImmutableError } from "./ledger-guard";
 
 const prisma = new PrismaClient();
 const guarded = new PrismaClient().$extends(ledgerGuardExtension);
@@ -88,6 +88,9 @@ const STOCK_COLS: Array<[string, string]> = [
   ["StockMovement", "quantity"],
   ["StockMovement", "balanceAfter"],
   ["UsageEvent", "quantity"],
+  ["InventoryItem", "lowStockThreshold"],
+  ["ChannelListing", "allocationValue"],
+  ["ChannelListing", "lastSyncedStock"],
 ];
 
 async function ac5() {
@@ -183,18 +186,30 @@ async function ac7() {
   );
 }
 
-async function expectThrow(label: string, fn: () => Promise<unknown>, wantRestrict = true) {
+/**
+ * Two distinct assertion modes, matched precisely so each layer's own failure
+ * mode is what's actually checked (otherwise deleting the Layer-1 guard could
+ * still "pass" via the Layer-2 trigger's unrelated error and mask a regression):
+ *   "guard"    — Layer 1 (Prisma extension) must throw exactly LedgerImmutableError.
+ *   "restrict" — Layer 2 (DB trigger) must throw the trigger's RESTRICT/raise error.
+ */
+type ExpectMode = "guard" | "restrict";
+
+async function expectThrow(label: string, fn: () => Promise<unknown>, mode: ExpectMode) {
   try {
     await fn();
     check("AC8", false, `${label} should have thrown but succeeded`);
   } catch (e: any) {
     const msg = String(e?.message ?? e);
     const ok =
-      !wantRestrict ||
-      /ledger is immutable/i.test(msg) ||
-      e?.code === "P2010" ||
-      /restrict_violation/.test(msg);
-    check("AC8", ok, `${label} rejected${wantRestrict ? " (ledger is immutable)" : ""}`);
+      mode === "guard"
+        ? e?.name === "LedgerImmutableError" || e instanceof LedgerImmutableError
+        : /ledger is immutable/i.test(msg) || /restrict_violation/.test(msg);
+    check(
+      "AC8",
+      ok,
+      `${label} rejected (${mode === "guard" ? "LedgerImmutableError" : "trigger restrict_violation"})${ok ? "" : ` — got: ${msg}`}`,
+    );
   }
 }
 
@@ -225,34 +240,50 @@ async function ac8() {
     ["StockMovement", sm.id],
     ["UsageEvent", ue.id],
   ] as const) {
+    // full row snapshot BEFORE the rejected mutations (Layer 2 — DB trigger)
+    const before = await prisma.$queryRawUnsafe<any[]>(`SELECT * FROM "${tbl}" WHERE id=$1`, id);
+
     // Layer 2 — raw SQL hits the DB trigger directly
-    await expectThrow(`raw UPDATE ${tbl}`, () =>
-      prisma.$executeRawUnsafe(`UPDATE "${tbl}" SET "quantity"=999 WHERE id=$1`, id),
+    await expectThrow(
+      `raw UPDATE ${tbl}`,
+      () => prisma.$executeRawUnsafe(`UPDATE "${tbl}" SET "quantity"=999 WHERE id=$1`, id),
+      "restrict",
     );
-    await expectThrow(`raw DELETE ${tbl}`, () =>
-      prisma.$executeRawUnsafe(`DELETE FROM "${tbl}" WHERE id=$1`, id),
+    await expectThrow(
+      `raw DELETE ${tbl}`,
+      () => prisma.$executeRawUnsafe(`DELETE FROM "${tbl}" WHERE id=$1`, id),
+      "restrict",
     );
-    await expectThrow(`TRUNCATE ${tbl}`, () =>
-      prisma.$executeRawUnsafe(`TRUNCATE TABLE "${tbl}" CASCADE`),
+    await expectThrow(
+      `TRUNCATE ${tbl}`,
+      () => prisma.$executeRawUnsafe(`TRUNCATE TABLE "${tbl}" CASCADE`),
+      "restrict",
     );
-    // atomicity — row byte-identical after rejected mutations
-    const still = await prisma.$queryRawUnsafe<any[]>(
-      `SELECT "quantity" FROM "${tbl}" WHERE id=$1`,
-      id,
-    );
+    // atomicity — full row byte-identical (deep-equal) after rejected mutations,
+    // not just the one column that the attack targeted.
+    const after = await prisma.$queryRawUnsafe<any[]>(`SELECT * FROM "${tbl}" WHERE id=$1`, id);
     check(
       "AC8",
-      still.length === 1 && still[0].quantity !== 999,
-      `${tbl} row unchanged after rejects`,
+      after.length === 1 &&
+        before.length === 1 &&
+        JSON.stringify(after[0]) === JSON.stringify(before[0]),
+      `${tbl} row byte-identical (full-row deep-equal) after rejects`,
     );
   }
-  // Layer 1 — Prisma guard blocks bulk app-path mutation
+  // Layer 1 — Prisma guard blocks bulk app-path mutation. Must reject with the
+  // guard's own LedgerImmutableError specifically (not merely "threw something"),
+  // otherwise deleting the Layer-1 extension would still "pass" via the Layer-2
+  // trigger's restrict_violation and mask the regression.
   await expectThrow(
     "guard updateMany StockMovement",
     () => guarded.stockMovement.updateMany({ data: { quantity: 0 } }),
-    false,
+    "guard",
   );
-  await expectThrow("guard deleteMany UsageEvent", () => guarded.usageEvent.deleteMany({}), false);
+  await expectThrow(
+    "guard deleteMany UsageEvent",
+    () => guarded.usageEvent.deleteMany({}),
+    "guard",
+  );
 }
 
 async function main() {

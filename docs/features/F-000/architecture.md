@@ -23,6 +23,7 @@ non-derived column is `StockMovement.balanceAfter` (audit snapshot per movement)
 ## 1. Prisma-in-`packages/db` strategy
 
 ### 1.1 Single schema source
+
 - **One and only one** Prisma schema: `packages/db/prisma/schema.prisma`. No other
   package or app declares a `schema.prisma`. This is the single source of truth for
   the physical data model (satisfies AC5/AC6/AC7 introspection targets).
@@ -36,6 +37,7 @@ non-derived column is `StockMovement.balanceAfter` (audit snapshot per movement)
   location of the generated client an implementation detail we can move.
 
 ### 1.2 How other packages consume the client
+
 - `apps/api` (NestJS) wraps `PrismaClient` in an injectable `PrismaService`
   (`onModuleInit → $connect`, `enableShutdownHooks`). All DB access in the API goes
   through DI, never `new PrismaClient()` scattered around.
@@ -50,6 +52,7 @@ non-derived column is `StockMovement.balanceAfter` (audit snapshot per movement)
   writes in F-000 (write primitive deferred to F-011, D-004).
 
 ### 1.3 Migration strategy
+
 - **Authoring:** migrations are generated locally with `prisma migrate dev` and
   committed under `packages/db/prisma/migrations/`. They are checked into git as the
   ordered, immutable history.
@@ -76,11 +79,13 @@ non-derived column is `StockMovement.balanceAfter` (audit snapshot per movement)
 Two-layer defense. **Layer 1 (app guard):** a Prisma client extension / repository
 rule that simply has no `update`/`delete`/`updateMany`/`deleteMany` path exposed for
 `StockMovement` and `UsageEvent` (the ledger repositories expose `create`/`createMany`
-+ reads only). This is convenience/fail-fast, **not** the guarantee. **Layer 2 (DB
-trigger, the actual guarantee):** even a raw query, a psql session, or a future buggy
-service physically cannot mutate a ledger row. AC8 tests Layer 2 directly.
+
+- reads only). This is convenience/fail-fast, **not** the guarantee. **Layer 2 (DB
+  trigger, the actual guarantee):** even a raw query, a psql session, or a future buggy
+  service physically cannot mutate a ledger row. AC8 tests Layer 2 directly.
 
 ### 2.1 Trigger/function SQL design
+
 A single shared trigger function raises on any UPDATE or DELETE; INSERT is never
 attached to the trigger, so inserts pass untouched.
 
@@ -116,6 +121,7 @@ CREATE TRIGGER trg_usage_event_immutable
 ```
 
 Design notes:
+
 - `BEFORE UPDATE OR DELETE` + `FOR EACH ROW`: fires before the mutation commits and
   aborts the statement, so nothing is ever partially applied. TRUNCATE is a separate
   event; if we want to also block it we add a `BEFORE TRUNCATE ... FOR EACH STATEMENT`
@@ -128,11 +134,13 @@ Design notes:
   identifiers. If devops later sets `@@map` to snake_case, the migration SQL must be
   regenerated against the mapped names — noted so the two stay in lockstep.
 - The function is idempotent to (re)create (`CREATE OR REPLACE` + `DROP TRIGGER IF
-  EXISTS`), so re-running the migration on a partially-built DB is safe.
+EXISTS`), so re-running the migration on a partially-built DB is safe.
 
 ### 2.2 Shipping as a Prisma migration
+
 Because Prisma's declarative `schema.prisma` cannot express triggers, we author a
 dedicated migration folder containing the SQL above. Workflow:
+
 1. `prisma migrate dev --create-only --name ledger_immutability` to scaffold an empty
    migration folder, then paste the trigger SQL into its `migration.sql`.
 2. Commit the folder. `_prisma_migrations` now tracks it, so `migrate deploy`
@@ -144,7 +152,9 @@ dedicated migration folder containing the SQL above. Workflow:
 ## 3. core-domain purity enforcement (AC9)
 
 ### 3.1 Tool decision — **dependency-cruiser** (not eslint-plugin-boundaries)
+
 Rationale:
+
 - dependency-cruiser resolves the **actual module graph** (including transitive and
   dynamic imports) and runs as its own CLI step, independent of ESLint. That means it
   cannot be silenced by an inline `// eslint-disable` — a hard requirement of AC9
@@ -161,33 +171,34 @@ surface and config — weaker against the "un-bypassable" requirement. We keep E
 for code style; **dependency-cruiser owns the architectural boundary.**
 
 ### 3.2 Rule config approach
+
 `packages/config/depcruise/.dependency-cruiser.cjs` (shared, referenced from root):
 
 ```js
 module.exports = {
   forbidden: [
     {
-      name: 'core-domain-is-pure',
-      comment: 'core-domain must stay framework/DB-free (golden rule 6, D-002)',
-      severity: 'error',
-      from: { path: '^packages/core-domain/src' },
+      name: "core-domain-is-pure",
+      comment: "core-domain must stay framework/DB-free (golden rule 6, D-002)",
+      severity: "error",
+      from: { path: "^packages/core-domain/src" },
       to: {
         path: [
-          '^packages/db',
-          'node_modules/@prisma/client',
-          'node_modules/\\.prisma',
-          'node_modules/@nestjs',
-          'node_modules/prisma',
-          'node_modules/express',
-          'node_modules/bullmq',
-          'node_modules/ioredis',
+          "^packages/db",
+          "node_modules/@prisma/client",
+          "node_modules/\\.prisma",
+          "node_modules/@nestjs",
+          "node_modules/prisma",
+          "node_modules/express",
+          "node_modules/bullmq",
+          "node_modules/ioredis",
         ],
       },
     },
   ],
   options: {
-    doNotFollow: { path: 'node_modules' },
-    tsConfig: { fileName: 'tsconfig.base.json' },
+    doNotFollow: { path: "node_modules" },
+    tsConfig: { fileName: "tsconfig.base.json" },
     tsPreCompilationDeps: true, // catch type-only imports too — a type import still couples
   },
 };
@@ -200,8 +211,9 @@ module.exports = {
   see it (answer: almost always no).
 
 ### 3.3 CI-blocking and un-bypassable
+
 - Root script `pnpm depcruise` runs `depcruise packages/core-domain --config
-  packages/config/depcruise/.dependency-cruiser.cjs`. Exit code is non-zero on any
+packages/config/depcruise/.dependency-cruiser.cjs`. Exit code is non-zero on any
   `severity: error` violation.
 - It is a **required status check** on the PR branch protection (devops wires this;
   see cross-domain note). Because it is its own job with its own exit code, a red
@@ -212,6 +224,7 @@ module.exports = {
   reject the disable pragma inside core-domain so the escape hatch itself is closed.
 
 ### 3.4 Negative-test fixture (AC9)
+
 - A fixture file (excluded from normal build, present only for the check) — e.g.
   `packages/core-domain/src/__purity_fixtures__/violation.ts` — contains
   `import { PrismaClient } from '@omnistock/db'`. A CI/unit assertion runs
@@ -228,6 +241,7 @@ module.exports = {
 ## 4. Contracts codegen (AC11)
 
 ### 4.1 OpenAPI source location
+
 - Single source spec: `packages/contracts/openapi/openapi.yaml` (hand-authored seed;
   in F-000 it declares `/health` only — enough to prove the codegen pipeline). This
   is the shared seam with frontend/ux going forward.
@@ -236,6 +250,7 @@ module.exports = {
   fails the pipeline.
 
 ### 4.2 TS client generator — must be typecheck-green
+
 - Generator: `openapi-typescript` (types) + a light typed fetch wrapper, **or**
   `openapi-generator-cli typescript-fetch` — pick one and pin it in `packages/config`.
   Recommendation: `openapi-typescript` for types + `openapi-fetch` runtime, because it
@@ -250,15 +265,22 @@ module.exports = {
   fails if the committed output differs (prevents spec/client drift, same spirit as
   the Prisma drift gate).
 
-### 4.3 Dart client — wired only (green deferred to F-006, D-004)
+### 4.3 Dart client — relocated + made green in F-000 (supersedes D-004 deferral, see D-015)
+
 - Generator: `openapi-generator-cli dart-dio` (or `dart`), output to
-  `apps/mobile/lib/generated/api/`.
-- **F-000 scope = wired, not green:** the generation command exists in the pipeline /
-  a make-target and produces Dart source, but `flutter analyze` passing over the
-  generated client is **out of scope** and explicitly deferred to **F-006** (D-004).
-  So AC13's Flutter `analyze`/`test` job runs against the hand-written shell only; the
-  generated Dart client is either excluded from analysis or allowed-to-fail until
-  F-006. This boundary must be documented in the pipeline so nobody "fixes" it early.
+  **`apps/mobile/api_client/`** (own package, not nested under `apps/mobile/lib/`).
+- **Superseded plan:** F-000 originally scoped this as "wired, not green" (deferred to F-006,
+  D-004). During the build, nesting the generated client under `apps/mobile/lib/generated/api/`
+  produced a language-version conflict with the Flutter shell package that broke `flutter
+test`/`build` outright — this had to be fixed immediately rather than deferred (D-015). The fix:
+  move the generated client to its own top-level package (`apps/mobile/api_client`), run
+  `build_runner` as part of `gen:contracts:dart` and commit the resulting `*.g.dart` files, and pin
+  Flutter to `3.27.3` via FVM (`.flutter-version`) since the machine's stock Flutter (2.10.5) was too
+  old for the generated dart-dio client.
+- **F-000 scope now:** the Dart client is generated, compiles, and its `*.g.dart` companions are
+  committed. AC13's Flutter `analyze`/`test` job runs against the shell (the `api_client` package is
+  excluded from `flutter analyze`'s scope via `analysis_options`, per its own package boundary, but
+  it does build/typecheck as part of `flutter pub get` + `build_runner` in CI).
 
 ---
 
@@ -269,6 +291,7 @@ F-000's job is to leave the hook in the right place so those features enforce wi
 re-plumbing.
 
 ### 5.1 Where the hook goes
+
 - **Prisma client extension seam:** `packages/db/src/tenancy.ts` exports a factory
   `withOrgScope(prisma, ctx)` that returns a Prisma client extended via
   `$extends({ query: { $allModels: { ... } } })`. In F-000 this is a **pass-through
@@ -281,11 +304,12 @@ re-plumbing.
   just establishes the context slot. F-002/F-003 fill it (resolve org from
   membership/JWT) and feed it into `withOrgScope`.
 - **Back-office exception is respected up front:** per docs/02 §5, the cross-org
-  path is deliberately a *separate* seam (`/admin/...` + super-admin guard), NOT the
+  path is deliberately a _separate_ seam (`/admin/...` + super-admin guard), NOT the
   tenant `withOrgScope` extension. F-000 does not build it, but the tenant seam is
   named/narrow enough that back-office won't be tempted to reuse it.
 
 ### 5.2 What stub F-000 ships
+
 - `withOrgScope` pass-through factory (typed, unit-tested as pass-through).
 - `OrgContext` provider + no-op guard registered but not enforcing.
 - A short `packages/db/README` note: "every domain repository must obtain its client
@@ -310,7 +334,7 @@ and asserted by AC7 introspection.
   spec §2.1): `available`, `onHand−reserved`, weighted-average `avgUnitCost`, COGS,
   resolved entitlements are all `core-domain` (F-010+), never columns.
 - **`StockMovement.balanceAfter` is the sanctioned exception** — it is a stored
-  *audit snapshot* recorded at insert time, not a value the DB recomputes. It stays a
+  _audit snapshot_ recorded at insert time, not a value the DB recomputes. It stays a
   plain `Int` column (never a Postgres `GENERATED` column), written by the ledger
   write path (F-011). Documented explicitly so a reviewer doesn't "optimize" it into a
   generated column and break the audit trail.

@@ -15,7 +15,7 @@
       "outputs": []
     },
     "typecheck": {
-      "dependsOn": ["^build", "db:generate", "gen:contracts"],
+      "dependsOn": ["^build", "db:generate"],
       "outputs": []
     },
     "test": {

@@ -8,117 +8,140 @@
 ---
 
 ## → F-020 / F-021 / F-023 / F-027 (Phase 1 — Gate 1/2 ของ sync ต้องรับเข้า, D-013)
-| สิ่งที่ต้องรับเข้า | ที่มา |
-|---|---|
-| **fake-Shopee adapter** (test double ใน `packages/connectors`) สำหรับ integration/E2E/seed/Track-2 — ระบุใน F-020 Gate 2 architecture | gap-scan G-3 |
-| **รูปสินค้า F-021**: ตัดสินตอน Gate 1 — hotlink URL platform (ยอมรับรูปหายถ้า listing ถูกลบ) vs ดึง storage ขึ้นมาก่อน F-040 | gap-scan G-7 |
-| **stock-drift transparency**: F-023 detect expected-vs-actual ก่อน push · F-027 แสดง drift event ("มีคนแก้สต๊อกบน platform") — ใส่เป็น AC ตอน Gate 1 | gap-scan G-4 |
-| **compliance-checklist ที่ Gate 1 ของ F-024/F-028** (buyer PII เข้าระบบครั้งแรก) | gap-scan G-2, D-013 |
+
+| สิ่งที่ต้องรับเข้า                                                                                                                                   | ที่มา               |
+| ---------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------- |
+| **fake-Shopee adapter** (test double ใน `packages/connectors`) สำหรับ integration/E2E/seed/Track-2 — ระบุใน F-020 Gate 2 architecture                | gap-scan G-3        |
+| **รูปสินค้า F-021**: ตัดสินตอน Gate 1 — hotlink URL platform (ยอมรับรูปหายถ้า listing ถูกลบ) vs ดึง storage ขึ้นมาก่อน F-040                         | gap-scan G-7        |
+| **stock-drift transparency**: F-023 detect expected-vs-actual ก่อน push · F-027 แสดง drift event ("มีคนแก้สต๊อกบน platform") — ใส่เป็น AC ตอน Gate 1 | gap-scan G-4        |
+| **compliance-checklist ที่ Gate 1 ของ F-024/F-028** (buyer PII เข้าระบบครั้งแรก)                                                                     | gap-scan G-2, D-013 |
 
 ## → F-024 / F-026 / F-030 (Phase 1 — ตอน build จริง)
-| สิ่งที่เลื่อน | seam ที่วางแล้ว |
-|---|---|
+
+| สิ่งที่เลื่อน                                                     | seam ที่วางแล้ว                            |
+| ----------------------------------------------------------------- | ------------------------------------------ |
 | Order financial fields (platformFee/ค่าส่ง mapping ราย connector) | F-024 ดึง field มา · กำไรหลังหักค่าช่องทาง |
-| "กำไรโดยประมาณ — settle ทีหลัง" + ปรับตอนคืนสินค้า | F-026 returns ผูกกับ margin |
+| "กำไรโดยประมาณ — settle ทีหลัง" + ปรับตอนคืนสินค้า                | F-026 returns ผูกกับ margin                |
 
 ## → F-040 / F-042 / F-043 (Phase 2 — Full tier accounting)
-| สิ่งที่เลื่อน | seam ที่วางแล้ว |
-|---|---|
-| เอกสารซื้อ: file attachment + generator **ใบรับรองแทนใบเสร็จ** | tag ใน F-040 · storage lifecycle-ready |
-| จัดกลุ่มเอกสารใหม่: ใบรับรองแทนใบเสร็จ/ใบสำคัญจ่าย = **ฝั่งซื้อ** (ย้ายจาก F-042) | flag data-model ตอน F-040 Gate 2 |
-| Input VAT timing (ใบกำกับ supplier มาคนละจังหวะ/ยอด) | F-040/F-043 Gate 2 |
-| read/write gate ของ accounting (downgrade ดูได้ เขียนไม่ได้) | F-007 `can(org,'accounting','read/write')` |
+
+| สิ่งที่เลื่อน                                                                     | seam ที่วางแล้ว                            |
+| --------------------------------------------------------------------------------- | ------------------------------------------ |
+| เอกสารซื้อ: file attachment + generator **ใบรับรองแทนใบเสร็จ**                    | tag ใน F-040 · storage lifecycle-ready     |
+| จัดกลุ่มเอกสารใหม่: ใบรับรองแทนใบเสร็จ/ใบสำคัญจ่าย = **ฝั่งซื้อ** (ย้ายจาก F-042) | flag data-model ตอน F-040 Gate 2           |
+| Input VAT timing (ใบกำกับ supplier มาคนละจังหวะ/ยอด)                              | F-040/F-043 Gate 2                         |
+| read/write gate ของ accounting (downgrade ดูได้ เขียนไม่ได้)                      | F-007 `can(org,'accounting','read/write')` |
 
 ## → F-004b (Phase 2 — Tax settings, Full tier)
-| สิ่งที่เลื่อน | seam ที่วางแล้ว |
-|---|---|
-| VAT/WHT config, tax handling ราย channel | F-004 structure + F-002 tax profile (TIN) |
-| **เลขรันเอกสารภาษี** (atomic sequence ไม่ซ้ำ/ไม่ขาด, prefix template, reset รายปี) | flag correctness ไว้แล้ว |
+
+| สิ่งที่เลื่อน                                                                      | seam ที่วางแล้ว                           |
+| ---------------------------------------------------------------------------------- | ----------------------------------------- |
+| VAT/WHT config, tax handling ราย channel                                           | F-004 structure + F-002 tax profile (TIN) |
+| **เลขรันเอกสารภาษี** (atomic sequence ไม่ซ้ำ/ไม่ขาด, prefix template, reset รายปี) | flag correctness ไว้แล้ว                  |
 
 ## → F-080 (Phase 5 — Billing)
-| สิ่งที่เลื่อน | seam ที่วางแล้ว |
-|---|---|
-| Provisioning จาก license ที่ซื้อ (แทน seed) | F-007 รับ "provisioning source" |
-| Static cap **ค่าจริง** + "เต็มโควต้า → อัปเกรด" | F-007 `canAdd()` path พร้อม |
-| Paywall/อัปเกรด UI จริง (เนื้อหา+CTA) | F-007 `<FeatureGate>` wrapper พร้อม |
-| Downgrade flow + **บล็อกถ้างวดภาษีค้าง** | F-007 ตั้งกฎ "ไม่ลบ + gate write" แล้ว |
-| Storage retention **automation** (90วัน grace timer + export ZIP + cold-archive job) | F-007 policy + F-000 lifecycle-ready |
-| Add-on **billing** (ซื้อ add-on) | F-007 itemized grants + source |
-| Audit retention automation (archive security events ตามอายุ) | F-005 policy + append-only model |
+
+| สิ่งที่เลื่อน                                                                        | seam ที่วางแล้ว                        |
+| ------------------------------------------------------------------------------------ | -------------------------------------- |
+| Provisioning จาก license ที่ซื้อ (แทน seed)                                          | F-007 รับ "provisioning source"        |
+| Static cap **ค่าจริง** + "เต็มโควต้า → อัปเกรด"                                      | F-007 `canAdd()` path พร้อม            |
+| Paywall/อัปเกรด UI จริง (เนื้อหา+CTA)                                                | F-007 `<FeatureGate>` wrapper พร้อม    |
+| Downgrade flow + **บล็อกถ้างวดภาษีค้าง**                                             | F-007 ตั้งกฎ "ไม่ลบ + gate write" แล้ว |
+| Storage retention **automation** (90วัน grace timer + export ZIP + cold-archive job) | F-007 policy + F-000 lifecycle-ready   |
+| Add-on **billing** (ซื้อ add-on)                                                     | F-007 itemized grants + source         |
+| Audit retention automation (archive security events ตามอายุ)                         | F-005 policy + append-only model       |
 
 ## → F-082 (Phase 5 — Plan/Entitlement admin)
-| สิ่งที่เลื่อน | seam ที่วางแล้ว |
-|---|---|
+
+| สิ่งที่เลื่อน                                             | seam ที่วางแล้ว                                |
+| --------------------------------------------------------- | ---------------------------------------------- |
 | Plan/package management UI + grandfathering + override UI | F-007 data model + mutation ops (internal API) |
 
 ## → F-083 (Phase 5 — Metering)
-| สิ่งที่เลื่อน | seam ที่วางแล้ว |
-|---|---|
+
+| สิ่งที่เลื่อน                                                 | seam ที่วางแล้ว                    |
+| ------------------------------------------------------------- | ---------------------------------- |
 | Usage metering (immutable ledger) + quota counting + hard cap | F-007 features map รับ metered key |
-| Metered storage / metered add-on (เครดิต AI ฯลฯ) | `storage_mb` key + grants seed |
+| Metered storage / metered add-on (เครดิต AI ฯลฯ)              | `storage_mb` key + grants seed     |
 
 ## → F-085 (Phase 5 — Back-office console)
-| สิ่งที่เลื่อน | seam ที่วางแล้ว |
-|---|---|
+
+| สิ่งที่เลื่อน                                          | seam ที่วางแล้ว                               |
+| ------------------------------------------------------ | --------------------------------------------- |
 | Super-admin config entitlement/plan/usage/support (UI) | F-007 mutation = internal API ให้ console ทับ |
-| Super-admin actor + cross-org access **เปิดใช้จริง** | F-003 US-8 cross-org seam + F-005 audit |
+| Super-admin actor + cross-org access **เปิดใช้จริง**   | F-003 US-8 cross-org seam + F-005 audit       |
 
 ## → F-081 (Phase 5 — Onboarding) + email infra
-| สิ่งที่เลื่อน | seam ที่วางแล้ว |
-|---|---|
-| **Sync→Full upgrade wizard** (แยก tax entity: ร้าน/สต๊อกที่ไม่ใช่ TIN นี้ต้องย้าย license) | จุดยากที่ระบุไว้ชัด |
-| Self-serve password reset (เมื่อมี SMTP) | F-001 admin-reset ก่อน · `verified` flag |
-| Email verification | F-001 `verified=false` flag ติดไว้ |
-| **ส่งคำเชิญสมาชิกทาง email อัตโนมัติ** (D-012: F-002 MVP = copy invite link) | F-002 Invitation token + link flow พร้อม — เติมแค่ transport |
+
+| สิ่งที่เลื่อน                                                                                              | seam ที่วางแล้ว                                                              |
+| ---------------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------- |
+| **Sync→Full upgrade wizard** (แยก tax entity: ร้าน/สต๊อกที่ไม่ใช่ TIN นี้ต้องย้าย license)                 | จุดยากที่ระบุไว้ชัด                                                          |
+| Self-serve password reset (เมื่อมี SMTP)                                                                   | F-001 admin-reset ก่อน · `verified` flag                                     |
+| Email verification                                                                                         | F-001 `verified=false` flag ติดไว้                                           |
+| **ส่งคำเชิญสมาชิกทาง email อัตโนมัติ** (D-012: F-002 MVP = copy invite link)                               | F-002 Invitation token + link flow พร้อม — เติมแค่ transport                 |
 | **ToS/consent ตอน signup + Privacy policy + PDPA baseline เต็ม** (D-013: dogfood = พวกเราเอง ยังไม่บังคับ) | skill `compliance-checklist` คุมราย feature ไปพลาง · เต็ม = launch-readiness |
-| **Email sending infra (SMTP)** — ปลดล็อก reset+verify+notification | track เป็น infra dependency (devops) |
+| **Email sending infra (SMTP)** — ปลดล็อก reset+verify+notification                                         | track เป็น infra dependency (devops)                                         |
 
 ## → F-061 (Phase 4 — Mobile public release & polish)
-| สิ่งที่เลื่อน | seam ที่วางแล้ว |
-|---|---|
-| Biometric app-lock | F-006 session/lock architecture พร้อมรับ |
-| Full offline-write sync (offline DB + conflict resolution) | F-006 graceful degradation + cache read |
-| Deep-link เต็ม, store submission/assets, perf polish, dark mode | F-006 navigation/push routing พื้นฐาน |
+
+| สิ่งที่เลื่อน                                                   | seam ที่วางแล้ว                          |
+| --------------------------------------------------------------- | ---------------------------------------- |
+| Biometric app-lock                                              | F-006 session/lock architecture พร้อมรับ |
+| Full offline-write sync (offline DB + conflict resolution)      | F-006 graceful degradation + cache read  |
+| Deep-link เต็ม, store submission/assets, perf polish, dark mode | F-006 navigation/push routing พื้นฐาน    |
 
 ## → F-090+ (Phase หลัง — Multi-warehouse)
-| สิ่งที่เลื่อน | seam ที่วางแล้ว |
-|---|---|
-| CRUD หลาย warehouse + ตั้ง default หลายอัน | schema `Warehouse`/`StockLevel` per-warehouse · Phase 0 = default คลังเดียว |
-| **TRANSFER** (โอนสต๊อกข้ามคลัง) + allocation ราย warehouse | `StockMovement.type=TRANSFER` มีใน enum แล้ว |
+
+| สิ่งที่เลื่อน                                              | seam ที่วางแล้ว                                                             |
+| ---------------------------------------------------------- | --------------------------------------------------------------------------- |
+| CRUD หลาย warehouse + ตั้ง default หลายอัน                 | schema `Warehouse`/`StockLevel` per-warehouse · Phase 0 = default คลังเดียว |
+| **TRANSFER** (โอนสต๊อกข้ามคลัง) + allocation ราย warehouse | `StockMovement.type=TRANSFER` มีใน enum แล้ว                                |
 
 ## → Phase หลัง (i18n)
-| สิ่งที่เลื่อน | seam ที่วางแล้ว |
-|---|---|
+
+| สิ่งที่เลื่อน                                 | seam ที่วางแล้ว                             |
+| --------------------------------------------- | ------------------------------------------- |
 | เติมคำแปล **อังกฤษ** ให้ครบทุกจอ (web+mobile) | i18n framework + key + Thai ครบ (F-006/web) |
 
 ## → Productize / Hardening (Phase 5+)
-| สิ่งที่เลื่อน | seam ที่วางแล้ว |
-|---|---|
-| Phone + OTP identifier (phone-first) + SMS provider | F-001 `identifier + type` นามธรรม |
-| 2FA/MFA, social login, SSO, CAPTCHA, passwordless | F-001 scope-out |
-| ลบ org / โอนขาดเจ้าของเต็ม / seat limit enforce | F-002 scope-out |
-| Custom role ละเอียด (per-field/record, per-warehouse scope), approval workflow | F-003 scope-out |
-| Audit tamper-evidence (hash chain) | F-005 append-only model |
+
+| สิ่งที่เลื่อน                                                                  | seam ที่วางแล้ว                   |
+| ------------------------------------------------------------------------------ | --------------------------------- |
+| Phone + OTP identifier (phone-first) + SMS provider                            | F-001 `identifier + type` นามธรรม |
+| 2FA/MFA, social login, SSO, CAPTCHA, passwordless                              | F-001 scope-out                   |
+| ลบ org / โอนขาดเจ้าของเต็ม / seat limit enforce                                | F-002 scope-out                   |
+| Custom role ละเอียด (per-field/record, per-warehouse scope), approval workflow | F-003 scope-out                   |
+| Audit tamper-evidence (hash chain)                                             | F-005 append-only model           |
 
 ## → F-000 / devops (Phase 0 — infra)
-| สิ่งที่เลื่อน | หมายเหตุ |
-|---|---|
+
+| สิ่งที่เลื่อน                                            | หมายเหตุ                               |
+| -------------------------------------------------------- | -------------------------------------- |
 | Object storage: แยก prefix ราย org + **lifecycle-ready** | เงื่อนไขให้ retention/archive ทำงานได้ |
 
+## → F-001 (e2e-in-CI สำหรับ F-000 AC3/AC15)
+
+รายละเอียดเต็มที่ [docs/features/F-000/forward-commitments.md](F-000/forward-commitments.md) —
+F-000 final whole-branch review (2026-07-05): AC3 (api `/health`+web 200+flutter build) และ AC15
+(redis/queue probe) verified locally สำหรับ F-000 แต่ยังไม่มี job e2e-in-CI จริง; เพิ่มตอน F-001
+เมื่อ apps/api มี endpoint จริงให้ e2e สมกับความพยายาม
+
 ## → Team/workflow upgrades (จาก PM review 2026-07-04) — ดูแผนละเอียด
-| สิ่งที่เลื่อน | trigger | รายละเอียด |
-|---|---|---|
-| Pin client stack (per-app CLAUDE.md + D-XXX) · CI path-boundary check · exemplar conventions | F-000 / F-006 / จบ build feature แรก | [team-upgrade-plan §B1–B3](../superpowers/plans/2026-07-04-team-upgrade-plan.md) |
-| skill `flutter-feature` (เขียนจากโค้ดจริง) | F-006 เสร็จ | [§B4](../superpowers/plans/2026-07-04-team-upgrade-plan.md) |
-| `support` agent + `/triage` | มี user นอกทีม | [§B5](../superpowers/plans/2026-07-04-team-upgrade-plan.md) |
-| Observability section ใน Gate-2 architecture + DR drill | ก่อน F-020 | [§B6](../superpowers/plans/2026-07-04-team-upgrade-plan.md) |
-| Launch-readiness (PDPA, pen test, load test, status page, help content) | ก่อนขายนอก dogfood | [§B7–B8](../superpowers/plans/2026-07-04-team-upgrade-plan.md) |
-| Enforcement ladder — ย้ายกฎทองจาก prose → CI check (org-filter middleware, float ban, protected-path diff check, lockfile-diff) **+ rulebook consistency scan** (blindspot-scan pass 6 กับ workflow docs เอง — จับกติกาขัดกันเอง) | หลัง F-000 CI เขียว + ทุกจบ phase | [§B9](../superpowers/plans/2026-07-04-team-upgrade-plan.md) |
-| **`pnpm verify` คำสั่งเดียวที่ root** (+ `--filter=<workspace>`) รันชุดเดียวกับ CI เป๊ะ — ทำให้ PM รันซ้ำตาม Build discipline ข้อ 1 ได้ด้วยคำสั่งเดียว และ runnable proof ของทุก agent อ้างคำสั่งเดียวกัน | F-000 Gate 2 (devops วาง script) | [§B10](../superpowers/plans/2026-07-04-team-upgrade-plan.md) |
+
+| สิ่งที่เลื่อน                                                                                                                                                                                                                     | trigger                              | รายละเอียด                                                                       |
+| --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------ | -------------------------------------------------------------------------------- |
+| Pin client stack (per-app CLAUDE.md + D-XXX) · CI path-boundary check · exemplar conventions                                                                                                                                      | F-000 / F-006 / จบ build feature แรก | [team-upgrade-plan §B1–B3](../superpowers/plans/2026-07-04-team-upgrade-plan.md) |
+| skill `flutter-feature` (เขียนจากโค้ดจริง)                                                                                                                                                                                        | F-006 เสร็จ                          | [§B4](../superpowers/plans/2026-07-04-team-upgrade-plan.md)                      |
+| `support` agent + `/triage`                                                                                                                                                                                                       | มี user นอกทีม                       | [§B5](../superpowers/plans/2026-07-04-team-upgrade-plan.md)                      |
+| Observability section ใน Gate-2 architecture + DR drill                                                                                                                                                                           | ก่อน F-020                           | [§B6](../superpowers/plans/2026-07-04-team-upgrade-plan.md)                      |
+| Launch-readiness (PDPA, pen test, load test, status page, help content)                                                                                                                                                           | ก่อนขายนอก dogfood                   | [§B7–B8](../superpowers/plans/2026-07-04-team-upgrade-plan.md)                   |
+| Enforcement ladder — ย้ายกฎทองจาก prose → CI check (org-filter middleware, float ban, protected-path diff check, lockfile-diff) **+ rulebook consistency scan** (blindspot-scan pass 6 กับ workflow docs เอง — จับกติกาขัดกันเอง) | หลัง F-000 CI เขียว + ทุกจบ phase    | [§B9](../superpowers/plans/2026-07-04-team-upgrade-plan.md)                      |
+| **`pnpm verify` คำสั่งเดียวที่ root** (+ `--filter=<workspace>`) รันชุดเดียวกับ CI เป๊ะ — ทำให้ PM รันซ้ำตาม Build discipline ข้อ 1 ได้ด้วยคำสั่งเดียว และ runnable proof ของทุก agent อ้างคำสั่งเดียวกัน                         | F-000 Gate 2 (devops วาง script)     | [§B10](../superpowers/plans/2026-07-04-team-upgrade-plan.md)                     |
 
 ## → deferred จาก F-000 (D-004 · Gate 1 sign-off 2026-07-02)
-| สิ่งที่เลื่อน | ปลายทาง build | seam ที่ F-000 วางแล้ว |
-|---|---|---|
-| Dart OpenAPI client **green/compile** | **F-006** (mobile shell) | F-000 wire Dart codegen pipeline (AC11) |
-| Object storage **concrete backend** (local/minio → prod) | **F-040** (attachment) | F-000 วาง stub interface + org-prefix seam |
+
+| สิ่งที่เลื่อน                                                                  | ปลายทาง build                  | seam ที่ F-000 วางแล้ว                                         |
+| ------------------------------------------------------------------------------ | ------------------------------ | -------------------------------------------------------------- |
+| Dart OpenAPI client **green/compile**                                          | **F-006** (mobile shell)       | F-000 wire Dart codegen pipeline (AC11)                        |
+| Object storage **concrete backend** (local/minio → prod)                       | **F-040** (attachment)         | F-000 วาง stub interface + org-prefix seam                     |
 | **transaction+ledger write primitive** (write-in-tx + StockMovement) — กฎทอง 5 | **F-011** (inventory + ledger) | F-000 วาง trigger (AC8) + schema; helper define ตอน write จริง |

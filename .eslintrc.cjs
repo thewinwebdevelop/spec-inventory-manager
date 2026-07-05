@@ -13,7 +13,8 @@ module.exports = {
     "node_modules",
     "packages/db/src/generated",
     "packages/contracts/src/generated",
-    "apps/mobile/lib/generated",
+    // apps/mobile/api_client (relocated from apps/mobile/lib/generated/api, D-015) is a Dart
+    // package — ESLint never lints .dart files, so no ignore entry is needed here.
     // Next.js's own auto-generated stub (apps/web) — its header says "should
     // not be edited"; the triple-slash reference it emits is Next.js's
     // required convention, not something we can fix in our source.

@@ -183,3 +183,25 @@ Decision: **บังคับ unit test ประกบทุกงาน imple
 Rationale: user เคาะ 2026-07-05 · ปิด gap ที่ process-only enforcement พึ่งความจำ agent · echo-ok script อันตรายกว่าไม่มี script (test ที่เขียนแล้วไม่ถูกรัน)
 Affects: CLAUDE.md กฎทอง 4 · WEB_TEAM.md Gate E · apps/*/CLAUDE.md · test script ทุก workspace · (CI node-ci/flutter-ci เป็น required อยู่แล้ว — ไม่ต้องแก้)
 Status: decided
+
+---
+
+### D-015 · 2026-07-05 · F-000
+
+Q: generated Dart client เดิมอยู่ `apps/mobile/lib/generated/api` ชน nested-package language-version กับ Flutter shell (ทำให้ `flutter test`/`build` พัง) — ย้ายที่ไหน + gen pipeline ต้องเปลี่ยนยังไง?
+Asked by: @frontend (escalation) Owner: @user
+Decision: **ย้าย generated Dart client ไป `apps/mobile/api_client`** (แยก package เต็ม ไม่ nested ใต้ `lib/`) · `gen:contracts:dart` รัน `openapi-generator` แล้วต่อด้วย `build_runner` แล้ว **commit `*.g.dart`** (built_value companions) เข้า git · Flutter pin `3.27.3` ผ่าน FVM + `.flutter-version` (เครื่อง dev เดิมมี `2.10.5` เก่าเกินไปสำหรับ dart-dio client ที่ generate ออกมา) · decided "แก้เดี๋ยวนี้" ไม่เลื่อน
+Rationale: nested-package language-version conflict ทำให้ mobile shell build/test พังทั้งก้อน — บล็อก AC3/AC13 ตรงๆ · แยก package ระดับ root ของ apps/mobile ให้ pub/analyzer เห็นเป็นคนละ package version constraint ได้จริง
+Affects: apps/mobile/api_client (ใหม่), turbo.json (gen:contracts outputs), CI contracts-drift + flutter-ci jobs, apps/mobile/.flutter-version, docs (architecture.md/test-plan.md path refs)
+Status: decided
+
+---
+
+### D-016 · 2026-07-05 · F-000
+
+Q: (T-000-05 security review Important-1) runtime DB role ที่ apps/api ใช้เป็นเจ้าของตาราง ledger + ตัว trigger เอง — connection ที่ถูก compromise สั่ง raw SQL ปิด/ลบ trigger ได้ ยอมรับความเสี่ยงนี้ไหมใน Phase 0?
+Asked by: @devops (จาก security review, ผ่าน backend-api) Owner: @devops + @backend-api
+Decision: **ยอมรับความเสี่ยงชั่วคราวสำหรับ Phase 0** (dogfood, ไม่มี external user) · **ก่อนขึ้น production ต้องมี**: least-privilege runtime role (ไม่มีสิทธิ์ DDL, ไม่ใช่ owner ของ trigger/ตาราง) + migration รันด้วย role แยกต่างหากจาก runtime role · ผูก milestone นี้กับ pre-prod gate ไม่ใช่ F-000
+Rationale: Phase 0 ไม่มี user ภายนอก — blast radius ของ compromised runtime connection จำกัดอยู่ในทีมเราเอง · แยก role ตอนนี้เพิ่ม infra complexity ที่ยังไม่มี threat model จริงมารองรับ (YAGNI ระดับ infra) แต่ต้องล็อกเป็น pre-prod requirement ไม่ให้ลืม
+Affects: packages/db (migration role setup — future), infra.md (future least-privilege role section), pre-prod launch checklist
+Status: decided
