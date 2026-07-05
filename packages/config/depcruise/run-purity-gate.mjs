@@ -97,11 +97,22 @@ function walk(dir) {
 
 // ---- Check 2: real core-domain src is clean ---------------------------------
 {
-  // Exclude the negative fixture dir — it is intentionally dirty and is
-  // checked separately below.
+  // Exclude ONLY the negative fixture dir — it is intentionally dirty and is
+  // checked separately below. This MUST be anchored to the exact directory,
+  // not a bare substring: dependency-cruiser's `--exclude` is a raw regex
+  // matched against the whole (cwd-relative) module path, so an unanchored
+  // "__purity_fixtures__" would silently skip ANY file anywhere whose path
+  // merely contains that substring — e.g.
+  // packages/core-domain/src/evil__purity_fixtures__leak.ts — letting a real
+  // golden-rule-6 violation dodge this check entirely (confirmed bypass).
+  // Anchoring to `^<REAL_SRC>/__purity_fixtures__/` (cwd-relative, matching
+  // the `source` field depcruise reports, same convention as the config's
+  // `from.path`) ensures only files actually inside that directory are
+  // excluded.
+  const FIXTURE_DIR_EXCLUDE = `^${REAL_SRC}/__purity_fixtures__/`;
   const { violations } = runDepcruise(REAL_SRC, [
     "--exclude",
-    "__purity_fixtures__",
+    FIXTURE_DIR_EXCLUDE,
   ]);
   if (violations.length > 0) {
     fail(
