@@ -11,13 +11,14 @@ include: package:flutter_lints/flutter.yaml
 
 analyzer:
   # T-000-09 / F-000 scope (architecture.md §4.3, infra.md §2.4): the generated
-  # OpenAPI Dart client under lib/generated/api is wired (imported, compiles),
-  # not analyzer-green — that lands in F-006 (D-004). Excluding it here keeps
-  # this deferral visible/auditable in the repo instead of an allow-failure CI
-  # step nobody notices. It does not affect `flutter build`/`pub get`, only
-  # `flutter analyze`'s scope.
+  # OpenAPI Dart client is a sibling package at apps/mobile/api_client (moved
+  # out of lib/ so its built_value library files and .g.dart parts resolve at
+  # one language version). It is wired (imported, compiles, flutter test green),
+  # not analyzer-green — full typed usage lands in F-006 (D-004). Excluding it
+  # here keeps that deferral visible/auditable instead of an allow-failure CI
+  # step nobody notices. Does not affect `flutter build`/`test`/`pub get`.
   exclude:
-    - lib/generated/api/**
+    - api_client/**
 
 linter:
   # The lint rules applied to this project can be customized in the

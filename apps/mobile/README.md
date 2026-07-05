@@ -17,7 +17,7 @@ per-project Flutter 3.27.3 (closest cached fvm version to `.flutter-version`'s
 
 `lib/main.dart` is a minimal placeholder screen that imports
 `omnistock_api_client` (the generated Dart client under
-`lib/generated/api/`, from `packages/contracts`/T-000-07) at the type level,
+`api_client/` (sibling package), from `packages/contracts`/T-000-07) at the type level,
 so the wiring is real and `flutter analyze` covers it (generated code itself
 is excluded from analysis per `analysis_options.yaml`, F-000 scope —
 analyzer-green over the generated client lands in F-006, D-004).

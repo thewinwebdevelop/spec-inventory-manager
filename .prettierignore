@@ -6,5 +6,5 @@ node_modules
 pnpm-lock.yaml
 packages/db/src/generated
 packages/contracts/src/generated
-apps/mobile/lib/generated
 apps/mobile/lib/**
+apps/mobile/api_client/**

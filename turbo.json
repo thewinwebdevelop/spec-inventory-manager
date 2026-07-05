@@ -24,7 +24,7 @@
     },
     "gen:contracts": {
       "inputs": ["openapi/openapi.yaml"],
-      "outputs": ["src/generated/ts/**", "../../apps/mobile/lib/generated/api/**"],
+      "outputs": ["src/generated/ts/**", "../../apps/mobile/api_client/**"],
       "cache": true
     },
     "validate": {

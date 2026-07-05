@@ -51,7 +51,7 @@ confirms the assumptions backend-api's architecture.md made about devops's job
     },
     "gen:contracts": {
       "inputs": ["openapi/openapi.yaml"],
-      "outputs": ["src/generated/ts/**", "../../apps/mobile/lib/generated/api/**"],
+      "outputs": ["src/generated/ts/**", "../../apps/mobile/api_client/**"],
       "cache": true
     },
     "depcruise": {
@@ -221,7 +221,11 @@ flutter-ci:
   `subosito/flutter-action`, mirroring how `.nvmrc` pins Node.
 - **Generated Dart client scope (confirms architecture.md §4.3):** F-000's
   `flutter analyze`/`flutter test` run over the hand-written Flutter shell only.
-  The generated client at `apps/mobile/lib/generated/api/` is either (a) excluded
+  The generated client is a sibling package at `apps/mobile/api_client/` (moved
+  out of `lib/` during the T-000-09 build: a Dart package nested inside another
+  package's `lib/` makes the CFE resolve its built_value library files and their
+  `.g.dart` parts at different language versions, breaking `flutter test`/`build`).
+  It is either (a) excluded
   from `analyze` via `analysis_options.yaml`'s `exclude:` globs, or (b) present
   but the job does not fail on its analyzer warnings until F-006 turns it green.
   Chosen approach: **(a) exclude via analysis_options.yaml**, because a silent
@@ -280,7 +284,7 @@ contracts-drift:
       run: |
         git diff --exit-code -- packages/db/src/generated \
                                 packages/contracts/src/generated \
-                                apps/mobile/lib/generated/api \
+                                apps/mobile/api_client \
           || (echo "::error::generated client(s) are stale — run gen commands and commit the diff" && exit 1)
     - name: OpenAPI spec validation (AC11)
       run: pnpm --filter @omnistock/contracts exec redocly lint openapi/openapi.yaml

@@ -190,7 +190,7 @@ packages:
   omnistock_api_client:
     dependency: "direct main"
     description:
-      path: "lib/generated/api"
+      path: api_client
       relative: true
     source: path
     version: "1.0.0"

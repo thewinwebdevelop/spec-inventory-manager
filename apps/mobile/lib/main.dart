@@ -1,7 +1,7 @@
 import 'package:flutter/material.dart';
 
 // T-000-09 — proves apps/mobile consumes the generated OpenAPI Dart client
-// (T-000-07) from lib/generated/api. Scope is "wired", not "feature complete":
+// (T-000-07) from the api_client sibling package. Scope is "wired", not "feature complete":
 // this placeholder only imports a generated type so the client is a real
 // compile-time dependency, not a fabricated shape (see
 // docs/features/F-000/architecture.md §4.3 — Dart client full analyzer-green

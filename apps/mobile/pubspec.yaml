@@ -35,12 +35,14 @@ dependencies:
   # Use with the CupertinoIcons class for iOS style icons.
   cupertino_icons: ^1.0.8
 
-  # Generated OpenAPI client (T-000-07). Wired-only per F-000 scope
-  # (docs/features/F-000/architecture.md §4.3) — full analyzer-green over the
-  # generated code lands in F-006 (D-004). This app only needs to prove it
-  # compiles against a real generated type.
+  # Generated OpenAPI client (T-000-07). Lives OUTSIDE lib/ as a sibling
+  # package (apps/mobile/api_client) — a Dart package nested inside another
+  # package's lib/ makes the CFE resolve the built_value library files and
+  # their .g.dart parts at different language versions ("language version
+  # override has to be the same in the library and its part(s)"). Wired-only
+  # per F-000 scope (architecture.md §4.3); full typed usage lands in F-006.
   omnistock_api_client:
-    path: lib/generated/api
+    path: api_client
 
 dev_dependencies:
   flutter_test:

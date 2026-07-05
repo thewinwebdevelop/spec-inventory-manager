@@ -9,7 +9,7 @@
     "validate": "redocly lint openapi/openapi.yaml",
     "gen:contracts": "pnpm run gen:contracts:ts && pnpm run gen:contracts:dart",
     "gen:contracts:ts": "openapi-typescript openapi/openapi.yaml -o src/generated/ts/schema.d.ts --redocly redocly.codegen.yaml",
-    "gen:contracts:dart": "openapi-generator-cli generate -i openapi/openapi.yaml -g dart-dio -o ../../apps/mobile/lib/generated/api --additional-properties=pubName=omnistock_api_client,pubAuthor=OmniStock",
+    "gen:contracts:dart": "bash scripts/gen-dart-client.sh",
     "lint": "eslint \"src/**/*.{ts,tsx}\" --ignore-pattern \"src/generated/**\"",
     "typecheck": "tsc -p tsconfig.json --noEmit",
     "test": "echo ok"
