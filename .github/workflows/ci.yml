@@ -1,0 +1,137 @@
+# F-000 T-000-10 · CI pipeline (infra.md §2). Five required jobs, each its own
+# top-level job so one green job can never mask another red one (§2.1). Branch
+# protection (§2.7) must add all five as required checks on `main` and disallow
+# direct pushes — that part is a GitHub repo-admin setting, not in this file.
+name: CI
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  # AC2 (build covers all workspaces), lint (real TS lint), typecheck, test — Node only.
+  node-ci:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version-file: ".nvmrc"
+      - uses: pnpm/action-setup@v4
+      - run: pnpm install --frozen-lockfile
+      # AC2: assert every workspace is in the build graph before building (no silent skip).
+      - name: AC2 — build graph covers all workspaces
+        run: pnpm exec turbo build --dry=json | node -e "const g=JSON.parse(require('fs').readFileSync(0));const names=new Set(g.tasks.map(t=>t.package));for(const p of ['@omnistock/core-domain','@omnistock/db','@omnistock/connectors','@omnistock/contracts','@omnistock/config','api','web','mobile','back-office']){if(!names.has(p)){console.error('::error::workspace missing from build graph: '+p);process.exit(1)}}console.log('all workspaces present')"
+      - run: pnpm turbo lint typecheck test --filter='!./apps/mobile'
+
+  # AC4/AC5/AC6/AC7/AC8 — one ephemeral Postgres, empty → migrated → introspected → trigger-armed (§3).
+  db-migrate:
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_USER: omnistock
+          POSTGRES_PASSWORD: omnistock
+          POSTGRES_DB: omnistock_ci
+        ports: ["5432:5432"]
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+    env:
+      DATABASE_URL: postgresql://omnistock:omnistock@localhost:5432/omnistock_ci
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version-file: ".nvmrc"
+      - uses: pnpm/action-setup@v4
+      - run: pnpm install --frozen-lockfile
+      - name: AC4 — migrate deploy from empty
+        run: pnpm --filter @omnistock/db exec prisma migrate deploy
+      - name: AC4 — migrate status in sync (no drift)
+        run: pnpm --filter @omnistock/db exec prisma migrate status
+      # AC5/6/7 introspection + AC8 ledger-trigger negative test. qa-authored
+      # (T-000-11), devops runs them here — MUST run after the FULL migration
+      # chain (init + ledger trigger) on every CI run: a future Prisma migration
+      # that recreates a ledger table silently drops the triggers and `migrate
+      # status` won't catch it (T-000-05 security review, Important-2).
+      - name: AC5/6/7/8 — schema shape + ledger immutability
+        run: pnpm --filter @omnistock/db run verify:ac
+
+  # AC9 — core-domain purity. Standalone from ESLint (§2.5). The gate script runs
+  # BOTH the clean check (must pass) and the negative-fixture check (must fail),
+  # so this single step proves the guard is live, not decorative.
+  depcruise:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version-file: ".nvmrc"
+      - uses: pnpm/action-setup@v4
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm turbo build --filter=@omnistock/core-domain # tsPreCompilationDeps needs built types
+      - name: AC9 — core-domain purity gate (clean passes + fixture fails)
+        run: pnpm depcruise
+
+  # AC13 — Flutter analyze + test, own job/own required check. Mobile shell only;
+  # the generated api_client package is excluded from analyze (analysis_options).
+  flutter-ci:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: subosito/flutter-action@v2
+        with:
+          flutter-version-file: apps/mobile/.flutter-version
+      - name: build_runner — generate api_client .g.dart (built_value companions)
+        working-directory: apps/mobile/api_client
+        run: |
+          dart pub get
+          dart run build_runner build --delete-conflicting-outputs
+      - name: flutter pub get
+        working-directory: apps/mobile
+        run: flutter pub get
+      - name: AC13 — flutter analyze
+        working-directory: apps/mobile
+        run: flutter analyze
+      - name: AC13 — flutter test
+        working-directory: apps/mobile
+        run: flutter test
+
+  # AC11 — committed generated clients must match a fresh regen; OpenAPI validates;
+  # TS client typechecks in api+web. Needs Dart on PATH because gen:contracts:dart
+  # runs build_runner (T-000-09 fix); flutter-action provides it.
+  contracts-drift:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version-file: ".nvmrc"
+      - uses: pnpm/action-setup@v4
+      - uses: subosito/flutter-action@v2
+        with:
+          flutter-version-file: apps/mobile/.flutter-version
+      - run: pnpm install --frozen-lockfile
+      - name: regenerate Prisma client
+        run: pnpm --filter @omnistock/db exec prisma generate
+      - name: regenerate TS + Dart contracts clients
+        run: pnpm turbo gen:contracts
+      - name: fail on uncommitted diff
+        run: |
+          git diff --exit-code -- packages/db/src/generated \
+                                  packages/contracts/src/generated \
+                                  apps/mobile/api_client \
+            || (echo "::error::generated client(s) are stale — run gen commands and commit the diff" && exit 1)
+      - name: AC11 — OpenAPI spec validation
+        run: pnpm --filter @omnistock/contracts exec redocly lint openapi/openapi.yaml
+      - name: AC11 — TS client typecheck-green (api + web)
+        run: pnpm turbo typecheck --filter=api --filter=web
