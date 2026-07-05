@@ -7,14 +7,17 @@
     "lint": "echo ok",
     "typecheck": "tsc -p tsconfig.json --noEmit",
     "test": "echo ok",
-    "dev": "echo 'apps/api dev placeholder — NestJS skeleton lands in T-000-08'"
+    "dev": "echo 'apps/api dev placeholder — NestJS skeleton lands in T-000-08'",
+    "check-env": "tsx scripts/check-env.ts"
   },
   "dependencies": {
+    "@omnistock/config": "workspace:*",
     "@omnistock/core-domain": "workspace:*",
     "@omnistock/db": "workspace:*",
     "@omnistock/contracts": "workspace:*"
   },
   "devDependencies": {
-    "typescript": "^5.7.2"
+    "typescript": "^5.7.2",
+    "tsx": "^4.19.2"
   }
 }

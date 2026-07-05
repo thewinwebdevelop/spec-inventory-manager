@@ -14,7 +14,9 @@
     "depcruise": "turbo depcruise",
     "validate": "turbo validate",
     "gen:contracts": "turbo gen:contracts",
-    "dev": "turbo dev"
+    "db:up": "docker compose up -d",
+    "db:down": "docker compose down",
+    "dev": "pnpm db:up && pnpm --filter @omnistock/db exec prisma migrate deploy && turbo dev"
   },
   "devDependencies": {
     "turbo": "^2.3.3"
