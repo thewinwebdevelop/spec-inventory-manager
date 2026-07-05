@@ -1,7 +1,7 @@
 ---
 doc: test-plan
 owner: "@qa"
-signoff: approved     # pending | approved
+signoff: approved # pending | approved
 ---
 
 # F-001 — Test Plan (Gate 2)
@@ -14,10 +14,15 @@ signoff: approved     # pending | approved
 > breached-password fixture), and [architecture.md](./architecture.md) (reuse pure-fn in core-domain,
 > **60s reuse-leeway D-011**, IP+account throttle, fail-open **+ degraded limiter + logged signal**,
 > argon2id). Reflects the backend-review fixes **C-1 / H-1 / H-2 / H-3 / M-1 / M-2 / M-3 / M-7** and
-> product scope decisions **D-007 / D-008 (US-6) / D-009 / D-010 / D-011**, plus the **Low-hardening**
-> amendments **L-2** (strict `Content-Type: application/json` → `415` before credential processing,
-> §5 I5c.1), **L-3** (`tokenHash` = keyed `HMAC-SHA-256(JWT_REFRESH_SECRET, value)`, not bare
-> SHA-256 — U3.8 / I3.9), **L-5** (`/auth/refresh` IP-only rate cap → `429 + Retry-After` — I3.10).
+> product scope decisions **D-007 / D-008 (US-6) / D-009 / D-010 / D-011 / D-014 / D-017**, plus the
+> **Low-hardening** amendments **L-2** (strict `Content-Type: application/json` → `415` before
+> credential processing, §5 I5c.1), **L-3** (`tokenHash` = keyed `HMAC-SHA-256(JWT_REFRESH_SECRET,
+value)`, not bare SHA-256 — U3.8 / I3.9), **L-5** (`/auth/refresh` IP-only rate cap → `429 +
+Retry-After` — I3.10). **D-014** (unit test required for every implement task, not just
+> money/stock) is already this plan's baseline (§1/§7 Track-1 unit gate covers all of F-001, not
+> a money/stock subset — see §0). **D-017** (session cap = 20 live families/user, LRU-revoke oldest
+> on overflow) adds **I3.11** (US-3). CI note: **E2E-in-CI runs on the lane T-001-20 provides** —
+> so §7/§8's "hard gate" is executable, not aspirational.
 >
 > **Rule:** each Gate-1 AC maps to ≥1 concrete pass/fail check — an assertion on a pure-fn return,
 > an API request with an asserted status/body/header/DB-side-effect, or a negative test that must
@@ -33,14 +38,14 @@ signoff: approved     # pending | approved
 no COGS/weighted-average, no Decimal money field. Therefore the **money-stock test matrix does NOT
 apply** to this feature and is deliberately absent:
 
-| Golden rule | Applies to F-001? | Why |
-|---|---|---|
-| #2 immutable stock ledger (append-only) | **N/A** | auth writes no ledger; `RefreshToken` rotation *is* append-only (insert successor, never mutate the value) but that is session state, not a stock ledger |
-| #5 stock/money write in DB txn + ledger | **N/A** | the rotate/revoke txn (§US-3) is tested for *atomicity of session state*, not stock/money |
-| #7 Decimal money / integer stock, no float | **N/A** | no monetary or stock quantity exists in the auth domain |
-| #3 org-scoping every domain query | **Partial** | auth is the *one place org-scoping does NOT apply* (arch §1) — User is system-wide. The **only** org-scoped surface is admin-reset (endpoint 8, US-5); cross-tenant isolation is tested **there**. `change-password` (endpoint 7, US-6) is Bearer-only and org-agnostic |
-| #4 unit tests on security-critical logic before merge | **APPLIES** | rotation/reuse decision, argon2 verify, password policy, email normalize are the hard-gate unit targets (replaces "money/stock unit tests" as the merge blocker for this feature) |
-| #6 pure fn in core-domain | **APPLIES** | reuse-detection decision is a pure fn (arch §3.3) — unit-tested without a DB |
+| Golden rule                                           | Applies to F-001? | Why                                                                                                                                                                                                                                                                     |
+| ----------------------------------------------------- | ----------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| #2 immutable stock ledger (append-only)               | **N/A**           | auth writes no ledger; `RefreshToken` rotation _is_ append-only (insert successor, never mutate the value) but that is session state, not a stock ledger                                                                                                                |
+| #5 stock/money write in DB txn + ledger               | **N/A**           | the rotate/revoke txn (§US-3) is tested for _atomicity of session state_, not stock/money                                                                                                                                                                               |
+| #7 Decimal money / integer stock, no float            | **N/A**           | no monetary or stock quantity exists in the auth domain                                                                                                                                                                                                                 |
+| #3 org-scoping every domain query                     | **Partial**       | auth is the _one place org-scoping does NOT apply_ (arch §1) — User is system-wide. The **only** org-scoped surface is admin-reset (endpoint 8, US-5); cross-tenant isolation is tested **there**. `change-password` (endpoint 7, US-6) is Bearer-only and org-agnostic |
+| #4 unit tests on security-critical logic before merge | **APPLIES**       | rotation/reuse decision, argon2 verify, password policy, email normalize are the hard-gate unit targets (replaces "money/stock unit tests" as the merge blocker for this feature)                                                                                       |
+| #6 pure fn in core-domain                             | **APPLIES**       | reuse-detection decision is a pure fn (arch §3.3) — unit-tested without a DB                                                                                                                                                                                            |
 
 **Seed note (overrides the generic template):** the `_TEMPLATE.md` line "state via StockMovement"
 does **not** apply. F-001 seeds state exclusively via **`User` + `RefreshToken` + `Membership`
@@ -54,23 +59,24 @@ Security-critical unit targets (golden rule #4 merge blocker) are marked ★.
 
 ## 1. Test pyramid & where each layer lives
 
-| Layer | Home | What it proves |
-|---|---|---|
-| **Unit** | `packages/core-domain/src/auth/*` (pure fns) + `apps/api` service specs | reuse-decision matrix ★ (incl. leeway D-011 + family-cap D-007), password policy ★, email normalize ★, dummy-verify timing, argon2 params/rehash ★ |
-| **Integration / API** | `apps/api` e2e (supertest against a test Postgres + Redis) | all **8** endpoints: status/body/headers/cookies + DB side-effects (family revoke **committed**, rotation chain, throttle keys, change-password revoke-others-keep-current) |
-| **E2E** | `apps/web` Playwright · `apps/mobile` Flutter integration | real signup→login→refresh→logout across the cookie (web) and body (mobile) transports |
-| **Manual** | human | throttle countdown copy, session-list render, mobile secure-storage wipe |
-| **Agentic** | Track 2 (Browser Use) | non-tech Thai SME persona happy-path + throttle message |
+| Layer                 | Home                                                                    | What it proves                                                                                                                                                              |
+| --------------------- | ----------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| **Unit**              | `packages/core-domain/src/auth/*` (pure fns) + `apps/api` service specs | reuse-decision matrix ★ (incl. leeway D-011 + family-cap D-007), password policy ★, email normalize ★, dummy-verify timing, argon2 params/rehash ★                          |
+| **Integration / API** | `apps/api` e2e (supertest against a test Postgres + Redis)              | all **8** endpoints: status/body/headers/cookies + DB side-effects (family revoke **committed**, rotation chain, throttle keys, change-password revoke-others-keep-current) |
+| **E2E**               | `apps/web` Playwright · `apps/mobile` Flutter integration               | real signup→login→refresh→logout across the cookie (web) and body (mobile) transports                                                                                       |
+| **Manual**            | human                                                                   | throttle countdown copy, session-list render, mobile secure-storage wipe                                                                                                    |
+| **Agentic**           | Track 2 (Browser Use)                                                   | non-tech Thai SME persona happy-path + throttle message                                                                                                                     |
 
 ---
 
-## US-1 — Signup  (`POST /auth/signup`)
+## US-1 — Signup (`POST /auth/signup`)
 
 > AC: สมัคร→ได้บัญชี · อีเมลซ้ำ→ปฏิเสธ (ไม่รั่วเกินจำเป็น) · รหัส < 8 →ปฏิเสธ · เก็บ hash ไม่เก็บ plain ·
 > สมัคร=ได้ user เท่านั้น + `verified=false`. (Note: api-spec §2.1 MVP = 201 then client logs in,
 > **no auto-login** — DECIDED D-006(1), see §9; tests assert the 201-no-token behavior as a gate.)
 
 ### Unit ★
+
 - **U1.1 email normalize** — `normalizeEmail("  User@Example.COM ")` → `"user@example.com"`
   (lowercase + trim). Table: leading/trailing space, mixed case, internal case preserved in
   local-part only per rule (lowercase whole address for MVP). Pass = exact normalized string.
@@ -88,6 +94,7 @@ Security-critical unit targets (golden rule #4 merge blocker) are marked ★.
   `verifyPassword(wrong, hash)` → false. Two hashes of the same password differ (unique salt).
 
 ### Integration / API `[auto]`
+
 - **I1.1 happy signup** — `POST /auth/signup {email, strongPw}` → **201**
   `{ userId, email, verified: false }`, **no tokens in body** (session issuance is a separate
   `/auth/login` step). DB assert: exactly one `User` row, `email` stored normalized,
@@ -95,7 +102,7 @@ Security-critical unit targets (golden rule #4 merge blocker) are marked ★.
   created** (US-1 AC: signup = user only).
 - **I1.2 duplicate email → generic** — signup with an email that already exists (any case/spacing
   variant that normalizes to the same) → **409 `EMAIL_TAKEN`** with a minimal Thai message. This is
-  the one *necessary* enumeration leak (Gate 1 §4) — assert the message does NOT reveal more than
+  the one _necessary_ enumeration leak (Gate 1 §4) — assert the message does NOT reveal more than
   "email taken". No second `User` row created.
 - **I1.3 policy rejections** — `422 PASSWORD_TOO_SHORT` / `422 PASSWORD_BREACHED` /
   `422 EMAIL_INVALID` each returned for the matching bad input; no `User` row created on any 422.
@@ -103,6 +110,7 @@ Security-critical unit targets (golden rule #4 merge blocker) are marked ★.
   `Retry-After` header (see US-2 for the throttle detail; signup is IP-only, no account dimension).
 
 ### E2E
+
 - **E1.1 web** `[auto]` (Playwright) — fill signup form with a strong password → success state →
   redirected to / lands on login (no auto-login, per contract).
 - **E1.2 web — inline validation** `[auto]` — short password and breached password each show the
@@ -110,24 +118,34 @@ Security-critical unit targets (golden rule #4 merge blocker) are marked ★.
 
 ---
 
-## US-2 — Login  (`POST /auth/login`)
+## US-2 — Login (`POST /auth/login`)
 
 > AC: ถูก→access+refresh · ผิด→ข้อความกลางๆ (กัน enumeration) · ผิดซ้ำ 5 →throttle/backoff (ไม่ hard-lock) ·
 > rate-limit IP + account.
 
 ### Unit ★
+
 - **U2.1 dummy-verify on unknown email** — the login service performs a **dummy argon2 verify**
   against a fixed dummy hash when the email is unknown, so the code path does the same work whether
   or not the account exists (arch §9). Unit-assert the branch is taken (the verify fn is invoked on
-  the not-found path). *(Timing itself is measured in I2.6 as best-effort, not a hard gate.)*
+  the not-found path). _(Timing itself is measured in I2.6 as best-effort, not a hard gate.)_
 - **U2.2 argon2 rehash-on-login** ★ — seed a hash produced with **below-current** params; on a
   successful verify, `needsRehash(hash, currentParams)` → true → service upgrades `passwordHash`.
   A hash at current params → `needsRehash` false (no rewrite).
 - **U2.3 backoff curve** — pure fn: given consecutive-failure count `n`, return the backoff/
   `retryAfter` seconds following `~1→2→4→8…` capped at the 15-min ceiling. Assert monotonic
   non-decreasing and clamped at ceiling. Assert **`n < 5` → no backoff** (threshold is 5).
+- **U2.4 access-JWT claim set is EXACTLY the documented minimal set** ★ (M-9 regression guard,
+  arch §2.2) — the pure claim-building fn that assembles the access-token payload before signing:
+  call it with a `userId` and assert the returned claims object's key set is **exactly**
+  `{ sub, iat, exp, jti, typ }` — no more, no fewer. Explicitly assert **absence**: no `email`, no
+  `organizationId`/`orgId`, no `role`, no `capabilities`, no other PII/domain field sneaks in.
+  `sub === userId`; `typ === "access"`. This is the regression guard for the deliberate
+  minimal-claims/no-PII decision (arch §1.1/§2.2: "No org, no role, no email... email is PII, keep
+  it out") — a future change that casually adds a convenience claim must fail this test.
 
 ### Integration / API `[auto]`
+
 - **I2.1 correct login — transport declaration** (H-1, C-1) — the client declares its transport
   (api-spec §0). Two sub-cases:
   - **(a) `tokenTransport: "cookie"` (web)** — `POST /auth/login {email, pw, deviceId, tokenTransport:"cookie"}`
@@ -138,11 +156,11 @@ Security-critical unit targets (golden rule #4 merge blocker) are marked ★.
     **only** in the `omni_rt` cookie.
   - **(b) `tokenTransport: "body"` (mobile / default when omitted)** — → **200** with the plaintext
     refresh token in body `refreshToken` (non-null) and **no** `omni_rt`/`omni_csrf` cookies set.
-  DB assert (both): a new `RefreshToken` row with a **fresh `familyId`**, `rotatedFrom = null`,
-  `tokenHash` = **`HMAC-SHA-256(JWT_REFRESH_SECRET, issuedValue)`** (keyed hash — L-3, data-model
-  §2.1; the issued plaintext is never stored), `expiresAt` ~60d out, and **`familyExpiresAt` ~90d
-  out** (D-007 absolute cap set on login). *(The keyed-HMAC guarantee is proven in detail by
-  U3.8 / I3.9.)*
+    DB assert (both): a new `RefreshToken` row with a **fresh `familyId`**, `rotatedFrom = null`,
+    `tokenHash` = **`HMAC-SHA-256(JWT_REFRESH_SECRET, issuedValue)`** (keyed hash — L-3, data-model
+    §2.1; the issued plaintext is never stored), `expiresAt` ~60d out, and **`familyExpiresAt` ~90d
+    out** (D-007 absolute cap set on login). _(The keyed-HMAC guarantee is proven in detail by
+    U3.8 / I3.9.)_
 - **I2.1b cookie transport does NOT leak the token in the body** (H-1 explicit negative) — on the
   `tokenTransport: "cookie"` login, assert body `refreshToken === null` **and** the plaintext that
   the `omni_rt` cookie carries appears **nowhere** in the JSON body. This is the exact H-1 gap: the
@@ -176,7 +194,7 @@ Security-critical unit targets (golden rule #4 merge blocker) are marked ★.
   it does not fail the build. (Hard guarantee is structural: dummy-verify U2.1 + identical response
   I2.2==I2.3.)
 - **I2.7 fail-open on Redis-down — logged + degraded limiter** (M-7) — with the throttle store
-  unreachable, a login attempt is **allowed** (auth availability > throttle, arch §8.3): a *correct*
+  unreachable, a login attempt is **allowed** (auth availability > throttle, arch §8.3): a _correct_
   credential → 200 even though the throttle counter can't be read/written. Assert no 5xx from the
   throttle layer; the request falls through. (Wrong credential still → 401 — fail-open affects
   throttling, not auth itself.) **Extended assertions (M-7):**
@@ -184,12 +202,23 @@ Security-critical unit targets (golden rule #4 merge blocker) are marked ★.
     `auth.throttle.fail_open` (captured via log spy / test transport). Not silent.
   - **(b) degraded in-process IP limiter still bites** — with Redis down, hammer `/auth/login` from a
     single IP past the coarse per-process cap → the degraded local limiter → **429** (a dampener, not
-    the shared control). Proves the outage is not a *fully* unthrottled brute-force window.
+    the shared control). Proves the outage is not a _fully_ unthrottled brute-force window.
 - **I2.8 per-device family creation** — two logins with **different** `deviceId` for the same user
   → **two distinct `familyId`s**, each independently rotatable/revocable (feeds US-3 session list
   and US-4 per-device logout).
+- **I2.10 issued access-JWT decodes to EXACTLY the documented claim set** ★ (M-9, arch §2.2) —
+  end-to-end complement to U2.4: log in, take the real `accessToken` from the response, decode it
+  (verify signature with the test env's signing key, then inspect the payload — no library-default
+  extra claims silently included) and assert the decoded payload's key set is **exactly**
+  `{ sub, iat, exp, jti, typ }` with `sub` equal to the logged-in user's `User.id`, `typ ===
+"access"`, and `exp − iat === 900` (15-minute TTL). Assert **absence** on the live, wire-issued
+  token (not just the pure fn): no `email`, no `organizationId`, no `role`, no `capabilities` key
+  anywhere in the decoded payload — closing the gap that a JWT library's defaults (e.g. an `aud`/
+  `iss` a developer adds later without updating U2.4's fn directly) could reintroduce PII at the
+  signing call site even if the pure claim-builder stays clean.
 
 ### E2E
+
 - **E2.1 web login** `[auto]` (Playwright) — login sends `tokenTransport: "cookie"` → app
   authenticated; `omni_rt` cookie present (`Path=/auth`) and **not** readable from JS (httpOnly
   assertion via context cookies, not `document.cookie`); the JSON body `refreshToken` is **`null`**
@@ -203,21 +232,23 @@ Security-critical unit targets (golden rule #4 merge blocker) are marked ★.
 
 ---
 
-## US-3 — Refresh rotation, reuse detection, sessions  (`POST /auth/refresh`, `GET /auth/sessions`)
+## US-3 — Refresh rotation, reuse detection, sessions (`POST /auth/refresh`, `GET /auth/sessions`)
 
 > AC: access หมด→ใช้ refresh ขอใหม่ · refresh หมุนทุกครั้ง ตัวเก่าใช้ไม่ได้ · **session cap = login+90d (D-007)** ·
 > ตรวจ reuse→เพิกถอนทั้ง family (**นอก leeway 60s, D-011**) · ผูก device/session (เห็นกี่เครื่อง, logout รายเครื่อง).
 
 ### Unit ★ — reuse-decision pure fn (core-domain, the golden-rule-#4 merge blocker)
+
 The decision fn takes the presented token's derived state + its family rows (incl. each successor's
 `createdAt`, and `familyExpiresAt`) as **plain values** and returns an action enum
 `{ ALLOW_ROTATE | REVOKE_FAMILY | REJECT_EXPIRED | REJECT_BENIGN_RETRY }` — the last two are both
 generic-401 outcomes on the wire but differ in whether the family is burned (arch §3.3/§3.5,
 data-model §2.3/§2.4). No DB.
+
 - **U3.1 current → ALLOW_ROTATE** — presented token is newest, `revokedAt=null`, not expired,
   **family cap not reached (`familyExpiresAt > now`)**, no successor → rotate.
 - **U3.2 consumed outside leeway → REVOKE_FAMILY** — a successor exists (`∃ row.rotatedFrom =
-  presented.id`) **and** that successor was minted **>60s ago** → reuse signal → revoke whole family.
+presented.id`) **and** that successor was minted **>60s ago** → reuse signal → revoke whole family.
 - **U3.3 revoked → REVOKE_FAMILY** — `revokedAt != null` presented → reuse/replay → revoke family.
 - **U3.4 expired → REJECT_EXPIRED** — `expiresAt <= now` → reject (no family burn required; expiry
   is benign). Boundary at exactly `now`.
@@ -226,7 +257,7 @@ data-model §2.3/§2.4). No DB.
   **and** `now − successor.createdAt ≤ 60s` → benign retry: generic 401 **WITHOUT** family revocation
   (family stays live). Boundary cases: successor age **59s → benign**, **61s → REVOKE_FAMILY** (reuse).
   A **deeper ancestor** (grandparent+, never held by a correct client) → **REVOKE_FAMILY** even inside
-  60s — the leeway is only for the *immediate* predecessor.
+  60s — the leeway is only for the _immediate_ predecessor.
 - **U3.6 family cap reached → REJECT_EXPIRED** (D-007) — `familyExpiresAt <= now` on the presented
   token → reject as **ordinary expiry**, **no** family burn, **no** audit event (the family aged out,
   not reuse). Distinct from U3.2/U3.3. Boundary at exactly `now`.
@@ -245,6 +276,7 @@ data-model §2.3/§2.4). No DB.
   env secret. (Pairs with the on-the-wire/DB proof in I3.9.)
 
 ### Integration / API `[auto]`
+
 - **I3.1 rotation happy path** — login → `/auth/refresh` (cookie or body) → **200** new pair; the
   **old** refresh token no longer works (present it again → **401**). DB: successor row inserted,
   `familyId` **inherited**, `rotatedFrom = presented.id`, `lastUsedAt` set; old row now "consumed".
@@ -264,7 +296,7 @@ data-model §2.3/§2.4). No DB.
 - **I3.3 concurrent refresh — deterministic via row-lock, loser is BENIGN (family survives)** ★
   (M-2/D-011) — fire **two** parallel `/auth/refresh` with the **same** current token. Per data-model
   §2.4 (row lock, leeway carve-out, no serializable-retry loop), assert **exactly `1×200` + `1×401
-  INVALID_REFRESH`**; the loser hits its lock **immediately after** the winner minted the successor
+INVALID_REFRESH`**; the loser hits its lock **immediately after** the winner minted the successor
   (age ≪ 60s) → **benign retry, NOT reuse** → the **family is NOT revoked** and the **winner's
   successor stays valid** (assert: re-query confirms no `revokedAt` on the family, and the winner's
   new token still refreshes). No `auth.refresh.reuse_detected` emitted. The test does **not** retry
@@ -285,7 +317,7 @@ data-model §2.3/§2.4). No DB.
     leeway boundary's far side).
   - **(b) deeper ancestor inside 60s:** rotate RT1→RT2→RT3; **within 60s** replay **RT1** (a
     grandparent — never held by a correct client) → `401` + **family revoked** + audit event. The
-    leeway protects only the *immediate* predecessor, never a deeper ancestor.
+    leeway protects only the _immediate_ predecessor, never a deeper ancestor.
 - **I3.4c family-lifetime cap expiry → generic 401, NOT reuse** ★ (D-007) — seed (or advance the
   controllable clock past) a family whose **`familyExpiresAt` has passed** while its current token's
   own `expiresAt` is still in the future, then `/auth/refresh` → **generic `401 INVALID_REFRESH`**
@@ -313,10 +345,10 @@ data-model §2.3/§2.4). No DB.
 - **I3.9 stored `tokenHash` is the keyed HMAC — DB-side proof + lookup uses HMAC** ★ (L-3, data-model
   §2.1/§2.4) — end-to-end complement to U3.8: log in (or rotate), capture the issued plaintext refresh
   token, then read the persisted `RefreshToken` row and assert `row.tokenHash ===
-  HMAC-SHA-256(JWT_REFRESH_SECRET, issuedPlaintext)` (recomputed in-test) **and** `row.tokenHash !==
-  SHA-256(issuedPlaintext)`. Also assert **lookup is by HMAC, not plaintext**: presenting the token on
-  `/auth/refresh` resolves the row (200), while a value whose *bare SHA-256* would collide but whose
-  *HMAC* differs would not resolve — i.e. the lookup key is the keyed digest (data-model §2.4 step 1:
+HMAC-SHA-256(JWT_REFRESH_SECRET, issuedPlaintext)` (recomputed in-test) **and** `row.tokenHash !==
+SHA-256(issuedPlaintext)`. Also assert **lookup is by HMAC, not plaintext**: presenting the token on
+  `/auth/refresh` resolves the row (200), while a value whose _bare SHA-256_ would collide but whose
+  _HMAC_ differs would not resolve — i.e. the lookup key is the keyed digest (data-model §2.4 step 1:
   `SELECT ... WHERE tokenHash = HMAC(...)`). Confirms a bare-SHA-256 regression is caught at the
   storage/lookup layer, not just in the pure fn.
 - **I3.10 `/auth/refresh` IP rate cap → 429 + Retry-After (IP dimension ONLY)** ★ (L-5, api-spec §2.3,
@@ -333,8 +365,26 @@ data-model §2.3/§2.4). No DB.
   - **it's a plain hygiene cap, not reuse** — a `429`-throttled refresh makes **no** state change:
     assert (fresh re-query) **no rotation** occurred (no successor row minted) and **no** family was
     revoked; the throttle short-circuits before the rotate txn.
+- **I3.11 session cap = 20 — 21st login LRU-revokes the oldest family, sessions list stays ≤ 20,
+  revoked-oldest device's refresh fails cleanly** ★ (D-017) — seed a user with **20 live families**
+  (20 distinct `deviceId` logins, oldest-to-newest by `createdAt`/`lastUsedAt` per data-model's LRU
+  ordering), then perform a **21st** login with a new `deviceId`. Assert:
+  - **the oldest live family is revoked** — a fresh re-query shows exactly one additional family
+    with `revokedAt` set, and it is the **oldest** of the pre-existing 20 by the LRU criterion (not
+    an arbitrary one); the 19 other pre-existing families plus the new 21st stay live.
+  - **`GET /auth/sessions` length stays ≤ 20** — immediately after the 21st login, the sessions list
+    returns **20** live entries (19 survivors + the new one), never 21 — proving the cap is enforced
+    synchronously on login, not by a lagging background job.
+  - **the revoked-oldest device's refresh now fails cleanly** — presenting the revoked-oldest
+    family's (still-unexpired, still-unconsumed) refresh token to `/auth/refresh` → **generic `401
+INVALID_REFRESH`** (same shape as any other revoked-family presentation, e.g. I3.2/I4.1) — no
+    5xx, no special "session cap" error text that would leak the eviction mechanism to the client.
+  - **not treated as reuse** — the LRU-revoke on the 21st login does **not** emit
+    `auth.refresh.reuse_detected` for the evicted family (this is capacity management, not a reuse
+    signal) — contrast with I3.2's genuine-reuse audit event.
 
 ### E2E
+
 - **E3.1 web silent refresh** `[auto]` (Playwright) — let the access token expire (or force it) →
   the app transparently refreshes via the `omni_rt` cookie + `X-CSRF-Token` and continues without a
   re-login prompt.
@@ -345,11 +395,12 @@ data-model §2.3/§2.4). No DB.
 
 ---
 
-## US-4 — Logout  (`POST /auth/logout`, `POST /auth/logout-all`)
+## US-4 — Logout (`POST /auth/logout`, `POST /auth/logout-all`)
 
 > AC: logout→refresh ปัจจุบันใช้ไม่ได้ + รองรับ logout ทุกเครื่อง · (มือถือ) token ถูกลบจาก secure storage.
 
 ### Integration / API `[auto]`
+
 - **I4.1 logout current family — cookie-path row IS revoked in the DB** ★ (C-1) — `/auth/logout`
   (presented refresh, cookie or body) → **204**. **The DB-side-effect assertion is the whole point of
   C-1:** on the **cookie path**, because `omni_rt` is now `Path=/auth` the browser actually sends the
@@ -377,29 +428,32 @@ data-model §2.3/§2.4). No DB.
 - **I4.5 CSRF on cookie logout** — cookie-path logout without valid `X-CSRF-Token` → **403**.
 
 ### E2E
+
 - **E4.1 web logout** `[auto]` — logout clears cookies; protected route redirects to login.
 - **E4.2 mobile secure-storage wipe** `[manual]` — after logout, confirm the refresh token is
   **removed** from Keychain/Keystore (US-4 AC; F-006 implements — verified on device by a human).
 
 ---
 
-## US-5 — Admin reset  (`POST /orgs/{orgId}/members/{userId}/reset-password`)
+## US-5 — Admin reset (`POST /orgs/{orgId}/members/{userId}/reset-password`)
 
 > AC: MVP = Owner/Admin รีเซ็ตรหัสให้สมาชิก (ไม่ต้องมี email infra) · ห้ามล็อกตัวเองออกถาวร (self-heal) ·
 > solo-owner ยอมรับรอ backoff ~15 นาที.
 
 ### Integration / API `[auto]` — org-scoped (the one org-scoped auth surface)
+
 - **I5.1 in-org reset happy path** — Org-A admin (capability `manage_members`) resets an Org-A member
   → **200** `{ ok: true }`. DB: target `User.passwordHash` updated to a new argon2id hash (old hash
   no longer verifies, new password does); **all target families revoked** (kicked out everywhere,
   api-spec §2.8); `auth.password.admin_reset` event emitted for F-005 (asserted via spy/outbox).
   Caller (admin) and target are **both `status=active`** members of Org-A (H-2 precondition).
-- **I5.2 cross-tenant isolation → 403/404** ★ (golden rule #3 for this surface) — Org-A admin attempts
-  to reset a user who belongs to **Org-B only** → rejected. Per api-spec §2.8: `403 FORBIDDEN`
-  (no capability / not in org) or `404` (target not a member of `orgId` — same-shape, no cross-org
-  enumeration). Assert the Org-B user's `passwordHash` is **unchanged** and their families are
-  **not** revoked. **Note:** the capability *guard* is F-003's; this plan asserts the F-001 **effect
-  boundary** — an out-of-org actor produces **no side effect**. (Guard-internals testing = F-003.)
+- **I5.2 cross-tenant isolation → 404 (never 403)** ★ (golden rule #3 for this surface) — Org-A admin
+  attempts to reset a user who belongs to **Org-B only** → rejected. Per the **amended** api-spec
+  §2.8 (step 4, "Failure → `404`, never `403`"): **same-shape `404`** — the endpoint has **no
+  `403 FORBIDDEN` response at all**, by design (no org-existence oracle for a non-member caller).
+  Assert the Org-B user's `passwordHash` is **unchanged** and their families are **not** revoked.
+  **Note:** the capability _guard_ is F-003's; this plan asserts the F-001 **effect boundary** — an
+  out-of-org actor produces **no side effect**. (Guard-internals testing = F-003.)
 - **I5.2a admin-reset requires target `status=active` — revoked/invited ex-member → 404, no effect**
   ★ (H-2) — Org-A admin resets a target who **is** in Org-A but whose `Membership(target, Org-A)` is
   **`revoked`** (ex-member who now works only at Org-B) → **same-shape `404`** (no status enumeration,
@@ -409,6 +463,27 @@ data-model §2.3/§2.4). No DB.
   a mere-existence check (F-000 keeps rows on removal) would have let Org-A reset the **global**
   `passwordHash` of someone no longer active there. Keep the existing cross-tenant (I5.2, Org-B-only)
   test alongside this one.
+- **I5.2b caller has NO membership in `{orgId}` at all → 404, no effect** ★ (C-1 follow-up, amended
+  api-spec §2.8 step 4) — an authenticated caller with a **valid Bearer access token** but **zero**
+  `Membership` row for `{orgId}` (never joined) calls reset on a target who **is** an active member
+  of `{orgId}` → **same-shape `404`** (identical body/shape to I5.2/I5.2a — "there is no
+  org-existence oracle for a non-member caller"). Assert the target's `passwordHash` is
+  **UNCHANGED** and no families revoked. Two sub-variants, both asserted (cheap — same fixture
+  shape, different caller):
+  - **(a) never-a-member** — caller has never had any `Membership(caller, orgId)` row.
+  - **(b) removed-member** — caller **previously** had `Membership(caller, orgId)` but it is now
+    `revoked` (an ex-admin of `orgId` who was removed) — same **404**, no effect. Distinguishes "no
+    row" from "row exists but not active" on the **caller** side (mirrors I5.2a's target-side
+    active-only check).
+- **I5.2c caller is an active member but role LACKS `manage_members` → 404 (per amended api-spec
+  §2.8), no effect** ★ (C-1 follow-up) — caller has an **active** `Membership(caller, orgId)` (so
+  they are a genuine member of the org) but their `Role.capabilities` does **not** contain
+  `manage_members` (e.g. a Staff role) → **same-shape `404`** — matching the amended api-spec §2.8
+  wording exactly: "Failure → `404`, never `403`... caller's role lacks the capability... returns
+  the same-shape `404`". Assert this `404` is **byte-identical in shape** to I5.2/I5.2a/I5.2b (no
+  differential that would let a caller distinguish "wrong org" from "right org, wrong role" from
+  "role has the capability but target isn't active"). Assert the target's `passwordHash` is
+  **UNCHANGED** and no families revoked.
 - **I5.3 post-reset kick** — after I5.1, the target's previously-issued refresh tokens all → 401 on
   refresh (they were revoked); target must log in with the new password → 200.
 - **I5.4 reset clears account throttle** — an admin reset clears the target account's throttle
@@ -416,20 +491,32 @@ data-model §2.3/§2.4). No DB.
   backoff. Supports the anti-lockout guarantee.
 
 ### Anti-lockout / self-heal (US-5 AC "ห้ามล็อกตัวเองออกถาวร")
+
 - **I5.5 backoff self-heals** — an account in backoff, with **no** external action, becomes loginable
   again once the window elapses (correct password → 200). Proves the lock is **temporary**, never
   permanent. (Deterministic via a controllable clock/Redis TTL in the test, not a real 15-min wait.)
 - **I5.6 solo-owner path back** `[manual]` — document/verify that a sole Owner throttled out has a
   path back (wait-out backoff ~15 min OR admin/break-glass) — the residual MVP gap is a **product**
-  call (arch §10); qa asserts only that no state requires a *permanent* external action to recover.
+  call (arch §10); qa asserts only that no state requires a _permanent_ external action to recover.
 
 ### E2E
-- **E5.1 admin reset flow** `[auto]` (Playwright) — Org-A admin opens a member, sets a new password,
-  member is signed out everywhere and can log in with the new password.
+
+- **E5.1 admin reset flow — DEFERRED to F-004, NOT a Track-1 gate for F-001** — per
+  `ux-wireframe.md` §6 (lines 220-224), the admin-reset screen (member list "reset password"
+  action + confirm dialog) explicitly does **NOT** live in F-001's UI; it is F-004
+  (member-management, with the F-003 capability-guard-visibility dependency). F-001 owns only the
+  **effect contract** (`POST /orgs/{orgId}/members/{userId}/reset-password`, api-spec §2.8), which
+  has no F-001-owned screen to drive a Playwright flow against. There is therefore **no E5.1 case
+  in F-001** — do not write one, and do not mark one "skipped": the case does not exist here by
+  design, so it cannot silently rot as a skip. **API-level coverage (I5.1/I5.2/I5.2a/I5.3/I5.4)
+  fully proves the F-001 behavior** (capability check, cross-tenant no-op, active-target-only,
+  post-reset kick, throttle-clear) independent of any UI. When F-004 lands the actual admin-reset
+  screen, F-004's own test plan owns the Playwright E2E case (equivalent to what E5.1 described
+  here) against that UI.
 
 ---
 
-## US-6 — Change own password  (`POST /auth/change-password`)  *(NEW — D-008)*
+## US-6 — Change own password (`POST /auth/change-password`) _(NEW — D-008)_
 
 > AC (F-001 §2 US-6): Bearer · ต้องยืนยัน `currentPassword` ก่อน · `newPassword` ผ่านนโยบายเดิม
 > (≥8 / breached list) มิฉะนั้นปฏิเสธ · สำเร็จ → **เพิกถอน refresh family อื่นทั้งหมด ยกเว้นเครื่องปัจจุบัน**
@@ -437,6 +524,7 @@ data-model §2.3/§2.4). No DB.
 > ไม่กระทบ session ปัจจุบัน. Grounds against api-spec §2.7 (endpoint 7), arch §4.
 
 ### Unit ★
+
 - **U6.1 policy reuse on `newPassword`** — the same policy fns exercised in U1.2/U1.3 gate
   `newPassword`: `< 8` → `PASSWORD_TOO_SHORT`; breached-list hit → `PASSWORD_BREACHED`; `> 128` →
   `PASSWORD_TOO_LONG`. (No new policy code — assert change-password calls the shared signup policy.)
@@ -445,9 +533,10 @@ data-model §2.3/§2.4). No DB.
   string (unique salt ⇒ differs from the old hash), and the plaintext appears nowhere.
 
 ### Integration / API `[auto]`
+
 - **I6.1 happy change — current session survives, ALL OTHER families revoked** ★ — seed the caller
   with **≥3 live families** (the current one + 2 others). `POST /auth/change-password
-  {currentPassword, newPassword}` (Bearer access of the current session) with a **correct** current
+{currentPassword, newPassword}` (Bearer access of the current session) with a **correct** current
   password + a **strong** new password → **200** `{ ok: true }`. Assert:
   - DB: `User.passwordHash` **updated** (old password no longer verifies; the new one does).
   - **caller's current family stays LIVE** — the caller can still `/auth/refresh` on its current
@@ -477,10 +566,10 @@ data-model §2.3/§2.4). No DB.
   fallback, no IDOR** ★ (N-1) — the family spared by I6.1 is resolved **only** from the presented
   refresh token (`omni_rt` cookie web / optional body `{refreshToken}` mobile), never a Bearer/client
   claim (mirrors the M-3 ownership rule). Three sub-cases, all with a **correct** current password +
-  **strong** new password so the change itself succeeds — the assertion is *which* family survives:
+  **strong** new password so the change itself succeeds — the assertion is _which_ family survives:
   - **(a) valid current refresh token presented → that family survives, all OTHERS revoked**
     (sharpens I6.1) — seed the caller with **≥3 live families**; call `/auth/change-password` **with**
-    the current session's refresh token presented (cookie *and* body sub-variants, per §0 resolution:
+    the current session's refresh token presented (cookie _and_ body sub-variants, per §0 resolution:
     cookie first, then body). Assert (fresh re-query): the **resolved** family's rows have `revokedAt`
     **null** (still `/auth/refresh` → 200) and **every OTHER** family is revoked (their tokens →
     401). Assert the surviving family is the one the presented refresh token belongs to — not merely
@@ -495,11 +584,11 @@ data-model §2.3/§2.4). No DB.
     deliberate revoke-all, distinct from I6.6(a)'s spare-one.
   - **(c) client-supplied `familyId` NOT backed by the presented refresh token → IGNORED (no IDOR)**
     ★ — call `/auth/change-password` presenting user A's current refresh token (so A's current family
-    *is* resolvable and survives) **while** also supplying a `familyId` that A does not present a
-    refresh token for — both a **foreign** family (belonging to user B) **and** a *different own*
+    _is_ resolvable and survives) **while** also supplying a `familyId` that A does not present a
+    refresh token for — both a **foreign** family (belonging to user B) **and** a _different own_
     family of A that A did **not** present. Assert (fresh re-query): the client-supplied `familyId`
     has **no** effect — **B's family is untouched** (`revokedAt` unchanged; no cross-user session
-    kill / no IDOR, mirrors M-3), and A's *presented* family is the one spared while A's other own
+    kill / no IDOR, mirrors M-3), and A's _presented_ family is the one spared while A's other own
     families are revoked per the resolved-from-token rule (the bare `familyId` never spares nor kills
     anything). The spared family is determined **solely** by the presented refresh token.
 - **I6.7 `currentPassword` is account-throttled — its own 429, resets on success** ★ (N-2) — an
@@ -512,7 +601,7 @@ data-model §2.3/§2.4). No DB.
     sequence + clock helpers).
   - **its own 429, NEVER folded into the 401** (mirrors M-1) — assert the throttled response is
     **`429`, NOT `401 INVALID_CREDENTIALS`**; the two are separate responses (a wrong-but-not-yet-
-    throttled current password → 401; a throttled attempt → 429 regardless of whether *this* current
+    throttled current password → 401; a throttled attempt → 429 regardless of whether _this_ current
     password would have been right). Pair with I6.2 (the plain wrong-current 401) so neither path is
     conflated.
   - **a correct `currentPassword` resets the counter** — after some (sub-threshold) wrong attempts, a
@@ -523,8 +612,21 @@ data-model §2.3/§2.4). No DB.
   - **no partial effect on a throttled attempt** — assert a `429`-throttled call makes **no**
     mutation: `passwordHash` unchanged and **no** family revoked (the throttle short-circuits before
     the verify/mutation, exactly like the login 429 precedes the credential path).
+- **I6.8 change-password with missing/invalid CSRF token (cookie-mode) → 403 CSRF_FAILED, password
+  unchanged** ★ (M-3) — mirrors I3.6/I4.5's CSRF gate on the cookie-transport path. Caller is on
+  `tokenTransport: "cookie"` (so `omni_rt` + `omni_csrf` cookies are set) and calls
+  `/auth/change-password` **without** an `X-CSRF-Token` header, or with one that does **not** match
+  the `omni_csrf` cookie value → **`403 CSRF_FAILED`**. Assert **no** mutation on the failed-CSRF
+  attempt: `User.passwordHash` **unchanged** (old password still verifies, correct `newPassword`
+  from the payload was never applied), **no** family revoked (neither the current family nor any
+  other), and **no** `auth.password.self_changed` event emitted — the CSRF guard is a pre-mutation
+  short-circuit, same shape as the login-CSRF (L-2) and refresh-CSRF (I3.6) gates. A follow-up
+  request with the header == `omni_csrf` cookie succeeds (**200**), confirming the 403 was
+  CSRF-specific, not a blanket reject. Body/mobile transport (no ambient cookie authority) **skips**
+  CSRF on this endpoint, consistent with I3.6/I4.5.
 
 ### E2E
+
 - **E6.1 web change-password** `[auto]` (Playwright) — logged-in user changes password with correct
   current + strong new → success state → **stays logged in** on the current tab; a second device's
   session (seeded family) is signed out on its next action.
@@ -540,13 +642,14 @@ data-model §2.3/§2.4). No DB.
 > guards that apply uniformly across the endpoints above, independent of any single US.
 
 ### Integration / API `[auto]`
+
 - **I5c.1 strict `Content-Type: application/json` → 415, BEFORE credential processing** ★ (L-2 —
   login-CSRF defense) — every `/auth/*` POST requires `Content-Type: application/json`; a request
   with any other content-type (assert at least `application/x-www-form-urlencoded`, `text/plain`,
   and a real form-`multipart/form-data` POST — the shapes an HTML `<form>` can emit) → **`415
-  UNSUPPORTED_MEDIA_TYPE`**. Cover a **representative set of `/auth/*`**: at minimum **`/auth/login`
+UNSUPPORTED_MEDIA_TYPE`**. Cover a **representative set of `/auth/*`**: at minimum **`/auth/login`
   and `/auth/signup`** (plus a spot-check on `/auth/refresh`), since the rule is uniform (api-spec
-  §3). **The load-bearing assertion is that the 415 fires *before* any credential processing:**
+  §3). **The load-bearing assertion is that the 415 fires _before_ any credential processing:**
   - **no throttle increment** — send a non-JSON `/auth/login` with a **valid** email past its
     account/IP threshold-minus-one, then assert the counter did **not** advance (Redis-key
     inspection: `throttle:acct:*` / `throttle:ip:*` unchanged) and a subsequent legitimate JSON
@@ -604,6 +707,14 @@ keys** only. **No `StockMovement`** — auth does not touch stock (see §0).
   (I4.3a).
 - **Family-cap fixture (D-007):** a family whose `familyExpiresAt` is in the past while its current
   token's `expiresAt` is still future — for I3.4c (cap expiry ≠ reuse; inherited-unchanged assertion).
+- **Session-cap fixture (D-017):** a user with **exactly 20 live families** (20 distinct
+  `deviceId` logins, seeded with distinguishable `createdAt`/`lastUsedAt` so the oldest is
+  unambiguous) — for I3.11 (21st login LRU-revokes the oldest, sessions list stays ≤ 20).
+- **Non-member / wrong-role caller fixtures (C-1 follow-up):** in Org-A, a user with **no**
+  `Membership(caller, Org-A)` row at all (never-a-member) and a separate user whose
+  `Membership(caller, Org-A)` is `revoked` (removed ex-admin) — both for I5.2b. A Staff-role user
+  with an **active** `Membership(caller, Org-A)` whose `Role.capabilities` does **not** include
+  `manage_members` — for I5.2c.
 - **Dummy hash:** the fixed dummy argon2 hash used by the unknown-email dummy-verify path (U2.1/I2.6).
 
 ---
@@ -611,26 +722,34 @@ keys** only. **No `StockMovement`** — auth does not touch stock (see §0).
 ## 7. CI tracks
 
 ### Track 1 — scripted (hard gate, blocks merge)
+
 - **Unit** (core-domain + service) — reuse-decision matrix ★ (incl. **leeway D-011** + **family-cap
   D-007** cells, U3.5/U3.6/U3.7), password policy ★ (shared by signup + change-password), email
   normalize ★, argon2 hash/verify/rehash ★, change-password verify-current ★, **tokenHash keyed-HMAC
-  vs bare-SHA-256 ★ (U3.8 — L-3)**, backoff curve, dummy-verify branch. **These are the
-  golden-rule-#4 merge blockers for F-001.** Note: **no money-stock unit tests apply** (auth ≠
-  money — §0).
+  vs bare-SHA-256 ★ (U3.8 — L-3)**, backoff curve, dummy-verify branch, **access-JWT minimal-claim-set
+  ★ (U2.4 — M-9)**. **These are the golden-rule-#4 merge blockers for F-001** (and, per **D-014**,
+  the general unit-test-with-every-implement-task floor — F-001's Track-1 unit set already exceeds
+  that floor). Note: **no money-stock unit tests apply** (auth ≠ money — §0).
 - **Integration / API** — the `Ix.y` supertest cases above against a test Postgres + Redis (all
   **8** endpoints, incl. change-password I6.x — the N-1 current-family-from-presented-token +
-  safe-direction revoke-all + no-IDOR (I6.6) and N-2 `currentPassword` account-throttle (I6.7) — and
-  the C-1 committed-revoke / H-3 committed-family-revoke / M-1 always-429 assertions, plus the
-  **Low-hardening** cases: **415-before-credential-processing on non-JSON `Content-Type` (I5c.1 —
-  L-2)**, **keyed-HMAC `tokenHash` DB/lookup proof (I3.9 — L-3)**, and **`/auth/refresh` IP-only rate
-  cap → 429 + Retry-After (I3.10 — L-5)**).
-- **E2E** — **Playwright** (web: signup, login, throttle countdown, silent refresh, logout, admin
-  reset, **change-password**) + **Flutter** integration (mobile: login-from-body, long-session
-  refresh).
+  safe-direction revoke-all + no-IDOR (I6.6), N-2 `currentPassword` account-throttle (I6.7), and
+  cookie-mode CSRF gate (I6.8) — and the C-1 committed-revoke / H-3 committed-family-revoke / M-1
+  always-429 assertions, plus admin-reset's **404-never-403 on no-membership / lacks-capability**
+  (I5.2b/I5.2c — C-1 follow-up), the wire-issued access-JWT claim proof (I2.10 — M-9), and the
+  **D-017** session-cap/LRU-revoke-oldest proof (I3.11), plus the **Low-hardening** cases:
+  **415-before-credential-processing on non-JSON `Content-Type` (I5c.1 — L-2)**, **keyed-HMAC
+  `tokenHash` DB/lookup proof (I3.9 — L-3)**, and **`/auth/refresh` IP-only rate cap → 429 +
+  Retry-After (I3.10 — L-5)**).
+- **E2E** — **Playwright** (web: signup, login, throttle countdown, silent refresh, logout,
+  **change-password**) + **Flutter** integration (mobile: login-from-body, long-session refresh).
+  **Admin-reset has no Playwright case in F-001** (E5.1 deferred to F-004 — no screen exists here
+  to drive; see US-5 §E2E note) — its behavior is proven at the API layer (I5.x) instead, so the
+  gate does not block on, and cannot silently skip, a nonexistent screen.
 - **Non-gating within Track 1:** **I2.6 timing consistency** logs a warning on breach but does **not**
   fail the build (timing is best-effort; structural guarantees U2.1 + I2.2==I2.3 are the real gate).
 
 ### Track 2 — agentic (scheduled, non-blocking)
+
 - **Browser Use**, **non-tech Thai SME persona:** signup → login → logout happy path;
   trigger the throttle and read the **countdown message** (must be reassuring "รอสักครู่…", not
   "ถูกล็อก"); spot-check the **session list** ("logged in on N devices"). Findings are triaged into
@@ -641,21 +760,29 @@ keys** only. **No `StockMovement`** — auth does not touch stock (see §0).
 ## 8. Verdict & defect routing
 
 - **Green requires:** all Track-1 unit ★ + integration + E2E pass; every **US-1..US-6** AC has ≥1
-  passing mapped case above; reuse-detection determinism (I3.3, loser is benign / family survives)
+  passing mapped case above (**US-5's E2E leg is satisfied by API-level I5.x — F-001 has no
+  admin-reset screen, E5.1 is deferred to F-004, and the gate does not block on nor silently skip
+  a nonexistent Playwright case**); reuse-detection determinism (I3.3, loser is benign / family survives)
   stable across repeats; **committed** family revoke on genuine reuse (I3.2, fresh re-query — H-3);
   **cookie-path logout actually revokes the DB row** (I4.1 — C-1); throttle **always 429** with no
   429/401 existence oracle (I2.4/I2.9 — M-1); reuse-leeway benign-retry vs burn boundary (I3.4a/b —
   M-2/D-011); family-cap expiry ≠ reuse + inherited-unchanged (I3.4c — D-007); logout `familyId`
   ownership no-op on foreign family (I4.3a — M-3); fail-open **logged + degraded limiter** (I2.7 —
-  M-7); admin-reset **no-op on non-active target** (I5.2a — H-2) and cross-tenant isolation (I5.2);
-  change-password **revokes others but keeps current** (I6.1 — D-008/US-6), current-family
-  **resolved from the presented refresh token** with safe-direction revoke-all fallback + no-IDOR on
-  a client-supplied `familyId` (I6.6 a/b/c — N-1), and `currentPassword` **its-own-429 account
-  throttle** that resets on success (I6.7 — N-2) proven; **Low-hardening** all green: non-JSON
-  `Content-Type` → **415 before any credential work** (no throttle increment, no user lookup) on
-  representative `/auth/*` (I5c.1 — L-2), stored `tokenHash` is the **keyed HMAC-SHA-256, not bare
-  SHA-256** and lookup uses it (U3.8 + I3.9 — L-3), and `/auth/refresh` carries an **IP-only** rate
-  cap → **429 + Retry-After** that self-heals and mutates no state (I3.10 — L-5).
+  M-7); admin-reset **no-op on non-active target** (I5.2a — H-2), **no membership / role lacks
+  `manage_members` → same-shape 404, never 403** (I5.2b/I5.2c — C-1 follow-up, amended api-spec
+  §2.8) and cross-tenant isolation (I5.2); change-password **revokes others but keeps current**
+  (I6.1 — D-008/US-6), current-family **resolved from the presented refresh token** with
+  safe-direction revoke-all fallback + no-IDOR on a client-supplied `familyId` (I6.6 a/b/c — N-1),
+  `currentPassword` **its-own-429 account throttle** that resets on success (I6.7 — N-2), and
+  **missing/invalid CSRF on cookie-mode change-password → 403 CSRF_FAILED with no mutation** (I6.8
+  — M-3) proven; the **access-JWT claim set is exactly the documented minimal set** (sub +
+  registered claims only, no email/org/role — M-9 regression guard) proven; **session cap = 20 with
+  LRU-revoke-oldest on the 21st login, oldest device's refresh fails cleanly** (D-017) proven;
+  **Low-hardening** all green: non-JSON `Content-Type` → **415 before any credential work** (no
+  throttle increment, no user lookup) on representative `/auth/*` (I5c.1 — L-2), stored `tokenHash`
+  is the **keyed HMAC-SHA-256, not bare SHA-256** and lookup uses it (U3.8 + I3.9 — L-3), and
+  `/auth/refresh` carries an **IP-only** rate cap → **429 + Retry-After** that self-heals and
+  mutates no state (I3.10 — L-5).
 - **Red loops back to Build**, routed to the owner: domain-logic/rotation/throttle defects →
   `@backend-api`; web transport/CSRF/UI copy → `@frontend`/`@ux`; capability-guard internals →
   `@F-003`/`@backend-api`; CI wiring of the gate → `@devops`.
@@ -677,6 +804,7 @@ both cases are now **gating** and their expected results are fixed:
   no-op on a foreign family) gates alongside it.
 
 Also folded in and no longer open (product scope decisions):
+
 - **Reuse wire response** → generic `401 INVALID_REFRESH` (D-006(2)) — I3.2/I3.4a/b assert generic
   401 + the internal audit event.
 - **Session-lifetime cap** → `familyExpiresAt` = login+90d (D-007) — I3.4c.
