@@ -44,12 +44,21 @@ dependencies:
   omnistock_api_client:
     path: api_client
 
+  # D-023 (mobile architecture refactor, user-approved new dependency) —
+  # state management + DI for the feature-first clean-architecture rewrite
+  # (docs/mobile-architecture.md §3). Manual providers only (no
+  # riverpod_generator/codegen per D-023 item 2) — every provider is
+  # overridable via ProviderScope/ProviderContainer so each layer (domain
+  # usecase, data repository, application controller) can be swapped for a
+  # fake in tests without touching a real platform channel/network.
+  flutter_riverpod: ^2.6.1
+
   # T-001-17 ★ — secure storage for the refresh token (Keychain/Keystore).
   # NEVER SharedPreferences/plaintext (client-security skill). The access
-  # token is never persisted here — in-memory only (see lib/auth/token_store.dart).
+  # token is never persisted here — in-memory only (see lib/features/auth/data/token_store.dart).
   flutter_secure_storage: ^9.2.2
 
-  # Direct deps (were transitive via omnistock_api_client) — lib/auth/auth_client.dart
+  # Direct deps (were transitive via omnistock_api_client) — lib/features/auth/data/auth_repository_impl.dart
   # catches DioException / builds Options directly to call the generated
   # AuthApi, and deserializes error bodies with the shared Serializers/FullType,
   # so both must be declared, not just relied on transitively

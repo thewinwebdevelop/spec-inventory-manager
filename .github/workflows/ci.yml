@@ -106,6 +106,13 @@ jobs:
       - name: AC13 — flutter analyze
         working-directory: apps/mobile
         run: flutter analyze
+      - name: D-023 — mobile boundary gate (feature-first clean arch)
+        # Mirrors the server-side depcruise purity gate: features/*/domain must be
+        # pure Dart (no flutter/dio/generated/riverpod), core/ must not import
+        # features/, the generated client only appears in data/ + core/api/, and
+        # no cross-feature imports. See docs/mobile-architecture.md §6.
+        working-directory: apps/mobile
+        run: dart run tool/check_boundaries.dart
       - name: AC13 — flutter test
         working-directory: apps/mobile
         run: flutter test

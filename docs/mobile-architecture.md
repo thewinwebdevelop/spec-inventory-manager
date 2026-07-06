@@ -117,11 +117,12 @@ provider ทุกตัว override ได้ใน `ProviderContainer`/`Provid
 
 | ของเดิม (`lib/auth/…`) | ไปที่ | หมายเหตุ |
 |---|---|---|
-| `auth_client.dart` | **แยก 2**: refresh/single-flight/interceptor → `core/api/` · endpoints → `features/auth/data/auth_repository_impl.dart` | จุดสำคัญสุด — F-013+ ทุก feature ได้ refresh ฟรีผ่าน core/api |
+| `auth_client.dart` | **แยก 2**: refresh/single-flight (+`RefreshOutcome`/`SessionExpiredException`) → `core/api/refresh_coordinator.dart` · endpoints → `features/auth/data/auth_repository_impl.dart` | จุดสำคัญสุด — F-013+ ทุก feature ได้ refresh ฟรีผ่าน core/api |
 | `token_store.dart` | `features/auth/data/` | สัญญาเดิม: access=memory, refresh=keychain |
 | `secure_storage.dart` | `core/storage/` | generic wrapper |
 | `auth_bootstrap.dart` | usecase → `features/auth/domain/usecases/` + controller → `application/bootstrap_controller.dart` | seam F-006 คงเดิม (shell เรียก controller) |
-| `auth_client_factory.dart` | `core/api/` (Dio factory + https-in-release guard M-3) | |
+| `auth_client_factory.dart` | **แยก 2** (as-built): https-in-release guard (M-3, feature-agnostic) → `core/api/https_guard.dart` · `createAuthClient` (สร้าง repo ของ auth) → `features/auth/data/auth_client_factory.dart` | ย้ายทั้งไฟล์ไป core ไม่ได้ — จะทำให้ core import features (ผิดกฎ §6 เอง) |
+| (ใหม่) domain `Session` entity | `features/auth/domain/entities/` | เดิม widgets import DTO ที่ gen มาโดยตรง = ละเมิด rule 3; repo แปลง DTO→entity แล้ว |
 | `screens/*` | `features/auth/presentation/screens/` | เปลี่ยน wiring เป็น `ref.watch` |
 | `widgets/*` generic (toast, confirm_dialog, error_banner, labeled_text_field, password_field, skeleton) | `core/ui/` | คือ contribute-back ตาม design-system |
 | `widgets/*` เฉพาะ auth (session_list_item, throttle_banner) | `features/auth/presentation/widgets/` | |
