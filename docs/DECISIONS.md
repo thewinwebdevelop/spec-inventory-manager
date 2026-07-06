@@ -265,3 +265,12 @@ Decision: **ดึงกลับเข้า F-001 — implement เลย** M-
 Rationale: US-3 "คงล็อกอิน" บนมือถือเป็น AC จริง — ถ้า defer = feature ขาดครึ่งจนกว่า F-006 · F-006 (app shell) build ต่อจาก seam ที่ F-001 วาง (TokenStore/secure_storage/AuthClient.silentRefresh) อยู่แล้ว → ทำ bootstrap ตอนนี้ไม่เสียของ F-006 แค่ consume · seam-conflict risk ต่ำเพราะ bootstrap logic เขียนเป็น fn ที่ shell เรียก ไม่ผูกกับ shell UI
 Affects: apps/mobile/lib/{main.dart,auth/auth_flow.dart} + auth screens (FLAG_SECURE) + AndroidManifest · F-006 scope ลด (เหลือแค่ wire bootstrap เข้า shell + env values) · F-001 US-3 mobile = **complete** (ไม่ใช่ partial)
 Status: decided
+
+### D-023 · 2026-07-07 · mobile (cross-feature)
+
+Q: (จาก user review ของ T-001-17 — withheld confirm) โครง flat `lib/auth/` + ไม่มี state management ไม่รองรับ scale ของ backlog (~10+ mobile features Phase 1-2, org-scoping, entitlements) → mobile architecture ควรเป็นแบบไหน และ refactor เมื่อไหร่?
+Asked by: @user Owner: @user (Type 1 — architecture + new dependency)
+Decision: **(1) Feature-first + pragmatic clean architecture 4 ชั้น** (`domain` pure-Dart / `data` / `application` / `presentation` ต่อ feature + `core/` cross-cutting + `app/` composition root) ตาม [docs/mobile-architecture.md](mobile-architecture.md) · **(2) Riverpod** (`flutter_riverpod` ^2, manual providers ไม่ใช้ codegen ก่อน) เป็น state management + DI — provider override = inject test ได้ทุก layer ตามที่ user กำหนด · **(3) Refactor ก่อน merge PR #5** — main เริ่มด้วยโครงที่ถูก, 127 เทสต์เดิม = regression net, F-006 build ต่อทันที · **(4) เพิ่ม mobile boundary gate ใน CI** (คู่ขนาน depcruise ฝั่ง server): domain ห้าม Flutter/dio/generated · core ห้าม import features · generated client เฉพาะ data+core/api
+Rationale: feature-first scale ตาม backlog (feature ใหม่ = โฟลเดอร์ใหม่) · Riverpod ให้ DI+state ตัวเดียว, `AsyncValue` ตรง 4 states ของ design-system, ceremony ต่ำกว่า Bloc สำหรับแอป CRUD+sync, GetX ตัดทิ้ง (discipline) · จุดแก้หลัก: แยก refresh-machinery (→ `core/api`, ทุก feature ได้ silent-refresh ฟรี) ออกจาก auth endpoints (→ `features/auth/data`)
+Affects: apps/mobile ทั้งหมด (โครง + pubspec + เทสต์ 127 ตัว migrate) · `apps/mobile/CLAUDE.md` (แผนที่โครงใหม่ + exemplar = `features/auth/`) · CI flutter-ci lane (+boundary gate) · ทุก mobile feature ถัดไป (F-006/013/024/027/028/030/050/084/093) ใช้ template นี้ · supersedes โครง flat ของ T-001-17 (พฤติกรรม/สัญญา ★ ไม่เปลี่ยน)
+Status: decided
