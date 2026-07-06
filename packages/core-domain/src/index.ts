@@ -7,3 +7,8 @@ export {
   type Money,
   type WeightedAverageInput,
 } from "./cost/weighted-average";
+
+// F-001 auth pure fns (T-001-01) — password policy, email normalize,
+// reuse-decision, backoff curve, access-claim builder, token-lifetime/cap,
+// capability constants. Pure, framework-free (golden rules #4/#6).
+export * from "./auth";

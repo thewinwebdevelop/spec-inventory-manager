@@ -41,7 +41,437 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/HealthResponse"
+
+  # ─── F-001 Authentication (T-001-09) ──────────────────────────────────────
+  /auth/signup:
+    post:
+      operationId: authSignup
+      summary: Create a user account (email + password)
+      description: >
+        US-1. Public (IP-throttled). Creates a user with verified=false and
+        returns NO tokens (MVP: client then calls /auth/login). All /auth/*
+        POSTs require Content-Type: application/json (415 otherwise, login-CSRF
+        defense, L-2).
+      tags:
+        - auth
+      security: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/SignupRequest"
+      responses:
+        "201":
+          description: Account created (no tokens issued)
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/SignupResponse"
+        "409":
+          description: Email already taken (the one necessary enumeration leak, Gate 1 §4)
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "415":
+          description: Non-JSON Content-Type (L-2)
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "422":
+          description: Password policy or email validation failure
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "429":
+          description: IP rate limit tripped (Retry-After seconds)
+          headers:
+            Retry-After:
+              $ref: "#/components/headers/RetryAfter"
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
+  /auth/login:
+    post:
+      operationId: authLogin
+      summary: Authenticate and receive tokens
+      description: >
+        US-2. Public (IP + account throttle). The client declares its transport
+        via `tokenTransport` (default "body"). With "cookie" (web) the refresh
+        token is set as an httpOnly Secure SameSite=Strict cookie `omni_rt`
+        (Path=/auth) plus a readable `omni_csrf` cookie, and the body
+        `refreshToken` is null (H-1). With "body" (mobile/default) the plaintext
+        refresh token is returned in the body and no cookies are set. Wrong
+        password and unknown email both return the identical 401
+        INVALID_CREDENTIALS (enumeration-safe). Throttle is ALWAYS its own 429 +
+        Retry-After (M-1), never folded into the 401.
+      tags:
+        - auth
+      security: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/LoginRequest"
+      responses:
+        "200":
+          description: Authenticated — token pair issued
+          headers:
+            Set-Cookie:
+              $ref: "#/components/headers/SetAuthCookies"
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/TokenResponse"
+        "401":
+          description: Invalid credentials (generic — wrong password or unknown email)
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "415":
+          description: Non-JSON Content-Type (L-2)
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "422":
+          description: Malformed request (e.g. invalid deviceId / email shape)
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "429":
+          description: IP or account backoff tripped (Retry-After seconds)
+          headers:
+            Retry-After:
+              $ref: "#/components/headers/RetryAfter"
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
+  /auth/refresh:
+    post:
+      operationId: authRefresh
+      summary: Rotate the refresh token → new token pair
+      description: >
+        US-3. Dual-transport: the refresh token is presented via the `omni_rt`
+        cookie (web) OR a body `refreshToken` field (mobile). Resolution order:
+        cookie first, then body. On the cookie path an `X-CSRF-Token` header
+        must equal the `omni_csrf` cookie (403 otherwise). The response follows
+        the presented transport. Rotation mints a new refresh token; the old one
+        becomes unusable. Reuse of a consumed/revoked token outside the 60s
+        leeway (D-011) revokes the whole family, but the wire response is the
+        same generic 401 INVALID_REFRESH. IP-throttled (L-5) — no account
+        dimension.
+        Auth is carried by the cookie or body (not a standard bearer/apiKey
+        scheme), so `security` is [].
+      tags:
+        - auth
+      security: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/RefreshRequest"
+      responses:
+        "200":
+          description: Rotated — new token pair issued (transport follows the presented one)
+          headers:
+            Set-Cookie:
+              $ref: "#/components/headers/SetAuthCookies"
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/TokenResponse"
+        "401":
+          description: >
+            Refresh token unknown / expired / not current / family-cap reached /
+            benign-retry / reuse — all generic INVALID_REFRESH (or
+            NO_REFRESH_TOKEN when neither cookie nor body is present).
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "403":
+          description: CSRF check failed on the cookie path
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "415":
+          description: Non-JSON Content-Type (L-2)
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "429":
+          description: IP rate cap tripped (Retry-After seconds, L-5)
+          headers:
+            Retry-After:
+              $ref: "#/components/headers/RetryAfter"
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
+  /auth/logout:
+    post:
+      operationId: authLogout
+      summary: Revoke the current session (family)
+      description: >
+        US-4. Revokes the caller's current family (from the presented refresh
+        token; cookie or body) and clears the auth cookies. Optional body
+        `familyId` revokes a specific LISTED family that MUST belong to the
+        caller (M-3); a foreign/unknown familyId is a no-op. Always 204
+        (idempotent). CSRF-checked on the cookie path. Auth is via the refresh
+        token (cookie/body), so `security` is [].
+      tags:
+        - auth
+      security: []
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/LogoutRequest"
+      responses:
+        "204":
+          description: Logged out (idempotent — always 204)
+        "403":
+          description: CSRF check failed on the cookie path
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "415":
+          description: Non-JSON Content-Type (L-2)
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
+  /auth/logout-all:
+    post:
+      operationId: authLogoutAll
+      summary: Revoke ALL the user's sessions
+      description: >
+        US-4. Bearer-authed. Revokes every family for the authenticated user and
+        clears the caller's cookies. 204.
+      tags:
+        - auth
+      security:
+        - bearerAuth: []
+      responses:
+        "204":
+          description: All sessions revoked
+        "401":
+          description: Missing/invalid access token
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "415":
+          description: Non-JSON Content-Type (L-2)
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
+  /auth/sessions:
+    get:
+      operationId: authSessions
+      summary: List the user's live sessions/devices
+      description: >
+        US-3. Bearer-authed. Lists live (non-revoked, non-expired) families for
+        the user — bounded at 20 (D-017). The family matching the `omni_rt`
+        cookie (if present) is marked current. Also reads the cookie to mark
+        current — that is an input, not an auth requirement.
+      tags:
+        - auth
+      security:
+        - bearerAuth: []
+      responses:
+        "200":
+          description: Live sessions
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/SessionsResponse"
+        "401":
+          description: Missing/invalid access token
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
+  /auth/change-password:
+    post:
+      operationId: authChangePassword
+      summary: Change the caller's own password
+      description: >
+        US-6 (D-008). Bearer-authed, org-agnostic. Verifies currentPassword
+        (account-throttled, N-2), enforces the signup policy on newPassword,
+        sets the new hash, and revokes all the caller's OTHER families — sparing
+        the current family resolved from the presented refresh token
+        (cookie/body, N-1); if none is resolvable, revokes ALL (safe direction).
+        CSRF-checked on the cookie path.
+      tags:
+        - auth
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ChangePasswordRequest"
+      responses:
+        "200":
+          description: Password changed
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/OkResponse"
+        "401":
+          description: Missing/invalid access token, or wrong currentPassword (generic)
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "403":
+          description: CSRF check failed on the cookie path
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "415":
+          description: Non-JSON Content-Type (L-2)
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "422":
+          description: newPassword policy failure
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "429":
+          description: currentPassword backoff tripped (Retry-After seconds, N-2)
+          headers:
+            Retry-After:
+              $ref: "#/components/headers/RetryAfter"
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
+  /orgs/{orgId}/members/{userId}/reset-password:
+    post:
+      operationId: authAdminResetPassword
+      summary: Admin resets a member's password
+      description: >
+        US-5. Bearer-authed. The capability check is INLINE application logic
+        (F-001-owned): the caller must have an ACTIVE Membership(orgId) whose
+        role grants `manage_members`, AND the target must be an ACTIVE member of
+        orgId (H-2). Any failure → the same-shape 404 (never 403 — no
+        org-existence/status/capability oracle). On success: sets the target's
+        password and revokes all the target's families. The capability check is
+        not expressible as an OpenAPI security requirement.
+      tags:
+        - auth
+      security:
+        - bearerAuth: []
+      parameters:
+        - $ref: "#/components/parameters/OrgIdParam"
+        - $ref: "#/components/parameters/UserIdParam"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/AdminResetRequest"
+      responses:
+        "200":
+          description: Member password reset
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/OkResponse"
+        "401":
+          description: Missing/invalid access token
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "404":
+          description: >
+            Same-shape not-found — caller lacks an active membership / capability,
+            or the target is not an active member (never 403; no enumeration).
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "415":
+          description: Non-JSON Content-Type
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "422":
+          description: newPassword policy failure
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "429":
+          description: Admin reset-attempt backoff tripped (Retry-After seconds)
+          headers:
+            Retry-After:
+              $ref: "#/components/headers/RetryAfter"
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
 components:
+  parameters:
+    OrgIdParam:
+      name: orgId
+      in: path
+      required: true
+      description: Organization id (the caller's authority derives from a shared membership)
+      schema:
+        type: string
+    UserIdParam:
+      name: userId
+      in: path
+      required: true
+      description: Target member's user id
+      schema:
+        type: string
+  headers:
+    RetryAfter:
+      description: Seconds until the backoff window clears (UX countdown source)
+      schema:
+        type: integer
+        minimum: 0
+    SetAuthCookies:
+      description: >
+        On the cookie transport, sets `omni_rt` (httpOnly, Secure,
+        SameSite=Strict, Path=/auth) and `omni_csrf` (readable, Secure,
+        SameSite=Strict, Path=/auth). Absent on the body transport.
+      schema:
+        type: string
   schemas:
     HealthResponse:
       type: object
@@ -78,6 +508,208 @@ components:
               description: >
                 Redis/BullMQ reachability via the ioredis connection's PING +
                 a BullMQ queue call.
+
+    ErrorResponse:
+      type: object
+      description: >
+        The project-standard error envelope. `code` is a machine-readable
+        uppercase enum; `message` is user-facing Thai copy. Every error
+        response (401/403/404/409/415/422/429) references this schema.
+      required:
+        - error
+      properties:
+        error:
+          type: object
+          required:
+            - code
+            - message
+          properties:
+            code:
+              type: string
+              description: Machine-readable error code (e.g. INVALID_CREDENTIALS, RATE_LIMITED)
+            message:
+              type: string
+              description: User-facing Thai message
+
+    OkResponse:
+      type: object
+      required:
+        - ok
+      properties:
+        ok:
+          type: boolean
+          enum:
+            - true
+
+    SignupRequest:
+      type: object
+      required:
+        - email
+        - password
+      properties:
+        email:
+          type: string
+          format: email
+        password:
+          type: string
+
+    SignupResponse:
+      type: object
+      required:
+        - userId
+        - email
+        - verified
+      properties:
+        userId:
+          type: string
+        email:
+          type: string
+        verified:
+          type: boolean
+          enum:
+            - false
+
+    LoginRequest:
+      type: object
+      required:
+        - email
+        - password
+      properties:
+        email:
+          type: string
+          format: email
+        password:
+          type: string
+        deviceId:
+          type: string
+          maxLength: 64
+          pattern: "^[A-Za-z0-9_-]+$"
+          description: Client session label (arch §4). Not a security boundary.
+        tokenTransport:
+          type: string
+          enum:
+            - cookie
+            - body
+          default: body
+          description: >
+            Refresh-token delivery channel (api-spec §0). Web sends "cookie";
+            mobile omits or sends "body".
+
+    RefreshRequest:
+      type: object
+      description: >
+        Body-transport clients (mobile) send `refreshToken`. Cookie-transport
+        clients (web) send it via the `omni_rt` cookie and omit the body field.
+      properties:
+        refreshToken:
+          type:
+            - string
+            - "null"
+        deviceId:
+          type: string
+          maxLength: 64
+          pattern: "^[A-Za-z0-9_-]+$"
+
+    LogoutRequest:
+      type: object
+      properties:
+        refreshToken:
+          type:
+            - string
+            - "null"
+          description: Body-transport refresh token (mobile). Web uses the cookie.
+        familyId:
+          type: string
+          description: Optional — revoke a specific LISTED family owned by the caller (M-3).
+
+    ChangePasswordRequest:
+      type: object
+      required:
+        - currentPassword
+        - newPassword
+      properties:
+        currentPassword:
+          type: string
+        newPassword:
+          type: string
+        refreshToken:
+          type:
+            - string
+            - "null"
+          description: Optional mobile refresh token to identify the current family to spare (N-1).
+
+    AdminResetRequest:
+      type: object
+      required:
+        - newPassword
+      properties:
+        newPassword:
+          type: string
+
+    TokenResponse:
+      type: object
+      required:
+        - accessToken
+        - refreshToken
+        - expiresIn
+        - tokenType
+      properties:
+        accessToken:
+          type: string
+          description: HS256 JWT access token (Bearer). 15-minute TTL.
+        refreshToken:
+          type:
+            - string
+            - "null"
+          description: >
+            The rotated refresh token on the BODY transport; `null` on the
+            cookie transport (the token is in the httpOnly `omni_rt` cookie,
+            never JS-readable — H-1).
+        expiresIn:
+          type: integer
+          description: Access-token TTL in seconds (900).
+        tokenType:
+          type: string
+          enum:
+            - Bearer
+
+    SessionsResponse:
+      type: object
+      required:
+        - sessions
+      properties:
+        sessions:
+          type: array
+          items:
+            $ref: "#/components/schemas/Session"
+
+    Session:
+      type: object
+      required:
+        - familyId
+        - deviceId
+        - createdAt
+        - lastUsedAt
+        - current
+      properties:
+        familyId:
+          type: string
+        deviceId:
+          type:
+            - string
+            - "null"
+        createdAt:
+          type: string
+          format: date-time
+        lastUsedAt:
+          type:
+            - string
+            - "null"
+          format: date-time
+        current:
+          type: boolean
+          description: True for the family matching the caller's omni_rt cookie (C-1).
+
   securitySchemes:
     bearerAuth:
       type: http
@@ -85,6 +717,7 @@ components:
       bearerFormat: JWT
       description: >
         Default auth scheme for OmniStock API endpoints. Individual public
-        endpoints (e.g. /health) opt out via an operation-level `security: []`.
+        endpoints (e.g. /health, /auth/signup, /auth/login) opt out per
+        operation via `security: []`.
 security:
   - bearerAuth: []

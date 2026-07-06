@@ -612,7 +612,10 @@ support-side reset, or making F-081 a fast-follow) are a **product** call, flagg
 - **@frontend / @ux** (contract changes now locked in `api-spec.md`, review relayed):
   (1) web declares `tokenTransport: "cookie"` at login and treats body `refreshToken` as
   `null` — the refresh token is only ever in the httpOnly `omni_rt` cookie (H-1); (2)
-  `omni_rt`/`omni_csrf` are `Path=/auth` so logout / sessions carry the cookie (C-1);
+  **split cookie paths (D-019, C-1 amendment — Option A):** `omni_rt` `Path=/auth` (httpOnly,
+  sent to the browser `/auth/*` routes), `omni_csrf` **`Path=/`** (non-httpOnly so app pages
+  outside `/auth` can read it into `X-CSRF-Token`) — a single `/auth` path left the CSRF cookie
+  unreadable in a real browser, killing the cookie transport (see api-spec §0 CSRF block);
   (3) the reuse-leeway window (§3.5, D-011) means a benign predecessor-replay returns a
   generic `401` **without** forcing logout — client should single-flight refreshes and retry
   once with its current token before re-login (defense-in-depth, no longer mandatory to

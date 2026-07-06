@@ -1,13 +1,14 @@
 import type { ReactNode } from "react";
+import "../styles/globals.css";
 
 export const metadata = {
   title: "OmniStock",
-  description: "OmniStock tenant admin console — placeholder shell (T-000-09).",
+  description: "OmniStock tenant admin console.",
 };
 
 export default function RootLayout({ children }: { children: ReactNode }) {
   return (
-    <html lang="en">
+    <html lang="th">
       <body>{children}</body>
     </html>
   );

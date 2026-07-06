@@ -227,3 +227,23 @@ Decision: **มอบให้ F-002 Gate 2 (data-model) เป็น required i
 Rationale: F-002 คือ feature แรกที่เขียน/อ่าน invitation จริง (invite flow) — เป็นจุด enforce ที่ถูกต้อง; แก้ schema ตอนตารางยังว่างถูกกว่าแก้ทีหลัง
 Affects: F-002 Gate-2 data-model · docs/features/forward-commitments.md
 Status: decided
+
+---
+
+### D-019 · 2026-07-06 · F-001
+
+Q: (จาก client-security review) locked C-1 ให้ทั้ง `omni_rt` และ `omni_csrf` เป็น `Path=/auth` — แต่ `omni_csrf` เป็น non-httpOnly ที่ JS ต้องอ่านจาก app page (`/login`, `/settings/security`, `/`) ซึ่งอยู่นอก `/auth` → `document.cookie` path-matching อ่านไม่ได้ → cookie transport ตายในเบราว์เซอร์จริง (client อ่าน CSRF token มา echo ใส่ `X-CSRF-Token` ไม่ได้) · แก้ยังไง?
+Asked by: @security-reviewer (client-security, advisory) Owner: @user (approved Option A)
+Decision: **แยก path 2 คุกกี้ (Option A):** `omni_rt` (httpOnly, refresh) คง **`Path=/auth`** (ส่งไป browser `/auth/*` routes เท่านั้น) · `omni_csrf` (non-httpOnly, double-submit) ย้ายเป็น **`Path=/`** ให้อ่านได้จากทุก page · auth endpoints เข้าถึงที่ browser path `/auth/*` (web dev proxy rewrite `/auth/:path*` → API `/auth/:path*`; API คงเสิร์ฟ auth ที่ `/auth/*`) — converged contract แชร์ verbatim กับ @devops + @frontend
+Rationale: `omni_csrf` **ไม่มี secret** — defense คือ `SameSite=Strict` + value-match กับ header ซึ่ง **path-independent** ทั้งคู่ → ขยาย path ไม่เสียอะไร แต่ทำให้ transport ใช้ได้จริง · single-path เดิม unworkable เพราะ `/api` proxy prefix + document-path rule (cross-artifact defect ที่ client-security review จับได้) · amends locked C-1 เฉพาะส่วน `omni_csrf` (ไม่ revert `omni_rt`=`/auth`)
+Affects: apps/api/src/auth/{auth.constants,cookies}.ts · api-spec §0 (C-1 block, §2.2/§2.4/§5) · architecture §12 · apps/web + next.config.mjs (@frontend/@devops — proxy + document.cookie read) · test-plan (Set-Cookie path assertions — @qa)
+Status: decided
+
+### D-020 · 2026-07-06 · F-001
+
+Q: workspace-map ระบุ web stack = **Next.js + Tailwind + shadcn** แต่ Tailwind/shadcn ไม่เคยถูก scaffold — F-001 frontend build ด้วย plain CSS custom properties (token 1:1 จาก design-system, 121 tests green) · จะ adopt Tailwind ตอนนี้ หรือ ratify plain-CSS?
+Asked by: @frontend (deviation flag) Owner: @user
+Decision: **Adopt Tailwind+shadcn ตอนนี้** — scaffold Tailwind v4 + shadcn ใน apps/web แล้ว remap component/token ที่มีอยู่ให้ตรง workspace-map ก่อน feature UI อื่นจะ build บน plain-CSS เพิ่ม
+Rationale: align stack ให้ตรง spec แต่เนิ่นๆ ลด drift · token value ไม่เปลี่ยน (design-system §1 เป็น source of truth) → เป็น mechanical remap ไม่ใช่ redesign · ทำเป็น follow-up **หลัง** correctness fixes (D-019 + client-security Importants) land แล้ว
+Affects: apps/web (postcss/tailwind config, components/ui/*, components/auth/*, styles/tokens.css → tailwind theme) · design-system.md (token → tailwind theme mapping note) · **ไม่แตะ** contract/API/logic (lib/*.ts คงเดิม)
+Status: **done** — migrated 2026-07-06 (mechanical remap, same token values; 17 test files / 121 tests green, typecheck+lint+build clean — see design-system.md §1.5 for the token → Tailwind theme mapping)
