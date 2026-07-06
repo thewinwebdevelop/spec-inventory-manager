@@ -149,10 +149,12 @@ F-000 final whole-branch review (2026-07-05): AC3 (api `/health`+web 200+flutter
 
 ## → deferred จาก F-001 (D-021 · mobile ★ client-security review 2026-07-06)
 
-| สิ่งที่เลื่อน                                                                                     | ปลายทาง build            | seam ที่ F-001 วางแล้ว                                                        |
+> **UPDATE D-022 (2026-07-06):** mobile bootstrap items ถูก **ดึงกลับมาทำใน F-001 แล้ว** (user decision) — ดูแถวที่ขีดสถานะ ✅ ด้านล่าง. เหลือ F-006/devops แค่ **env base URL ค่าจริง**.
+
+| สิ่งที่เลื่อน                                                                                     | ปลายทาง build            | สถานะ                                                        |
 | ------------------------------------------------------------------------------------------------- | ------------------------ | ----------------------------------------------------------------------------- |
-| **mobile cold-start silent-refresh restore** (ปิด US-3 "คงล็อกอิน" ข้าม app restart · M-2)        | **F-006** (mobile shell) | `main.dart` เป็น F-006 bootstrap seam; `TokenStore` keychain + `AuthClient.silentRefresh` พร้อมเรียกตอน startup |
-| **per-env mobile API base URL injection** (M-3 — F-001 วาง https-in-release guard + required-param seam แล้ว; ค่า per-env = devops) | **F-006** + devops       | `auth_client_factory` รับ base URL param + assert https ใน release            |
-| release `AndroidManifest` เพิ่ม `INTERNET` permission (main manifest — F-000 heritage)            | **F-006**                | debug manifest มีแล้ว                                                          |
-| transient-refresh-failure distinct signal (L-3) · mobile current-device row (L-4) · FLAG_SECURE บนจอรหัส (L-5) | **F-006**                | auth_client wipe-preserve-on-transient logic + session-list widget พร้อม extend |
+| ~~mobile cold-start silent-refresh restore (M-2)~~                                                | ~~F-006~~ → **F-001**    | ✅ **done (D-022)** — `auth_bootstrap.dart` + `bootstrap_screen.dart` wired ใน main.dart; US-3 มือถือ complete |
+| **per-env mobile API base URL injection** (ค่า per-env เท่านั้น; https-guard + required-param seam ทำใน F-001 แล้ว M-3) | **F-006** + devops       | ⏸ seam พร้อม; รอค่า env ตอน deploy                          |
+| ~~release `AndroidManifest` INTERNET permission~~                                                | ~~F-006~~ → **F-001**    | ✅ **done (D-022)** — added to main manifest                 |
+| ~~transient-failure signal (L-3) · current-device row (L-4) · FLAG_SECURE (L-5)~~                | ~~F-006~~ → **F-001**    | ✅ **done (D-022)** — RefreshOutcome + session-list notice + screenshot_guard (L-4 copy รอ ux review) |
 | **compile workspace deps เป็น real JS** (config/db/contracts `main`=src/index.ts + build=`echo ok`) เพื่อ self-contained prod api artifact ที่ `node dist/main.js` boot ได้ — ตอนนี้ CI boot ผ่าน `tsx src/main.ts` (real app + real DB tests) ซึ่งพอสำหรับ gate; prod bundling = deploy-time | **devops / deploy** (คู่กับ T-001-13) | core-domain build→dist แล้ว (ref pattern); api compiles ✓ (node-ci typecheck) |
