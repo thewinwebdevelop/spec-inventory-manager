@@ -255,4 +255,13 @@ Asked by: @security-reviewer (client-security, advisory) Owner: @user (PM decide
 Decision: **Defer ไป F-006 (mobile app shell)** — ทั้งหมดนี้เป็น bootstrap/app-shell/env concern ที่ `main.dart` ระบุไว้เป็น F-006 seam อยู่แล้ว · T-001-17 scope = auth screens + secure storage + body-transport refresh + clear-on-logout (ทำครบ) · **แก้ทันทีใน F-001 เฉพาะ** M-1 (single-flight test — D-014), M-3 (https-in-release seam guard), L-1 (secure-storage options + allowBackup=false), L-2 (wipe-repersist epoch guard) · **F-006 ต้องรับ:** cold-start silent-refresh restore (ปิด US-3 gap บน mobile), per-env API base URL injection (ค่า devops), INTERNET permission ใน main manifest, L-3/L-4/L-5
 Rationale: bootstrap + env-injection + manifest = app-shell ของ F-006 โดยตรง — ทำใน F-001 = ก้าวข้าม seam + เสี่ยง conflict ตอน F-006 build shell · แต่ M-1/M-3/L-1/L-2 เป็น auth-local + ราคาถูก + ปิดช่องจริง จึงทำเลย · US-3 บน mobile ปิดสมบูรณ์ที่ F-006 (web ปิดแล้วใน F-001)
 Affects: F-006 scope (forward-commitment: mobile cold-start restore + env base URL + INTERNET perm + L-3/4/5) · apps/mobile/lib/main.dart + auth_client_factory (F-006 wires bootstrap) · **ไม่กระทบ** contract/AC ของ F-001 (US-3 mobile = partial→F-006)
-Status: decided — [auto]
+Status: **superseded-by D-022** (mobile cold-start ดึงกลับเข้า F-001)
+
+### D-022 · 2026-07-06 · F-001
+
+Q: (ทวน D-021 โดย user) cold-start restore กระทบ US-3 มือถือโดยตรง และ F-006 ยังไงก็ต้อง build ต่อจากของที่ทำแล้ว → ควรดึง mobile bootstrap items กลับมาทำใน F-001 เลยไหม แทนที่จะ defer?
+Asked by: @user Owner: @user
+Decision: **ดึงกลับเข้า F-001 — implement เลย** M-2 (cold-start silent-refresh restore, ปิด US-3 มือถือ), INTERNET permission (main manifest), L-3 (transient-failure signal), L-4 (current-device row), L-5 (FLAG_SECURE จอรหัส) · **ยังคงอยู่ F-006/devops:** per-env API base URL **ค่า**จริง (seam+https guard ทำแล้วใน F-001, M-3) เพราะเป็น deploy/env config
+Rationale: US-3 "คงล็อกอิน" บนมือถือเป็น AC จริง — ถ้า defer = feature ขาดครึ่งจนกว่า F-006 · F-006 (app shell) build ต่อจาก seam ที่ F-001 วาง (TokenStore/secure_storage/AuthClient.silentRefresh) อยู่แล้ว → ทำ bootstrap ตอนนี้ไม่เสียของ F-006 แค่ consume · seam-conflict risk ต่ำเพราะ bootstrap logic เขียนเป็น fn ที่ shell เรียก ไม่ผูกกับ shell UI
+Affects: apps/mobile/lib/{main.dart,auth/auth_flow.dart} + auth screens (FLAG_SECURE) + AndroidManifest · F-006 scope ลด (เหลือแค่ wire bootstrap เข้า shell + env values) · F-001 US-3 mobile = **complete** (ไม่ใช่ partial)
+Status: decided

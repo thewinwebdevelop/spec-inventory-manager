@@ -269,6 +269,72 @@
 > per the note above). Result: `fvm flutter analyze` → **0 issues**; `fvm flutter test` →
 > **104/104 passing** (up from 98 — +6: 3 in the new `auth_client_factory_test.dart`, +3 in
 > `auth_client_test.dart` for M-1/L-2). No `apps/web`, `apps/api`, or contract files touched.
+> **Mobile ★ M-2/L-3/L-4/L-5 pulled forward from F-006 into T-001-17 (2026-07-06, user decision
+> D-021→D-022; `apps/mobile` only — no web/api/contract changes):** the 4 items deferred above are
+> now implemented, built ON the existing seams (no app-shell rebuild — F-006 still owns real
+> navigation/IA and consumes these as-is):
+> - **M-2 (cold-start silent-refresh restore):** new `lib/auth/auth_bootstrap.dart`
+>   (`runAuthBootstrap(AuthClient)` — pure orchestration, no widgets) + `lib/auth/screens/
+>   bootstrap_screen.dart` (`BootstrapScreen`, the F-006 seam: `onRestored`/`onNeedsLogin`
+>   callbacks). On start: reads the refresh token via the existing `TokenStore`/`SecureStorage`
+>   seam; if present, calls the new `AuthClient.silentRefreshDetailed()` (see L-3 below) and routes
+>   to the authenticated destination on success or to login on a genuine dead session; if absent,
+>   routes straight to login with no network call. Shows a `loading` state (spinner, per
+>   design-system §2's 4-state rule applied to a one-shot startup gate) while the attempt is in
+>   flight. `lib/main.dart` wires this as the new first destination (`_AppDestination.bootstrap`)
+>   ahead of `AuthFlow`/`SecurityScreen`; `OmniStockApp` now takes an optional injectable
+>   `AuthClient` so tests never touch the real (test-time-unavailable) FlutterSecureStorage
+>   platform channel.
+> - **L-3 (transient vs terminal refresh failure):** `AuthClient` gained a `RefreshOutcome` enum
+>   (`success`/`sessionExpired`/`transientFailure`) and `silentRefreshDetailed()` surfacing it;
+>   `_doRefresh` now returns `transientFailure` (never wipes storage) instead of collapsing
+>   network/5xx/429 into the same `false` as a genuine dead session. `silentRefresh()` (bool) is
+>   now a thin projection kept for `requestWithRefresh`'s existing callers — unchanged behavior
+>   there. `BootstrapScreen` uses the detailed outcome to show an offline/retry banner (reusing
+>   `ErrorBanner`) on transient failure instead of forcing a re-login/wipe — the refresh token stays
+>   intact and a later retry (button, reruns the same one-shot bootstrap) can still succeed.
+> - **L-4 (mobile `current` is always `false`, no misleading logout success):** `GET
+>   /auth/sessions`'s `current` flag only resolves from the `omni_rt` cookie (api-spec §2.6) —
+>   Bearer-only mobile calls get `current: false`/no exclusion on every row, so the device the user
+>   is holding could be logged out via its own row with a superficially-successful `204`. Rather
+>   than fabricate an unreliable client-side "this is you" heuristic, `SessionList` now shows a
+>   mobile-only warning notice above the list (new `_MobileCurrentDeviceNotice`, reusing the
+>   `ErrorBanner` visual language in a warning/info variant) whenever there's more than 1 session,
+>   telling the user mobile can't identify which row is its own device — shown only when there's an
+>   actual logout-device button to be misled by (not during loading/error, not with exactly 1
+>   session). Copy (`AuthTh.sessionsMobileCannotIdentifyCurrent`) is new/frontend-authored (no
+>   verbatim ui.md entry existed for this mobile-only gap) — **flagging to `ux` for a copy review**,
+>   not asserting it as final. `AuthClient` also gained a public `deviceId` getter (the label this
+>   client instance sends on login/refresh) for a possible future `ux`-approved matching heuristic;
+>   not used for hiding/relabeling rows in this change since `deviceId` is an unauthenticated
+>   display label, not guaranteed unique, and nothing sets it yet (`main.dart` passes none).
+> - **L-5 (FLAG_SECURE / screenshot protection on password screens):** new
+>   `lib/auth/screenshot_guard.dart` — a first-party `MethodChannel('omnistock/screenshot_guard')`
+>   seam (`ScreenshotGuard.enable/disable`, best-effort: swallows `MissingPluginException`/
+>   `PlatformException` so it never crashes a screen, including under `flutter test` which has no
+>   platform channel) plus `ScreenshotGuardScope.acquire()` — reference-counted so concurrently
+>   mounted password fields (e.g. `ChangePasswordForm` living inside `SecurityScreen`) don't fight
+>   over one global flag; the native guard only actually disables once the last caller releases it.
+>   Wired via `initState`/`dispose` into `LoginScreen`, `SignupScreen`, and `ChangePasswordForm`.
+>   Native handlers: Android `MainActivity.kt` sets/clears `WindowManager.LayoutParams.FLAG_SECURE`
+>   (blocks screenshots/screen-recording + blanks the recent-apps thumbnail); iOS `AppDelegate.swift`
+>   (no OS-level screenshot-blocking API exists on iOS) covers the view with an opaque overlay in
+>   `applicationDidEnterBackground`/removes it in `applicationWillEnterForeground`, so the
+>   app-switcher snapshot never shows the password field. (Native code isn't exercised by
+>   `flutter analyze`/`flutter test` — no Android/iOS toolchain available in this environment to do
+>   a native build; Dart-side behavior incl. reference counting and the missing-handler fallback is
+>   fully unit-tested.)
+> - **INTERNET permission:** `android/app/src/main/AndroidManifest.xml` (the main/release manifest)
+>   was missing `<uses-permission android:name="android.permission.INTERNET"/>` entirely — it only
+>   existed in the debug/profile manifests (added there for the Flutter tool's dev bridge, not app
+>   traffic), so a release build could never reach the API. Added to the main manifest.
+>
+> New tests: `test/auth/auth_bootstrap_test.dart` (6), `test/auth/screens/bootstrap_screen_test.dart`
+> (5), `test/auth/screenshot_guard_test.dart` (5), 2 new cases in `test/auth/screens/
+> session_list_test.dart` (L-4 notice shown/hidden). `test/widget_test.dart` updated for the new
+> bootstrap-first boot sequence (now injects a fake `AuthClient`/`TokenStore` rather than touching
+> the real secure-storage channel). Result: `fvm flutter analyze` → **0 issues**; `fvm flutter test`
+> → **122/122 passing** (up from 104 — +18). No `apps/web`, `apps/api`, or contract files touched.
 
 ## backend-api
 

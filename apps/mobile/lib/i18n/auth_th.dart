@@ -75,6 +75,16 @@ class AuthTh {
   // per the web client-security review (Important #3); not in the original
   // ui.md §3.5 table but kept parity with web rather than silently diverging.
   static const sessionsErrorLogoutAllFailed = 'ออกจากระบบทุกอุปกรณ์ไม่สำเร็จ ลองใหม่อีกครั้ง';
+  // T-001-17 ★ (L-4, mobile-only): `GET /auth/sessions`'s `current` flag is
+  // resolved from the `omni_rt` cookie (api-spec §2.6) — mobile is
+  // Bearer-only and never sends that cookie, so `current` is always `false`
+  // on this platform and no row can be reliably labeled/excluded as "this
+  // device". Rather than silently show a misleading "อุปกรณ์นี้" badge or
+  // let the user log out the very device they're holding with a
+  // superficially-successful action, mobile shows this notice once above
+  // the list.
+  static const sessionsMobileCannotIdentifyCurrent =
+      'อุปกรณ์นี้ไม่สามารถระบุตัวเองในรายการด้านล่างได้ — หากไม่แน่ใจว่าแถวไหนคืออุปกรณ์ที่ถืออยู่ กรุณาระวังก่อนกด "ออกจากอุปกรณ์นี้"';
 
   // ---- Confirm dialogs (auth.confirm.*) ----
   static const confirmLogoutDeviceTitle = 'ออกจากอุปกรณ์นี้?';
@@ -114,4 +124,15 @@ class AuthTh {
   static const commonPasswordHide = 'ซ่อนรหัสผ่าน';
   static const commonRetry = 'ลองใหม่';
   static const commonCancel = 'ยกเลิก';
+
+  // ---- Cold-start bootstrap (auth.bootstrap.*, T-001-17 M-2/L-3) ----
+  // Loading/offline-retry copy for the one-shot "restore session on app
+  // start" gate — reuses the same generic-network-error tone as the rest of
+  // §7 edge states (design-system.md §2: error copy + a "ลองใหม่" button),
+  // not a new error taxonomy.
+  static const bootstrapLoading = 'กำลังตรวจสอบสถานะการเข้าสู่ระบบ...';
+  static const bootstrapOfflineTitle = 'เชื่อมต่อไม่สำเร็จ';
+  static const bootstrapOfflineBody =
+      'ตรวจสอบอินเทอร์เน็ตแล้วลองใหม่อีกครั้ง บัญชีของคุณยังเข้าสู่ระบบอยู่';
+  static const bootstrapOfflineRetry = 'ลองใหม่';
 }

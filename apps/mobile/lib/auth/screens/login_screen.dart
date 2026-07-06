@@ -5,6 +5,7 @@ import '../../theme/app_theme.dart';
 import '../auth_client.dart';
 import '../auth_exceptions.dart';
 import '../error_messages.dart';
+import '../screenshot_guard.dart';
 import '../throttle_countdown_controller.dart';
 import '../widgets/error_banner.dart';
 import '../widgets/labeled_text_field.dart';
@@ -44,14 +45,20 @@ class _LoginScreenState extends State<LoginScreen> {
   bool _hasCredentialsError = false;
   String? _generalError;
 
+  // T-001-17 ★ (L-5) — obscure the password field from screenshots/the
+  // app-switcher preview for as long as this screen is mounted.
+  late final VoidCallback _releaseScreenshotGuard;
+
   @override
   void initState() {
     super.initState();
     _emailController = TextEditingController(text: widget.prefillEmail ?? '');
+    _releaseScreenshotGuard = ScreenshotGuardScope.acquire();
   }
 
   @override
   void dispose() {
+    _releaseScreenshotGuard();
     _emailController.dispose();
     _passwordController.dispose();
     _passwordFocusNode.dispose();

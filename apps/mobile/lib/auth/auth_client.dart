@@ -5,6 +5,27 @@ import 'package:omnistock_api_client/omnistock_api_client.dart';
 import 'auth_exceptions.dart';
 import 'token_store.dart';
 
+/// T-001-17 ★ (L-3 — cold-start restore / refresh-failure UX). Distinguishes
+/// a REAL dead session from a merely-transient failure so callers (cold-start
+/// bootstrap, any silent-refresh call site) don't force a full re-login/wipe
+/// over a flaky network — mirrors [AuthClient._doRefresh]'s existing storage
+/// behavior (only a genuine `401 INVALID_REFRESH` wipes storage) by exposing
+/// that distinction on the wire, not just internally.
+enum RefreshOutcome {
+  /// Refresh succeeded — a fresh access/refresh token pair is stored.
+  success,
+
+  /// The refresh token is genuinely dead (expired/revoked/reuse-detected, or
+  /// simply absent) — storage has been wiped; the caller must treat the
+  /// session as over (ux-wireframe §7: bounce to login + polite toast).
+  sessionExpired,
+
+  /// Network failure / 5xx / 429 — the refresh token was intentionally left
+  /// untouched in storage (still potentially valid). The caller should offer
+  /// a retry/offline state, NOT a forced re-login/wipe.
+  transientFailure,
+}
+
 /// T-001-17 ★ — mobile token/refresh flow.
 ///
 /// Contract: docs/features/F-001/api-spec.md §0 (LOCKED). Skill:
@@ -31,6 +52,17 @@ class AuthClient {
   final String? _deviceId;
 
   TokenStore get tokenStore => _tokenStore;
+
+  /// T-001-17 ★ (L-4): the label THIS client instance sends as `deviceId` on
+  /// login/refresh (api-spec §2.2/§2.3) — echoed back verbatim as
+  /// `Session.deviceId` (api-spec §2.6). Since `GET /auth/sessions` marks
+  /// `current` from the `omni_rt` cookie only (api-spec §2.6: "null if no
+  /// cookie, e.g. a Bearer-only mobile call"), mobile's `current` is always
+  /// `false` server-side — comparing a listed session's `deviceId` against
+  /// THIS getter is the only client-side signal mobile has for "is this row
+  /// the device I'm holding", and is exposed here so the session-list UI can
+  /// use it instead of trusting the always-false `current` flag.
+  String? get deviceId => _deviceId;
 
   int? _retryAfterFromHeaders(Map<String, List<String>> headers) {
     final values = headers['retry-after'] ?? headers['Retry-After'];
@@ -132,7 +164,23 @@ class AuthClient {
   /// guidance M-2 (api-spec §5): **do not retry with the same token** — wipe
   /// storage. Never throws; callers treat it as a boolean gate (mirrors
   /// `silentRefresh` in apps/web/src/lib/auth-client.ts).
+  ///
+  /// This is a thin bool projection of [silentRefreshDetailed] kept for
+  /// existing callers ([requestWithRefresh]) that only ever wipe/retry on a
+  /// TRUE dead session anyway — a transient failure and a dead session both
+  /// mean "this in-flight request can't be retried right now" from that call
+  /// site's point of view. Callers that need to react differently to a
+  /// transient failure (L-3 — cold-start bootstrap) should call
+  /// [silentRefreshDetailed] directly instead.
   Future<bool> silentRefresh() async {
+    final outcome = await silentRefreshDetailed();
+    return outcome == RefreshOutcome.success;
+  }
+
+  /// Same single-flight refresh as [silentRefresh], but surfaces the
+  /// [RefreshOutcome] distinction (L-3) instead of collapsing
+  /// session-expired and transient-network-failure into the same `false`.
+  Future<RefreshOutcome> silentRefreshDetailed() async {
     if (_inflightRefresh != null) return _inflightRefresh!;
     final future = _doRefresh();
     _inflightRefresh = future;
@@ -148,7 +196,7 @@ class AuthClient {
   // real refresh call would hit the just-rotated token as a benign-retry 401
   // (arch §3.5 leeway window) purely from a client-side race, wrongly
   // throwing SessionExpiredException for a still-live session.
-  Future<bool>? _inflightRefresh;
+  Future<RefreshOutcome>? _inflightRefresh;
 
   // T-001-17 ★ (L-2): monotonically-bumped logout epoch. `_doRefresh` reads
   // the epoch BEFORE awaiting the network call and re-checks it right before
@@ -167,12 +215,12 @@ class AuthClient {
     await _tokenStore.clearAll();
   }
 
-  Future<bool> _doRefresh() async {
+  Future<RefreshOutcome> _doRefresh() async {
     final epochAtStart = _logoutEpoch;
     final currentRefreshToken = await _tokenStore.getRefreshToken();
     if (currentRefreshToken == null) {
       await _tokenStore.clearAll();
-      return false;
+      return RefreshOutcome.sessionExpired;
     }
     try {
       final res = await _authApi.authRefresh(
@@ -184,19 +232,19 @@ class AuthClient {
       final body = res.data;
       if (body == null) {
         await _tokenStore.clearAll();
-        return false;
+        return RefreshOutcome.sessionExpired;
       }
       if (_logoutEpoch != epochAtStart) {
         // A logout happened while this refresh was in flight — storage was
         // already deliberately wiped; do not rewrite a dead token into it.
-        return false;
+        return RefreshOutcome.sessionExpired;
       }
       _tokenStore.setAccessToken(body.accessToken, expiresInSeconds: body.expiresIn);
       final rotated = body.refreshToken;
       if (rotated != null) {
         await _tokenStore.setRefreshToken(rotated);
       }
-      return true;
+      return RefreshOutcome.success;
     } on DioException catch (e) {
       // 401 INVALID_REFRESH (expired/revoked/reuse-detected — all
       // indistinguishable on the wire, api-spec §2.3) → the session is
@@ -207,13 +255,16 @@ class AuthClient {
         if (_logoutEpoch == epochAtStart) {
           await _tokenStore.clearAll();
         }
-        return false;
+        return RefreshOutcome.sessionExpired;
       }
-      // Network/5xx/429: leave storage untouched — a transient failure
-      // should not destroy a still-potentially-valid refresh token. The
-      // caller surfaces this as a failed silentRefresh (-> session-expired
-      // treatment for THIS request), but a later attempt may still succeed.
-      return false;
+      // Network/5xx/429 (L-3): leave storage untouched — a transient failure
+      // should not destroy a still-potentially-valid refresh token. Most call
+      // sites (requestWithRefresh, via the silentRefresh bool projection)
+      // still surface this as a failed refresh for THIS in-flight request;
+      // callers that can distinguish (cold-start bootstrap) get
+      // transientFailure instead of sessionExpired so they can offer a
+      // retry/offline state rather than forcing a full re-login.
+      return RefreshOutcome.transientFailure;
     }
   }
 

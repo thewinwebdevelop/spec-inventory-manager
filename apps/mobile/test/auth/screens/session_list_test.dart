@@ -180,6 +180,80 @@ void main() {
     expect(find.text('ออกจากอุปกรณ์แล้ว'), findsOneWidget);
   });
 
+  testWidgets(
+      'T-001-17 L-4: shows the "cannot identify current device" notice when there is more than 1 session',
+      (tester) async {
+    final adapter = FakeHttpClientAdapter();
+    adapter.enqueue(FakeResponse(statusCode: 200, jsonBody: {
+      'sessions': [
+        sessionJson(
+          familyId: 'f1',
+          deviceId: 'device-1',
+          createdAt: '2026-07-01T00:00:00.000Z',
+          lastUsedAt: '2026-07-06T00:00:00.000Z',
+          current: false,
+        ),
+        sessionJson(
+          familyId: 'f2',
+          deviceId: 'device-2',
+          createdAt: '2026-07-01T00:00:00.000Z',
+          lastUsedAt: '2026-07-02T00:00:00.000Z',
+          current: false,
+        ),
+      ],
+    }));
+    final client = buildClient(adapter);
+
+    await tester.pumpWidget(MaterialApp(
+      home: Scaffold(
+        body: SessionList(authClient: client, onSessionExpired: () {}, onLoggedOutAll: () {}),
+      ),
+    ));
+    await tester.pumpAndSettle();
+
+    // Both rows have a logout-device button (neither `current`, since mobile
+    // never gets a true `current: true` back — api-spec §2.6) — the notice
+    // is what tells the user not to trust that as "these are all other
+    // devices".
+    expect(find.text('ออกจากอุปกรณ์นี้'), findsNWidgets(2));
+    expect(
+      find.text(
+        'อุปกรณ์นี้ไม่สามารถระบุตัวเองในรายการด้านล่างได้ — หากไม่แน่ใจว่าแถวไหนคืออุปกรณ์ที่ถืออยู่ กรุณาระวังก่อนกด "ออกจากอุปกรณ์นี้"',
+      ),
+      findsOneWidget,
+    );
+  });
+
+  testWidgets('does NOT show the "cannot identify current device" notice with only 1 session', (tester) async {
+    final adapter = FakeHttpClientAdapter();
+    adapter.enqueue(FakeResponse(statusCode: 200, jsonBody: {
+      'sessions': [
+        sessionJson(
+          familyId: 'f1',
+          deviceId: 'device-1',
+          createdAt: '2026-07-01T00:00:00.000Z',
+          lastUsedAt: '2026-07-06T00:00:00.000Z',
+          current: true,
+        ),
+      ],
+    }));
+    final client = buildClient(adapter);
+
+    await tester.pumpWidget(MaterialApp(
+      home: Scaffold(
+        body: SessionList(authClient: client, onSessionExpired: () {}, onLoggedOutAll: () {}),
+      ),
+    ));
+    await tester.pumpAndSettle();
+
+    expect(
+      find.text(
+        'อุปกรณ์นี้ไม่สามารถระบุตัวเองในรายการด้านล่างได้ — หากไม่แน่ใจว่าแถวไหนคืออุปกรณ์ที่ถืออยู่ กรุณาระวังก่อนกด "ออกจากอุปกรณ์นี้"',
+      ),
+      findsNothing,
+    );
+  });
+
   testWidgets('logout-all shows the confirm dialog and calls onLoggedOutAll on success', (tester) async {
     final adapter = FakeHttpClientAdapter();
     adapter.enqueue(FakeResponse(statusCode: 200, jsonBody: {

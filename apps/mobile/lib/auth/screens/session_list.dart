@@ -125,6 +125,17 @@ class SessionListState extends State<SessionList> {
         const SizedBox(height: AppSpacing.s1),
         Text(AuthTh.sessionsSubtitle, style: AppTypography.bodySm),
         const SizedBox(height: AppSpacing.s4),
+        // T-001-17 ★ (L-4): mobile can never resolve `current` (api-spec
+        // §2.6 — Bearer-only calls get `current: false` on every row, since
+        // that flag is only set from the `omni_rt` cookie). Only shown once
+        // there's an actual list to look at (not during loading/error), and
+        // only when there's more than 1 row — with exactly 1 session the
+        // list has no logout-device button to be misled by anyway (the sole
+        // row is necessarily this device, ux-wireframe §4 empty-state note).
+        if (!_loading && !_hasError && _sessions.length > 1) ...[
+          _MobileCurrentDeviceNotice(),
+          const SizedBox(height: AppSpacing.s3),
+        ],
         if (_loading)
           const SessionListSkeleton()
         else if (_hasError)
@@ -151,6 +162,38 @@ class SessionListState extends State<SessionList> {
           ),
         ],
       ],
+    );
+  }
+}
+
+/// T-001-17 ★ (L-4) — mobile-only notice above the session list. Uses the
+/// same visual language as [ErrorBanner] (`AppColors.warningBg`/`Border`, not
+/// `danger`, since this is informational, not an error) rather than
+/// inventing a new banner variant.
+class _MobileCurrentDeviceNotice extends StatelessWidget {
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.all(AppSpacing.s4),
+      decoration: BoxDecoration(
+        color: AppColors.warningBg,
+        border: Border.all(color: AppColors.warningBorder),
+        borderRadius: BorderRadius.circular(AppRadius.card),
+      ),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          const Icon(Icons.info_outline, color: AppColors.warningText, size: 20),
+          const SizedBox(width: AppSpacing.s2),
+          Expanded(
+            child: Text(
+              AuthTh.sessionsMobileCannotIdentifyCurrent,
+              style: AppTypography.bodySm.copyWith(color: AppColors.warningText),
+            ),
+          ),
+        ],
+      ),
     );
   }
 }

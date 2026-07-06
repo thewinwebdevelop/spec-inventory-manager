@@ -5,6 +5,7 @@ import '../../theme/app_theme.dart';
 import '../auth_client.dart';
 import '../auth_exceptions.dart';
 import '../error_messages.dart';
+import '../screenshot_guard.dart';
 import '../throttle_countdown_controller.dart';
 import '../validation.dart';
 import '../widgets/error_banner.dart';
@@ -44,8 +45,21 @@ class _ChangePasswordFormState extends State<ChangePasswordForm> {
   String? _newError;
   String? _generalError;
 
+  // T-001-17 ★ (L-5) — obscure the password fields from screenshots/the
+  // app-switcher preview for as long as this form is mounted. Reference-
+  // counted (ScreenshotGuardScope) since this form lives INSIDE
+  // SecurityScreen alongside the session list, not as a standalone screen.
+  late final VoidCallback _releaseScreenshotGuard;
+
+  @override
+  void initState() {
+    super.initState();
+    _releaseScreenshotGuard = ScreenshotGuardScope.acquire();
+  }
+
   @override
   void dispose() {
+    _releaseScreenshotGuard();
     _currentController.dispose();
     _newController.dispose();
     _throttleController.dispose();
