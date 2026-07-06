@@ -247,3 +247,12 @@ Decision: **Adopt Tailwind+shadcn ตอนนี้** — scaffold Tailwind v4 
 Rationale: align stack ให้ตรง spec แต่เนิ่นๆ ลด drift · token value ไม่เปลี่ยน (design-system §1 เป็น source of truth) → เป็น mechanical remap ไม่ใช่ redesign · ทำเป็น follow-up **หลัง** correctness fixes (D-019 + client-security Importants) land แล้ว
 Affects: apps/web (postcss/tailwind config, components/ui/*, components/auth/*, styles/tokens.css → tailwind theme) · design-system.md (token → tailwind theme mapping note) · **ไม่แตะ** contract/API/logic (lib/*.ts คงเดิม)
 Status: **done** — migrated 2026-07-06 (mechanical remap, same token values; 17 test files / 121 tests green, typecheck+lint+build clean — see design-system.md §1.5 for the token → Tailwind theme mapping)
+
+### D-021 · 2026-07-06 · F-001 → F-006
+
+Q: (จาก ★ client-security review ของ mobile T-001-17) พบ M-2 (ไม่มี cold-start session restore — keychain เก็บ refresh token ไว้แต่เปิดแอปมา login ทุกครั้ง → US-3 "คงล็อกอิน" ใช้ไม่ได้ข้าม restart + orphan family สะสม), L-3 (transient-refresh-failure signal), L-4 (mobile ระบุ current-device row ไม่ได้), L-5 (FLAG_SECURE บนจอรหัส), + release AndroidManifest ขาด `INTERNET` permission — งานพวกนี้อยู่ใน T-001-17 หรือ F-006?
+Asked by: @security-reviewer (client-security, advisory) Owner: @user (PM decided [auto], Type-2 reversible)
+Decision: **Defer ไป F-006 (mobile app shell)** — ทั้งหมดนี้เป็น bootstrap/app-shell/env concern ที่ `main.dart` ระบุไว้เป็น F-006 seam อยู่แล้ว · T-001-17 scope = auth screens + secure storage + body-transport refresh + clear-on-logout (ทำครบ) · **แก้ทันทีใน F-001 เฉพาะ** M-1 (single-flight test — D-014), M-3 (https-in-release seam guard), L-1 (secure-storage options + allowBackup=false), L-2 (wipe-repersist epoch guard) · **F-006 ต้องรับ:** cold-start silent-refresh restore (ปิด US-3 gap บน mobile), per-env API base URL injection (ค่า devops), INTERNET permission ใน main manifest, L-3/L-4/L-5
+Rationale: bootstrap + env-injection + manifest = app-shell ของ F-006 โดยตรง — ทำใน F-001 = ก้าวข้าม seam + เสี่ยง conflict ตอน F-006 build shell · แต่ M-1/M-3/L-1/L-2 เป็น auth-local + ราคาถูก + ปิดช่องจริง จึงทำเลย · US-3 บน mobile ปิดสมบูรณ์ที่ F-006 (web ปิดแล้วใน F-001)
+Affects: F-006 scope (forward-commitment: mobile cold-start restore + env base URL + INTERNET perm + L-3/4/5) · apps/mobile/lib/main.dart + auth_client_factory (F-006 wires bootstrap) · **ไม่กระทบ** contract/AC ของ F-001 (US-3 mobile = partial→F-006)
+Status: decided — [auto]

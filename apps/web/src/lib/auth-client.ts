@@ -181,17 +181,55 @@ export async function silentRefresh(): Promise<boolean> {
 }
 
 /**
+ * `requestWithRefresh`'s 401 is, by default, ALWAYS treated as
+ * access-token-expiry — correct for endpoints whose only 401 source is the
+ * server's Bearer-auth guard rejecting a dead/missing access token
+ * (`getSessions`, `logoutAll`). It is overridden for `changePassword`
+ * (api-spec §2.7), whose 401 is double-duty: the SAME status also means
+ * "wrong `currentPassword`" (an `INVALID_CREDENTIALS`-coded domain rejection,
+ * nothing to do with the access token) — treating that as session-expiry
+ * would wipe a live session and kick the user to /login over a simple typo.
+ * Mirrors `_defaultIsAuthExpiry` / `_isChangePasswordAuthExpiry` in
+ * apps/mobile/lib/auth/auth_client.dart (T-001-17).
+ */
+function defaultIsAuthExpiry(): boolean {
+  return true;
+}
+
+/**
+ * `changePassword`'s 401 is only an access-token-expiry signal when it
+ * carries NO app-level `INVALID_CREDENTIALS` code (a bare Bearer-guard
+ * rejection body). A 401 that DOES carry `INVALID_CREDENTIALS` is the
+ * documented wrong-current-password outcome (api-spec §2.7) — never route
+ * that through silent-refresh/session-expiry.
+ */
+async function isChangePasswordAuthExpiry(res: Response): Promise<boolean> {
+  // `res` here is already a clone handed to us by `requestWithRefresh` (the
+  // original is preserved for the normal error-parsing path in
+  // `changePassword` below), so it is safe for us to consume its body.
+  const body = await parseErrorBody(res);
+  return body?.error?.code !== "INVALID_CREDENTIALS";
+}
+
+/**
  * Authenticated request with silent-refresh-then-retry-once (T-001-16,
  * ux-wireframe §7). Pure orchestration over an injectable `send` so the
  * retry/refresh decision tree is unit-testable without a real network (see
  * auth-client.retry.test.ts).
+ *
+ * `isAuthExpiry` lets a specific call (e.g. `changePassword`) distinguish a
+ * genuine access-token-expiry 401 from a same-status domain rejection that
+ * must NOT trigger silent-refresh / session-expired handling (see
+ * `isChangePasswordAuthExpiry` above). Defaults to "every 401 is expiry",
+ * matching every other endpoint's single 401 source.
  */
 export async function requestWithRefresh(
   send: () => Promise<Response>,
   refresh: () => Promise<boolean> = silentRefresh,
+  isAuthExpiry: (res: Response) => boolean | Promise<boolean> = defaultIsAuthExpiry,
 ): Promise<Response> {
   const first = await send();
-  if (first.status !== 401) return first;
+  if (first.status !== 401 || !(await isAuthExpiry(first.clone()))) return first;
 
   const refreshed = await refresh();
   if (!refreshed) {
@@ -199,7 +237,7 @@ export async function requestWithRefresh(
   }
 
   const second = await send();
-  if (second.status === 401) {
+  if (second.status === 401 && (await isAuthExpiry(second.clone()))) {
     // Refreshed successfully but the retried call still 401'd (e.g. kicked
     // mid-flight, arch §7 "ถูก kick กลางการใช้งาน") — do not loop again.
     clearAccessToken();
@@ -265,12 +303,15 @@ export async function logoutAll(): Promise<void> {
 }
 
 export async function changePassword(req: ChangePasswordRequest): Promise<OkResponse> {
-  const res = await requestWithRefresh(() =>
-    rawRequest(
-      "/change-password",
-      { method: "POST", body: JSON.stringify(req) },
-      { auth: true, csrf: true },
-    ),
+  const res = await requestWithRefresh(
+    () =>
+      rawRequest(
+        "/change-password",
+        { method: "POST", body: JSON.stringify(req) },
+        { auth: true, csrf: true },
+      ),
+    silentRefresh,
+    isChangePasswordAuthExpiry,
   );
   if (res.status === 200) return (await res.json()) as OkResponse;
   throw new ApiError(res.status, await parseErrorBody(res), parseRetryAfter(res));

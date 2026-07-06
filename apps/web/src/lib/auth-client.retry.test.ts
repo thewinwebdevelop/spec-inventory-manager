@@ -108,4 +108,68 @@ describe("requestWithRefresh (T-001-16 ★ — silent refresh on 401 + retry-onc
     expect(resB.status).toBe(200);
     expect(refreshCallCount).toBe(1); // exactly ONE refresh across both callers
   });
+
+  describe("isAuthExpiry (double-duty 401 — changePassword's wrong-current-password case)", () => {
+    it("when isAuthExpiry returns false on a 401, returns that response as-is (no refresh, no retry)", async () => {
+      const domainRejection = mockResponse(401);
+      const send = vi.fn().mockResolvedValue(domainRejection);
+      const refresh = vi.fn();
+      const isAuthExpiry = vi.fn().mockReturnValue(false);
+
+      const res = await requestWithRefresh(send, refresh, isAuthExpiry);
+
+      expect(res).toBe(domainRejection);
+      expect(send).toHaveBeenCalledTimes(1);
+      expect(refresh).not.toHaveBeenCalled();
+    });
+
+    it("when isAuthExpiry returns true on a 401, behaves exactly like the default (refresh + retry once)", async () => {
+      const send = vi
+        .fn()
+        .mockResolvedValueOnce(mockResponse(401))
+        .mockResolvedValueOnce(mockResponse(200));
+      const refresh = vi.fn().mockResolvedValue(true);
+      const isAuthExpiry = vi.fn().mockReturnValue(true);
+
+      const res = await requestWithRefresh(send, refresh, isAuthExpiry);
+
+      expect(res.status).toBe(200);
+      expect(refresh).toHaveBeenCalledTimes(1);
+      expect(send).toHaveBeenCalledTimes(2);
+    });
+
+    it("isAuthExpiry can be async (mirrors reading the response body to check an error code)", async () => {
+      const domainRejection = mockResponse(401);
+      const send = vi.fn().mockResolvedValue(domainRejection);
+      const refresh = vi.fn();
+      const isAuthExpiry = vi.fn().mockResolvedValue(false);
+
+      const res = await requestWithRefresh(send, refresh, isAuthExpiry);
+
+      expect(res).toBe(domainRejection);
+      expect(refresh).not.toHaveBeenCalled();
+    });
+
+    it("a domain-rejection 401 on the RETRIED call (isAuthExpiry false) is also returned as-is, not thrown as SessionExpiredError", async () => {
+      const retriedDomainRejection = mockResponse(401);
+      const send = vi
+        .fn()
+        .mockResolvedValueOnce(mockResponse(401)) // first: genuine expiry
+        .mockResolvedValueOnce(retriedDomainRejection); // retry: domain rejection
+      const refresh = vi.fn().mockResolvedValue(true);
+      // First call (pre-refresh) is expiry; the retried call is a domain
+      // rejection — model this with a call-counting predicate.
+      let calls = 0;
+      const isAuthExpiry = vi.fn(() => {
+        calls += 1;
+        return calls === 1; // true first time (expiry), false second time (domain)
+      });
+
+      const res = await requestWithRefresh(send, refresh, isAuthExpiry);
+
+      expect(res).toBe(retriedDomainRejection);
+      expect(refresh).toHaveBeenCalledTimes(1);
+      expect(send).toHaveBeenCalledTimes(2);
+    });
+  });
 });

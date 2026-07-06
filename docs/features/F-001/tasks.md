@@ -11,6 +11,14 @@
 > gen แล้ว; Dart client **code** gen แล้วครบ (`apps/mobile/api_client` — auth_api.dart + models ทุกตัว) แต่ `build_runner`
 > (`.g.dart` companions, D-015) **ค้าง** เพราะ Dart SDK บนเครื่อง build = 2.17.1 (pubspec ต้องการ ≥2.18) และ FVM-pinned SDK
 > ไม่มีใน worktree นี้ — รันบน CI/dev machine ที่มี FVM SDK (ตาม `scripts/gen-dart-client.sh`). TS client พอสำหรับ web (T-001-15/16).
+> **Frontend note (T-001-17, 2026-07-06):** the `build_runner` blocker above is resolved on THIS
+> worktree — FVM Flutter 3.27.3/Dart 3.6.1 is installed, `fvm dart run build_runner build
+> --delete-conflicting-outputs` in `apps/mobile/api_client` succeeds (all 15 `.g.dart` companions
+> present/generated), and `apps/mobile` now has real typed usage of the generated `AuthApi` +
+> every auth model throughout `lib/auth/**` (not just wired, per T-001-17's task note below).
+> backend-api's own remaining T-001-09 scope (OpenAPI publish/redocly gate, committing the tree) is
+> unaffected by this — flagging only the Dart-client/build_runner sub-concern as observably clear
+> from the frontend side.
 > **New tooling deps:** apps/api += argon2, @nestjs/jwt, class-validator/-transformer, cookie-parser (runtime) + supertest, unplugin-swc/@swc/core
 > (test: vitest ต้องมี decorator-metadata สำหรับ Nest DI). core-domain += `verify:fixture`/`gen:fixture` scripts. lockfile updated.
 > **Security-review fixes applied 2026-07-06 (★ review of 01/05/07, still staged — no commit):**
@@ -127,6 +135,140 @@
 > untouched (token-store, auth-client, csrf, validation — byte-identical). Full suite still **17
 > test files / 121 tests passing**; `pnpm --filter web lint|typecheck|test` all exit 0; `next build`
 > still succeeds (5 static routes, same route list). D-020 flipped to done in DECISIONS.md.
+> **Mobile build 2026-07-06 (T-001-17 ★, this task):** `apps/mobile/api_client`'s `build_runner`
+> (D-015, previously blocked per T-001-09's note — dev machine Dart SDK was 2.17.1, pubspec needs
+> ≥2.18) is **now clean on the FVM-pinned Flutter 3.27.3 / Dart 3.6.1 toolchain**
+> (`fvm dart run build_runner build --delete-conflicting-outputs` → `Succeeded ... 0 outputs (0
+> actions)`, i.e. already up to date on this run) — all 15 `.g.dart` companions generate/exist;
+> frontend consumes the generated `AuthApi` + models **unmodified** (no hand-reshaping). Screens
+> (`apps/mobile/lib/auth/screens/**`): `SignupScreen`, `LoginScreen` (+ real-time throttle
+> countdown, tabular-figure digits), `LoginHelpScreen` (static), `SecurityScreen` (= `ChangePasswordForm`
+> + `SessionList` sections per ux-wireframe §9.1/§11.5), all 4 design-system §2 states
+> (loading/empty/error/success) per screen, Thai copy centralized in `apps/mobile/lib/i18n/auth_th.dart`
+> (verbatim from ui.md §3, same keys/values as `apps/web/src/i18n/auth.ts` — no web/mobile copy
+> drift). Design tokens ported 1:1 from design-system.md §1 into `apps/mobile/lib/theme/app_theme.dart`
+> (`AppColors`/`AppSpacing`/`AppRadius`/`AppTypography` → `ThemeData`/`ColorScheme`). Reusable
+> widgets (`apps/mobile/lib/auth/widgets/**`): `PasswordField`, `LabeledTextField`, `ErrorBanner`,
+> `ThrottleBanner` (tabular-nums via `FontFeature.tabularFigures()`, 10s/threshold-gated
+> `Semantics.liveRegion` per ui.md §6), `ConfirmDialog` (bottom-sheet variant, destructive
+> defaults focus to Cancel), `SessionListItem`, `SessionListSkeleton`, `AppToast`. ★ secure
+> storage/token flow (`apps/mobile/lib/auth/`): `token_store.dart` (access token in-memory field
+> only — never persisted; refresh token via an injectable `SecureStorage` seam,
+> `secure_storage.dart`, production-backed by `flutter_secure_storage` —
+> Keychain/EncryptedSharedPreferences-Keystore, never SharedPreferences/plaintext/logs);
+> `auth_client.dart` (`AuthClient`: mobile ALWAYS sends `tokenTransport: "body"` — the D-019
+> cookie-path fix is web-only and was NOT applied here per instructions; single-flight
+> `silentRefresh`; `requestWithRefresh` retry-once with a per-call `isAuthExpiry` predicate — see
+> below; `logoutDevice`/`logoutAll` both call `TokenStore.clearAll()` on success, current-device
+> logout only). **Notable fix found while building (not a web regression — same latent shape
+> exists in `apps/web/src/lib/auth-client.ts`'s `changePassword`, flagging for `ux`/`backend-api`
+> awareness though not touching web code under this mobile task):** `POST /auth/change-password`'s
+> `401` is double-duty on the wire (api-spec §2.7) — it means EITHER a dead access token
+> (`JwtAuthGuard` rejection, no app error code) OR a wrong `currentPassword`
+> (`INVALID_CREDENTIALS`-coded, purely semantic, nothing to do with token validity). Naively
+> routing every 401 through silent-refresh-then-retry (as `getSessions`/`logoutAll` correctly do)
+> would misclassify a simple password typo as session-expiry, wipe a live session, and kick the
+> user to `/login`. Mobile's `requestWithRefresh` now takes an `isAuthExpiry(ApiError) -> bool`
+> predicate (default: every 401 is auth-expiry, correct for Bearer-only endpoints) and
+> `changePassword` passes one that excludes the `INVALID_CREDENTIALS` code — covered by 2 new
+> `auth_client_test.dart` cases (semantic 401 surfaces directly, 1 request, tokens untouched; a
+> bare/code-less 401 still triggers refresh-then-retry as before). D-014: `fvm flutter test`
+> **98/98 passing** across `apps/mobile/test/auth/**` (token store keychain write/read/clear +
+> never-in-storage assertion for the access token; `AuthClient` login/signup/refresh/logout/
+> logout-all/change-password against a real `AuthApi` + fake `Dio` `HttpClientAdapter` — exercises
+> actual built_value (de)serialization, not a mocked client; retry-once incl. the
+> auth-expiry-vs-semantic-401 cases above, no-refresh-token short-circuit, kicked-mid-flight;
+> per-device vs current-device logout token-wipe distinction; throttle countdown pure-fn +
+> `fake_async`-driven real-time controller incl. re-sync/clock-skew and D-005 no-"ล็อก"/"ระงับ"
+> assertion; validation; error-code→Thai mapping incl. enumeration-safety; relative-time incl.
+> Buddhist-era year; widget tests for `PasswordField`/`ThrottleBanner`/`ConfirmDialog`
+> (destructive-defaults-to-Cancel-focus) and full screen state coverage
+> (Signup/Login/SessionList/ChangePasswordForm loading/empty/error/throttle/success)) plus the
+> pre-existing `test/widget_test.dart` smoke test (updated to boot to the real login screen instead
+> of the retired F-000 placeholder text). `fvm flutter analyze`: **0 issues**. F-006 seam:
+> `apps/mobile/lib/auth/auth_flow.dart` (self-contained pre-auth `Navigator` — login ⇄ signup ⇄
+> help) + `auth_client_factory.dart` (`createAuthClient()` bootstrap helper) are the documented
+> integration points; `apps/mobile/lib/main.dart` wires them standalone (not a permanent app
+> shell) so `fvm flutter test`/`analyze`/`build apk --debug` stay green today without depending on
+> F-006 existing yet. client-security skill checklist walked (in-memory access token only,
+> keychain-only refresh token, retry-once with the change-password carve-out above, clear-on-logout
+> asserted by test, no tokens logged, no raw HTML rendering) — `security-reviewer` pass on this ★
+> diff is still outstanding before merge (WEB_TEAM §3.6), same as web's T-001-16.
+> **Web fix 2026-07-06 (T-001-16 ★, cross-platform bug closed):** applied the web-side twin of
+> the mobile fix flagged above. `apps/web/src/lib/auth-client.ts`'s `requestWithRefresh` gained an
+> optional `isAuthExpiry(res: Response) => boolean | Promise<boolean>` parameter (default: every
+> 401 is auth-expiry — unchanged behavior for `getSessions`/`logoutAll`), mirroring
+> `apps/mobile/lib/auth/auth_client.dart`'s per-call `isAuthExpiry` predicate. `changePassword` now
+> passes `isChangePasswordAuthExpiry`, which reads the (cloned) response body and returns `false`
+> when `error.code === "INVALID_CREDENTIALS"` (api-spec §2.7's documented wrong-current-password
+> outcome) — that 401 is now returned as-is (no silent refresh, no token wipe, no
+> `SessionExpiredError`), while a bare/code-less 401 (genuine access-token expiry) still
+> silent-refreshes + retries once as before. No contract change needed: §2.7/§3 already put a
+> machine-readable `code` in the `{ error: { code, message } }` envelope on every `/auth/*` error,
+> including this 401 — the bug was purely a client-side gap (web never had an `isAuthExpiry` seam
+> at all), not a wire-shape ambiguity. New tests: `auth-client.change-password-401.test.ts` (4
+> cases — wrong-current-password surfaces the domain `ApiError` with 0 refresh calls + token
+> untouched; genuine-expiry 401 still refreshes+retries+succeeds; genuine-expiry 401 that persists
+> after refresh throws `SessionExpiredError`; a domain-401 on the *retried* call is still surfaced,
+> not misreported as session-expiry) + 4 new cases in `auth-client.retry.test.ts` covering the
+> `isAuthExpiry` parameter at the `requestWithRefresh` orchestration level directly. Full web suite:
+> **18 test files / 129 tests passing** (up from 121); `pnpm --filter web lint|typecheck|test` all
+> exit 0. `ChangePasswordForm.tsx`/`error-messages.ts` needed no changes — they already handled an
+> `ApiError` with `code: "INVALID_CREDENTIALS"` correctly (that test was mocking `changePassword`
+> directly, which is why it passed despite the underlying `requestWithRefresh` bug — the gap was
+> only reachable through the real fetch/401 path, now covered by the new tests above).
+> **Mobile ★ client-security review fixes 2026-07-06 (T-001-17, apps/mobile only — no web/api/contract
+> changes):** applied the merge-worthy items from the fable client-security review of T-001-17;
+> M-2 (cold-start restore) and wipe-keychain-on-pre-auth are explicitly **DEFERRED to F-006** by
+> decision (F-006 owns app bootstrap/cold-start, out of scope for this standalone screens task) —
+> not implemented here. Applied:
+> - **M-1 (single-flight refresh had no test):** added 2 new cases to `auth_client_test.dart`
+>   mirroring web's T-001-16 concurrent-401 test — 3 concurrent `silentRefresh()` callers share
+>   EXACTLY ONE `POST /auth/refresh` (asserted via `capturedRequests`, using a new
+>   `FakeHttpClientAdapter.enqueueGated()` completer-gated slot so the assertion happens while the
+>   refresh is genuinely still in flight, plus a `pumpEventQueue()` to let Dio's async pipeline
+>   actually reach the adapter before asserting) and the live session is rotated (not wiped); a
+>   second, later (non-concurrent) call fires a fresh refresh once the first one has settled.
+> - **M-3 (`auth_client_factory.dart` defaulted to the generated client's cleartext
+>   `http://localhost:3000`):** `createAuthClient` now takes a **required** `baseUrl` (no
+>   hardcoded/implicit prod default) and calls a new pure `guardBaseUrlForRelease(baseUrl,
+>   {isRelease = kReleaseMode})` helper that throws `ArgumentError` when `isRelease` is true and
+>   `baseUrl` doesn't start with `https://` — plaintext is only tolerated outside release builds
+>   (local dev). Extracted as a standalone pure function (not inlined behind the real
+>   `kReleaseMode` const) specifically so it's unit-testable — `flutter test` itself always runs
+>   in debug mode, so the real const can't be flipped from a test. `lib/main.dart` (the standalone
+>   T-000-09/T-001-17 proof shell, debug-only) updated to pass an explicit local
+>   `http://localhost:3000` dev URL. Real per-environment (staging/prod https) URLs are left to
+>   F-006/devops — this task only ships the seam + the guard. New
+>   `test/auth/auth_client_factory_test.dart` (3 cases).
+> - **L-1 (`flutter_secure_storage` implicit defaults):** `secure_storage.dart`'s
+>   `FlutterSecureStorageAdapter` now constructs `FlutterSecureStorage` with explicit
+>   `AndroidOptions(encryptedSharedPreferences: true)` (Keystore-backed
+>   `EncryptedSharedPreferences`, not the legacy plain-prefs-plus-wrapped-key path) and
+>   `IOSOptions(accessibility: KeychainAccessibility.first_unlock_this_device)` (readable only
+>   after first unlock since boot, never migrates via an encrypted backup to a different device —
+>   a refresh token should not resurrect on a restored/different device). Doc comment updated to
+>   describe what's actually configured instead of the plugin's un-stated defaults. Also set
+>   `android:allowBackup="false"` (+ `android:fullBackupContent="false"` defensively for Android
+>   12+ Auto Backup) on the main `android/app/src/main/AndroidManifest.xml` so the encrypted
+>   keystore blob is excluded from device/cloud backups.
+> - **L-2 (`_doRefresh` could rewrite a rotated token into storage after a logout wiped it):**
+>   added a monotonically-bumped `_logoutEpoch` int on `AuthClient`, captured at the start of
+>   `_doRefresh` and re-checked right before persisting the rotated pair (both on the 200 success
+>   path and before the dead-session wipe on a 401). `logoutDevice` (current-device path) and
+>   `logoutAll` now go through a new `_wipeForLogout()` helper that bumps the epoch and calls
+>   `TokenStore.clearAll()` together, so a refresh that resolves after an intervening logout
+>   observes the epoch has moved and skips writing — it neither resurrects the wiped refresh
+>   token nor stomps the in-memory access token back in. New test in `auth_client_test.dart`:
+>   starts a gated (held-open) `silentRefresh()`, calls `logoutDevice()` while it's still pending
+>   (wiping storage), THEN resolves the stale refresh with a rotated pair — asserts the refresh
+>   reports `false` and storage stays wiped (`accessToken` null, refresh token null).
+>
+> M-2/L-3/L-4/L-5 from the same review are **out of scope here by decision** (deferred to F-006);
+> the `changePassword` `isAuthExpiry` predicate was reviewed and left unchanged (already correct
+> per the note above). Result: `fvm flutter analyze` → **0 issues**; `fvm flutter test` →
+> **104/104 passing** (up from 98 — +6: 3 in the new `auth_client_factory_test.dart`, +3 in
+> `auth_client_test.dart` for M-1/L-2). No `apps/web`, `apps/api`, or contract files touched.
 
 ## backend-api
 
@@ -164,7 +306,7 @@
 | -------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------- | --------------------------------------------- | ------------------ | ------ | ---------- |
 | T-001-15 | web auth screens + components — signup, login (+throttle countdown), help, sessions, change-password; states + i18n `auth.*`; consume generated client (ห้าม reshape) | ux-wireframe · ui.md → `apps/web`             | T-001-09, T-001-10 | done   | frontend    |
 | T-001-16 | ★ web token/cookie refresh flow — httpOnly cookie refresh, access in-memory, silent refresh on 401 + retry-once, `X-CSRF-Token`                                       | api-spec §0 · ux-wireframe §7 → `apps/web`    | T-001-09           | done   | frontend    |
-| T-001-17 | ★ mobile auth + secure storage — Flutter screens + refresh ใน Keychain/Keystore, body-transport refresh loop, clear-on-logout (ประสาน F-006)                          | ux-wireframe §8 · api-spec §0 → `apps/mobile` | T-001-09, T-001-10 | todo   | —          |
+| T-001-17 | ★ mobile auth + secure storage — Flutter screens + refresh ใน Keychain/Keystore, body-transport refresh loop, clear-on-logout (ประสาน F-006)                          | ux-wireframe §8 · api-spec §0 → `apps/mobile` | T-001-09, T-001-10 | done   | frontend    |
 
 ## qa
 

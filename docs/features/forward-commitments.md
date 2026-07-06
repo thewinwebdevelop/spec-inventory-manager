@@ -146,3 +146,12 @@ F-000 final whole-branch review (2026-07-05): AC3 (api `/health`+web 200+flutter
 | Dart OpenAPI client **green/compile**                                          | **F-006** (mobile shell)       | F-000 wire Dart codegen pipeline (AC11)                        |
 | Object storage **concrete backend** (local/minio → prod)                       | **F-040** (attachment)         | F-000 วาง stub interface + org-prefix seam                     |
 | **transaction+ledger write primitive** (write-in-tx + StockMovement) — กฎทอง 5 | **F-011** (inventory + ledger) | F-000 วาง trigger (AC8) + schema; helper define ตอน write จริง |
+
+## → deferred จาก F-001 (D-021 · mobile ★ client-security review 2026-07-06)
+
+| สิ่งที่เลื่อน                                                                                     | ปลายทาง build            | seam ที่ F-001 วางแล้ว                                                        |
+| ------------------------------------------------------------------------------------------------- | ------------------------ | ----------------------------------------------------------------------------- |
+| **mobile cold-start silent-refresh restore** (ปิด US-3 "คงล็อกอิน" ข้าม app restart · M-2)        | **F-006** (mobile shell) | `main.dart` เป็น F-006 bootstrap seam; `TokenStore` keychain + `AuthClient.silentRefresh` พร้อมเรียกตอน startup |
+| **per-env mobile API base URL injection** (M-3 — F-001 วาง https-in-release guard + required-param seam แล้ว; ค่า per-env = devops) | **F-006** + devops       | `auth_client_factory` รับ base URL param + assert https ใน release            |
+| release `AndroidManifest` เพิ่ม `INTERNET` permission (main manifest — F-000 heritage)            | **F-006**                | debug manifest มีแล้ว                                                          |
+| transient-refresh-failure distinct signal (L-3) · mobile current-device row (L-4) · FLAG_SECURE บนจอรหัส (L-5) | **F-006**                | auth_client wipe-preserve-on-transient logic + session-list widget พร้อม extend |

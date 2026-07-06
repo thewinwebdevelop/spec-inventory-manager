@@ -1,61 +1,58 @@
 import 'package:flutter/material.dart';
 
-// T-000-09 — proves apps/mobile consumes the generated OpenAPI Dart client
-// (T-000-07) from the api_client sibling package. Scope is "wired", not "feature complete":
-// this placeholder only imports a generated type so the client is a real
-// compile-time dependency, not a fabricated shape (see
-// docs/features/F-000/architecture.md §4.3 — the client's *.g.dart companions
-// are generated and committed in F-000 itself; D-015 superseded the original
-// F-006/D-004 "green later" deferral after the nested-package language-version
-// conflict forced an immediate fix. Full feature-level usage of the client
-// beyond this wiring proof is still F-006's job).
-import 'package:omnistock_api_client/omnistock_api_client.dart';
+import 'auth/auth_client_factory.dart';
+import 'auth/auth_flow.dart';
+import 'auth/screens/security_screen.dart';
+import 'theme/app_theme.dart';
+
+// T-001-17 — real F-001 auth screens (signup/login/help/security), replacing
+// the F-000 placeholder shell. Still proves apps/mobile consumes the
+// generated OpenAPI Dart client (package:omnistock_api_client) — now via
+// real typed usage throughout lib/auth/** (AuthApi, LoginRequest,
+// TokenResponse, Session, ...), not just a single enum reference.
+//
+// F-006 integration seam (see lib/auth/auth_flow.dart doc comment): this
+// `main()` is a *standalone* runnable proof, not the final app shell — F-006
+// owns real navigation/IA and should wire `createAuthClient()` +
+// `AuthFlow`/`SecurityScreen` into its own bootstrap rather than depend on
+// this particular `MaterialApp`.
+//
+// T-001-17 ★ (M-3): `createAuthClient` requires an explicit `baseUrl` (no
+// hardcoded prod default) and rejects a non-https base URL outside debug
+// builds. This placeholder shell only ever runs in debug (`fvm flutter run`/
+// `flutter test`), so the plain-http local dev server is fine here; F-006
+// owns picking the real per-environment (staging/prod https) URL.
+const _devBaseUrl = 'http://localhost:3000';
 
 void main() {
   runApp(const OmniStockApp());
 }
 
-/// Placeholder root widget. No real screens/navigation/state in F-000 — see
-/// docs/features/F-000/tasks.md T-000-09 scope note.
-class OmniStockApp extends StatelessWidget {
+class OmniStockApp extends StatefulWidget {
   const OmniStockApp({super.key});
+
+  @override
+  State<OmniStockApp> createState() => _OmniStockAppState();
+}
+
+class _OmniStockAppState extends State<OmniStockApp> {
+  late final _authClient = createAuthClient(baseUrl: _devBaseUrl);
+  bool _authenticated = false;
 
   @override
   Widget build(BuildContext context) {
     return MaterialApp(
       title: 'OmniStock',
-      theme: ThemeData(
-        colorScheme: ColorScheme.fromSeed(seedColor: Colors.deepPurple),
-        useMaterial3: true,
-      ),
-      home: const _ShellPage(),
-    );
-  }
-}
-
-class _ShellPage extends StatelessWidget {
-  const _ShellPage();
-
-  /// References the generated client's [HealthResponseStatusEnum] purely to
-  /// keep the import a real, type-checked reference (not just an unused
-  /// import) — see the file-level note above. This placeholder only reads the
-  /// enum; it does not exercise a full [HealthResponse] builder round-trip
-  /// (that belongs to F-006's feature work), but the `.g.dart` (built_value
-  /// codegen) output IS generated and committed as of F-000 (D-015).
-  String _describeWiring() => HealthResponseStatusEnum.ok.name;
-
-  @override
-  Widget build(BuildContext context) {
-    final wiredStatus = _describeWiring();
-    return Scaffold(
-      appBar: AppBar(title: const Text('OmniStock')),
-      body: Center(
-        child: Text(
-          'apps/mobile placeholder shell\n'
-          'generated client wired (HealthResponseStatusEnum: $wiredStatus)',
-          textAlign: TextAlign.center,
-        ),
-      ),
+      theme: buildAppTheme(),
+      home: _authenticated
+          ? SecurityScreen(
+              authClient: _authClient,
+              onSessionExpired: () => setState(() => _authenticated = false),
+            )
+          : AuthFlow(
+              authClient: _authClient,
+              onAuthenticated: () => setState(() => _authenticated = true),
+            ),
     );
   }
 }
