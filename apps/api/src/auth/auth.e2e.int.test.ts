@@ -440,8 +440,13 @@ d("prod-path security wiring (trust proxy 0 + CORS allow-list)", () => {
     // is the socket peer (same loopback) for both → they share ONE ip bucket, so
     // the counter increments across both. If XFF were trusted, each spoofed IP
     // would get its own bucket (counter would reset), which is the bypass.
-    await request(server).post("/auth/signup").set("Content-Type", "application/json").set("X-Forwarded-For", "1.2.3.4").send({ email: "no1@x", password: "short" });
-    await request(server).post("/auth/signup").set("Content-Type", "application/json").set("X-Forwarded-For", "5.6.7.8").send({ email: "no2@x", password: "short" });
+    // Emails must be VALID so the request passes the ValidationPipe and reaches
+    // the handler, where throttle.checkIp(ip) records the IP bucket (an invalid
+    // email 422s before the handler, so no bucket would be written). The password
+    // strength is irrelevant here — checkIp runs before the policy check.
+    const spoofBase = Date.now();
+    await request(server).post("/auth/signup").set("Content-Type", "application/json").set("X-Forwarded-For", "1.2.3.4").send({ email: `spoof-${spoofBase}-1@example.com`, password: STRONG_PW });
+    await request(server).post("/auth/signup").set("Content-Type", "application/json").set("X-Forwarded-For", "5.6.7.8").send({ email: `spoof-${spoofBase}-2@example.com`, password: STRONG_PW });
     // Both requests hit the SAME ip bucket → count == 2 under one key.
     const ipKeys = await redis.keys("throttle:ip:*");
     expect(ipKeys.length).toBe(1); // a single bucket, not one-per-spoofed-IP
