@@ -23,7 +23,6 @@ export {
 export {
   isBreachedPassword,
   loadCommonPasswords,
-  fixturePath,
   FIXTURE_VERSION,
 } from "./common-passwords";
 

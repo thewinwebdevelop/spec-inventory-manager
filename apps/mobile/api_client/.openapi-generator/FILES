@@ -47,17 +47,3 @@ lib/src/model/signup_response.dart
 lib/src/model/token_response.dart
 lib/src/serializers.dart
 pubspec.yaml
-test/admin_reset_request_test.dart
-test/auth_api_test.dart
-test/change_password_request_test.dart
-test/error_response_error_test.dart
-test/error_response_test.dart
-test/login_request_test.dart
-test/logout_request_test.dart
-test/ok_response_test.dart
-test/refresh_request_test.dart
-test/session_test.dart
-test/sessions_response_test.dart
-test/signup_request_test.dart
-test/signup_response_test.dart
-test/token_response_test.dart

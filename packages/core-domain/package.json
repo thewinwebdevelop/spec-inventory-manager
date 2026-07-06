@@ -5,7 +5,7 @@
   "main": "dist/index.js",
   "types": "dist/index.d.ts",
   "scripts": {
-    "build": "tsc -p tsconfig.json && node scripts/copy-fixtures.mjs",
+    "build": "tsc -p tsconfig.json",
     "lint": "eslint \"src/**/*.{ts,tsx}\" --ignore-pattern \"src/__purity_fixtures__/**\"",
     "typecheck": "tsc -p tsconfig.json --noEmit",
     "test": "vitest run",

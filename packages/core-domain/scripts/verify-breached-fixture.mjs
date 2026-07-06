@@ -10,6 +10,7 @@ import { dirname, join } from "node:path";
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const FIXTURE = join(__dirname, "..", "src", "auth", "fixtures", "common-passwords-top10k.txt");
 const SOURCE = join(__dirname, "..", "src", "auth", "fixtures", "SOURCE.md");
+const MODULE = join(__dirname, "..", "src", "auth", "common-passwords.generated.ts");
 const PINNED = "88864c6d9b2cb4f3bdace56acaf467989def9f1a7edce6bcc2a211f164673de7";
 
 function sha(buf) {
@@ -36,13 +37,24 @@ check(committedSha === PINNED, `committed SHA-256 ${committedSha} != pinned ${PI
 const sourceMd = readFileSync(SOURCE, "utf8");
 check(sourceMd.includes(PINNED), "SOURCE.md must record the pinned SHA-256");
 
-// Reproducibility: regen into a temp buffer via the generator's own logic by
-// re-running it and comparing. (The generator writes in place; we snapshot,
-// regen, compare, restore.)
-const before = readFileSync(FIXTURE);
+// The generated .ts data module (imported by core-domain at runtime) must embed
+// exactly the committed .txt body — otherwise the pure module and the pinned
+// source could silently diverge.
+const moduleSrc = readFileSync(MODULE, "utf8");
+check(
+  moduleSrc.includes(JSON.stringify(committed.toString("utf8"))),
+  "common-passwords.generated.ts does not embed the committed fixture body verbatim — run gen:fixture",
+);
+
+// Reproducibility: re-run the generator (writes both the .txt and the .ts in
+// place) and assert BOTH outputs are byte-identical to what's committed.
+const beforeTxt = readFileSync(FIXTURE);
+const beforeModule = readFileSync(MODULE);
 execFileSync("node", [join(__dirname, "gen-breached-fixture.mjs")], { stdio: "ignore" });
-const after = readFileSync(FIXTURE);
-check(before.equals(after), "generator is not reproducible — regen produced a different file");
+const afterTxt = readFileSync(FIXTURE);
+const afterModule = readFileSync(MODULE);
+check(beforeTxt.equals(afterTxt), "generator is not reproducible — regen produced a different .txt");
+check(beforeModule.equals(afterModule), "generator is not reproducible — regen produced a different .generated.ts");
 
 if (!ok) process.exit(1);
 // eslint-disable-next-line no-console

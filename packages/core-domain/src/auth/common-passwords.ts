@@ -6,14 +6,13 @@
 // SHA-256; FIXTURE_VERSION below is asserted by the unit test (U1.3) so a
 // silent fixture swap is caught.
 //
-// Reading the file with `readFileSync` at module load is the ONE fs touch in
-// core-domain — it is a build-time-committed asset, not I/O against a live
-// system, and it is synchronous + deterministic (no DB, no network, no clock),
-// so it does not violate the "pure, framework-free" spirit of golden rule #6
-// (the policy fns that consume it are pure). The dependency-cruiser purity gate
-// forbids DB/framework imports, not reading a committed data file.
-import { existsSync, readFileSync } from "node:fs";
-import { join } from "node:path";
+// The fixture is imported as a PURE, committed data module
+// (`common-passwords.generated.ts`, produced from the SHA-pinned .txt by
+// scripts/gen-breached-fixture.mjs). core-domain must stay framework/fs-free
+// (golden rule #6) and build under a tsc with no Node types, so there is NO
+// `node:fs`/`__dirname` read here — the data is a plain string constant the
+// bundler/tsc resolves like any other import.
+import { COMMON_PASSWORDS_RAW } from "./common-passwords.generated";
 
 /**
  * Pinned fixture version — must match SOURCE.md's "Version / date". Bumping the
@@ -22,33 +21,18 @@ import { join } from "node:path";
  */
 export const FIXTURE_VERSION = "v1";
 
-/** Absolute path to the committed fixture (top-10k common passwords).
- *  Uses CJS `__dirname` (this package compiles to CommonJS) so the path
- *  resolves under vitest (ts source, `src/auth`). When compiled to
- *  `dist/auth`, the build copies the `fixtures/` dir alongside (see the
- *  `build` script), so `__dirname/fixtures` resolves there too; as a
- *  belt-and-braces fallback we also probe the `src` sibling so a partial
- *  build never fails the lookup. */
-export function fixturePath(): string {
-  const local = join(__dirname, "fixtures", "common-passwords-top10k.txt");
-  if (existsSync(local)) return local;
-  // Fallback: from dist/auth → ../../src/auth/fixtures (source of truth).
-  const fromSrc = join(__dirname, "..", "..", "src", "auth", "fixtures", "common-passwords-top10k.txt");
-  return fromSrc;
-}
-
 let cached: ReadonlySet<string> | null = null;
 
 /**
- * The breached/common-password set (lowercased entries). Loaded once and
- * cached. Entries are compared case-insensitively by the policy (it lowercases
- * the candidate first), matching how the fixture is stored (all lowercase).
+ * The breached/common-password set (lowercased entries). Parsed once from the
+ * committed data module and cached. Entries are compared case-insensitively by
+ * the policy (it lowercases the candidate first), matching how the fixture is
+ * stored (all lowercase).
  */
 export function loadCommonPasswords(): ReadonlySet<string> {
   if (cached) return cached;
-  const raw = readFileSync(fixturePath(), "utf8");
   const set = new Set<string>();
-  for (const line of raw.split("\n")) {
+  for (const line of COMMON_PASSWORDS_RAW.split("\n")) {
     const p = line.trim();
     if (p.length > 0) set.add(p);
   }
