@@ -219,9 +219,11 @@
 > only reachable through the real fetch/401 path, now covered by the new tests above).
 > **Mobile ★ client-security review fixes 2026-07-06 (T-001-17, apps/mobile only — no web/api/contract
 > changes):** applied the merge-worthy items from the fable client-security review of T-001-17;
-> M-2 (cold-start restore) and wipe-keychain-on-pre-auth are explicitly **DEFERRED to F-006** by
-> decision (F-006 owns app bootstrap/cold-start, out of scope for this standalone screens task) —
-> not implemented here. Applied:
+> M-2 (cold-start restore) and wipe-keychain-on-pre-auth were initially DEFERRED to F-006 — **but
+> that deferral was REVERSED by D-022 (user): M-2 cold-start restore + INTERNET perm + L-3/L-4/L-5
+> are now IMPLEMENTED in F-001** (`auth_bootstrap.dart` at the F-006 seam; 127/127 tests; ★ re-reviewed).
+> US-3 mobile = complete. Only per-env base-URL VALUES remain with devops. Below is the earlier
+> (M-1/M-3/L-1/L-2) slice; the D-022 slice is documented in the T-001-17 note further down. Applied:
 > - **M-1 (single-flight refresh had no test):** added 2 new cases to `auth_client_test.dart`
 >   mirroring web's T-001-16 concurrent-401 test — 3 concurrent `silentRefresh()` callers share
 >   EXACTLY ONE `POST /auth/refresh` (asserted via `capturedRequests`, using a new

@@ -204,6 +204,12 @@ concurrency answer are all correct and should be preserved. The blocking concern
   (conflicts with the scoped path). Given `SameSite=Strict` is the primary defense, accept —
   but at least spec `omni_csrf` as `Secure; SameSite=Strict; Path=/auth` and note the
   trade-off. *(Owner: @backend-api)*
+  > **SUPERSEDED by D-019 (2026-07-06):** `omni_csrf` is now shipped at `Path=/` (widened so
+  > `document.cookie` is readable from app pages). That makes the `__Host-omni_csrf` prefix — which
+  > requires `Path=/` + `Secure` + no `Domain` — now **viable**, closing the subdomain-takeover
+  > double-submit weakness above. **Minor hardening follow-up (@backend-api):** rename the CSRF
+  > cookie to `__Host-omni_csrf`. Not an F-001 blocker (`SameSite=Strict` still primary); logged so
+  > the opportunity D-019 opened isn't lost.
 
 ### L-2 [Low] No explicit `Content-Type: application/json` / Origin enforcement on auth POSTs — leaves login-CSRF residue
 - `/auth/login` has (and can have) no CSRF token; a cross-site form-POST could log the
