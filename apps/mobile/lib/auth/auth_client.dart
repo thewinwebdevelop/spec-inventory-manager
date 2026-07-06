@@ -231,8 +231,14 @@ class AuthClient {
       );
       final body = res.data;
       if (body == null) {
-        await _tokenStore.clearAll();
-        return RefreshOutcome.sessionExpired;
+        // D-022 ★ re-review fix (Minor #5): a 200 status with no/unparseable
+        // body is a broken proxy/CDN symptom (malformed success), NOT the
+        // server's documented dead-refresh-token signal (that's a real 401,
+        // handled below). Treat it the same as network/5xx/429: leave
+        // storage untouched and let the caller offer retry — wiping a
+        // possibly-still-live session over a malformed 200 would be strictly
+        // worse than a spurious retry prompt.
+        return RefreshOutcome.transientFailure;
       }
       if (_logoutEpoch != epochAtStart) {
         // A logout happened while this refresh was in flight — storage was

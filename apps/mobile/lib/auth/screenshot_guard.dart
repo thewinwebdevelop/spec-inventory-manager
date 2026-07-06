@@ -1,4 +1,5 @@
 import 'package:flutter/services.dart';
+import 'package:flutter/widgets.dart';
 
 /// T-001-17 ★ (L-5) — screenshot/app-switcher-snapshot protection for the
 /// password-entry screens (login, signup, change-password). client-security
@@ -57,6 +58,21 @@ class ScreenshotGuardScope {
 
   static int _refCount = 0;
 
+  // D-022 ★ re-review fix (Minor #3 — FLAG_SECURE across activity
+  // recreation): `enable()` is normally only invoked on the 0->1 refcount
+  // transition. On Android, an activity recreation (config change, or the
+  // OS reclaiming/recreating the Activity while the process survives) gets a
+  // brand-new `Window` that does NOT inherit the previous window's
+  // `FLAG_SECURE` — if a password screen stays mounted across that
+  // recreation (refcount never drops to 0, so `acquire()` is never called
+  // again), the new window is left unprotected. This one process-wide
+  // `WidgetsBindingObserver` re-invokes `ScreenshotGuard.enable()` whenever
+  // the app returns to `resumed` while `_refCount > 0`, which is exactly the
+  // point a recreated Activity/Window becomes current again — cheap,
+  // idempotent (native `enable` just re-sets a flag that's already correct
+  // in the no-recreation case), and requires no widget in the tree.
+  static _ScreenshotGuardLifecycleObserver? _observer;
+
   /// Increments the ref count, enabling the native guard on the 0->1
   /// transition. Returns a release callback — call it exactly once (e.g.
   /// from `dispose()`); calling it more than once is a no-op past 0 (never
@@ -67,6 +83,7 @@ class ScreenshotGuardScope {
       // Fire-and-forget: initState/dispose are synchronous; the native call
       // itself is async best-effort (see ScreenshotGuard._invoke).
       ScreenshotGuard.enable();
+      _observer ??= _ScreenshotGuardLifecycleObserver()..attach();
     }
     var released = false;
     return () {
@@ -76,6 +93,8 @@ class ScreenshotGuardScope {
       if (_refCount <= 0) {
         _refCount = 0;
         ScreenshotGuard.disable();
+        _observer?.detach();
+        _observer = null;
       }
     };
   }
@@ -84,5 +103,26 @@ class ScreenshotGuardScope {
   /// isolate, so the static ref count must not leak between tests.
   static void resetForTest() {
     _refCount = 0;
+    _observer?.detach();
+    _observer = null;
+  }
+}
+
+/// D-022 (Minor #3): re-enables the native screenshot guard whenever the app
+/// comes back to [AppLifecycleState.resumed] while a password screen is
+/// still mounted (`_refCount > 0`) — covers an Android activity recreation
+/// (new `Window`, so a fresh, unprotected `FLAG_SECURE` state) that a plain
+/// refcount 0->1 transition would never observe, since the refcount never
+/// changed across the recreation.
+class _ScreenshotGuardLifecycleObserver with WidgetsBindingObserver {
+  void attach() => WidgetsBinding.instance.addObserver(this);
+
+  void detach() => WidgetsBinding.instance.removeObserver(this);
+
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    if (state == AppLifecycleState.resumed && ScreenshotGuardScope._refCount > 0) {
+      ScreenshotGuard.enable();
+    }
   }
 }

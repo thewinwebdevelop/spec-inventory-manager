@@ -335,6 +335,55 @@
 > bootstrap-first boot sequence (now injects a fake `AuthClient`/`TokenStore` rather than touching
 > the real secure-storage channel). Result: `fvm flutter analyze` → **0 issues**; `fvm flutter test`
 > → **122/122 passing** (up from 104 — +18). No `apps/web`, `apps/api`, or contract files touched.
+>
+> **Mobile ★ D-022 re-review fixes 2026-07-06 (T-001-17, `apps/mobile` only — no web/api/contract
+> changes):** applied the 2 Important + 3 Minor items from the fable client-security re-review of
+> the cold-start/bootstrap code above (no Critical/merge-blocker found):
+> - **[Important] iOS app-switcher leak:** `ios/Runner/AppDelegate.swift` was covering the view only
+>   in `applicationDidEnterBackground`, which fires strictly AFTER the OS has already grabbed the
+>   app-switcher snapshot (that happens at `applicationWillResignActive`, the foreground-inactive
+>   transition) — a window existed where the switcher card could still show the password field. The
+>   overlay now goes up in `applicationWillResignActive` and comes down in
+>   `applicationDidBecomeActive` (the true "fully interactive again" hook, covers resign→become-active
+>   cycles that never actually background, e.g. Control Center). The existing
+>   `didEnterBackground`/`willEnterForeground` pair is kept as idempotent belt-and-braces. Native
+>   Swift — not exercised by `flutter analyze`/`flutter test` (no Xcode/iOS toolchain in this
+>   environment); reviewed by inspection, same `FlutterAppDelegate` override pattern as before.
+> - **[Important] bootstrap transient no-escape-hatch:** `BootstrapScreen`'s offline/retry state
+>   (L-3) offered only "retry", so a PERSISTENT non-401 failure (proxy 403, wrong base URL 404,
+>   contract drift 400) looped forever with no way out. Added a secondary action —
+>   `AuthTh.bootstrapOfflineUseLoginInstead` ("เข้าสู่ระบบด้วยรหัสผ่าน") — that reuses the existing
+>   `onNeedsLogin` callback (same transition `noSession`/`sessionExpired` already use) and does
+>   **NOT** touch the keychain: the refresh token already in storage is left alone (a successful
+>   password login overwrites it with a fresh pair anyway; the old family is server-side GC'able).
+>   **Copy flag for `ux`:** `bootstrapOfflineUseLoginInstead` is frontend-placeholder text, not a
+>   verbatim `ui.md` §3 entry (same caveat as L-4's `sessionsMobileCannotIdentifyCurrent`) — needs a
+>   `ux` copy pass before this is considered final.
+> - **[Minor] Android FLAG_SECURE across activity recreation:** `enable()` previously only fired on
+>   the refcount 0→1 transition — an activity recreation (config change / OS-recreated Activity)
+>   gets a brand-new `Window` that does not inherit the old `FLAG_SECURE`, and if a password screen
+>   stays mounted across that recreation the refcount never changes, so the new window was left
+>   unprotected. `ScreenshotGuardScope` now attaches a process-wide `WidgetsBindingObserver` on the
+>   0→1 transition (detached on the last release) that re-invokes `ScreenshotGuard.enable()` whenever
+>   the app returns to `AppLifecycleState.resumed` while `_refCount > 0`.
+> - **[Minor] bootstrap callbacks fire-exactly-once:** `BootstrapScreenState` gained a `_decided`
+>   guard so `onRestored`/`onNeedsLogin` (and the new escape-hatch callback) can only ever fire once
+>   per screen instance — protects the F-006 `Navigator` caller from a double route-transition if two
+>   retries (or a retry + the escape hatch) both resolve to a terminal outcome.
+> - **[Minor] 200-with-empty-body should be transient, not a wipe:** `AuthClient._doRefresh` treated
+>   ANY unparseable/empty response body on `/auth/refresh` (`res.data == null`) as
+>   `RefreshOutcome.sessionExpired` (wipe), conflating the documented dead-refresh-token signal (a
+>   real 401) with a broken proxy/CDN returning a malformed 200. Now classified as
+>   `RefreshOutcome.transientFailure` — storage is left untouched, matching the existing
+>   network/5xx/429 handling right below it.
+>
+> New tests (all `fvm flutter test`, no new native/platform test harness needed): 1 in
+> `auth_client_test.dart` (200-empty-body → transientFailure, refresh token survives), 2 in
+> `bootstrap_screen_test.dart` (escape-hatch routes to login without wiping the keychain; `_decided`
+> guard — two rapid retries resolving to a terminal outcome fire `onRestored` exactly once), 2 in
+> `screenshot_guard_test.dart` (resumed-while-acquired re-invokes `enable`; resumed-while-refCount-0
+> is a no-op). Result: `fvm flutter analyze` → **0 issues**; `fvm flutter test` → **127/127 passing**
+> (up from 122 — +5). No `apps/web`, `apps/api`, or contract files touched.
 
 ## backend-api
 

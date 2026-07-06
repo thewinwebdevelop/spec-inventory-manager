@@ -167,4 +167,90 @@ void main() {
 
     expect(restored, isTrue);
   });
+
+  testWidgets(
+      'D-022 ★ re-review Important #2: offline/retry state offers an escape hatch to '
+      'login WITHOUT wiping the keychain', (tester) async {
+    final adapter = FakeHttpClientAdapter();
+    // A persistent transient failure (e.g. a proxy 403 that never recovers)
+    // — the point of the escape hatch is the user is never stuck here.
+    adapter.enqueue(FakeResponse(statusCode: 403, jsonBody: null));
+    final tokenStore = TokenStore(secureStorage: FakeSecureStorage());
+    await tokenStore.setRefreshToken('old-refresh');
+    final client = buildClient(adapter, tokenStore: tokenStore);
+    var neededLogin = false;
+    var restored = false;
+
+    await tester.pumpWidget(MaterialApp(
+      home: BootstrapScreen(
+        authClient: client,
+        onRestored: () => restored = true,
+        onNeedsLogin: () => neededLogin = true,
+      ),
+    ));
+    await tester.pump(const Duration(milliseconds: 10));
+    await tester.pump(const Duration(milliseconds: 10));
+
+    expect(find.text('เชื่อมต่อไม่สำเร็จ'), findsOneWidget);
+    expect(find.text('เข้าสู่ระบบด้วยรหัสผ่าน'), findsOneWidget);
+
+    await tester.tap(find.text('เข้าสู่ระบบด้วยรหัสผ่าน'));
+    await tester.pump();
+
+    expect(neededLogin, isTrue);
+    expect(restored, isFalse);
+    // Critically: the keychain refresh token must NOT be wiped by taking the
+    // escape hatch — a successful password login overwrites it with a fresh
+    // pair anyway, and the old family is server-side GC'able.
+    expect(await tokenStore.getRefreshToken(), 'old-refresh');
+  });
+
+  testWidgets(
+      'D-022 ★ re-review Minor #4: _decided guard — two rapid retry taps that both '
+      'resolve to a terminal outcome fire onRestored exactly once', (tester) async {
+    final adapter = FakeHttpClientAdapter();
+    adapter.enqueue(FakeResponse(statusCode: 503, jsonBody: null));
+    final tokenStore = TokenStore(secureStorage: FakeSecureStorage());
+    await tokenStore.setRefreshToken('old-refresh');
+    final client = buildClient(adapter, tokenStore: tokenStore);
+    var restoredCount = 0;
+
+    await tester.pumpWidget(MaterialApp(
+      home: BootstrapScreen(
+        authClient: client,
+        onRestored: () => restoredCount++,
+        onNeedsLogin: () {},
+      ),
+    ));
+    await tester.pump(const Duration(milliseconds: 10));
+    await tester.pump(const Duration(milliseconds: 10));
+    expect(find.text('เชื่อมต่อไม่สำเร็จ'), findsOneWidget);
+
+    // Queue two successful responses — one for each rapid retry tap.
+    adapter.enqueue(FakeResponse(statusCode: 200, jsonBody: {
+      'accessToken': 'access-a',
+      'refreshToken': 'refresh-a',
+      'expiresIn': 900,
+      'tokenType': 'Bearer',
+    }));
+    adapter.enqueue(FakeResponse(statusCode: 200, jsonBody: {
+      'accessToken': 'access-b',
+      'refreshToken': 'refresh-b',
+      'expiresIn': 900,
+      'tokenType': 'Bearer',
+    }));
+
+    final state = tester.state<BootstrapScreenState>(find.byType(BootstrapScreen));
+    // Fire two retries back-to-back before either settles (simulates two
+    // rapid taps) — only the FIRST terminal resolution should ever reach
+    // onRestored.
+    final retry1 = state.retry();
+    final retry2 = state.retry();
+    await tester.pump(const Duration(milliseconds: 10));
+    await tester.pump(const Duration(milliseconds: 10));
+    await Future.wait([retry1, retry2]);
+    await tester.pump(const Duration(milliseconds: 10));
+
+    expect(restoredCount, 1);
+  });
 }

@@ -364,6 +364,28 @@ void main() {
       expect(tokenStore.accessToken, isNull);
       expect(await tokenStore.getRefreshToken(), isNull);
     });
+
+    test(
+        'D-022 ★ re-review Minor #5: a 200 with an empty/unparseable body (broken '
+        'proxy/CDN) classifies as transientFailure, NOT sessionExpired — storage is '
+        'left untouched, not wiped', () async {
+      final adapter = FakeHttpClientAdapter();
+      // A malformed 200 — status says success but there is no body to
+      // deserialize into a TokenResponse, so `res.data` comes back null. This
+      // must NOT be treated the same as the documented 401 dead-refresh-token
+      // signal.
+      adapter.enqueue(FakeResponse(statusCode: 200, jsonBody: null));
+      final tokenStore = await loggedInStore();
+      final client = buildClient(adapter, tokenStore: tokenStore);
+
+      final outcome = await client.silentRefreshDetailed();
+
+      expect(outcome, RefreshOutcome.transientFailure);
+      // The refresh token already in storage must survive — a malformed
+      // success response is not grounds to wipe a possibly-still-live
+      // session.
+      expect(await tokenStore.getRefreshToken(), 'refresh-1');
+    });
   });
 
   group('AuthClient.logoutDevice — clear-on-logout (client-security)', () {

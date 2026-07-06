@@ -47,6 +47,15 @@ class BootstrapScreen extends StatefulWidget {
 class BootstrapScreenState extends State<BootstrapScreen> {
   AuthBootstrapStatus _status = AuthBootstrapStatus.loading;
 
+  // D-022 ★ re-review fix (Minor #4): guards `onRestored`/`onNeedsLogin` so
+  // they fire AT MOST once per screen instance. Without this, two rapid
+  // retry taps (or a retry racing the initial `_run()`) could each run
+  // `runAuthBootstrap` to a terminal outcome and each call the terminal
+  // callback — F-006's Navigator caller only expects one route transition,
+  // and a double-fire (e.g. two `pushReplacement`s) is a caller-side bug
+  // this widget shouldn't be able to trigger.
+  var _decided = false;
+
   @override
   void initState() {
     super.initState();
@@ -54,16 +63,19 @@ class BootstrapScreenState extends State<BootstrapScreen> {
   }
 
   Future<void> _run() async {
+    if (_decided) return;
     setState(() => _status = AuthBootstrapStatus.loading);
     final result = await runAuthBootstrap(widget.authClient);
-    if (!mounted) return;
+    if (!mounted || _decided) return;
 
     switch (result) {
       case AuthBootstrapStatus.restored:
+        _decided = true;
         widget.onRestored();
         return;
       case AuthBootstrapStatus.noSession:
       case AuthBootstrapStatus.sessionExpired:
+        _decided = true;
         widget.onNeedsLogin();
         return;
       case AuthBootstrapStatus.transientFailure:
@@ -79,6 +91,21 @@ class BootstrapScreenState extends State<BootstrapScreen> {
   /// Exposed for tests / the retry button — re-runs the same one-shot
   /// bootstrap (never loops automatically; only on explicit user action).
   Future<void> retry() => _run();
+
+  /// D-022 (Important #2 — escape hatch): lets the user leave the
+  /// offline/retry loop and log in with a password instead of being stuck
+  /// forever on a persistent non-401 failure (broken proxy/CDN, wrong base
+  /// URL, contract drift). Deliberately reuses [onNeedsLogin] — it is the
+  /// SAME "go to the login flow" transition `noSession`/`sessionExpired`
+  /// already use, and critically does NOT touch storage: the refresh token
+  /// already in the keychain is simply left alone (a successful password
+  /// login overwrites it with a fresh pair anyway; the old token family is
+  /// server-side GC'able, so leaving it is not a security issue).
+  void _useLoginInstead() {
+    if (_decided) return;
+    _decided = true;
+    widget.onNeedsLogin();
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -102,6 +129,14 @@ class BootstrapScreenState extends State<BootstrapScreen> {
                         message: AuthTh.bootstrapOfflineBody,
                         onRetry: retry,
                         retryLabel: AuthTh.bootstrapOfflineRetry,
+                      ),
+                      const SizedBox(height: AppSpacing.s2),
+                      // D-022 (Important #2): escape hatch out of a
+                      // persistent (non-401) transient-failure loop — does
+                      // NOT wipe the keychain, see `_useLoginInstead`.
+                      TextButton(
+                        onPressed: _useLoginInstead,
+                        child: Text(AuthTh.bootstrapOfflineUseLoginInstead),
                       ),
                     ],
                   )

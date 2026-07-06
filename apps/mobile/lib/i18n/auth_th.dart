@@ -135,4 +135,11 @@ class AuthTh {
   static const bootstrapOfflineBody =
       'ตรวจสอบอินเทอร์เน็ตแล้วลองใหม่อีกครั้ง บัญชีของคุณยังเข้าสู่ระบบอยู่';
   static const bootstrapOfflineRetry = 'ลองใหม่';
+  // D-022 ★ re-review fix (Important #2 — escape hatch): secondary action on
+  // the offline/retry state so a PERSISTENT non-401 failure (broken
+  // proxy/CDN, wrong base URL, contract drift) doesn't trap the user in an
+  // infinite retry loop with no way forward. Placeholder copy — flagged for
+  // `ux` sign-off (docs/features/F-001/tasks.md T-001-17 note); not in the
+  // original ui.md §3 table.
+  static const bootstrapOfflineUseLoginInstead = 'เข้าสู่ระบบด้วยรหัสผ่าน';
 }

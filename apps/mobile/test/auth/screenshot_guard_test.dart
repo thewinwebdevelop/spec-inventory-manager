@@ -1,4 +1,5 @@
 import 'package:flutter/services.dart';
+import 'package:flutter/widgets.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 import 'package:mobile/auth/screenshot_guard.dart';
@@ -87,6 +88,38 @@ void main() {
       await pumpEventQueue();
 
       expect(calls, ['enable', 'disable']);
+    });
+
+    test(
+        'D-022 ★ re-review Minor #3: returning to resumed while a password screen is '
+        'still mounted re-invokes enable (covers an Android activity recreation that '
+        'gets a fresh, unprotected Window)', () async {
+      final release = ScreenshotGuardScope.acquire();
+      await pumpEventQueue();
+      expect(calls, ['enable']);
+
+      // Simulate the app lifecycle going away and coming back to `resumed`
+      // (e.g. an activity recreation) while the guarded screen is still
+      // mounted (refcount still > 0, so a plain acquire()/dispose() cycle
+      // never happens here).
+      TestWidgetsFlutterBinding.instance.handleAppLifecycleStateChanged(AppLifecycleState.inactive);
+      TestWidgetsFlutterBinding.instance.handleAppLifecycleStateChanged(AppLifecycleState.resumed);
+      await pumpEventQueue();
+
+      expect(calls, ['enable', 'enable']);
+
+      release();
+      await pumpEventQueue();
+      expect(calls, ['enable', 'enable', 'disable']);
+    });
+
+    test(
+        'a resumed lifecycle event with no acquired guard (refCount == 0) does NOT '
+        'invoke enable', () async {
+      TestWidgetsFlutterBinding.instance.handleAppLifecycleStateChanged(AppLifecycleState.resumed);
+      await pumpEventQueue();
+
+      expect(calls, isEmpty);
     });
   });
 }
