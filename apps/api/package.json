@@ -7,6 +7,7 @@
     "lint": "eslint \"src/**/*.{ts,tsx}\"",
     "typecheck": "tsc -p tsconfig.json --noEmit",
     "test": "vitest run",
+    "test:integration": "vitest run int.test",
     "dev": "tsx watch src/main.ts",
     "start": "node dist/main.js",
     "check-env": "tsx scripts/check-env.ts"

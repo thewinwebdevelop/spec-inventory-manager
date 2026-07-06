@@ -178,6 +178,15 @@ jobs:
     env:
       DATABASE_URL: postgresql://omnistock:omnistock@localhost:5432/omnistock_ci
       REDIS_URL: redis://localhost:6379
+      # The *.int.test.ts DB-backed suites gate on TEST_DATABASE_URL/TEST_REDIS_URL
+      # (skip otherwise). Point them at the same ephemeral service containers so
+      # the auth integration/E2E specs (HMAC-at-rest, rotation, committed-family
+      # revoke, cookie Set-Cookie paths, throttle-spoof, admin-reset, tenant
+      # isolation) actually RUN as a merge gate — not just the /health smoke.
+      # They use supertest in-memory (app.init(), no listen) so there is no port
+      # clash with the booted server above.
+      TEST_DATABASE_URL: postgresql://omnistock:omnistock@localhost:5432/omnistock_ci
+      TEST_REDIS_URL: redis://localhost:6379
       # CI-only placeholders — never real secrets (root CLAUDE.md constraint).
       # Satisfy packages/config's env schema (>=32 chars, must differ, F-001 I-4).
       JWT_ACCESS_SECRET: ci-access-secret-not-a-real-value-000000
@@ -196,8 +205,12 @@ jobs:
           node-version-file: ".nvmrc"
       - uses: pnpm/action-setup@v4
       - run: pnpm install --frozen-lockfile
-      - name: build workspace deps (api needs core-domain/db/contracts/config built)
-        run: pnpm turbo build --filter=api^...
+      - name: build api + its workspace deps (start runs node dist/main.js)
+        # `--filter=api` (not `api^...`) so apps/api ITSELF is built, not just its
+        # deps — the boot step below runs `node dist/main.js`, which needs the
+        # compiled output. turbo's build dependsOn ["^build"] pulls in
+        # core-domain/db/contracts/config transitively.
+        run: pnpm turbo build --filter=api
       - name: generate Prisma client
         run: pnpm --filter @omnistock/db exec prisma generate
       - name: migrate deploy (empty CI database)
