@@ -216,7 +216,14 @@ jobs:
       - name: migrate deploy (empty CI database)
         run: pnpm --filter @omnistock/db exec prisma migrate deploy
       - name: boot apps/api in the background
-        run: pnpm --filter api run start &>/tmp/api.log &
+        # Boot the REAL app via tsx (not `node dist/main.js`): @omnistock/config,
+        # @omnistock/db and @omnistock/contracts still ship a TS-source `main`
+        # (their build is a placeholder), so a plain node run of the compiled
+        # entrypoint can't resolve them. tsx runs the real source + real TS deps
+        # and answers HTTP for real. Producing a self-contained compiled prod
+        # artifact (bundling/compiling those deps) is a deploy-time concern with
+        # no Phase-0 target yet — tracked with T-001-13 (see forward-commitments).
+        run: pnpm --filter api exec tsx src/main.ts &>/tmp/api.log &
         working-directory: .
       - name: wait for a REAL 200 from a booted /health (supertest-equivalent smoke, forward-commitment AC3/AC15)
         run: |
