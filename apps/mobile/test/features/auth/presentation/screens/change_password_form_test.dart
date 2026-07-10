@@ -1,7 +1,9 @@
 import 'package:flutter/material.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:omnistock_api_client/omnistock_api_client.dart';
 
+import 'package:mobile/features/auth/application/auth_providers.dart';
 import 'package:mobile/features/auth/data/auth_repository_impl.dart';
 import 'package:mobile/features/auth/presentation/screens/change_password_form.dart';
 import 'package:mobile/features/auth/data/token_store.dart';
@@ -21,6 +23,14 @@ Future<AuthRepositoryImpl> buildClient(FakeHttpClientAdapter adapter) async {
   return AuthRepositoryImpl(authApi: authApi, tokenStore: store);
 }
 
+/// D-023 PASS 2 — provider-override wiring (see login_screen_test.dart doc).
+Widget wrap(AuthRepositoryImpl client, Widget child) {
+  return ProviderScope(
+    overrides: [authRepositoryProvider.overrideWithValue(client)],
+    child: MaterialApp(home: Scaffold(body: child)),
+  );
+}
+
 Finder submitButtonFinder() => find.widgetWithText(ElevatedButton, 'เปลี่ยนรหัสผ่าน');
 
 void main() {
@@ -30,13 +40,11 @@ void main() {
     final client = await buildClient(adapter);
     var changed = false;
 
-    await tester.pumpWidget(MaterialApp(
-      home: Scaffold(
-        body: ChangePasswordForm(
-          authClient: client,
-          onChanged: () => changed = true,
-          onSessionExpired: () {},
-        ),
+    await tester.pumpWidget(wrap(
+      client,
+      ChangePasswordForm(
+        onChanged: () => changed = true,
+        onSessionExpired: () {},
       ),
     ));
 
@@ -56,10 +64,9 @@ void main() {
     final adapter = FakeHttpClientAdapter();
     final client = await buildClient(adapter);
 
-    await tester.pumpWidget(MaterialApp(
-      home: Scaffold(
-        body: ChangePasswordForm(authClient: client, onChanged: () {}, onSessionExpired: () {}),
-      ),
+    await tester.pumpWidget(wrap(
+      client,
+      ChangePasswordForm(onChanged: () {}, onSessionExpired: () {}),
     ));
 
     await tester.enterText(find.byType(TextField).first, 'oldpass12');
@@ -84,10 +91,9 @@ void main() {
     ));
     final client = await buildClient(adapter);
 
-    await tester.pumpWidget(MaterialApp(
-      home: Scaffold(
-        body: ChangePasswordForm(authClient: client, onChanged: () {}, onSessionExpired: () {}),
-      ),
+    await tester.pumpWidget(wrap(
+      client,
+      ChangePasswordForm(onChanged: () {}, onSessionExpired: () {}),
     ));
 
     await tester.enterText(find.byType(TextField).first, 'wrongold');
@@ -113,10 +119,9 @@ void main() {
     ));
     final client = await buildClient(adapter);
 
-    await tester.pumpWidget(MaterialApp(
-      home: Scaffold(
-        body: ChangePasswordForm(authClient: client, onChanged: () {}, onSessionExpired: () {}),
-      ),
+    await tester.pumpWidget(wrap(
+      client,
+      ChangePasswordForm(onChanged: () {}, onSessionExpired: () {}),
     ));
 
     await tester.enterText(find.byType(TextField).first, 'oldpass12');
@@ -144,13 +149,11 @@ void main() {
     final client = await buildClient(adapter);
     var sessionExpired = false;
 
-    await tester.pumpWidget(MaterialApp(
-      home: Scaffold(
-        body: ChangePasswordForm(
-          authClient: client,
-          onChanged: () {},
-          onSessionExpired: () => sessionExpired = true,
-        ),
+    await tester.pumpWidget(wrap(
+      client,
+      ChangePasswordForm(
+        onChanged: () {},
+        onSessionExpired: () => sessionExpired = true,
       ),
     ));
 

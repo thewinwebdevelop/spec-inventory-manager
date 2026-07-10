@@ -13,12 +13,21 @@
 //      lib/features/*/data/** or lib/core/api/**.
 //   4. lib/features/X/**        must NOT import lib/features/Y/** for any
 //      other feature Y (no cross-feature imports).
+//   5. lib/features/*/domain/** must NOT import its OWN feature's
+//      data/application/presentation (the dependency rule points inward —
+//      a "pure" domain file re-exporting or importing data/ would pull the
+//      generated client in transitively while looking clean under rule 1).
+//
+// All URI-bearing directives are scanned — `import`, `export`, and
+// `part`/`part of 'uri.dart'` — not just `import` (★ sanity-pass fix: an
+// `export` used to bypass every rule). Whitespace between the keyword and
+// the quote is optional (`import'x.dart';` is legal Dart).
 //
 // Exit code 0 = clean, 1 = violations found (prints every violation, not
 // just the first, so a single run surfaces the whole list).
 import 'dart:io';
 
-final _importRe = RegExp(r'''^\s*import\s+['"]([^'"]+)['"]''');
+final _directiveRe = RegExp(r'''^\s*(?:import|export|part\s+of|part)\s*['"]([^'"]+)['"]''');
 
 class Violation {
   Violation(this.file, this.rule, this.message);
@@ -30,7 +39,8 @@ class Violation {
   String toString() => '  [rule $rule] $file: $message';
 }
 
-/// One parsed `import` line: the raw URI text as written in the file.
+/// One parsed URI-bearing directive (`import`/`export`/`part`): the raw URI
+/// text as written in the file.
 class Import {
   Import(this.uri, this.lineNumber);
   final String uri;
@@ -41,7 +51,7 @@ List<Import> _parseImports(File file) {
   final imports = <Import>[];
   final lines = file.readAsLinesSync();
   for (var i = 0; i < lines.length; i++) {
-    final match = _importRe.firstMatch(lines[i]);
+    final match = _directiveRe.firstMatch(lines[i]);
     if (match != null) {
       imports.add(Import(match.group(1)!, i + 1));
     }
@@ -185,6 +195,20 @@ void main(List<String> args) {
             4,
             'line ${imp.lineNumber}: imports "$uri" (feature "$selfFeature" must not import '
             'feature "$targetFeature" directly)',
+          ));
+        }
+      }
+
+      // ---- Rule 5: domain/ must not depend on its own feature's other layers ----
+      if (_isDomainPath(libRelative) && selfFeature != null && targetLibRelative != null) {
+        final ownLayer = RegExp('^features/${RegExp.escape(selfFeature)}/(data|application|presentation)/')
+            .firstMatch(targetLibRelative);
+        if (ownLayer != null) {
+          violations.add(Violation(
+            rawPath,
+            5,
+            'line ${imp.lineNumber}: domain/ references "$uri" (domain must not depend on '
+            '${ownLayer.group(1)}/ — the dependency rule points inward)',
           ));
         }
       }

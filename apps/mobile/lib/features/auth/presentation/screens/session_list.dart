@@ -1,9 +1,10 @@
 import 'package:flutter/material.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../../../core/api/refresh_coordinator.dart';
 import '../../../../core/i18n/auth_th.dart';
 import '../../../../app/theme/app_theme.dart';
-import '../../data/auth_repository_impl.dart';
+import '../../application/session_list_controller.dart';
 import '../../domain/entities/session.dart';
 import '../../../../core/ui/app_toast.dart';
 import '../../../../core/ui/confirm_dialog.dart';
@@ -11,58 +12,45 @@ import '../widgets/session_list_item.dart';
 import '../../../../core/ui/skeleton.dart';
 
 /// Session list section — "อุปกรณ์ที่เข้าสู่ระบบ" (ux-wireframe §4/§11.5).
-/// Owns its own load/loading/error state so it can be dropped into the
-/// Security screen and refreshed on-demand (e.g. after a password change,
-/// ux-wireframe §9.4).
-class SessionList extends StatefulWidget {
+///
+/// D-023 PASS 2: rewired to a `ConsumerStatefulWidget` watching
+/// `sessionListControllerProvider` (`AsyncNotifier<List<Session>>`) — takes
+/// NO repository param anymore. `SecurityScreen` still refreshes this list
+/// after a password change via a `GlobalKey<SessionListState>` calling
+/// `load()`, so that public entry point is preserved unchanged.
+class SessionList extends ConsumerStatefulWidget {
   const SessionList({
     super.key,
-    required this.authClient,
     required this.onSessionExpired,
     required this.onLoggedOutAll,
   });
 
-  final AuthRepositoryImpl authClient;
   final VoidCallback onSessionExpired;
   final VoidCallback onLoggedOutAll;
 
   @override
-  State<SessionList> createState() => SessionListState();
+  ConsumerState<SessionList> createState() => SessionListState();
 }
 
-class SessionListState extends State<SessionList> {
-  bool _loading = true;
-  bool _hasError = false;
-  List<Session> _sessions = const [];
+class SessionListState extends ConsumerState<SessionList> {
+  // ★ Important #1 — session-expiry can now surface from EVERY load path
+  // (initial build(), retry, GlobalKey refresh, logout-all), each observed
+  // both by the ref.listen below and by imperative return values; this guard
+  // makes the navigation callback fire exactly once per mount (same
+  // "decide exactly once" shape as BootstrapScreen's _decided flag).
+  bool _notifiedExpiry = false;
 
-  @override
-  void initState() {
-    super.initState();
-    load();
+  void _notifySessionExpiredOnce() {
+    if (_notifiedExpiry || !mounted) return;
+    _notifiedExpiry = true;
+    widget.onSessionExpired();
   }
 
   Future<void> load() async {
-    setState(() {
-      _loading = true;
-      _hasError = false;
-    });
-    try {
-      final res = await widget.authClient.getSessions();
-      if (!mounted) return;
-      setState(() {
-        _sessions = res.toList()
-          ..sort((a, b) => (b.lastUsedAt ?? b.createdAt).compareTo(a.lastUsedAt ?? a.createdAt));
-        _loading = false;
-      });
-    } on SessionExpiredException {
-      if (!mounted) return;
-      widget.onSessionExpired();
-    } catch (_) {
-      if (!mounted) return;
-      setState(() {
-        _loading = false;
-        _hasError = true;
-      });
+    final result = await ref.read(sessionListControllerProvider.notifier).load();
+    if (!mounted) return;
+    if (result == SessionListLoadResult.sessionExpired) {
+      _notifySessionExpiredOnce();
     }
   }
 
@@ -77,17 +65,11 @@ class SessionListState extends State<SessionList> {
     );
     if (!confirmed || !mounted) return;
 
-    final previous = _sessions;
-    setState(() {
-      _sessions = _sessions.where((s) => s.familyId != session.familyId).toList();
-    });
-    try {
-      await widget.authClient.logoutDevice(familyId: session.familyId);
-      if (!mounted) return;
+    final success = await ref.read(sessionListControllerProvider.notifier).logoutDevice(session.familyId);
+    if (!mounted) return;
+    if (success) {
       showAppToast(context, AuthTh.sessionsToastDeviceLoggedOut);
-    } catch (_) {
-      if (!mounted) return;
-      setState(() => _sessions = previous);
+    } else {
       showAppToast(context, AuthTh.sessionsToastDeviceLogoutFailed, variant: AppToastVariant.danger);
     }
   }
@@ -103,21 +85,38 @@ class SessionListState extends State<SessionList> {
     );
     if (!confirmed || !mounted) return;
 
-    try {
-      await widget.authClient.logoutAll();
-      if (!mounted) return;
-      widget.onLoggedOutAll();
-    } on SessionExpiredException {
-      if (!mounted) return;
-      widget.onSessionExpired();
-    } catch (_) {
-      if (!mounted) return;
-      showAppToast(context, AuthTh.sessionsErrorLogoutAllFailed, variant: AppToastVariant.danger);
+    final result = await ref.read(sessionListControllerProvider.notifier).logoutAll();
+    if (!mounted) return;
+    switch (result) {
+      case SessionListLoadResult.ok:
+        widget.onLoggedOutAll();
+      case SessionListLoadResult.sessionExpired:
+        _notifySessionExpiredOnce();
+      case null:
+        showAppToast(context, AuthTh.sessionsErrorLogoutAllFailed, variant: AppToastVariant.danger);
     }
   }
 
   @override
   Widget build(BuildContext context) {
+    // ★ Important #1 — observe the INITIAL fetch (which runs inside the
+    // controller's build(), before any imperative load() call exists) so a
+    // dead session on mount navigates to login instead of parking the user
+    // on an authenticated screen with wiped storage.
+    ref.listen<AsyncValue<List<Session>>>(sessionListControllerProvider, (previous, next) {
+      if (next.hasError && next.error is SessionExpiredException) {
+        _notifySessionExpiredOnce();
+      }
+    });
+
+    final asyncSessions = ref.watch(sessionListControllerProvider);
+    final sessionExpired = asyncSessions.error is SessionExpiredException;
+    // While expired we keep showing the skeleton until the (already-fired)
+    // navigation takes over — never a misleading error/empty flash.
+    final loading = (asyncSessions.isLoading && !asyncSessions.hasValue) || sessionExpired;
+    final hasError = asyncSessions.hasError && !sessionExpired;
+    final sessions = asyncSessions.valueOrNull ?? const <Session>[];
+
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
@@ -132,13 +131,13 @@ class SessionListState extends State<SessionList> {
         // only when there's more than 1 row — with exactly 1 session the
         // list has no logout-device button to be misled by anyway (the sole
         // row is necessarily this device, ux-wireframe §4 empty-state note).
-        if (!_loading && !_hasError && _sessions.length > 1) ...[
+        if (!loading && !hasError && sessions.length > 1) ...[
           _MobileCurrentDeviceNotice(),
           const SizedBox(height: AppSpacing.s3),
         ],
-        if (_loading)
+        if (loading)
           const SessionListSkeleton()
-        else if (_hasError)
+        else if (hasError)
           Center(
             child: Column(
               children: [
@@ -149,7 +148,7 @@ class SessionListState extends State<SessionList> {
             ),
           )
         else ...[
-          for (final session in _sessions)
+          for (final session in sessions)
             SessionListItem(
               session: session,
               onLogoutDevice: () => _confirmLogoutDevice(session),

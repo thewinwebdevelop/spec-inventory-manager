@@ -1,6 +1,5 @@
 import 'package:flutter/material.dart';
 
-import '../features/auth/data/auth_repository_impl.dart';
 import '../features/auth/presentation/screens/login_help_screen.dart';
 import '../features/auth/presentation/screens/login_screen.dart';
 import '../features/auth/presentation/screens/signup_screen.dart';
@@ -8,13 +7,13 @@ import '../features/auth/presentation/screens/signup_screen.dart';
 /// F-006 integration seam (T-001-17 note): F-006 owns the app shell/nav IA
 /// (bottom-nav/drawer, "ตั้งค่า" → "ความปลอดภัย" entry point per ux-wireframe
 /// §8/§9.1) and the post-login destination. This widget is a **self-contained
-/// pre-auth flow** (login ⇄ signup ⇄ help, all wired to the same
-/// [AuthRepositoryImpl]) that F-006 can either:
+/// pre-auth flow** (login ⇄ signup ⇄ help, all resolving the auth repository
+/// via `authRepositoryProvider`, D-023 PASS 2) that F-006 can either:
 ///   1. push as its initial route until a real access token exists, or
 ///   2. inline/replace piece by piece into its own navigator — each screen
 ///      ([SignupScreen], [LoginScreen], [LoginHelpScreen], and
-///      `SecurityScreen` post-login) is already a standalone,
-///      dependency-injected widget; nothing here requires this particular
+///      `SecurityScreen` post-login) is already a standalone widget reading
+///      its own controller/provider; nothing here requires this particular
 ///      [Navigator] wrapper.
 ///
 /// [onAuthenticated] fires once a real token pair exists (after login, or
@@ -24,11 +23,9 @@ import '../features/auth/presentation/screens/signup_screen.dart';
 class AuthFlow extends StatefulWidget {
   const AuthFlow({
     super.key,
-    required this.authClient,
     required this.onAuthenticated,
   });
 
-  final AuthRepositoryImpl authClient;
   final VoidCallback onAuthenticated;
 
   @override
@@ -49,7 +46,6 @@ class _AuthFlowState extends State<AuthFlow> {
             return MaterialPageRoute(
               settings: settings,
               builder: (context) => SignupScreen(
-                authClient: widget.authClient,
                 onSignupSuccess: (email) {
                   _navigatorKey.currentState!.pushReplacementNamed('/login', arguments: email);
                 },
@@ -69,7 +65,6 @@ class _AuthFlowState extends State<AuthFlow> {
             return MaterialPageRoute(
               settings: settings,
               builder: (context) => LoginScreen(
-                authClient: widget.authClient,
                 prefillEmail: prefill,
                 onLoginSuccess: widget.onAuthenticated,
                 onNavigateToSignup: () => _navigatorKey.currentState!.pushNamed('/signup'),

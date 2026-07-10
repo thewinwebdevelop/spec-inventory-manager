@@ -155,8 +155,13 @@ class AuthRepositoryImpl implements AuthRepository {
     }
   }
 
+  /// Raw refresh-token read — private to `data/` (client-security skill: the
+  /// plaintext refresh token never leaks past this layer). Domain/application
+  /// callers use [hasStoredSession] instead.
+  Future<String?> _getStoredRefreshToken() => _tokenStore.getRefreshToken();
+
   @override
-  Future<String?> getStoredRefreshToken() => _tokenStore.getRefreshToken();
+  Future<bool> hasStoredSession() async => await _getStoredRefreshToken() != null;
 
   /// Rotates the refresh token. Presents the CURRENT refresh token from
   /// secure storage in the request body (body transport, api-spec §2.3).

@@ -1,7 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
-import '../features/auth/application/auth_providers.dart';
 import '../features/auth/presentation/screens/bootstrap_screen.dart';
 import '../features/auth/presentation/screens/security_screen.dart';
 import 'auth_flow.dart';
@@ -45,8 +44,6 @@ class _OmniStockAppState extends ConsumerState<OmniStockApp> {
 
   @override
   Widget build(BuildContext context) {
-    final authClient = ref.watch(authRepositoryProvider);
-
     final Widget home;
     switch (_destination) {
       case _AppDestination.bootstrap:
@@ -56,12 +53,10 @@ class _OmniStockAppState extends ConsumerState<OmniStockApp> {
         );
       case _AppDestination.authenticated:
         home = SecurityScreen(
-          authClient: authClient,
           onSessionExpired: () => setState(() => _destination = _AppDestination.authFlow),
         );
       case _AppDestination.authFlow:
         home = AuthFlow(
-          authClient: authClient,
           onAuthenticated: () => setState(() => _destination = _AppDestination.authenticated),
         );
     }

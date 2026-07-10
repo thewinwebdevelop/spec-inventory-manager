@@ -17,9 +17,12 @@ import '../../../../core/api/refresh_coordinator.dart' show RefreshOutcome;
 /// cover the rest of the surface is a mechanical follow-up, not required to
 /// preserve current behavior.
 abstract class AuthRepository {
-  /// Reads the refresh token from secure storage (or null if never set /
-  /// already cleared) — the single source of truth for "was I logged in".
-  Future<String?> getStoredRefreshToken();
+  /// Whether a refresh token is currently stored (secure storage) — the
+  /// single source of truth for "was I logged in". Deliberately does not
+  /// expose the raw token value itself: no consumer above `data/` needs the
+  /// plaintext refresh token (client-security skill — keep the raw read
+  /// private to `data/`), only whether one exists.
+  Future<bool> hasStoredSession();
 
   /// Single-flight refresh attempt (mirrors
   /// `RefreshCoordinator.refreshDetailed`) — returns the terminal

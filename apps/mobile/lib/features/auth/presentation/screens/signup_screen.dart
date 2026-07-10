@@ -1,13 +1,10 @@
 import 'package:flutter/material.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../../../core/i18n/auth_th.dart';
 import '../../../../app/theme/app_theme.dart';
-import '../../data/auth_repository_impl.dart';
-import '../../data/auth_exceptions.dart';
-import '../../../../core/error/error_messages.dart';
 import '../../../../core/security/screenshot_guard.dart';
-import '../../application/throttle_countdown_controller.dart';
-import '../../domain/validation.dart';
+import '../../application/signup_controller.dart';
 import '../../../../core/ui/error_banner.dart';
 import '../../../../core/ui/labeled_text_field.dart';
 import '../../../../core/ui/password_field.dart';
@@ -15,15 +12,15 @@ import '../widgets/throttle_banner.dart';
 
 /// "สมัครใช้งาน" (`/signup`, ux-wireframe §2). Full-screen, safe-area aware
 /// (ux-wireframe §11.1 mobile note) — no card/shadow (web-only chrome).
-class SignupScreen extends StatefulWidget {
+///
+/// D-023 PASS 2: rewired to a `ConsumerStatefulWidget` watching
+/// `signupControllerProvider` — takes NO repository param anymore.
+class SignupScreen extends ConsumerStatefulWidget {
   const SignupScreen({
     super.key,
-    required this.authClient,
     required this.onSignupSuccess,
     required this.onNavigateToLogin,
   });
-
-  final AuthRepositoryImpl authClient;
 
   /// Called with the just-registered email so the caller can route to
   /// login with the field prefilled (ux-wireframe: "สมัครสำเร็จ → พาไปหน้า
@@ -32,18 +29,12 @@ class SignupScreen extends StatefulWidget {
   final VoidCallback onNavigateToLogin;
 
   @override
-  State<SignupScreen> createState() => _SignupScreenState();
+  ConsumerState<SignupScreen> createState() => _SignupScreenState();
 }
 
-class _SignupScreenState extends State<SignupScreen> {
+class _SignupScreenState extends ConsumerState<SignupScreen> {
   final _emailController = TextEditingController();
   final _passwordController = TextEditingController();
-  final _throttleController = ThrottleCountdownController();
-
-  bool _submitting = false;
-  String? _emailError;
-  String? _passwordError;
-  String? _generalError;
 
   // T-001-17 ★ (L-5) — obscure the password field from screenshots/the
   // app-switcher preview for as long as this screen is mounted.
@@ -60,64 +51,28 @@ class _SignupScreenState extends State<SignupScreen> {
     _releaseScreenshotGuard();
     _emailController.dispose();
     _passwordController.dispose();
-    _throttleController.dispose();
     super.dispose();
   }
 
-  bool get _throttled => _throttleController.isActive;
-
   void _validateEmailOnBlur() {
-    final email = _emailController.text;
-    setState(() {
-      _emailError = email.isEmpty || isValidEmailShape(email) ? null : AuthTh.signupErrorEmailInvalid;
-    });
+    ref.read(signupControllerProvider.notifier).validateEmailOnBlur(_emailController.text);
   }
 
   Future<void> _submit() async {
-    if (_submitting || _throttled) return;
-
-    final email = _emailController.text.trim();
+    final email = _emailController.text;
     final password = _passwordController.text;
-
-    setState(() {
-      _generalError = null;
-      _emailError = isValidEmailShape(email) ? null : AuthTh.signupErrorEmailInvalid;
-      _passwordError = isPasswordLongEnough(password) ? null : AuthTh.signupErrorPasswordTooShort;
-    });
-    if (_emailError != null || _passwordError != null) return;
-
-    setState(() => _submitting = true);
-    try {
-      await widget.authClient.signup(email: email, password: password);
-      if (!mounted) return;
-      widget.onSignupSuccess(email);
-    } on ApiError catch (e) {
-      if (!mounted) return;
-      if (e.status == 429) {
-        _throttleController.start(e.retryAfterSeconds ?? 60);
-        setState(() {});
-      } else if (e.status == 422 || e.status == 409) {
-        setState(() {
-          if (e.code == 'PASSWORD_TOO_SHORT' || e.code == 'PASSWORD_BREACHED') {
-            _passwordError = signupErrorMessage(e.code);
-          } else {
-            _emailError = signupErrorMessage(e.code);
-          }
-        });
-      } else {
-        setState(() => _generalError = signupErrorMessage(e.code));
-      }
-    } catch (_) {
-      if (!mounted) return;
-      setState(() => _generalError = AuthTh.signupErrorGeneric);
-    } finally {
-      if (mounted) setState(() => _submitting = false);
-    }
+    final signedUpEmail =
+        await ref.read(signupControllerProvider.notifier).submit(email: email, password: password);
+    if (!mounted || signedUpEmail == null) return;
+    widget.onSignupSuccess(signedUpEmail);
   }
 
   @override
   Widget build(BuildContext context) {
-    final disabled = _submitting || _throttled;
+    final signupState = ref.watch(signupControllerProvider);
+    final throttle = ref.read(signupControllerProvider.notifier).throttle;
+    final disabled = signupState.submitting || throttle.isActive;
+
     return Scaffold(
       body: SafeArea(
         child: SingleChildScrollView(
@@ -134,13 +89,13 @@ class _SignupScreenState extends State<SignupScreen> {
                 textAlign: TextAlign.center,
               ),
               const SizedBox(height: AppSpacing.s8),
-              ThrottleBanner(controller: _throttleController),
-              if (_generalError != null) ErrorBanner(message: _generalError!),
+              ThrottleBanner(controller: throttle),
+              if (signupState.generalError != null) ErrorBanner(message: signupState.generalError!),
               LabeledTextField(
                 label: AuthTh.signupEmailLabel,
                 controller: _emailController,
                 placeholder: AuthTh.signupEmailPlaceholder,
-                errorText: _emailError,
+                errorText: signupState.emailError,
                 enabled: !disabled,
                 keyboardType: TextInputType.emailAddress,
                 onEditingComplete: _validateEmailOnBlur,
@@ -151,7 +106,7 @@ class _SignupScreenState extends State<SignupScreen> {
                 controller: _passwordController,
                 placeholder: AuthTh.signupPasswordPlaceholder,
                 helperText: AuthTh.signupPasswordHelper,
-                errorText: _passwordError,
+                errorText: signupState.passwordError,
                 enabled: !disabled,
                 textInputAction: TextInputAction.done,
                 onSubmitted: (_) => _submit(),
@@ -159,13 +114,13 @@ class _SignupScreenState extends State<SignupScreen> {
               const SizedBox(height: AppSpacing.s6),
               ElevatedButton(
                 onPressed: disabled ? null : _submit,
-                child: _submitting
+                child: signupState.submitting
                     ? const SizedBox(
                         height: 20,
                         width: 20,
                         child: CircularProgressIndicator(strokeWidth: 2, color: AppColors.primaryFg),
                       )
-                    : Text(_submitting ? AuthTh.signupSubmitLoading : AuthTh.signupSubmit),
+                    : Text(signupState.submitting ? AuthTh.signupSubmitLoading : AuthTh.signupSubmit),
               ),
               const SizedBox(height: AppSpacing.s4),
               Center(

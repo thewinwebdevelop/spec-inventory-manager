@@ -22,12 +22,14 @@ import '../../../../core/api/refresh_coordinator.dart' show RefreshOutcome;
 /// caller-side UI state shown *while this future is pending*, not a value
 /// this function produces).
 ///
-/// Reads the refresh token via the repository's storage seam only
+/// Reads session presence via the repository's storage seam only
 /// (client-security skill: the keychain is the single source of truth for
-/// "was I logged in") — never hand-rolls its own storage read.
+/// "was I logged in") — never hand-rolls its own storage read, and never
+/// touches the raw refresh token value itself (that stays private to
+/// `data/`; this usecase only needs a yes/no).
 Future<AuthBootstrapStatus> runAuthBootstrap(AuthRepository repository) async {
-  final existingRefreshToken = await repository.getStoredRefreshToken();
-  if (existingRefreshToken == null) {
+  final hasSession = await repository.hasStoredSession();
+  if (!hasSession) {
     return AuthBootstrapStatus.noSession;
   }
 

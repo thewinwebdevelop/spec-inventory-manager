@@ -1,7 +1,9 @@
 import 'package:flutter/material.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:omnistock_api_client/omnistock_api_client.dart';
 
+import 'package:mobile/features/auth/application/auth_providers.dart';
 import 'package:mobile/features/auth/data/auth_repository_impl.dart';
 import 'package:mobile/features/auth/presentation/screens/signup_screen.dart';
 import 'package:mobile/features/auth/data/token_store.dart';
@@ -15,6 +17,14 @@ AuthRepositoryImpl buildClient(FakeHttpClientAdapter adapter) {
   return AuthRepositoryImpl(authApi: authApi, tokenStore: TokenStore(secureStorage: FakeSecureStorage()));
 }
 
+/// D-023 PASS 2 — provider-override wiring (see login_screen_test.dart doc).
+Widget wrap(AuthRepositoryImpl client, Widget child) {
+  return ProviderScope(
+    overrides: [authRepositoryProvider.overrideWithValue(client)],
+    child: MaterialApp(home: child),
+  );
+}
+
 Finder submitButtonFinder() => find.widgetWithText(ElevatedButton, 'สมัครใช้งาน');
 
 void main() {
@@ -22,9 +32,9 @@ void main() {
     final adapter = FakeHttpClientAdapter();
     final client = buildClient(adapter);
 
-    await tester.pumpWidget(MaterialApp(
-      home: SignupScreen(
-        authClient: client,
+    await tester.pumpWidget(wrap(
+      client,
+      SignupScreen(
         onSignupSuccess: (_) {},
         onNavigateToLogin: () {},
       ),
@@ -43,9 +53,9 @@ void main() {
     final adapter = FakeHttpClientAdapter();
     final client = buildClient(adapter);
 
-    await tester.pumpWidget(MaterialApp(
-      home: SignupScreen(
-        authClient: client,
+    await tester.pumpWidget(wrap(
+      client,
+      SignupScreen(
         onSignupSuccess: (_) {},
         onNavigateToLogin: () {},
       ),
@@ -70,9 +80,9 @@ void main() {
     final client = buildClient(adapter);
     String? signedUpEmail;
 
-    await tester.pumpWidget(MaterialApp(
-      home: SignupScreen(
-        authClient: client,
+    await tester.pumpWidget(wrap(
+      client,
+      SignupScreen(
         onSignupSuccess: (email) => signedUpEmail = email,
         onNavigateToLogin: () {},
       ),
@@ -96,9 +106,9 @@ void main() {
     ));
     final client = buildClient(adapter);
 
-    await tester.pumpWidget(MaterialApp(
-      home: SignupScreen(
-        authClient: client,
+    await tester.pumpWidget(wrap(
+      client,
+      SignupScreen(
         onSignupSuccess: (_) {},
         onNavigateToLogin: () {},
       ),
@@ -125,9 +135,9 @@ void main() {
     ));
     final client = buildClient(adapter);
 
-    await tester.pumpWidget(MaterialApp(
-      home: SignupScreen(
-        authClient: client,
+    await tester.pumpWidget(wrap(
+      client,
+      SignupScreen(
         onSignupSuccess: (_) {},
         onNavigateToLogin: () {},
       ),

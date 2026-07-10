@@ -1,7 +1,9 @@
 import 'package:flutter/material.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:omnistock_api_client/omnistock_api_client.dart';
 
+import 'package:mobile/features/auth/application/auth_providers.dart';
 import 'package:mobile/features/auth/data/auth_repository_impl.dart';
 import 'package:mobile/features/auth/presentation/screens/session_list.dart';
 import 'package:mobile/features/auth/data/token_store.dart';
@@ -16,6 +18,14 @@ AuthRepositoryImpl buildClient(FakeHttpClientAdapter adapter) {
   final store = TokenStore(secureStorage: FakeSecureStorage());
   store.setAccessToken('access-1');
   return AuthRepositoryImpl(authApi: authApi, tokenStore: store);
+}
+
+/// D-023 PASS 2 — provider-override wiring (see login_screen_test.dart doc).
+Widget wrap(AuthRepositoryImpl client, Widget child) {
+  return ProviderScope(
+    overrides: [authRepositoryProvider.overrideWithValue(client)],
+    child: MaterialApp(home: Scaffold(body: child)),
+  );
 }
 
 Map<String, Object?> sessionJson({
@@ -40,10 +50,9 @@ void main() {
     adapter.enqueue(FakeResponse(statusCode: 200, jsonBody: {'sessions': <Map<String, Object?>>[]}));
     final client = buildClient(adapter);
 
-    await tester.pumpWidget(MaterialApp(
-      home: Scaffold(
-        body: SessionList(authClient: client, onSessionExpired: () {}, onLoggedOutAll: () {}),
-      ),
+    await tester.pumpWidget(wrap(
+      client,
+      SessionList(onSessionExpired: () {}, onLoggedOutAll: () {}),
     ));
     // One frame after mount, before the async load() resolves — still loading.
     expect(find.byType(SessionListSkeleton), findsOneWidget);
@@ -61,10 +70,9 @@ void main() {
     adapter.enqueue(FakeResponse(statusCode: 500));
     final client = buildClient(adapter);
 
-    await tester.pumpWidget(MaterialApp(
-      home: Scaffold(
-        body: SessionList(authClient: client, onSessionExpired: () {}, onLoggedOutAll: () {}),
-      ),
+    await tester.pumpWidget(wrap(
+      client,
+      SessionList(onSessionExpired: () {}, onLoggedOutAll: () {}),
     ));
     await tester.pumpAndSettle();
 
@@ -88,10 +96,9 @@ void main() {
     }));
     final client = buildClient(adapter);
 
-    await tester.pumpWidget(MaterialApp(
-      home: Scaffold(
-        body: SessionList(authClient: client, onSessionExpired: () {}, onLoggedOutAll: () {}),
-      ),
+    await tester.pumpWidget(wrap(
+      client,
+      SessionList(onSessionExpired: () {}, onLoggedOutAll: () {}),
     ));
     await tester.pumpAndSettle();
 
@@ -123,10 +130,9 @@ void main() {
     }));
     final client = buildClient(adapter);
 
-    await tester.pumpWidget(MaterialApp(
-      home: Scaffold(
-        body: SessionList(authClient: client, onSessionExpired: () {}, onLoggedOutAll: () {}),
-      ),
+    await tester.pumpWidget(wrap(
+      client,
+      SessionList(onSessionExpired: () {}, onLoggedOutAll: () {}),
     ));
     await tester.pumpAndSettle();
 
@@ -160,10 +166,9 @@ void main() {
 
     final client = buildClient(adapter);
 
-    await tester.pumpWidget(MaterialApp(
-      home: Scaffold(
-        body: SessionList(authClient: client, onSessionExpired: () {}, onLoggedOutAll: () {}),
-      ),
+    await tester.pumpWidget(wrap(
+      client,
+      SessionList(onSessionExpired: () {}, onLoggedOutAll: () {}),
     ));
     await tester.pumpAndSettle();
 
@@ -204,10 +209,9 @@ void main() {
     }));
     final client = buildClient(adapter);
 
-    await tester.pumpWidget(MaterialApp(
-      home: Scaffold(
-        body: SessionList(authClient: client, onSessionExpired: () {}, onLoggedOutAll: () {}),
-      ),
+    await tester.pumpWidget(wrap(
+      client,
+      SessionList(onSessionExpired: () {}, onLoggedOutAll: () {}),
     ));
     await tester.pumpAndSettle();
 
@@ -239,10 +243,9 @@ void main() {
     }));
     final client = buildClient(adapter);
 
-    await tester.pumpWidget(MaterialApp(
-      home: Scaffold(
-        body: SessionList(authClient: client, onSessionExpired: () {}, onLoggedOutAll: () {}),
-      ),
+    await tester.pumpWidget(wrap(
+      client,
+      SessionList(onSessionExpired: () {}, onLoggedOutAll: () {}),
     ));
     await tester.pumpAndSettle();
 
@@ -271,13 +274,11 @@ void main() {
     final client = buildClient(adapter);
     var loggedOutAll = false;
 
-    await tester.pumpWidget(MaterialApp(
-      home: Scaffold(
-        body: SessionList(
-          authClient: client,
-          onSessionExpired: () {},
-          onLoggedOutAll: () => loggedOutAll = true,
-        ),
+    await tester.pumpWidget(wrap(
+      client,
+      SessionList(
+        onSessionExpired: () {},
+        onLoggedOutAll: () => loggedOutAll = true,
       ),
     ));
     await tester.pumpAndSettle();
@@ -290,5 +291,42 @@ void main() {
     await tester.pumpAndSettle();
 
     expect(loggedOutAll, isTrue);
+  });
+
+  // ★ sanity-pass fix (Important #1): the INITIAL fetch runs inside the
+  // controller's build() — before any imperative load() call exists — so a
+  // dead session on mount must still navigate to login (the pre-D-023
+  // contract), not park the user on an authenticated screen with an empty
+  // list while storage is already wiped.
+  testWidgets('initial load hitting a dead session fires onSessionExpired and never flashes error/empty UI', (tester) async {
+    final adapter = FakeHttpClientAdapter();
+    // Access token rejected (401), then the refresh itself is dead too.
+    adapter.enqueue(FakeResponse(statusCode: 401));
+    adapter.enqueue(FakeResponse(
+      statusCode: 401,
+      jsonBody: {
+        'error': {'code': 'INVALID_REFRESH', 'message': 'dead'},
+      },
+    ));
+    final client = buildClient(adapter);
+
+    var expiredCalls = 0;
+    await tester.pumpWidget(wrap(
+      client,
+      SessionList(onSessionExpired: () => expiredCalls++, onLoggedOutAll: () {}),
+    ));
+    // Bounded pumps, NOT pumpAndSettle — on the expired path the skeleton
+    // (whose shimmer never settles) intentionally stays up until navigation.
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 50));
+    await tester.pump(const Duration(milliseconds: 50));
+
+    expect(expiredCalls, 1, reason: 'mount-path expiry must navigate exactly once');
+    // Neither the error state (load-failed + retry) nor the data/empty
+    // state's logout-all button may flash — the skeleton holds until the
+    // (already-fired) navigation takes over.
+    expect(find.text('โหลดรายการอุปกรณ์ไม่สำเร็จ'), findsNothing);
+    expect(find.text('ออกจากระบบทุกอุปกรณ์'), findsNothing);
+    expect(find.byType(SessionListSkeleton), findsOneWidget);
   });
 }

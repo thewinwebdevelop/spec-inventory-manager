@@ -2,7 +2,6 @@ import 'package:flutter/material.dart';
 
 import '../../../../core/i18n/auth_th.dart';
 import '../../../../app/theme/app_theme.dart';
-import '../../data/auth_repository_impl.dart';
 import 'change_password_form.dart';
 import 'session_list.dart';
 
@@ -10,14 +9,17 @@ import 'session_list.dart';
 /// change-password (§9) + session list (§4) in one screen, per ux-wireframe:
 /// "ทั้งสองเรื่อง (รหัสผ่าน + เซสชัน) เป็น 'ความปลอดภัยของบัญชี' concept
 /// เดียวกัน ... วางเป็น section คนละบล็อกในหน้าเดียว".
+///
+/// D-023 PASS 2: no longer takes an `authClient` param — `ChangePasswordForm`/
+/// `SessionList` resolve the repository via their own controllers'
+/// `authRepositoryProvider` read, so this screen has nothing repository-shaped
+/// left to thread through.
 class SecurityScreen extends StatefulWidget {
   const SecurityScreen({
     super.key,
-    required this.authClient,
     required this.onSessionExpired,
   });
 
-  final AuthRepositoryImpl authClient;
   final VoidCallback onSessionExpired;
 
   @override
@@ -55,7 +57,6 @@ class _SecurityScreenState extends State<SecurityScreen> {
             crossAxisAlignment: CrossAxisAlignment.stretch,
             children: [
               ChangePasswordForm(
-                authClient: widget.authClient,
                 onChanged: _handlePasswordChanged,
                 onSessionExpired: widget.onSessionExpired,
               ),
@@ -64,7 +65,6 @@ class _SecurityScreenState extends State<SecurityScreen> {
               const SizedBox(height: AppSpacing.s8),
               SessionList(
                 key: _sessionListKey,
-                authClient: widget.authClient,
                 onSessionExpired: widget.onSessionExpired,
                 onLoggedOutAll: widget.onSessionExpired,
               ),
