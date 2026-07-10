@@ -30,6 +30,12 @@ Per coordinator + frontend recommendation, locked:
    also sends `omni_rt` to `/auth/logout` and `/auth/sessions` — otherwise web logout /
    session-current-marker silently no-op (C-1). The cookie is still off every domain route
    (only `/auth/*` matches).
+   > **Browser path (D-019, C-1 amendment — client-security review):** auth endpoints are
+   > reachable at the **browser path `/auth/*`** — the web dev proxy rewrites
+   > `/auth/:path*` → API `/auth/:path*` (the API keeps serving auth at `/auth/*`). So
+   > `omni_rt`'s `Path=/auth` matches the path the browser actually requests, and the cookie
+   > is genuinely sent to `/auth/refresh` / `/auth/logout` / `/auth/sessions`. This is the
+   > agreed converged contract shared verbatim with @devops and @frontend.
 2. **Mobile = secure storage.** With `tokenTransport: "body"` (mobile / F-006, and the
    default), the server sets **no** refresh cookie and returns the plaintext refresh token in
    the response **body** field `refreshToken`; the client stores it in Keychain/Keystore.
@@ -56,10 +62,23 @@ not — they're immune by construction):
 
 - `SameSite=Strict` on `omni_rt` is the primary defense (browser won't send it cross-site).
 - **Plus** a **double-submit CSRF token**: `/auth/login` (when `tokenTransport: "cookie"`)
-  also sets a **non-httpOnly** `omni_csrf` cookie (`Secure; SameSite=Strict; Path=/auth`,
-  matching `omni_rt`'s scope); the web client echoes it in an `X-CSRF-Token` header on
+  also sets a **non-httpOnly** `omni_csrf` cookie (`Secure; SameSite=Strict`, **`Path=/`** —
+  see the split-path amendment below); the web client echoes it in an `X-CSRF-Token` header on
   `/auth/refresh`, `/auth/logout`, and `/auth/change-password`; server rejects (`403`) if
   header ≠ cookie.
+- **Split cookie paths (D-019, C-1 amendment — Option A, client-security review):** the two
+  cookies now have **different** paths, because they have different readers:
+  - **`omni_rt`** stays **`Path=/auth`** — it is httpOnly (never JS-read) and only needs to be
+    _sent_ to the `/auth/*` endpoints, so scoping it to `/auth` keeps the secret off every
+    other route.
+  - **`omni_csrf`** moves to **`Path=/`** — it is **non-httpOnly by design** (JS must read it to
+    echo it into `X-CSRF-Token`), and the pages that read it (`/login`, `/settings/security`,
+    `/`, …) live **outside** `/auth`. Under `document.cookie`'s path-matching, a cookie scoped
+    `Path=/auth` is **not readable** from a page at `/login`, so a single shared `/auth` path
+    made the cookie transport **dead in a real browser** (the client could never read the CSRF
+    token to send it). Widening `omni_csrf` to `/` loses nothing security-wise: it carries **no
+    secret**, and its defense — `SameSite=Strict` + the value-match against the header — is
+    **path-independent** (a wider path neither weakens SameSite nor the double-submit match).
 - **`omni_csrf` value semantics (M-6):** a fresh, independent CSPRNG-random value of **≥128
   bits** of entropy (e.g. `crypto.randomBytes(16)` or larger, base64/hex-encoded) — **not**
   derived from the refresh token, the access token, or any other secret (a double-submit token
@@ -170,8 +189,8 @@ check.
 ```
 
 - `tokenTransport: "cookie"` (web) → sets `omni_rt` (httpOnly, `Path=/auth`) + `omni_csrf`
-  (readable, `Path=/auth`) cookies; body **`refreshToken: null`** (H-1 — token is in the
-  cookie, never JS-readable).
+  (readable, **`Path=/`** — split-path amendment D-019, §0 CSRF block) cookies; body
+  **`refreshToken: null`** (H-1 — token is in the cookie, never JS-readable).
 - `tokenTransport: "body"` (mobile / default) → **no** cookies set; body `refreshToken`
   holds the plaintext token for secure-storage.
 
@@ -236,7 +255,8 @@ place on the cookie transport (H-1).
 ### 2.4 `POST /auth/logout` (US-4)
 
 Revokes the **current family** (from the presented refresh token; cookie or body). Clears
-`omni_rt` + `omni_csrf` cookies (`Path=/auth`). Access token still lives ≤15 min by design
+`omni_rt` (`Path=/auth`) + `omni_csrf` (`Path=/`) cookies — each cleared at its own set path
+(§0 CSRF block, D-019 split-path). Access token still lives ≤15 min by design
 (arch §2.1). **204** always (idempotent — logging out an already-dead session still succeeds;
 no leak). CSRF-checked on the cookie path.
 **Optional body `{ familyId }`** (per-device logout of a _listed_ non-current session, §2.6):
@@ -445,8 +465,11 @@ reset-attempt throttle tripped, `422` password policy.
   HMAC so a regression to plain SHA-256 is caught (L-3)**).
 - **@frontend / @ux informed (contract changes):** (1) web must send
   `tokenTransport: "cookie"` at login and treat body `refreshToken` as `null` — the token is
-  only ever in the httpOnly cookie (H-1); (2) `omni_rt`/`omni_csrf` are now `Path=/auth` so
-  logout / sessions carry the cookie (C-1); (3) the reuse-leeway window (D-011 / arch §3.5)
+  only ever in the httpOnly cookie (H-1); (2) **split cookie paths (D-019, C-1 amendment —
+  Option A):** `omni_rt` is `Path=/auth` (httpOnly refresh, sent to the browser `/auth/*`
+  routes); `omni_csrf` is **`Path=/`** (non-httpOnly, readable via `document.cookie` from app
+  pages like `/login` / `/settings/security` to echo into `X-CSRF-Token`) — a single `/auth`
+  path made the cookie transport unreadable in a real browser; (3) the reuse-leeway window (D-011 / arch §3.5)
   means a benign predecessor-replay returns a generic `401` **without** logging the user out
   — **mobile guidance (M-2, corrected):** on a refresh `401 INVALID_REFRESH`, do **not**
   re-attempt with the same refresh token — wipe secure storage and go to the login screen.

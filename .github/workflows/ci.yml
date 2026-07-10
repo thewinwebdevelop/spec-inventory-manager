@@ -106,6 +106,13 @@ jobs:
       - name: AC13 — flutter analyze
         working-directory: apps/mobile
         run: flutter analyze
+      - name: D-023 — mobile boundary gate (feature-first clean arch)
+        # Mirrors the server-side depcruise purity gate: features/*/domain must be
+        # pure Dart (no flutter/dio/generated/riverpod), core/ must not import
+        # features/, the generated client only appears in data/ + core/api/, and
+        # no cross-feature imports. See docs/mobile-architecture.md §6.
+        working-directory: apps/mobile
+        run: dart run tool/check_boundaries.dart
       - name: AC13 — flutter test
         working-directory: apps/mobile
         run: flutter test
@@ -138,3 +145,165 @@ jobs:
         run: pnpm --filter @omnistock/contracts exec redocly lint openapi/openapi.yaml
       - name: AC11 — TS client typecheck-green (api + web)
         run: pnpm turbo typecheck --filter=api --filter=web
+
+  # F-001 T-001-20 (I-1) — integration lane: boot a REAL apps/api process against
+  # ephemeral Postgres+Redis service containers and prove it actually answers
+  # over HTTP (not a build-only/unit-only proxy for "the server works").
+  # Folds in the F-000 forward-commitment (AC3/AC15, forward-commitments.md
+  # "→ F-001 (e2e-in-CI for AC3 / AC15)"): a supertest-equivalent HTTP hit
+  # against a booted `/health`, now wired as a required, merge-blocking check
+  # instead of local-only verification.
+  # D-014: no `echo ok`/fake-pass steps. Once backend-api lands T-001-07's
+  # supertest suite under the `test:integration` script convention, this job
+  # picks it up automatically (no CI file change needed) — see the explicit
+  # existence check below, which fails loudly rather than silently skipping
+  # if the convention name is wrong, and prints a visible (not silent) notice
+  # when the script genuinely doesn't exist yet.
+  integration-api:
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_USER: omnistock
+          POSTGRES_PASSWORD: omnistock
+          POSTGRES_DB: omnistock_ci
+        ports: ["5432:5432"]
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+      redis:
+        image: redis:7
+        ports: ["6379:6379"]
+        options: >-
+          --health-cmd "redis-cli ping"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+    env:
+      DATABASE_URL: postgresql://omnistock:omnistock@localhost:5432/omnistock_ci
+      REDIS_URL: redis://localhost:6379
+      # The *.int.test.ts DB-backed suites gate on TEST_DATABASE_URL/TEST_REDIS_URL
+      # (skip otherwise). Point them at the same ephemeral service containers so
+      # the auth integration/E2E specs (HMAC-at-rest, rotation, committed-family
+      # revoke, cookie Set-Cookie paths, throttle-spoof, admin-reset, tenant
+      # isolation) actually RUN as a merge gate — not just the /health smoke.
+      # They use supertest in-memory (app.init(), no listen) so there is no port
+      # clash with the booted server above.
+      TEST_DATABASE_URL: postgresql://omnistock:omnistock@localhost:5432/omnistock_ci
+      TEST_REDIS_URL: redis://localhost:6379
+      # CI-only placeholders — never real secrets (root CLAUDE.md constraint).
+      # Satisfy packages/config's env schema (>=32 chars, must differ, F-001 I-4).
+      JWT_ACCESS_SECRET: ci-access-secret-not-a-real-value-000000
+      JWT_REFRESH_SECRET: ci-refresh-secret-not-a-real-value-00000
+      PORT: "3000"
+      NODE_ENV: test
+      # T-001-12 — no proxy in front of the api in CI: trust zero XFF hops so
+      # the IP-throttle tests (once T-001-07 lands) exercise the direct
+      # socket-remote-address path, matching architecture.md §8.3's
+      # "only known-proxy hops" rule (see infra/gateway/README.md).
+      TRUST_PROXY_HOPS: "0"
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version-file: ".nvmrc"
+      - uses: pnpm/action-setup@v4
+      - run: pnpm install --frozen-lockfile
+      - name: build api + its workspace deps (start runs node dist/main.js)
+        # `--filter=api` (not `api^...`) so apps/api ITSELF is built, not just its
+        # deps — the boot step below runs `node dist/main.js`, which needs the
+        # compiled output. turbo's build dependsOn ["^build"] pulls in
+        # core-domain/db/contracts/config transitively.
+        run: pnpm turbo build --filter=api
+      - name: generate Prisma client
+        run: pnpm --filter @omnistock/db exec prisma generate
+      - name: migrate deploy (empty CI database)
+        run: pnpm --filter @omnistock/db exec prisma migrate deploy
+      - name: boot apps/api in the background
+        # Boot the REAL app via tsx (not `node dist/main.js`): @omnistock/config,
+        # @omnistock/db and @omnistock/contracts still ship a TS-source `main`
+        # (their build is a placeholder), so a plain node run of the compiled
+        # entrypoint can't resolve them. tsx runs the real source + real TS deps
+        # and answers HTTP for real. Producing a self-contained compiled prod
+        # artifact (bundling/compiling those deps) is a deploy-time concern with
+        # no Phase-0 target yet — tracked with T-001-13 (see forward-commitments).
+        run: pnpm --filter api exec tsx src/main.ts &>/tmp/api.log &
+        working-directory: .
+      - name: wait for a REAL 200 from a booted /health (supertest-equivalent smoke, forward-commitment AC3/AC15)
+        run: |
+          for i in $(seq 1 30); do
+            code=$(curl -s -o /dev/null -w '%{http_code}' http://localhost:3000/health || true)
+            if [ "$code" = "200" ]; then
+              echo "GET /health -> 200 (attempt $i)"
+              exit 0
+            fi
+            sleep 1
+          done
+          echo "::error::apps/api never answered 200 on /health within 30s"
+          cat /tmp/api.log || true
+          exit 1
+      - name: run api integration suite (T-001-07 supertest, once it lands)
+        run: |
+          if node -e "process.exit(require('./apps/api/package.json').scripts['test:integration'] ? 0 : 1)"; then
+            pnpm --filter api run test:integration
+          else
+            echo "::notice::apps/api has no 'test:integration' script yet (F-001 T-001-07/T-001-18 not landed) — the required /health boot-smoke above still ran and gated this job; this step is a no-op until backend-api adds the script."
+          fi
+      - name: dump api log on failure
+        if: failure()
+        run: cat /tmp/api.log || true
+
+  # F-001 T-001-20 (I-1) — web E2E lane: boot a REAL apps/web production server
+  # and prove it actually answers over HTTP (forward-commitment: "web GET / 200").
+  # Also runs apps/web's Playwright suite (T-001-18/qa) once it exists, via the
+  # same existence-check convention as the api job above — no CI file change
+  # needed when qa/frontend land `test:e2e`.
+  e2e-web:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version-file: ".nvmrc"
+      - uses: pnpm/action-setup@v4
+      - run: pnpm install --frozen-lockfile
+      - name: build workspace deps (web needs contracts built)
+        run: pnpm turbo build --filter=web^...
+      - name: build apps/web (production)
+        run: pnpm --filter web run build
+      - name: boot apps/web in the background
+        run: pnpm --filter web exec next start -p 3001 &>/tmp/web.log &
+        working-directory: .
+      - name: wait for a REAL 200 from a booted GET / (forward-commitment AC3)
+        run: |
+          for i in $(seq 1 30); do
+            code=$(curl -s -o /dev/null -w '%{http_code}' http://localhost:3001/ || true)
+            if [ "$code" = "200" ]; then
+              echo "GET / -> 200 (attempt $i)"
+              exit 0
+            fi
+            sleep 1
+          done
+          echo "::error::apps/web never answered 200 on / within 30s"
+          cat /tmp/web.log || true
+          exit 1
+      - name: install Playwright browsers (only if apps/web declares test:e2e)
+        run: |
+          if node -e "process.exit(require('./apps/web/package.json').scripts['test:e2e'] ? 0 : 1)"; then
+            pnpm --filter web exec playwright install --with-deps chromium
+          else
+            echo "::notice::apps/web has no 'test:e2e' script yet (F-001 T-001-15/16/18 not landed) — the required GET / boot-smoke above still ran and gated this job; this step is a no-op until frontend/qa add the script + Playwright config."
+          fi
+      - name: run web Playwright suite (T-001-18/qa, once it lands)
+        run: |
+          if node -e "process.exit(require('./apps/web/package.json').scripts['test:e2e'] ? 0 : 1)"; then
+            pnpm --filter web run test:e2e
+          else
+            echo "::notice::skipped — see previous step"
+          fi
+      - name: dump web log on failure
+        if: failure()
+        run: cat /tmp/web.log || true

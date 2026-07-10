@@ -157,18 +157,28 @@ model Role {
 }
 
 // RefreshToken — allowlist: NO organizationId (bound to User; auth org-agnostic)
+// F-001 deltas (T-001-02, data-model §2.1): familyId (rotation chain), tokenHash
+// (HMAC-SHA-256 keyed, unique), expiresAt (60d, slides), familyExpiresAt (90d cap,
+// inherited unchanged — D-007), lastUsedAt?, rotatedFrom now @unique (I-5).
 model RefreshToken {
-  id          String    @id @default(cuid())
-  userId      String
-  deviceId    String?
-  rotatedFrom String?
-  revokedAt   DateTime?
-  createdAt   DateTime  @default(now())
+  id              String    @id @default(cuid())
+  userId          String
+  familyId        String // NEW — rotation-chain / session id (arch §3)
+  tokenHash       String    @unique // NEW — HMAC-SHA-256(JWT_REFRESH_SECRET, tokenValue) (L-3)
+  deviceId        String? // client-supplied session label (arch §4)
+  rotatedFrom     String?   @unique // NEW @unique (I-5) — ≤1 successor per token, DB-enforced
+  expiresAt       DateTime // NEW — per-token 60d expiry, SLIDES on rotation
+  familyExpiresAt DateTime // NEW — absolute family cap, login+90d, INHERITED unchanged (D-007)
+  lastUsedAt      DateTime? // NEW (optional) — session-list UX (arch §4)
+  revokedAt       DateTime? // reuse/logout/admin revoke
+  createdAt       DateTime  @default(now())
 
   user User @relation(fields: [userId], references: [id])
 
   @@index([userId])
   @@index([rotatedFrom])
+  @@index([familyId]) // NEW — family-wide revoke + session list
+  @@index([userId, revokedAt]) // NEW — list live sessions + D-017 cap-20 count
 }
 
 // Invitation — HAS organizationId (belongs to an org)

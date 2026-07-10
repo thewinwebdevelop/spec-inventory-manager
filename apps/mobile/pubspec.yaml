@@ -44,9 +44,40 @@ dependencies:
   omnistock_api_client:
     path: api_client
 
+  # D-023 (mobile architecture refactor, user-approved new dependency) —
+  # state management + DI for the feature-first clean-architecture rewrite
+  # (docs/mobile-architecture.md §3). Manual providers only (no
+  # riverpod_generator/codegen per D-023 item 2) — every provider is
+  # overridable via ProviderScope/ProviderContainer so each layer (domain
+  # usecase, data repository, application controller) can be swapped for a
+  # fake in tests without touching a real platform channel/network.
+  flutter_riverpod: ^2.6.1
+
+  # T-001-17 ★ — secure storage for the refresh token (Keychain/Keystore).
+  # NEVER SharedPreferences/plaintext (client-security skill). The access
+  # token is never persisted here — in-memory only (see lib/features/auth/data/token_store.dart).
+  flutter_secure_storage: ^9.2.2
+
+  # Direct deps (were transitive via omnistock_api_client) — lib/features/auth/data/auth_repository_impl.dart
+  # catches DioException / builds Options directly to call the generated
+  # AuthApi, and deserializes error bodies with the shared Serializers/FullType,
+  # so both must be declared, not just relied on transitively
+  # (depend_on_referenced_packages lint). Versions match api_client/pubspec.yaml.
+  dio: ^5.7.0
+  built_value: '>=8.4.0 <9.0.0'
+
 dev_dependencies:
   flutter_test:
     sdk: flutter
+
+  # T-001-17 — mocks the generated Dio-based AuthApi in widget/unit tests
+  # without a real network call.
+  mockito: ^5.4.4
+  build_runner: any
+
+  # T-001-17 — deterministic virtual-clock testing for
+  # ThrottleCountdownController's real-time ticking (no real Timer/sleep).
+  fake_async: ^1.3.1
 
   # The "flutter_lints" package below contains a set of recommended lints to
   # encourage good coding practices. The lint set provided by the package is

@@ -152,7 +152,8 @@ Security-critical unit targets (golden rule #4 merge blocker) are marked ★.
     → **200** `{ accessToken, refreshToken: null, expiresIn: 900, tokenType: "Bearer" }`. Assert the
     body `refreshToken` is **`null`** (H-1 — the plaintext is NOT in a JS-readable place). Sets
     `omni_rt` (httpOnly, Secure, SameSite=Strict, **`Path=/auth`** — C-1, not `/auth/refresh`) **and**
-    `omni_csrf` (readable, `Secure; SameSite=Strict; Path=/auth`) cookies; the refresh token lives
+    `omni_csrf` (readable, `Secure; SameSite=Strict; **Path=/**` — D-019, widened from `/auth` so
+    `document.cookie` can read it from app pages) cookies; the refresh token lives
     **only** in the `omni_rt` cookie.
   - **(b) `tokenTransport: "body"` (mobile / default when omitted)** — → **200** with the plaintext
     refresh token in body `refreshToken` (non-null) and **no** `omni_rt`/`omni_csrf` cookies set.
@@ -408,7 +409,7 @@ INVALID_REFRESH`** (same shape as any other revoked-family presentation, e.g. I3
   current family's rows **have `revokedAt` set** — NOT merely that the endpoint returned 204 (a 204
   with **no** cookie sent, which was the C-1 bug under `Path=/auth/refresh`, would revoke **nothing**
   yet still return 204 — invisible to a status-only test). A subsequent `/auth/refresh` with that
-  token → 401. Cookies `omni_rt` + `omni_csrf` cleared (`Path=/auth`). **Other families stay live**
+  token → 401. Cookies cleared at their set paths (`omni_rt` `Path=/auth`, `omni_csrf` `Path=/` — D-019). **Other families stay live**
   (still refreshable).
 - **I4.2 logout is idempotent** — logout again on an already-dead session → **204** (no leak, no
   error). Confirms api-spec §2.4.

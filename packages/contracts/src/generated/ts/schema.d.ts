@@ -24,6 +24,166 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/auth/signup": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Create a user account (email + password)
+         * @description US-1. Public (IP-throttled). Creates a user with verified=false and returns NO tokens (MVP: client then calls /auth/login). All /auth/* POSTs require Content-Type: application/json (415 otherwise, login-CSRF defense, L-2).
+         */
+        post: operations["authSignup"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/auth/login": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Authenticate and receive tokens
+         * @description US-2. Public (IP + account throttle). The client declares its transport via `tokenTransport` (default "body"). With "cookie" (web) the refresh token is set as an httpOnly Secure SameSite=Strict cookie `omni_rt` (Path=/auth) plus a readable `omni_csrf` cookie, and the body `refreshToken` is null (H-1). With "body" (mobile/default) the plaintext refresh token is returned in the body and no cookies are set. Wrong password and unknown email both return the identical 401 INVALID_CREDENTIALS (enumeration-safe). Throttle is ALWAYS its own 429 + Retry-After (M-1), never folded into the 401.
+         */
+        post: operations["authLogin"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/auth/refresh": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Rotate the refresh token → new token pair
+         * @description US-3. Dual-transport: the refresh token is presented via the `omni_rt` cookie (web) OR a body `refreshToken` field (mobile). Resolution order: cookie first, then body. On the cookie path an `X-CSRF-Token` header must equal the `omni_csrf` cookie (403 otherwise). The response follows the presented transport. Rotation mints a new refresh token; the old one becomes unusable. Reuse of a consumed/revoked token outside the 60s leeway (D-011) revokes the whole family, but the wire response is the same generic 401 INVALID_REFRESH. IP-throttled (L-5) — no account dimension. Auth is carried by the cookie or body (not a standard bearer/apiKey scheme), so `security` is [].
+         */
+        post: operations["authRefresh"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/auth/logout": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Revoke the current session (family)
+         * @description US-4. Revokes the caller's current family (from the presented refresh token; cookie or body) and clears the auth cookies. Optional body `familyId` revokes a specific LISTED family that MUST belong to the caller (M-3); a foreign/unknown familyId is a no-op. Always 204 (idempotent). CSRF-checked on the cookie path. Auth is via the refresh token (cookie/body), so `security` is [].
+         */
+        post: operations["authLogout"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/auth/logout-all": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Revoke ALL the user's sessions
+         * @description US-4. Bearer-authed. Revokes every family for the authenticated user and clears the caller's cookies. 204.
+         */
+        post: operations["authLogoutAll"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/auth/sessions": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * List the user's live sessions/devices
+         * @description US-3. Bearer-authed. Lists live (non-revoked, non-expired) families for the user — bounded at 20 (D-017). The family matching the `omni_rt` cookie (if present) is marked current. Also reads the cookie to mark current — that is an input, not an auth requirement.
+         */
+        get: operations["authSessions"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/auth/change-password": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Change the caller's own password
+         * @description US-6 (D-008). Bearer-authed, org-agnostic. Verifies currentPassword (account-throttled, N-2), enforces the signup policy on newPassword, sets the new hash, and revokes all the caller's OTHER families — sparing the current family resolved from the presented refresh token (cookie/body, N-1); if none is resolvable, revokes ALL (safe direction). CSRF-checked on the cookie path.
+         */
+        post: operations["authChangePassword"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/orgs/{orgId}/members/{userId}/reset-password": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Admin resets a member's password
+         * @description US-5. Bearer-authed. The capability check is INLINE application logic (F-001-owned): the caller must have an ACTIVE Membership(orgId) whose role grants `manage_members`, AND the target must be an ACTIVE member of orgId (H-2). Any failure → the same-shape 404 (never 403 — no org-existence/status/capability oracle). On success: sets the target's password and revokes all the target's families. The capability check is not expressible as an OpenAPI security requirement.
+         */
+        post: operations["authAdminResetPassword"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
 }
 export type webhooks = Record<string, never>;
 export interface components {
@@ -48,11 +208,101 @@ export interface components {
                 redis?: "ok" | "fail";
             };
         };
+        /** @description The project-standard error envelope. `code` is a machine-readable uppercase enum; `message` is user-facing Thai copy. Every error response (401/403/404/409/415/422/429) references this schema. */
+        ErrorResponse: {
+            error: {
+                /** @description Machine-readable error code (e.g. INVALID_CREDENTIALS, RATE_LIMITED) */
+                code: string;
+                /** @description User-facing Thai message */
+                message: string;
+            };
+        };
+        OkResponse: {
+            /** @enum {boolean} */
+            ok: true;
+        };
+        SignupRequest: {
+            /** Format: email */
+            email: string;
+            password: string;
+        };
+        SignupResponse: {
+            userId: string;
+            email: string;
+            /** @enum {boolean} */
+            verified: false;
+        };
+        LoginRequest: {
+            /** Format: email */
+            email: string;
+            password: string;
+            /** @description Client session label (arch §4). Not a security boundary. */
+            deviceId?: string;
+            /**
+             * @description Refresh-token delivery channel (api-spec §0). Web sends "cookie"; mobile omits or sends "body".
+             * @default body
+             * @enum {string}
+             */
+            tokenTransport: "cookie" | "body";
+        };
+        /** @description Body-transport clients (mobile) send `refreshToken`. Cookie-transport clients (web) send it via the `omni_rt` cookie and omit the body field. */
+        RefreshRequest: {
+            refreshToken?: string | null;
+            deviceId?: string;
+        };
+        LogoutRequest: {
+            /** @description Body-transport refresh token (mobile). Web uses the cookie. */
+            refreshToken?: string | null;
+            /** @description Optional — revoke a specific LISTED family owned by the caller (M-3). */
+            familyId?: string;
+        };
+        ChangePasswordRequest: {
+            currentPassword: string;
+            newPassword: string;
+            /** @description Optional mobile refresh token to identify the current family to spare (N-1). */
+            refreshToken?: string | null;
+        };
+        AdminResetRequest: {
+            newPassword: string;
+        };
+        TokenResponse: {
+            /** @description HS256 JWT access token (Bearer). 15-minute TTL. */
+            accessToken: string;
+            /** @description The rotated refresh token on the BODY transport; `null` on the cookie transport (the token is in the httpOnly `omni_rt` cookie, never JS-readable — H-1). */
+            refreshToken: string | null;
+            /** @description Access-token TTL in seconds (900). */
+            expiresIn: number;
+            /** @enum {string} */
+            tokenType: "Bearer";
+        };
+        SessionsResponse: {
+            sessions: components["schemas"]["Session"][];
+        };
+        Session: {
+            familyId: string;
+            deviceId: string | null;
+            /** Format: date-time */
+            createdAt: string;
+            /** Format: date-time */
+            lastUsedAt: string | null;
+            /** @description True for the family matching the caller's omni_rt cookie (C-1). */
+            current: boolean;
+        };
     };
     responses: never;
-    parameters: never;
+    parameters: {
+        /** @description Organization id (the caller's authority derives from a shared membership) */
+        OrgIdParam: string;
+        /** @description Target member's user id */
+        UserIdParam: string;
+    };
     requestBodies: never;
-    headers: never;
+    headers: {
+        /** @description Seconds until the backoff window clears (UX countdown source) */
+        RetryAfter: number;
+        /** @description On the cookie transport, sets `omni_rt` (httpOnly, Secure, SameSite=Strict, Path=/auth) and `omni_csrf` (readable, Secure, SameSite=Strict, Path=/auth). Absent on the body transport. */
+        SetAuthCookies: string;
+    };
     pathItems: never;
 }
 export type $defs = Record<string, never>;
@@ -82,6 +332,441 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["HealthResponse"];
+                };
+            };
+        };
+    };
+    authSignup: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["SignupRequest"];
+            };
+        };
+        responses: {
+            /** @description Account created (no tokens issued) */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SignupResponse"];
+                };
+            };
+            /** @description Email already taken (the one necessary enumeration leak, Gate 1 §4) */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Non-JSON Content-Type (L-2) */
+            415: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Password policy or email validation failure */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description IP rate limit tripped (Retry-After seconds) */
+            429: {
+                headers: {
+                    "Retry-After": components["headers"]["RetryAfter"];
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+        };
+    };
+    authLogin: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["LoginRequest"];
+            };
+        };
+        responses: {
+            /** @description Authenticated — token pair issued */
+            200: {
+                headers: {
+                    "Set-Cookie": components["headers"]["SetAuthCookies"];
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["TokenResponse"];
+                };
+            };
+            /** @description Invalid credentials (generic — wrong password or unknown email) */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Non-JSON Content-Type (L-2) */
+            415: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Malformed request (e.g. invalid deviceId / email shape) */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description IP or account backoff tripped (Retry-After seconds) */
+            429: {
+                headers: {
+                    "Retry-After": components["headers"]["RetryAfter"];
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+        };
+    };
+    authRefresh: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["RefreshRequest"];
+            };
+        };
+        responses: {
+            /** @description Rotated — new token pair issued (transport follows the presented one) */
+            200: {
+                headers: {
+                    "Set-Cookie": components["headers"]["SetAuthCookies"];
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["TokenResponse"];
+                };
+            };
+            /** @description Refresh token unknown / expired / not current / family-cap reached / benign-retry / reuse — all generic INVALID_REFRESH (or NO_REFRESH_TOKEN when neither cookie nor body is present). */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description CSRF check failed on the cookie path */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Non-JSON Content-Type (L-2) */
+            415: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description IP rate cap tripped (Retry-After seconds, L-5) */
+            429: {
+                headers: {
+                    "Retry-After": components["headers"]["RetryAfter"];
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+        };
+    };
+    authLogout: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: {
+            content: {
+                "application/json": components["schemas"]["LogoutRequest"];
+            };
+        };
+        responses: {
+            /** @description Logged out (idempotent — always 204) */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description CSRF check failed on the cookie path */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Non-JSON Content-Type (L-2) */
+            415: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+        };
+    };
+    authLogoutAll: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description All sessions revoked */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Missing/invalid access token */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Non-JSON Content-Type (L-2) */
+            415: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+        };
+    };
+    authSessions: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Live sessions */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SessionsResponse"];
+                };
+            };
+            /** @description Missing/invalid access token */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+        };
+    };
+    authChangePassword: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ChangePasswordRequest"];
+            };
+        };
+        responses: {
+            /** @description Password changed */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["OkResponse"];
+                };
+            };
+            /** @description Missing/invalid access token, or wrong currentPassword (generic) */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description CSRF check failed on the cookie path */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Non-JSON Content-Type (L-2) */
+            415: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description newPassword policy failure */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description currentPassword backoff tripped (Retry-After seconds, N-2) */
+            429: {
+                headers: {
+                    "Retry-After": components["headers"]["RetryAfter"];
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+        };
+    };
+    authAdminResetPassword: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description Organization id (the caller's authority derives from a shared membership) */
+                orgId: components["parameters"]["OrgIdParam"];
+                /** @description Target member's user id */
+                userId: components["parameters"]["UserIdParam"];
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["AdminResetRequest"];
+            };
+        };
+        responses: {
+            /** @description Member password reset */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["OkResponse"];
+                };
+            };
+            /** @description Missing/invalid access token */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Same-shape not-found — caller lacks an active membership / capability, or the target is not an active member (never 403; no enumeration). */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Non-JSON Content-Type */
+            415: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description newPassword policy failure */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Admin reset-attempt backoff tripped (Retry-After seconds) */
+            429: {
+                headers: {
+                    "Retry-After": components["headers"]["RetryAfter"];
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
                 };
             };
         };

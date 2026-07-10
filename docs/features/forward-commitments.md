@@ -146,3 +146,25 @@ F-000 final whole-branch review (2026-07-05): AC3 (api `/health`+web 200+flutter
 | Dart OpenAPI client **green/compile**                                          | **F-006** (mobile shell)       | F-000 wire Dart codegen pipeline (AC11)                        |
 | Object storage **concrete backend** (local/minio → prod)                       | **F-040** (attachment)         | F-000 วาง stub interface + org-prefix seam                     |
 | **transaction+ledger write primitive** (write-in-tx + StockMovement) — กฎทอง 5 | **F-011** (inventory + ledger) | F-000 วาง trigger (AC8) + schema; helper define ตอน write จริง |
+
+## → deferred จาก F-001 (D-021 · mobile ★ client-security review 2026-07-06)
+
+> **UPDATE D-022 (2026-07-06):** mobile bootstrap items ถูก **ดึงกลับมาทำใน F-001 แล้ว** (user decision) — ดูแถวที่ขีดสถานะ ✅ ด้านล่าง. เหลือ F-006/devops แค่ **env base URL ค่าจริง**.
+
+| สิ่งที่เลื่อน                                                                                     | ปลายทาง build            | สถานะ                                                        |
+| ------------------------------------------------------------------------------------------------- | ------------------------ | ----------------------------------------------------------------------------- |
+| ~~mobile cold-start silent-refresh restore (M-2)~~                                                | ~~F-006~~ → **F-001**    | ✅ **done (D-022)** — `auth_bootstrap.dart` + `bootstrap_screen.dart` wired ใน main.dart; US-3 มือถือ complete |
+| **per-env mobile API base URL injection** (ค่า per-env เท่านั้น; https-guard + required-param seam ทำใน F-001 แล้ว M-3) | **F-006** + devops       | ⏸ seam พร้อม; รอค่า env ตอน deploy                          |
+| ~~release `AndroidManifest` INTERNET permission~~                                                | ~~F-006~~ → **F-001**    | ✅ **done (D-022)** — added to main manifest                 |
+| ~~transient-failure signal (L-3) · current-device row (L-4) · FLAG_SECURE (L-5)~~                | ~~F-006~~ → **F-001**    | ✅ **done (D-022)** — RefreshOutcome + session-list notice + screenshot_guard (L-4 copy รอ ux review) |
+| **compile workspace deps เป็น real JS** (config/db/contracts `main`=src/index.ts + build=`echo ok`) เพื่อ self-contained prod api artifact ที่ `node dist/main.js` boot ได้ — ตอนนี้ CI boot ผ่าน `tsx src/main.ts` (real app + real DB tests) ซึ่งพอสำหรับ gate; prod bundling = deploy-time | **devops / deploy** (คู่กับ T-001-13) | core-domain build→dist แล้ว (ref pattern); api compiles ✓ (node-ci typecheck) |
+
+## → BOUND TRIGGERS สำหรับงานที่ยังเปิดค้าง (firm-up 2026-07-06 — กัน "มี owner แต่ไม่มี trigger")
+
+> ⚠️ **GAP ที่ต้อง user/product เคาะ:** backlog **ไม่มี feature "production deploy / hosting"** เลย (F-000 = scaffold เท่านั้น). งาน 2 ตัวล่างพึ่ง target นั้น → **ต้องสร้าง feature ใหม่ (เสนอ: `F-009 Production deploy & hosting`, tier ⚙️ infra)** ให้เป็นเจ้าของ, ไม่งั้นมันจะลอยจริง. จนกว่าจะมี feature นั้น = ผูกไว้ที่ **launch-readiness bucket** (ก่อนขายนอก dogfood).
+
+| งานเปิดค้าง | เจ้าของ | **TRIGGER (เมื่อไหร่ทำ)** | binding |
+| --- | --- | --- | --- |
+| **T-001-13** global `/auth/*` request ceiling (L-4, กัน dummy-verify CPU-DoS) + **prod api artifact** (แถวบน) | devops | **เมื่อ spec feature deploy/hosting (F-009 เสนอ) เข้า Gate-1** — ต้องเป็น AC/checklist ของ feature นั้น · หรืออย่างช้า = ก่อน first non-dev deploy | ต้องเข้า Gate-1 ของ F-009 (ถ้าสร้าง) · ระหว่างนี้อยู่ launch-readiness bucket |
+| **T-001-19** agentic Track-2 (Browser Use SME ไทย, non-blocking) | qa + devops | **TRIGGER ปลดแล้ว** (dep T-001-15 = done) → **actionable ทันที**; งาน = wire scheduled workflow (`.github/workflows` cron) + เขียน persona flow | ไม่ block F-001 merge · หยิบเป็น task แยกได้เลย (spawn เป็น chip แล้ว) |
+| **native compile lane ใน CI** (Kotlin/Swift ไม่ถูก compile — flutter-ci = analyze+test เท่านั้น; FLAG_SECURE handlers + AppDelegate ship uncompiled, edit พังเงียบ → guard degrade เป็น no-op) | devops | ก่อน mobile feature ถัดไป (F-006) หรือก่อน first mobile release | เพิ่ม `flutter build apk --debug` (+ iOS `--no-codesign` เมื่อมี mac runner) เข้า flutter-ci · **แยกจาก F-001 merge** เพราะ native build อาจเผย scaffold issue อื่น |

@@ -80,4 +80,55 @@ describe("envSchema (AC14)", () => {
       expect(result.data.JWT_ACCESS_SECRET).not.toBe(result.data.JWT_REFRESH_SECRET);
     }
   });
+
+  // --- F-001 security review: TRUST_PROXY_HOPS (spoof-safe default) ----------
+  it("TRUST_PROXY_HOPS defaults to 0 (trust no hop → spoof-safe) when omitted", () => {
+    const result = envSchema.safeParse(validEnv); // validEnv has no TRUST_PROXY_HOPS
+    expect(result.success).toBe(true);
+    if (result.success) expect(result.data.TRUST_PROXY_HOPS).toBe("0");
+  });
+
+  it("TRUST_PROXY_HOPS accepts a non-negative integer string", () => {
+    const result = envSchema.safeParse({ ...validEnv, TRUST_PROXY_HOPS: "1" });
+    expect(result.success).toBe(true);
+    if (result.success) expect(result.data.TRUST_PROXY_HOPS).toBe("1");
+  });
+
+  it("NEGATIVE: TRUST_PROXY_HOPS garbage (non-integer / negative) fails and names it", () => {
+    for (const bad of ["true", "-1", "1.5", "abc"]) {
+      const result = envSchema.safeParse({ ...validEnv, TRUST_PROXY_HOPS: bad });
+      expect(result.success).toBe(false);
+      if (!result.success) {
+        const named = result.error.issues.map((i) => i.path.join("."));
+        expect(named).toContain("TRUST_PROXY_HOPS");
+      }
+    }
+  });
+
+  // --- F-001 security review: CORS_ALLOWED_ORIGINS (parsed allow-list) -------
+  it("CORS_ALLOWED_ORIGINS defaults to an empty list (no cross-origin) when omitted", () => {
+    const result = envSchema.safeParse(validEnv);
+    expect(result.success).toBe(true);
+    if (result.success) expect(result.data.CORS_ALLOWED_ORIGINS).toEqual([]);
+  });
+
+  it("CORS_ALLOWED_ORIGINS parses comma-separated origins → trimmed string[]", () => {
+    const result = envSchema.safeParse({
+      ...validEnv,
+      CORS_ALLOWED_ORIGINS: "http://localhost:3001, https://app.example.com ",
+    });
+    expect(result.success).toBe(true);
+    if (result.success) {
+      expect(result.data.CORS_ALLOWED_ORIGINS).toEqual([
+        "http://localhost:3001",
+        "https://app.example.com",
+      ]);
+    }
+  });
+
+  it("CORS_ALLOWED_ORIGINS drops blank entries", () => {
+    const result = envSchema.safeParse({ ...validEnv, CORS_ALLOWED_ORIGINS: "a.com,,  ,b.com" });
+    expect(result.success).toBe(true);
+    if (result.success) expect(result.data.CORS_ALLOWED_ORIGINS).toEqual(["a.com", "b.com"]);
+  });
 });

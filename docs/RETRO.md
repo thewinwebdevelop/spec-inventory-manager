@@ -54,4 +54,11 @@ protocol (แตะ gate/กติกาหลัก = Type 1 รอ user เส
 
 ---
 
-_(ยังไม่มี entry — feature แรกที่ผ่าน Gate F จะเริ่มบันทึกที่นี่)_
+### F-001 · 2026-07-06
+- **ช้าที่:** วน push→CI→fix 5 รอบ เพราะ "green ในเครื่อง" บังหน้าปัญหาจริง (core-domain อ่านไฟล์ด้วย node:fs ในแพ็กเกจ pure, deps ไม่ compile, `test:integration` ไม่เคย wire, เทสต์ XFF ใช้ email ผิด) — DB-backed test **ไม่เคยรันจริง**จนขึ้น CI (host Docker ค้าง + ดิสก์เต็ม). ซ้ำด้วย agent โดน usage-limit ตัดกลางงานหลายรอบ.
+- **กติกาที่ขาด:** (1) backlog **ไม่มี feature deploy/hosting** → infra ที่ defer (T-001-13, prod artifact) ไม่มีที่เกาะ (เสนอ F-009). (2) นิยาม "Gate E เขียว" ไม่ได้บังคับว่า DB-backed suite ต้อง**รันจริง** — integration lane แค่ smoke `/health`, `test:integration` ไม่ถูก wire → "code-complete" ปลอมเป็น "tested" ได้.
+- **Review จับพลาด:** core-domain fs-purity ผ่าน local build (warm cache) — purity gate จับตอน **clean build ที่ CI** ไม่ใช่ตอน review; และ ★ เทสต์ 2 ตัว (spoofed-XFF, cookie path) เขียนแล้วแต่**ไม่ถูก execute** จน DB CI พร้อม → test bug (email ไม่ valid) ซ่อนอยู่ในนั้น.
+- **Dispatch/model:** ★ tagging เวิร์ก (จับ Critical จริง: trust-proxy, cookie-path). cross-artifact defect (cookie Path ปะทะ `/api` proxy prefix) ต้องใช้ **client-security ★ pass แยก** ถึงเจอ — backend/frontend เดี่ยวๆ ไม่เจอ. agent usage-limit → PM ทำ CI-fix ทั้ง 6 commit เองใน main session.
+- **ทำซ้ำ/เลิกทำ:** **KEEP** — push ขึ้น CI จริงเพื่อไล่ภาพลวง "green ในเครื่อง" (เจอบั๊กจริง 5 ตัว) · **KEEP** — client-security ★ pass แยกจาก backend review · **STOP** — เคลม Gate E ผ่านทั้งที่เทสต์ยัง unrun; ต้องบังคับ DB-backed suite execute จริงใน CI = นิยามของ gate.
+
+> **Routing (learning loop):** (a) "Gate E ต้องมี DB-backed test รันจริง ไม่ใช่แค่ /health smoke" → เสนอแก้ **quality-gate/WEB_TEAM Gate E** (Type 1 — รอ user เคาะ). (b) "ไม่มี deploy feature" → **product** สร้าง F-009. (c) "green ในเครื่อง ≠ tested; push CI เร็วเพื่อ flush illusion" → **PM memory** (orchestration lesson).

@@ -227,3 +227,50 @@ Decision: **มอบให้ F-002 Gate 2 (data-model) เป็น required i
 Rationale: F-002 คือ feature แรกที่เขียน/อ่าน invitation จริง (invite flow) — เป็นจุด enforce ที่ถูกต้อง; แก้ schema ตอนตารางยังว่างถูกกว่าแก้ทีหลัง
 Affects: F-002 Gate-2 data-model · docs/features/forward-commitments.md
 Status: decided
+
+---
+
+### D-019 · 2026-07-06 · F-001
+
+Q: (จาก client-security review) locked C-1 ให้ทั้ง `omni_rt` และ `omni_csrf` เป็น `Path=/auth` — แต่ `omni_csrf` เป็น non-httpOnly ที่ JS ต้องอ่านจาก app page (`/login`, `/settings/security`, `/`) ซึ่งอยู่นอก `/auth` → `document.cookie` path-matching อ่านไม่ได้ → cookie transport ตายในเบราว์เซอร์จริง (client อ่าน CSRF token มา echo ใส่ `X-CSRF-Token` ไม่ได้) · แก้ยังไง?
+Asked by: @security-reviewer (client-security, advisory) Owner: @user (approved Option A)
+Decision: **แยก path 2 คุกกี้ (Option A):** `omni_rt` (httpOnly, refresh) คง **`Path=/auth`** (ส่งไป browser `/auth/*` routes เท่านั้น) · `omni_csrf` (non-httpOnly, double-submit) ย้ายเป็น **`Path=/`** ให้อ่านได้จากทุก page · auth endpoints เข้าถึงที่ browser path `/auth/*` (web dev proxy rewrite `/auth/:path*` → API `/auth/:path*`; API คงเสิร์ฟ auth ที่ `/auth/*`) — converged contract แชร์ verbatim กับ @devops + @frontend
+Rationale: `omni_csrf` **ไม่มี secret** — defense คือ `SameSite=Strict` + value-match กับ header ซึ่ง **path-independent** ทั้งคู่ → ขยาย path ไม่เสียอะไร แต่ทำให้ transport ใช้ได้จริง · single-path เดิม unworkable เพราะ `/api` proxy prefix + document-path rule (cross-artifact defect ที่ client-security review จับได้) · amends locked C-1 เฉพาะส่วน `omni_csrf` (ไม่ revert `omni_rt`=`/auth`)
+Affects: apps/api/src/auth/{auth.constants,cookies}.ts · api-spec §0 (C-1 block, §2.2/§2.4/§5) · architecture §12 · apps/web + next.config.mjs (@frontend/@devops — proxy + document.cookie read) · test-plan (Set-Cookie path assertions — @qa)
+Status: decided
+
+### D-020 · 2026-07-06 · F-001
+
+Q: workspace-map ระบุ web stack = **Next.js + Tailwind + shadcn** แต่ Tailwind/shadcn ไม่เคยถูก scaffold — F-001 frontend build ด้วย plain CSS custom properties (token 1:1 จาก design-system, 121 tests green) · จะ adopt Tailwind ตอนนี้ หรือ ratify plain-CSS?
+Asked by: @frontend (deviation flag) Owner: @user
+Decision: **Adopt Tailwind+shadcn ตอนนี้** — scaffold Tailwind v4 + shadcn ใน apps/web แล้ว remap component/token ที่มีอยู่ให้ตรง workspace-map ก่อน feature UI อื่นจะ build บน plain-CSS เพิ่ม
+Rationale: align stack ให้ตรง spec แต่เนิ่นๆ ลด drift · token value ไม่เปลี่ยน (design-system §1 เป็น source of truth) → เป็น mechanical remap ไม่ใช่ redesign · ทำเป็น follow-up **หลัง** correctness fixes (D-019 + client-security Importants) land แล้ว
+Affects: apps/web (postcss/tailwind config, components/ui/*, components/auth/*, styles/tokens.css → tailwind theme) · design-system.md (token → tailwind theme mapping note) · **ไม่แตะ** contract/API/logic (lib/*.ts คงเดิม)
+Status: **done** — migrated 2026-07-06 (mechanical remap, same token values; 17 test files / 121 tests green, typecheck+lint+build clean — see design-system.md §1.5 for the token → Tailwind theme mapping)
+
+### D-021 · 2026-07-06 · F-001 → F-006
+
+Q: (จาก ★ client-security review ของ mobile T-001-17) พบ M-2 (ไม่มี cold-start session restore — keychain เก็บ refresh token ไว้แต่เปิดแอปมา login ทุกครั้ง → US-3 "คงล็อกอิน" ใช้ไม่ได้ข้าม restart + orphan family สะสม), L-3 (transient-refresh-failure signal), L-4 (mobile ระบุ current-device row ไม่ได้), L-5 (FLAG_SECURE บนจอรหัส), + release AndroidManifest ขาด `INTERNET` permission — งานพวกนี้อยู่ใน T-001-17 หรือ F-006?
+Asked by: @security-reviewer (client-security, advisory) Owner: @user (PM decided [auto], Type-2 reversible)
+Decision: **Defer ไป F-006 (mobile app shell)** — ทั้งหมดนี้เป็น bootstrap/app-shell/env concern ที่ `main.dart` ระบุไว้เป็น F-006 seam อยู่แล้ว · T-001-17 scope = auth screens + secure storage + body-transport refresh + clear-on-logout (ทำครบ) · **แก้ทันทีใน F-001 เฉพาะ** M-1 (single-flight test — D-014), M-3 (https-in-release seam guard), L-1 (secure-storage options + allowBackup=false), L-2 (wipe-repersist epoch guard) · **F-006 ต้องรับ:** cold-start silent-refresh restore (ปิด US-3 gap บน mobile), per-env API base URL injection (ค่า devops), INTERNET permission ใน main manifest, L-3/L-4/L-5
+Rationale: bootstrap + env-injection + manifest = app-shell ของ F-006 โดยตรง — ทำใน F-001 = ก้าวข้าม seam + เสี่ยง conflict ตอน F-006 build shell · แต่ M-1/M-3/L-1/L-2 เป็น auth-local + ราคาถูก + ปิดช่องจริง จึงทำเลย · US-3 บน mobile ปิดสมบูรณ์ที่ F-006 (web ปิดแล้วใน F-001)
+Affects: F-006 scope (forward-commitment: mobile cold-start restore + env base URL + INTERNET perm + L-3/4/5) · apps/mobile/lib/main.dart + auth_client_factory (F-006 wires bootstrap) · **ไม่กระทบ** contract/AC ของ F-001 (US-3 mobile = partial→F-006)
+Status: **superseded-by D-022** (mobile cold-start ดึงกลับเข้า F-001)
+
+### D-022 · 2026-07-06 · F-001
+
+Q: (ทวน D-021 โดย user) cold-start restore กระทบ US-3 มือถือโดยตรง และ F-006 ยังไงก็ต้อง build ต่อจากของที่ทำแล้ว → ควรดึง mobile bootstrap items กลับมาทำใน F-001 เลยไหม แทนที่จะ defer?
+Asked by: @user Owner: @user
+Decision: **ดึงกลับเข้า F-001 — implement เลย** M-2 (cold-start silent-refresh restore, ปิด US-3 มือถือ), INTERNET permission (main manifest), L-3 (transient-failure signal), L-4 (current-device row), L-5 (FLAG_SECURE จอรหัส) · **ยังคงอยู่ F-006/devops:** per-env API base URL **ค่า**จริง (seam+https guard ทำแล้วใน F-001, M-3) เพราะเป็น deploy/env config
+Rationale: US-3 "คงล็อกอิน" บนมือถือเป็น AC จริง — ถ้า defer = feature ขาดครึ่งจนกว่า F-006 · F-006 (app shell) build ต่อจาก seam ที่ F-001 วาง (TokenStore/secure_storage/AuthClient.silentRefresh) อยู่แล้ว → ทำ bootstrap ตอนนี้ไม่เสียของ F-006 แค่ consume · seam-conflict risk ต่ำเพราะ bootstrap logic เขียนเป็น fn ที่ shell เรียก ไม่ผูกกับ shell UI
+Affects: apps/mobile/lib/{main.dart,auth/auth_flow.dart} + auth screens (FLAG_SECURE) + AndroidManifest · F-006 scope ลด (เหลือแค่ wire bootstrap เข้า shell + env values) · F-001 US-3 mobile = **complete** (ไม่ใช่ partial)
+Status: decided
+
+### D-023 · 2026-07-07 · mobile (cross-feature)
+
+Q: (จาก user review ของ T-001-17 — withheld confirm) โครง flat `lib/auth/` + ไม่มี state management ไม่รองรับ scale ของ backlog (~10+ mobile features Phase 1-2, org-scoping, entitlements) → mobile architecture ควรเป็นแบบไหน และ refactor เมื่อไหร่?
+Asked by: @user Owner: @user (Type 1 — architecture + new dependency)
+Decision: **(1) Feature-first + pragmatic clean architecture 4 ชั้น** (`domain` pure-Dart / `data` / `application` / `presentation` ต่อ feature + `core/` cross-cutting + `app/` composition root) ตาม [docs/mobile-architecture.md](mobile-architecture.md) · **(2) Riverpod** (`flutter_riverpod` ^2, manual providers ไม่ใช้ codegen ก่อน) เป็น state management + DI — provider override = inject test ได้ทุก layer ตามที่ user กำหนด · **(3) Refactor ก่อน merge PR #5** — main เริ่มด้วยโครงที่ถูก, 127 เทสต์เดิม = regression net, F-006 build ต่อทันที · **(4) เพิ่ม mobile boundary gate ใน CI** (คู่ขนาน depcruise ฝั่ง server): domain ห้าม Flutter/dio/generated · core ห้าม import features · generated client เฉพาะ data+core/api
+Rationale: feature-first scale ตาม backlog (feature ใหม่ = โฟลเดอร์ใหม่) · Riverpod ให้ DI+state ตัวเดียว, `AsyncValue` ตรง 4 states ของ design-system, ceremony ต่ำกว่า Bloc สำหรับแอป CRUD+sync, GetX ตัดทิ้ง (discipline) · จุดแก้หลัก: แยก refresh-machinery (→ `core/api`, ทุก feature ได้ silent-refresh ฟรี) ออกจาก auth endpoints (→ `features/auth/data`)
+Affects: apps/mobile ทั้งหมด (โครง + pubspec + เทสต์ 127 ตัว migrate) · `apps/mobile/CLAUDE.md` (แผนที่โครงใหม่ + exemplar = `features/auth/`) · CI flutter-ci lane (+boundary gate) · ทุก mobile feature ถัดไป (F-006/013/024/027/028/030/050/084/093) ใช้ template นี้ · supersedes โครง flat ของ T-001-17 (พฤติกรรม/สัญญา ★ ไม่เปลี่ยน)
+Status: decided

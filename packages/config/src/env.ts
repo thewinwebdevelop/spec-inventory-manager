@@ -36,6 +36,33 @@ export const envSchema = z
       required_error: "NODE_ENV is required",
       invalid_type_error: "NODE_ENV must be one of development|test|production",
     }),
+    // --- Trusted-proxy hop count (F-001 security review · T-001-06/12) --------
+    // How many X-Forwarded-For hops to trust, counting from the right (Express
+    // `trust proxy` numeric semantics). Defaults to "0" — trust NO hop, so
+    // req.ip is the socket peer and a client can NEVER spoof X-Forwarded-For to
+    // forge req.ip and bypass the IP throttle (arch §8.1/§8.3). Prod behind one
+    // reverse proxy sets "1"; raise only for a real longer known chain. Garbage
+    // (non-integer/negative) fails fast at boot.
+    TRUST_PROXY_HOPS: z
+      .string()
+      .regex(/^\d+$/, "TRUST_PROXY_HOPS must be a non-negative integer")
+      .default("0"),
+    // --- CORS allow-list (F-001 T-001-11) ------------------------------------
+    // Comma-separated browser origins the API may set Access-Control-Allow-
+    // Origin + Allow-Credentials:true for. Parsed to a string[] (blank entries
+    // dropped). main.ts passes THIS EXPLICIT LIST to enableCors — never `*`/
+    // `true` with credentials, which would break the login-CSRF "preflight the
+    // API won't allow" property (api-spec §0). Default "" = no cross-origin
+    // allowed (same-origin dev proxy path, apps/web rewrites).
+    CORS_ALLOWED_ORIGINS: z
+      .string()
+      .default("")
+      .transform((raw) =>
+        raw
+          .split(",")
+          .map((o) => o.trim())
+          .filter((o) => o.length > 0),
+      ),
   })
   .refine((env) => env.JWT_ACCESS_SECRET !== env.JWT_REFRESH_SECRET, {
     message:

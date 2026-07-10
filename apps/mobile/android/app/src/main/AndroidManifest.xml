@@ -2,7 +2,9 @@
     <application
         android:label="mobile"
         android:name="${applicationName}"
-        android:icon="@mipmap/ic_launcher">
+        android:icon="@mipmap/ic_launcher"
+        android:allowBackup="false"
+        android:fullBackupContent="false">
         <activity
             android:name=".MainActivity"
             android:exported="true"
@@ -42,4 +44,12 @@
             <data android:mimeType="text/plain"/>
         </intent>
     </queries>
+
+    <!-- T-001-17 ★ client-security review fix: this was previously only
+         declared in the debug/profile manifests (added there for the
+         Flutter tool's dev bridge, not for app traffic) — a release build
+         had NO INTERNET permission at all and could never reach the API.
+         Required for every generated Dart client call (package:
+         omnistock_api_client / lib/auth/**) in every build variant. -->
+    <uses-permission android:name="android.permission.INTERNET"/>
 </manifest>

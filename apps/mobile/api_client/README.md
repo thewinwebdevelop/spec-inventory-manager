@@ -48,13 +48,16 @@ Please follow the [installation procedure](#installation--usage) and then run th
 import 'package:omnistock_api_client/omnistock_api_client.dart';
 
 
-final api = OmnistockApiClient().getSystemApi();
+final api = OmnistockApiClient().getAuthApi();
+final String orgId = orgId_example; // String | Organization id (the caller's authority derives from a shared membership)
+final String userId = userId_example; // String | Target member's user id
+final AdminResetRequest adminResetRequest = ; // AdminResetRequest | 
 
 try {
-    final response = await api.getHealth();
+    final response = await api.authAdminResetPassword(orgId, userId, adminResetRequest);
     print(response);
 } on DioException catch (e) {
-    print("Exception when calling SystemApi->getHealth: $e\n");
+    print("Exception when calling AuthApi->authAdminResetPassword: $e\n");
 }
 
 ```
@@ -65,13 +68,34 @@ All URIs are relative to *http://localhost:3000*
 
 Class | Method | HTTP request | Description
 ------------ | ------------- | ------------- | -------------
+[*AuthApi*](doc/AuthApi.md) | [**authAdminResetPassword**](doc/AuthApi.md#authadminresetpassword) | **POST** /orgs/{orgId}/members/{userId}/reset-password | Admin resets a member&#39;s password
+[*AuthApi*](doc/AuthApi.md) | [**authChangePassword**](doc/AuthApi.md#authchangepassword) | **POST** /auth/change-password | Change the caller&#39;s own password
+[*AuthApi*](doc/AuthApi.md) | [**authLogin**](doc/AuthApi.md#authlogin) | **POST** /auth/login | Authenticate and receive tokens
+[*AuthApi*](doc/AuthApi.md) | [**authLogout**](doc/AuthApi.md#authlogout) | **POST** /auth/logout | Revoke the current session (family)
+[*AuthApi*](doc/AuthApi.md) | [**authLogoutAll**](doc/AuthApi.md#authlogoutall) | **POST** /auth/logout-all | Revoke ALL the user&#39;s sessions
+[*AuthApi*](doc/AuthApi.md) | [**authRefresh**](doc/AuthApi.md#authrefresh) | **POST** /auth/refresh | Rotate the refresh token → new token pair
+[*AuthApi*](doc/AuthApi.md) | [**authSessions**](doc/AuthApi.md#authsessions) | **GET** /auth/sessions | List the user&#39;s live sessions/devices
+[*AuthApi*](doc/AuthApi.md) | [**authSignup**](doc/AuthApi.md#authsignup) | **POST** /auth/signup | Create a user account (email + password)
 [*SystemApi*](doc/SystemApi.md) | [**getHealth**](doc/SystemApi.md#gethealth) | **GET** /health | Liveness/readiness probe
 
 
 ## Documentation For Models
 
+ - [AdminResetRequest](doc/AdminResetRequest.md)
+ - [ChangePasswordRequest](doc/ChangePasswordRequest.md)
+ - [ErrorResponse](doc/ErrorResponse.md)
+ - [ErrorResponseError](doc/ErrorResponseError.md)
  - [HealthResponse](doc/HealthResponse.md)
  - [HealthResponseChecks](doc/HealthResponseChecks.md)
+ - [LoginRequest](doc/LoginRequest.md)
+ - [LogoutRequest](doc/LogoutRequest.md)
+ - [OkResponse](doc/OkResponse.md)
+ - [RefreshRequest](doc/RefreshRequest.md)
+ - [Session](doc/Session.md)
+ - [SessionsResponse](doc/SessionsResponse.md)
+ - [SignupRequest](doc/SignupRequest.md)
+ - [SignupResponse](doc/SignupResponse.md)
+ - [TokenResponse](doc/TokenResponse.md)
 
 
 ## Documentation For Authorization

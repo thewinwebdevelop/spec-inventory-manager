@@ -1,13 +1,115 @@
 import Flutter
 import UIKit
 
+/// T-001-17 ★ (L-5, client-security skill): backs
+/// `apps/mobile/lib/auth/screenshot_guard.dart`'s `omnistock/screenshot_guard`
+/// MethodChannel. iOS has no OS-level API to block screenshots/screen
+/// recording (unlike Android's `FLAG_SECURE`) — the mitigation available on
+/// this platform is covering the view with an opaque overlay right before
+/// the app is backgrounded, so the OS's app-switcher snapshot (and the
+/// visible frame during a screen recording taken from Control Center) never
+/// shows the password field. The overlay is added/removed only while a
+/// password-entry screen is mounted (Dart-side `ScreenshotGuardScope`).
+///
+/// D-022 ★ re-review fix (Important #1 — app-switcher leak): the
+/// app-switcher snapshot is actually captured by the OS at
+/// `applicationWillResignActive` time (the moment the app becomes
+/// foreground-inactive — e.g. the switcher gesture starting, a system
+/// interruption, or the app about to background), NOT at
+/// `applicationDidEnterBackground` (which fires strictly later, once the app
+/// is already fully backgrounded). Adding the overlay only in
+/// `didEnterBackground` therefore missed the snapshot itself — the switcher
+/// card could still show the password field for the split second the OS
+/// grabs it. The overlay is now added in `applicationWillResignActive` (so
+/// it's already in place by the time the snapshot is taken) and removed in
+/// `applicationDidBecomeActive` (the true "fully interactive again" hook,
+/// which fires before `willEnterForeground` on a plain resume and also
+/// covers the resign→become-active cycle that never actually backgrounds,
+/// e.g. Control Center / notification-center swipe-down). The existing
+/// `didEnterBackground`/`willEnterForeground` hooks are kept as idempotent
+/// belt-and-braces (add/remove no-ops if already in the desired state) for
+/// app lifecycles that skip straight to background without an
+/// resign-active/become-active pair being observed by this class first.
 @main
 @objc class AppDelegate: FlutterAppDelegate {
+  private var isScreenshotGuardEnabled = false
+  private var privacyOverlay: UIView?
+
   override func application(
     _ application: UIApplication,
     didFinishLaunchingWithOptions launchOptions: [UIApplication.LaunchOptionsKey: Any]?
   ) -> Bool {
     GeneratedPluginRegistrant.register(with: self)
+
+    if let controller = window?.rootViewController as? FlutterViewController {
+      let channel = FlutterMethodChannel(
+        name: "omnistock/screenshot_guard",
+        binaryMessenger: controller.binaryMessenger
+      )
+      channel.setMethodCallHandler { [weak self] call, result in
+        switch call.method {
+        case "enable":
+          self?.isScreenshotGuardEnabled = true
+          result(nil)
+        case "disable":
+          self?.isScreenshotGuardEnabled = false
+          self?.removePrivacyOverlay()
+          result(nil)
+        default:
+          result(FlutterMethodNotImplemented)
+        }
+      }
+    }
+
     return super.application(application, didFinishLaunchingWithOptions: launchOptions)
+  }
+
+  // D-022: this is the hook that actually precedes the app-switcher
+  // snapshot — covering the view here (rather than only in
+  // didEnterBackground, which fires too late) is what closes the leak.
+  override func applicationWillResignActive(_ application: UIApplication) {
+    if isScreenshotGuardEnabled {
+      addPrivacyOverlay()
+    }
+    super.applicationWillResignActive(application)
+  }
+
+  // D-022: mirrors willResignActive — this is the true "fully interactive
+  // again" hook (fires on every resign→become-active cycle, including ones
+  // that never actually background the app, e.g. Control Center).
+  override func applicationDidBecomeActive(_ application: UIApplication) {
+    removePrivacyOverlay()
+    super.applicationDidBecomeActive(application)
+  }
+
+  // Idempotent belt-and-braces: kept so any lifecycle path that reaches
+  // background/foreground without this class having observed a matching
+  // resignActive/becomeActive first still ends up in the right state.
+  // addPrivacyOverlay()/removePrivacyOverlay() are both no-ops if already in
+  // the desired state (guarded by `privacyOverlay == nil` / nil-check).
+  override func applicationDidEnterBackground(_ application: UIApplication) {
+    if isScreenshotGuardEnabled {
+      addPrivacyOverlay()
+    }
+    super.applicationDidEnterBackground(application)
+  }
+
+  override func applicationWillEnterForeground(_ application: UIApplication) {
+    removePrivacyOverlay()
+    super.applicationWillEnterForeground(application)
+  }
+
+  private func addPrivacyOverlay() {
+    guard privacyOverlay == nil, let window = self.window else { return }
+    let overlay = UIView(frame: window.bounds)
+    overlay.backgroundColor = UIColor.white
+    overlay.tag = 0x5EC12E // arbitrary marker tag, no functional meaning
+    window.addSubview(overlay)
+    privacyOverlay = overlay
+  }
+
+  private func removePrivacyOverlay() {
+    privacyOverlay?.removeFromSuperview()
+    privacyOverlay = nil
   }
 }
