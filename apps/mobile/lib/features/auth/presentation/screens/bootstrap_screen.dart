@@ -1,8 +1,8 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
-import '../../../../core/i18n/auth_th.dart';
-import '../../../../app/theme/app_theme.dart';
+import '../../../../core/l10n/l10n.dart';
+import '../../../../core/theme/app_theme.dart';
 import '../../../../core/ui/error_banner.dart';
 import '../../application/bootstrap_controller.dart';
 import '../../domain/entities/auth_bootstrap_status.dart';
@@ -108,6 +108,7 @@ class BootstrapScreenState extends ConsumerState<BootstrapScreen> {
     });
     final asyncStatus = ref.watch(bootstrapControllerProvider);
     final isTransientFailure = asyncStatus.valueOrNull == AuthBootstrapStatus.transientFailure;
+    final t = AppLocalizations.of(context);
 
     return Scaffold(
       body: SafeArea(
@@ -120,15 +121,15 @@ class BootstrapScreenState extends ConsumerState<BootstrapScreen> {
                     crossAxisAlignment: CrossAxisAlignment.stretch,
                     children: [
                       Text(
-                        AuthTh.bootstrapOfflineTitle,
+                        t.authBootstrapOfflineTitle,
                         style: AppTypography.headingSm,
                         textAlign: TextAlign.center,
                       ),
                       const SizedBox(height: AppSpacing.s4),
                       ErrorBanner(
-                        message: AuthTh.bootstrapOfflineBody,
+                        message: t.authBootstrapOfflineBody,
                         onRetry: retry,
-                        retryLabel: AuthTh.bootstrapOfflineRetry,
+                        retryLabel: t.authBootstrapOfflineRetry,
                       ),
                       const SizedBox(height: AppSpacing.s2),
                       // D-022 (Important #2): escape hatch out of a
@@ -136,7 +137,7 @@ class BootstrapScreenState extends ConsumerState<BootstrapScreen> {
                       // NOT wipe the keychain, see `_useLoginInstead`.
                       TextButton(
                         onPressed: _useLoginInstead,
-                        child: Text(AuthTh.bootstrapOfflineUseLoginInstead),
+                        child: Text(t.authBootstrapOfflineUseLoginInstead),
                       ),
                     ],
                   )
@@ -145,7 +146,7 @@ class BootstrapScreenState extends ConsumerState<BootstrapScreen> {
                     children: [
                       const CircularProgressIndicator(),
                       const SizedBox(height: AppSpacing.s4),
-                      Text(AuthTh.bootstrapLoading, style: AppTypography.bodyMd),
+                      Text(t.authBootstrapLoading, style: AppTypography.bodyMd),
                     ],
                   ),
           ),

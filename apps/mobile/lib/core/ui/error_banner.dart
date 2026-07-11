@@ -1,6 +1,6 @@
 import 'package:flutter/material.dart';
 
-import '../../app/theme/app_theme.dart';
+import '../theme/app_theme.dart';
 
 /// `ErrorBanner` (ui.md §2.1) — banner for general errors above a form,
 /// distinct from inline field errors. Reused across every auth form.

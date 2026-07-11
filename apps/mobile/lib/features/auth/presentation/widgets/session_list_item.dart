@@ -1,7 +1,7 @@
 import 'package:flutter/material.dart';
 
-import '../../../../core/i18n/auth_th.dart';
-import '../../../../app/theme/app_theme.dart';
+import '../../../../core/l10n/l10n.dart';
+import '../../../../core/theme/app_theme.dart';
 import '../../../../core/utils/relative_time.dart';
 import '../../domain/entities/session.dart';
 
@@ -20,13 +20,14 @@ class SessionListItem extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final t = AppLocalizations.of(context);
     // ux-wireframe §11.5 sketch: the row label is the readable device name
     // (or the "ไม่ทราบชื่อ" fallback) — the SEPARATE "อุปกรณ์นี้" badge is
     // what signals the current device, not the label text itself (so a
     // current row never shows "อุปกรณ์นี้" twice).
     final deviceLabel = session.deviceId?.trim().isNotEmpty == true
         ? session.deviceId!
-        : AuthTh.sessionsDeviceUnknown;
+        : t.authSessionsDeviceUnknown;
     final lastUsed = session.lastUsedAt ?? session.createdAt;
 
     return Container(
@@ -65,7 +66,7 @@ class SessionListItem extends StatelessWidget {
                 ),
                 const SizedBox(height: AppSpacing.s1),
                 Text(
-                  AuthTh.sessionsLastActive(formatRelativeTimeTh(lastUsed)),
+                  t.authSessionsLastActive(formatRelativeTimeTh(lastUsed)),
                   style: AppTypography.bodySm,
                 ),
               ],
@@ -78,7 +79,7 @@ class SessionListItem extends StatelessWidget {
                 foregroundColor: AppColors.textMuted,
                 minimumSize: const Size(0, AppSizes.tapTargetMin),
               ),
-              child: Text(AuthTh.sessionsActionLogoutDevice),
+              child: Text(t.authSessionsActionLogoutDevice),
             ),
         ],
       ),
@@ -96,7 +97,7 @@ class _CurrentBadge extends StatelessWidget {
         borderRadius: BorderRadius.circular(AppRadius.badge),
       ),
       child: Text(
-        AuthTh.sessionsBadgeCurrent,
+        AppLocalizations.of(context).authSessionsBadgeCurrent,
         style: AppTypography.bodySm.copyWith(
           color: AppColors.badgeCurrentText,
           fontWeight: FontWeight.w600,

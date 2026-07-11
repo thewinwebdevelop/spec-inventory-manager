@@ -1,0 +1,10 @@
+# R4 (docs/architecture/refactor-plan.md §4, mobile.md §3.7) — gen_l10n config.
+# Thai only for now ("structure ready for en later" — mobile.md §3.7: adding
+# lib/l10n/app_en.arb later is additive, no code changes here needed beyond
+# that new file). Built-in flutter tool codegen (no build_runner) — see
+# apps/mobile/CLAUDE.md.
+arb-dir: lib/l10n
+template-arb-file: app_th.arb
+output-localization-file: app_localizations.dart
+output-class: AppLocalizations
+nullable-getter: false

@@ -1,6 +1,6 @@
 import 'package:flutter/material.dart';
 
-import '../../app/theme/app_theme.dart';
+import '../theme/app_theme.dart';
 
 /// Plain labeled text field (email etc.) — sibling to [PasswordField] so
 /// signup/login share the same field chrome (ui.md §2.1 `AuthForm`).

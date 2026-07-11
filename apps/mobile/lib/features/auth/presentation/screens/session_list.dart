@@ -1,11 +1,11 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
-import '../../../../core/api/refresh_coordinator.dart';
-import '../../../../core/i18n/auth_th.dart';
-import '../../../../app/theme/app_theme.dart';
+import '../../../../core/l10n/l10n.dart';
+import '../../../../core/theme/app_theme.dart';
 import '../../application/session_list_controller.dart';
 import '../../domain/entities/session.dart';
+import '../../domain/exceptions.dart';
 import '../../../../core/ui/app_toast.dart';
 import '../../../../core/ui/confirm_dialog.dart';
 import '../widgets/session_list_item.dart';
@@ -55,12 +55,13 @@ class SessionListState extends ConsumerState<SessionList> {
   }
 
   Future<void> _confirmLogoutDevice(Session session) async {
+    final t = AppLocalizations.of(context);
     final confirmed = await showConfirmDialog(
       context,
-      title: AuthTh.confirmLogoutDeviceTitle,
-      body: AuthTh.confirmLogoutDeviceBody,
-      cancelLabel: AuthTh.confirmLogoutDeviceCancel,
-      confirmLabel: AuthTh.confirmLogoutDeviceConfirm,
+      title: t.authConfirmLogoutDeviceTitle,
+      body: t.authConfirmLogoutDeviceBody,
+      cancelLabel: t.authConfirmLogoutDeviceCancel,
+      confirmLabel: t.authConfirmLogoutDeviceConfirm,
       destructive: true,
     );
     if (!confirmed || !mounted) return;
@@ -68,19 +69,20 @@ class SessionListState extends ConsumerState<SessionList> {
     final success = await ref.read(sessionListControllerProvider.notifier).logoutDevice(session.familyId);
     if (!mounted) return;
     if (success) {
-      showAppToast(context, AuthTh.sessionsToastDeviceLoggedOut);
+      showAppToast(context, t.authSessionsToastDeviceLoggedOut);
     } else {
-      showAppToast(context, AuthTh.sessionsToastDeviceLogoutFailed, variant: AppToastVariant.danger);
+      showAppToast(context, t.authSessionsToastDeviceLogoutFailed, variant: AppToastVariant.danger);
     }
   }
 
   Future<void> confirmLogoutAll() async {
+    final t = AppLocalizations.of(context);
     final confirmed = await showConfirmDialog(
       context,
-      title: AuthTh.confirmLogoutAllTitle,
-      body: AuthTh.confirmLogoutAllBody,
-      cancelLabel: AuthTh.confirmLogoutAllCancel,
-      confirmLabel: AuthTh.confirmLogoutAllConfirm,
+      title: t.authConfirmLogoutAllTitle,
+      body: t.authConfirmLogoutAllBody,
+      cancelLabel: t.authConfirmLogoutAllCancel,
+      confirmLabel: t.authConfirmLogoutAllConfirm,
       destructive: true,
     );
     if (!confirmed || !mounted) return;
@@ -93,7 +95,7 @@ class SessionListState extends ConsumerState<SessionList> {
       case SessionListLoadResult.sessionExpired:
         _notifySessionExpiredOnce();
       case null:
-        showAppToast(context, AuthTh.sessionsErrorLogoutAllFailed, variant: AppToastVariant.danger);
+        showAppToast(context, t.authSessionsErrorLogoutAllFailed, variant: AppToastVariant.danger);
     }
   }
 
@@ -116,13 +118,14 @@ class SessionListState extends ConsumerState<SessionList> {
     final loading = (asyncSessions.isLoading && !asyncSessions.hasValue) || sessionExpired;
     final hasError = asyncSessions.hasError && !sessionExpired;
     final sessions = asyncSessions.valueOrNull ?? const <Session>[];
+    final t = AppLocalizations.of(context);
 
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
-        Text(AuthTh.sessionsTitle, style: AppTypography.headingSm),
+        Text(t.authSessionsTitle, style: AppTypography.headingSm),
         const SizedBox(height: AppSpacing.s1),
-        Text(AuthTh.sessionsSubtitle, style: AppTypography.bodySm),
+        Text(t.authSessionsSubtitle, style: AppTypography.bodySm),
         const SizedBox(height: AppSpacing.s4),
         // T-001-17 ★ (L-4): mobile can never resolve `current` (api-spec
         // §2.6 — Bearer-only calls get `current: false` on every row, since
@@ -141,9 +144,9 @@ class SessionListState extends ConsumerState<SessionList> {
           Center(
             child: Column(
               children: [
-                Text(AuthTh.sessionsErrorLoadFailed, style: AppTypography.bodyMd),
+                Text(t.authSessionsErrorLoadFailed, style: AppTypography.bodyMd),
                 const SizedBox(height: AppSpacing.s3),
-                OutlinedButton(onPressed: load, child: Text(AuthTh.sessionsActionRetry)),
+                OutlinedButton(onPressed: load, child: Text(t.authSessionsActionRetry)),
               ],
             ),
           )
@@ -157,7 +160,7 @@ class SessionListState extends ConsumerState<SessionList> {
           ElevatedButton(
             onPressed: confirmLogoutAll,
             style: ElevatedButton.styleFrom(backgroundColor: AppColors.danger),
-            child: Text(AuthTh.sessionsActionLogoutAll),
+            child: Text(t.authSessionsActionLogoutAll),
           ),
         ],
       ],
@@ -187,7 +190,7 @@ class _MobileCurrentDeviceNotice extends StatelessWidget {
           const SizedBox(width: AppSpacing.s2),
           Expanded(
             child: Text(
-              AuthTh.sessionsMobileCannotIdentifyCurrent,
+              AppLocalizations.of(context).authSessionsMobileCannotIdentifyCurrent,
               style: AppTypography.bodySm.copyWith(color: AppColors.warningText),
             ),
           ),

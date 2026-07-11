@@ -1,7 +1,7 @@
 import 'package:flutter/material.dart';
 
-import '../../../../core/i18n/auth_th.dart';
-import '../../../../app/theme/app_theme.dart';
+import '../../../../core/l10n/l10n.dart';
+import '../../../../core/theme/app_theme.dart';
 
 /// "ลืมรหัสผ่าน?" — static help (ux-wireframe §3.3/§11.4). No API call: not
 /// self-serve reset in MVP (F-081 later). Rendered as a full-screen or bottom
@@ -14,6 +14,7 @@ class LoginHelpScreen extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final t = AppLocalizations.of(context);
     return Scaffold(
       body: SafeArea(
         child: Padding(
@@ -22,20 +23,20 @@ class LoginHelpScreen extends StatelessWidget {
             crossAxisAlignment: CrossAxisAlignment.stretch,
             children: [
               const SizedBox(height: AppSpacing.s8),
-              Text(AuthTh.helpTitle, style: AppTypography.headingMd, textAlign: TextAlign.center),
+              Text(t.authHelpTitle, style: AppTypography.headingMd, textAlign: TextAlign.center),
               const SizedBox(height: AppSpacing.s6),
-              Text(AuthTh.helpBody, style: AppTypography.bodyMd),
+              Text(t.authHelpBody, style: AppTypography.bodyMd),
               const SizedBox(height: AppSpacing.s6),
               const Divider(color: AppColors.borderDefault),
               const SizedBox(height: AppSpacing.s6),
               Text(
-                AuthTh.helpBodySoloOwner,
+                t.authHelpBodySoloOwner,
                 style: AppTypography.bodySm.copyWith(color: AppColors.textMuted),
               ),
               const SizedBox(height: AppSpacing.s8),
               ElevatedButton(
                 onPressed: onBackToLogin,
-                child: Text(AuthTh.helpBackToLogin),
+                child: Text(t.authHelpBackToLogin),
               ),
             ],
           ),

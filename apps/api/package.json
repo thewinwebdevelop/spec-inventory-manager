@@ -8,6 +8,7 @@
     "typecheck": "tsc -p tsconfig.json --noEmit",
     "test": "vitest run",
     "test:integration": "vitest run int.test",
+    "depcruise": "omnistock-api-boundaries",
     "dev": "tsx watch src/main.ts",
     "start": "node dist/main.js",
     "check-env": "tsx scripts/check-env.ts"

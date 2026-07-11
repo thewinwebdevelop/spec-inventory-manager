@@ -1,6 +1,6 @@
 import 'package:flutter/material.dart';
 
-import '../../app/theme/app_theme.dart';
+import '../theme/app_theme.dart';
 
 /// `ConfirmDialog` (ui.md §2.1) — 2-button confirm (cancel/confirm), variant
 /// `default`/`destructive`. Mobile renders as a bottom sheet (ux-wireframe

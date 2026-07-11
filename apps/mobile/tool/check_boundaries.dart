@@ -5,7 +5,9 @@
 //
 // Run: `fvm dart run tool/check_boundaries.dart` (from apps/mobile/).
 //
-// Rules enforced (docs/mobile-architecture.md §6, D-023 item 4):
+// Rules enforced (docs/mobile-architecture.md §6, D-023 item 4; rules 6-7
+// added per docs/architecture/mobile.md §5.2 / refactor-plan.md §4, the
+// pre-Phase-1 hardening batch):
 //   1. lib/features/*/domain/**  must NOT import flutter/dio/
 //      omnistock_api_client/riverpod.
 //   2. lib/core/**               must NOT import lib/features/**.
@@ -17,6 +19,19 @@
 //      data/application/presentation (the dependency rule points inward —
 //      a "pure" domain file re-exporting or importing data/ would pull the
 //      generated client in transitively while looking clean under rule 1).
+//   6. No file may import lib/app/** EXCEPT lib/main.dart — app/ is the
+//      composition root; it imports features/*+core/*, never the reverse
+//      (a file WITHIN lib/app/** importing another lib/app/** file is fine
+//      — that's app/ assembling its own pieces, not a features/core->app
+//      dependency).
+//   7. lib/features/*/presentation/** must NOT import lib/core/api/**
+//      directly — a screen must never make its own HTTP call; it goes
+//      through application/ -> data/ like every other repository access.
+//
+// Plus a test-presence check (mobile.md §5.2, D-014): every
+// lib/features/<f>/ must have a non-empty test/features/<f>/ — printed
+// separately from the import-boundary violations above (it isn't an import
+// rule) but with the same "fail the whole run" contract.
 //
 // All URI-bearing directives are scanned — `import`, `export`, and
 // `part`/`part of 'uri.dart'` — not just `import` (★ sanity-pass fix: an
@@ -110,6 +125,11 @@ bool _isFeatureDataPath(String libRelativePath) =>
 bool _isCoreApiPath(String libRelativePath) => libRelativePath.startsWith('core/api/');
 
 bool _isCorePath(String libRelativePath) => libRelativePath.startsWith('core/');
+
+bool _isAppPath(String libRelativePath) => libRelativePath.startsWith('app/');
+
+bool _isPresentationPath(String libRelativePath) =>
+    RegExp(r'^features/[^/]+/presentation/').hasMatch(libRelativePath);
 
 void main(List<String> args) {
   final libDir = Directory('lib');
@@ -212,17 +232,72 @@ void main(List<String> args) {
           ));
         }
       }
+
+      // ---- Rule 6: no file imports app/** except main.dart (app/ importing app/ is fine) ----
+      if (libRelative != 'main.dart' &&
+          !_isAppPath(libRelative) &&
+          targetLibRelative != null &&
+          _isAppPath(targetLibRelative)) {
+        violations.add(Violation(
+          rawPath,
+          6,
+          'line ${imp.lineNumber}: imports "$uri" (only main.dart may import app/ — app/ is the '
+          'composition root and must not be depended on by features/ or core/)',
+        ));
+      }
+
+      // ---- Rule 7: presentation/ must not import core/api/ directly ----
+      if (_isPresentationPath(libRelative) && targetLibRelative != null && _isCoreApiPath(targetLibRelative)) {
+        violations.add(Violation(
+          rawPath,
+          7,
+          'line ${imp.lineNumber}: imports "$uri" (presentation/ must not import core/api/ directly — '
+          'a screen must never make its own HTTP call; go through application/ -> data/)',
+        ));
+      }
     }
   }
 
-  if (violations.isEmpty) {
+  // ---- Test-presence check (mobile.md §5.2, D-014) — every
+  // lib/features/<f>/ must have a non-empty test/features/<f>/. ----
+  final featuresDir = Directory('lib/features');
+  final testPresenceViolations = <String>[];
+  if (featuresDir.existsSync()) {
+    final featureNames = featuresDir
+        .listSync()
+        .whereType<Directory>()
+        .map((d) => d.path.replaceAll(r'\', '/').split('/').last)
+        .toList()
+      ..sort();
+    for (final feature in featureNames) {
+      final testDir = Directory('test/features/$feature');
+      final hasTests = testDir.existsSync() &&
+          testDir.listSync(recursive: true).whereType<File>().any((f) => f.path.endsWith('_test.dart'));
+      if (!hasTests) {
+        testPresenceViolations.add(
+          'lib/features/$feature/ has no non-empty test/features/$feature/ '
+          '(every implementation file needs a mirrored test — D-014)',
+        );
+      }
+    }
+  }
+
+  if (violations.isEmpty && testPresenceViolations.isEmpty) {
     stdout.writeln('check_boundaries: OK — ${dartFiles.length} files scanned, no violations.');
     exit(0);
   }
 
-  stderr.writeln('check_boundaries: ${violations.length} violation(s) found:');
-  for (final v in violations) {
-    stderr.writeln(v);
+  if (violations.isNotEmpty) {
+    stderr.writeln('check_boundaries: ${violations.length} boundary violation(s) found:');
+    for (final v in violations) {
+      stderr.writeln(v);
+    }
+  }
+  if (testPresenceViolations.isNotEmpty) {
+    stderr.writeln('check_boundaries: ${testPresenceViolations.length} test-presence violation(s) found:');
+    for (final v in testPresenceViolations) {
+      stderr.writeln('  [test-presence] $v');
+    }
   }
   exit(1);
 }

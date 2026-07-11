@@ -18,6 +18,7 @@ async function bootstrap(): Promise<void> {
   const { NestFactory } = await import("@nestjs/core");
   const { AppModule } = await import("./app.module");
   const { ValidationPipe, UnprocessableEntityException } = await import("@nestjs/common");
+  const { DomainExceptionFilter } = await import("./common/domain-exception.filter");
   const cookieParser = (await import("cookie-parser")).default;
 
   const app = await NestFactory.create(AppModule, {
@@ -67,6 +68,13 @@ async function bootstrap(): Promise<void> {
       },
     }),
   );
+
+  // R1 (backend.md §3.5) — the single wire-envelope authority. Converts typed
+  // DomainExceptions (+ any other thrown error) into
+  // `{ error: { code, message, details?, fieldErrors?, traceId? } }`. Registered
+  // AFTER the pipe so a 422 from ValidationPipe also flows through it. Unknown
+  // errors → 500 INTERNAL with nothing leaked.
+  app.useGlobalFilters(new DomainExceptionFilter());
 
   app.enableShutdownHooks();
 

@@ -48,6 +48,14 @@ class AuthRepositoryImpl implements AuthRepository {
   final String? _deviceId;
   late final RefreshCoordinator _refreshCoordinator;
 
+  /// R2 (docs/architecture/refactor-plan.md §4) — public seam so
+  /// `features/auth/data/auth_client_factory.dart` can wire the SAME
+  /// coordinator instance into `core/api/refresh_interceptor.dart` on the
+  /// shared Dio (single-flight dedupe is per-instance — the interceptor and
+  /// this repository's own [silentRefresh]/[silentRefreshDetailed] MUST
+  /// share one coordinator, not each get their own). Purely additive.
+  RefreshCoordinator get refreshCoordinator => _refreshCoordinator;
+
   TokenStore get tokenStore => _tokenStore;
 
   /// T-001-17 ★ (L-4): the label THIS client instance sends as `deviceId` on
@@ -102,6 +110,7 @@ class AuthRepositoryImpl implements AuthRepository {
 
   // ---- Public endpoints (no access token needed) ----
 
+  @override
   Future<SignupResponse> signup({
     required String email,
     required String password,
@@ -126,6 +135,7 @@ class AuthRepositoryImpl implements AuthRepository {
   /// default `"body"`, api-spec §0 item 2) — never declares `"cookie"`.
   /// On success, the access token goes to memory and the refresh token to
   /// the OS keychain/keystore (client-security skill).
+  @override
   Future<TokenResponse> login({
     required String email,
     required String password,
@@ -289,19 +299,59 @@ class AuthRepositoryImpl implements AuthRepository {
   /// A 401 that DOES carry `INVALID_CREDENTIALS` is the documented
   /// wrong-current-password outcome (api-spec §2.7) — never route that
   /// through silent-refresh/session-expiry.
-  static bool _isChangePasswordAuthExpiry(ApiError e) => e.code != 'INVALID_CREDENTIALS';
+  ///
+  /// Code-based (not `ApiError`-based, unlike [_defaultIsAuthExpiry]/
+  /// [requestWithRefresh]'s `isAuthExpiry` param) so R2's
+  /// `core/api/refresh_interceptor.dart` can apply the SAME predicate via
+  /// `options.extra['authExpiryOverride']` (see [changePassword]) — one
+  /// source of truth for this rule, consumed by both the still-present
+  /// `requestWithRefresh` path and the interceptor path.
+  static bool _isChangePasswordAuthExpiry(String? code) => code != 'INVALID_CREDENTIALS';
 
   // ---- Authenticated endpoints (Bearer + silent-refresh-then-retry-once) ----
+  //
+  // R2 (docs/architecture/refactor-plan.md §4) — `core/api/refresh_interceptor.dart`
+  // now ALSO does silent-refresh-then-retry-once transparently, at the Dio
+  // level, for every bearer-scoped request on this repository's Dio (wired
+  // in `auth_client_factory.dart`) — for a SUCCESSFUL retry, the interceptor
+  // resolves the original call and `requestWithRefresh` below never even
+  // sees a failure. This `requestWithRefresh` wrapping is kept (not deleted)
+  // as belt-and-suspenders: it's provably inert whenever the interceptor is
+  // present (the interceptor already resolved or terminally failed first),
+  // and is exactly what keeps THIS repository's own extensive test suite
+  // (which constructs `AuthRepositoryImpl` directly against a plain
+  // `Dio`+`FakeHttpClientAdapter` with NO interceptors registered) passing
+  // unchanged — see `_rethrowInterceptorSessionExpiry` below for the one
+  // small addition that makes the two mechanisms compose correctly instead
+  // of double-wrapping the interceptor's own terminal signal.
 
   Options _bearerOptions() {
     final token = _tokenStore.accessToken;
     return Options(headers: token != null ? {'Authorization': 'Bearer $token'} : null);
   }
 
+  /// R2 — when `core/api/refresh_interceptor.dart` IS present on this
+  /// repository's Dio (production, via `auth_client_factory.dart`) and its
+  /// own refresh+retry-once terminally fails, it rejects with a
+  /// `DioException` whose `.error` is ALREADY [SessionExpiredException] (see
+  /// that interceptor's `_sessionExpired` helper) — unwrap and rethrow it
+  /// AS ITSELF rather than letting [_mapDioError] flatten it into a
+  /// meaningless `ApiError(0, null)` (no `response`, since this exception
+  /// was synthesized by the interceptor, not returned by the server). A
+  /// no-op everywhere the interceptor is absent (every existing test's
+  /// plain `Dio` — `e.error` is never a `SessionExpiredException` there),
+  /// so this is a pure addition, not a behavior change for any current test.
+  Never _rethrowInterceptorSessionExpiry(DioException e) {
+    final err = e.error;
+    if (err is SessionExpiredException) throw err;
+    throw _mapDioError(e);
+  }
+
   /// Returns the domain [domain.Session] entity list (not the generated
   /// wire DTO) — presentation never imports `omnistock_api_client` directly
   /// (docs/mobile-architecture.md §2 boundary rule); this is the ONLY place
   /// that maps the wire `Session` to the domain entity.
+  @override
   Future<List<domain.Session>> getSessions() {
     return requestWithRefresh(() async {
       try {
@@ -310,7 +360,7 @@ class AuthRepositoryImpl implements AuthRepository {
         if (body == null) throw ApiError(res.statusCode ?? 0, null);
         return body.sessions.map(_toDomainSession).toList();
       } on DioException catch (e) {
-        throw _mapDioError(e);
+        _rethrowInterceptorSessionExpiry(e);
       }
     });
   }
@@ -329,6 +379,7 @@ class AuthRepositoryImpl implements AuthRepository {
   /// endpoint itself has `security: []`). Optional [familyId] targets a
   /// specific LISTED non-current session (§2.4/§2.6, M-3 ownership-checked
   /// server-side).
+  @override
   Future<void> logoutDevice({String? familyId}) async {
     final currentRefreshToken = await _tokenStore.getRefreshToken();
     try {
@@ -349,18 +400,20 @@ class AuthRepositoryImpl implements AuthRepository {
     }
   }
 
+  @override
   Future<void> logoutAll() async {
     await requestWithRefresh(() async {
       try {
         await _authApi.authLogoutAll(headers: _bearerOptions().headers);
         return null;
       } on DioException catch (e) {
-        throw _mapDioError(e);
+        _rethrowInterceptorSessionExpiry(e);
       }
     });
     await _wipeForLogout();
   }
 
+  @override
   Future<OkResponse> changePassword({
     required String currentPassword,
     required String newPassword,
@@ -376,13 +429,18 @@ class AuthRepositoryImpl implements AuthRepository {
             if (currentRefreshToken != null) b.refreshToken = currentRefreshToken;
           }),
           headers: _bearerOptions().headers,
+          // R2 — tells `core/api/refresh_interceptor.dart` to apply the SAME
+          // "INVALID_CREDENTIALS is not auth-expiry" rule this call already
+          // enforces via `isAuthExpiry:` below (one predicate, two
+          // consumers — see `_isChangePasswordAuthExpiry`'s doc comment).
+          extra: {'authExpiryOverride': _isChangePasswordAuthExpiry},
         );
         final body = res.data;
         if (body == null) throw ApiError(res.statusCode ?? 0, null);
         return body;
       } on DioException catch (e) {
-        throw _mapDioError(e);
+        _rethrowInterceptorSessionExpiry(e);
       }
-    }, isAuthExpiry: _isChangePasswordAuthExpiry);
+    }, isAuthExpiry: (e) => _isChangePasswordAuthExpiry(e.code));
   }
 }

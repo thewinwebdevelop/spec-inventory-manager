@@ -1,6 +1,6 @@
 import 'package:flutter/material.dart';
 
-import '../../app/theme/app_theme.dart';
+import '../theme/app_theme.dart';
 
 /// Skeleton shimmer (design-system.md §2: "loading: Skeleton shimmer ...
 /// ไม่ใช่ spinner"). Used for the session list loading state

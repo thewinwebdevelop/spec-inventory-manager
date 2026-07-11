@@ -1,10 +1,11 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../core/l10n/l10n.dart';
+import '../core/theme/app_theme.dart';
 import '../features/auth/presentation/screens/bootstrap_screen.dart';
 import '../features/auth/presentation/screens/security_screen.dart';
 import 'auth_flow.dart';
-import 'theme/app_theme.dart';
 
 // T-001-17 — real F-001 auth screens (signup/login/help/security), replacing
 // the F-000 placeholder shell. Still proves apps/mobile consumes the
@@ -64,6 +65,14 @@ class _OmniStockAppState extends ConsumerState<OmniStockApp> {
     return MaterialApp(
       title: 'OmniStock',
       theme: buildAppTheme(),
+      // R4 (docs/architecture/refactor-plan.md §4, mobile.md §3.7) — wires
+      // the generated AppLocalizations (Thai only for now, structure ready
+      // for `en` later per the ARB doc comment) so every `presentation/`
+      // widget's `AppLocalizations.of(context)` resolves, plus Thai
+      // MaterialLocalizations (date pickers etc.) for free.
+      localizationsDelegates: AppLocalizations.localizationsDelegates,
+      supportedLocales: AppLocalizations.supportedLocales,
+      locale: const Locale('th'),
       home: home,
     );
   }

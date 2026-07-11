@@ -6,20 +6,16 @@
 // verify (§9); wrong-password and unknown-email both return the identical
 // INVALID_CREDENTIALS shape. Throttle is ALWAYS its own 429 (M-1), never folded
 // into the 401.
-import {
-  ConflictException,
-  Injectable,
-  NotFoundException,
-  UnauthorizedException,
-  UnprocessableEntityException,
-} from "@nestjs/common";
+import { Injectable } from "@nestjs/common";
 import {
   checkPasswordPolicy,
   normalizeEmail,
   isValidEmailShape,
   hasCapability,
   CAPABILITY_MANAGE_MEMBERS,
+  type PasswordPolicyError,
 } from "@omnistock/core-domain";
+import { domainError } from "../common/domain-exception";
 import { PrismaService } from "../prisma/prisma.service";
 import { HashingService } from "./hashing.service";
 import { RefreshTokenService, type IssuedRefresh } from "./refresh-token.service";
@@ -27,25 +23,12 @@ import { AccessTokenService } from "./access-token.service";
 import { SecurityEventsService } from "./security-events.service";
 import { ThrottleService } from "./throttle.service";
 
-function mapPolicyError(error: string): never {
-  throw new UnprocessableEntityException({ error: { code: error, message: policyMessage(error) } });
+// Password-policy codes ARE registry keys (PASSWORD_TOO_SHORT/LONG/BREACHED),
+// so a policy failure maps 1:1 onto the central registry — same 422, same code,
+// same Thai message that F-001 shipped.
+function mapPolicyError(error: PasswordPolicyError): never {
+  throw domainError(error);
 }
-function policyMessage(code: string): string {
-  switch (code) {
-    case "PASSWORD_TOO_SHORT":
-      return "รหัสผ่านต้องมีอย่างน้อย 8 ตัวอักษร";
-    case "PASSWORD_TOO_LONG":
-      return "รหัสผ่านยาวเกินไป (ไม่เกิน 128 ตัวอักษร)";
-    case "PASSWORD_BREACHED":
-      return "รหัสผ่านนี้อยู่ในรายการที่ถูกเปิดเผยแล้ว กรุณาใช้รหัสอื่น";
-    default:
-      return "รหัสผ่านไม่ผ่านเงื่อนไข";
-  }
-}
-
-const INVALID_CREDENTIALS = {
-  error: { code: "INVALID_CREDENTIALS", message: "อีเมลหรือรหัสผ่านไม่ถูกต้อง" },
-};
 
 @Injectable()
 export class AuthService {
@@ -67,7 +50,7 @@ export class AuthService {
   async signup(rawEmail: string, password: string): Promise<{ userId: string; email: string; verified: boolean }> {
     const email = normalizeEmail(rawEmail);
     if (!isValidEmailShape(email)) {
-      throw new UnprocessableEntityException({ error: { code: "EMAIL_INVALID", message: "อีเมลไม่ถูกต้อง" } });
+      throw domainError("EMAIL_INVALID");
     }
     const policy = checkPasswordPolicy(password);
     if (!policy.ok) mapPolicyError(policy.error);
@@ -75,7 +58,7 @@ export class AuthService {
     // Duplicate email is the one necessary enumeration leak (Gate 1 §4).
     const existing = await this.db.user.findUnique({ where: { email }, select: { id: true } });
     if (existing) {
-      throw new ConflictException({ error: { code: "EMAIL_TAKEN", message: "อีเมลนี้ถูกใช้แล้ว" } });
+      throw domainError("EMAIL_TAKEN");
     }
     const passwordHash = await this.hashing.hash(password);
     const user = await this.db.user.create({
@@ -111,13 +94,13 @@ export class AuthService {
       // keys on submitted email whether or not a user exists).
       await this.hashing.dummyVerify(password);
       await hooks.onFailure();
-      throw new UnauthorizedException(INVALID_CREDENTIALS);
+      throw domainError("INVALID_CREDENTIALS");
     }
 
     const ok = await this.hashing.verify(user.passwordHash, password);
     if (!ok) {
       await hooks.onFailure();
-      throw new UnauthorizedException(INVALID_CREDENTIALS);
+      throw domainError("INVALID_CREDENTIALS");
     }
 
     // Success — clear the account counter (self-heal) and rehash if params bumped.
@@ -153,12 +136,12 @@ export class AuthService {
     // A live Bearer should always resolve, but be defensive.
     if (!user) {
       await hooks.onFailure();
-      throw new UnauthorizedException(INVALID_CREDENTIALS);
+      throw domainError("INVALID_CREDENTIALS");
     }
     const ok = await this.hashing.verify(user.passwordHash, currentPassword);
     if (!ok) {
       await hooks.onFailure();
-      throw new UnauthorizedException(INVALID_CREDENTIALS);
+      throw domainError("INVALID_CREDENTIALS");
     }
     await hooks.onSuccess();
 
@@ -214,7 +197,7 @@ export class AuthService {
     // (4) Any failure → same-shape 404 (never 403). Do policy validation only
     // AFTER authorization so an unauthorized caller cannot probe policy either.
     if (!callerOk || !targetOk) {
-      throw new NotFoundException({ error: { code: "NOT_FOUND", message: "ไม่พบข้อมูล" } });
+      throw domainError("NOT_FOUND");
     }
 
     const policy = checkPasswordPolicy(newPassword);

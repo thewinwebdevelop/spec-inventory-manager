@@ -1,8 +1,8 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
-import '../../../../core/i18n/auth_th.dart';
-import '../../../../app/theme/app_theme.dart';
+import '../../../../core/l10n/l10n.dart';
+import '../../../../core/theme/app_theme.dart';
 import '../../../../core/security/screenshot_guard.dart';
 import '../../application/signup_controller.dart';
 import '../../../../core/ui/error_banner.dart';
@@ -72,6 +72,7 @@ class _SignupScreenState extends ConsumerState<SignupScreen> {
     final signupState = ref.watch(signupControllerProvider);
     final throttle = ref.read(signupControllerProvider.notifier).throttle;
     final disabled = signupState.submitting || throttle.isActive;
+    final t = AppLocalizations.of(context);
 
     return Scaffold(
       body: SafeArea(
@@ -81,10 +82,10 @@ class _SignupScreenState extends ConsumerState<SignupScreen> {
             crossAxisAlignment: CrossAxisAlignment.stretch,
             children: [
               const SizedBox(height: AppSpacing.s8),
-              Text(AuthTh.signupTitle, style: AppTypography.headingMd, textAlign: TextAlign.center),
+              Text(t.authSignupTitle, style: AppTypography.headingMd, textAlign: TextAlign.center),
               const SizedBox(height: AppSpacing.s2),
               Text(
-                AuthTh.signupSubtitle,
+                t.authSignupSubtitle,
                 style: AppTypography.bodyMd.copyWith(color: AppColors.textMuted),
                 textAlign: TextAlign.center,
               ),
@@ -92,9 +93,9 @@ class _SignupScreenState extends ConsumerState<SignupScreen> {
               ThrottleBanner(controller: throttle),
               if (signupState.generalError != null) ErrorBanner(message: signupState.generalError!),
               LabeledTextField(
-                label: AuthTh.signupEmailLabel,
+                label: t.authSignupEmailLabel,
                 controller: _emailController,
-                placeholder: AuthTh.signupEmailPlaceholder,
+                placeholder: t.authSignupEmailPlaceholder,
                 errorText: signupState.emailError,
                 enabled: !disabled,
                 keyboardType: TextInputType.emailAddress,
@@ -102,10 +103,10 @@ class _SignupScreenState extends ConsumerState<SignupScreen> {
               ),
               const SizedBox(height: AppSpacing.formGap),
               PasswordField(
-                label: AuthTh.signupPasswordLabel,
+                label: t.authSignupPasswordLabel,
                 controller: _passwordController,
-                placeholder: AuthTh.signupPasswordPlaceholder,
-                helperText: AuthTh.signupPasswordHelper,
+                placeholder: t.authSignupPasswordPlaceholder,
+                helperText: t.authSignupPasswordHelper,
                 errorText: signupState.passwordError,
                 enabled: !disabled,
                 textInputAction: TextInputAction.done,
@@ -120,13 +121,13 @@ class _SignupScreenState extends ConsumerState<SignupScreen> {
                         width: 20,
                         child: CircularProgressIndicator(strokeWidth: 2, color: AppColors.primaryFg),
                       )
-                    : Text(signupState.submitting ? AuthTh.signupSubmitLoading : AuthTh.signupSubmit),
+                    : Text(signupState.submitting ? t.authSignupSubmitLoading : t.authSignupSubmit),
               ),
               const SizedBox(height: AppSpacing.s4),
               Center(
                 child: TextButton(
                   onPressed: widget.onNavigateToLogin,
-                  child: Text(AuthTh.signupLinkToLogin),
+                  child: Text(t.authSignupLinkToLogin),
                 ),
               ),
             ],

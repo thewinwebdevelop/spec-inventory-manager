@@ -3,7 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../../core/api/refresh_coordinator.dart';
 import '../data/auth_exceptions.dart';
 import '../../../core/error/error_messages.dart';
-import '../../../core/i18n/auth_th.dart';
+import '../../../core/l10n/l10n.dart';
 import '../domain/validation.dart';
 import 'auth_providers.dart';
 import 'throttle_countdown_controller.dart';
@@ -83,7 +83,7 @@ class ChangePasswordController extends AutoDisposeNotifier<ChangePasswordState> 
   }) async {
     if (state.submitting || _throttled) return ChangePasswordOutcome.failure;
 
-    final newError = isPasswordLongEnough(newPassword) ? null : AuthTh.changePasswordErrorPasswordTooShort;
+    final newError = isPasswordLongEnough(newPassword) ? null : l10n.authChangePasswordErrorPasswordTooShort;
     state = state.copyWith(
       clearGeneralError: true,
       clearCurrentError: true,
@@ -111,16 +111,16 @@ class ChangePasswordController extends AutoDisposeNotifier<ChangePasswordState> 
         throttle.start(e.retryAfterSeconds ?? 60);
         state = state.copyWith(submitting: false);
       } else if (e.status == 401) {
-        state = state.copyWith(submitting: false, currentError: changePasswordErrorMessage(e.code));
+        state = state.copyWith(submitting: false, currentError: changePasswordErrorMessage(l10n, e.code));
       } else if (e.status == 422) {
-        state = state.copyWith(submitting: false, newError: changePasswordErrorMessage(e.code));
+        state = state.copyWith(submitting: false, newError: changePasswordErrorMessage(l10n, e.code));
       } else {
-        state = state.copyWith(submitting: false, generalError: AuthTh.changePasswordErrorGeneric);
+        state = state.copyWith(submitting: false, generalError: l10n.authChangePasswordErrorGeneric);
       }
       return ChangePasswordOutcome.failure;
     } catch (_) {
       if (_disposed) return ChangePasswordOutcome.failure;
-      state = state.copyWith(submitting: false, generalError: AuthTh.changePasswordErrorGeneric);
+      state = state.copyWith(submitting: false, generalError: l10n.authChangePasswordErrorGeneric);
       return ChangePasswordOutcome.failure;
     }
   }

@@ -159,6 +159,30 @@ F-000 final whole-branch review (2026-07-05): AC3 (api `/health`+web 200+flutter
 | ~~transient-failure signal (L-3) · current-device row (L-4) · FLAG_SECURE (L-5)~~                | ~~F-006~~ → **F-001**    | ✅ **done (D-022)** — RefreshOutcome + session-list notice + screenshot_guard (L-4 copy รอ ux review) |
 | **compile workspace deps เป็น real JS** (config/db/contracts `main`=src/index.ts + build=`echo ok`) เพื่อ self-contained prod api artifact ที่ `node dist/main.js` boot ได้ — ตอนนี้ CI boot ผ่าน `tsx src/main.ts` (real app + real DB tests) ซึ่งพอสำหรับ gate; prod bundling = deploy-time | **devops / deploy** (คู่กับ T-001-13) | core-domain build→dist แล้ว (ref pattern); api compiles ✓ (node-ci typecheck) |
 
+## → จาก architecture deep-design 2026-07-11 (docs/architecture/refactor-plan.md — ผูก trigger กัน "ถึงเวลาแล้วลืม")
+
+> ที่มา: รอบออกแบบ per-platform (fable) — [refactor-plan.md](../architecture/refactor-plan.md) §4–5 คือ detail เต็ม
+> **Gate 2 ของ feature ปลายทางต้องรับรายการของตัวเองเป็น required item** · convention กลางที่ล็อกร่วม 3 platform
+> (ApiFailure taxonomy, cursor pagination, `X-Organization-Id`, gating 2 แกน, jobs resource) ดู refactor-plan §2
+> หมายเหตุ: hardening batch (R1 backend + R2–R5 mobile + gate rules) ถูกดึงมาทำทันที 2026-07-11 — ไม่อยู่ในตารางนี้แล้ว
+
+| Trigger | สิ่งที่ต้องรับเข้า Gate 2 / build | ตาม |
+| --- | --- | --- |
+| **F-002 / F-003** | backend: `OrgContextMiddleware` (ALS) + `ORG_PRISMA`/`SYSTEM_PRISMA` + `withOrgScope` enforcement จริง + `@RequireCapability` + **cross-org leak int-test เป็นเทสต์บังคับของทุก feature ใหม่นับจากนี้** · web: `lib/org`+`lib/session` + `app/o/[orgId]/layout` + ย้าย `components/auth/*`→`features/auth/` (R6) · mobile: `core/session` + `orgDioProvider` + org header เข้า interceptor chain (seam comment ไว้แล้ว) | backend.md §3.3 · web.md §3.2 · mobile.md §3.2 |
+| **F-006 Gate 2** (ก้อนที่เหลือหลัง hardening) | router (go_router) + guards + deep link `omnistock://o/<orgId>/...` · event bus `core/events` · push plumbing · connectivity/ReadCache · per-env API base URL (ค่าจาก devops — ของเดิมค้างอยู่แถว D-021 ด้านล่าง) | mobile.md §3.5–3.6, §4 |
+| **F-007** | entitlements service `can()`/`canAdd()` + `@RequireFeature` (backend) · `FeatureGate`/`entitled()` แยกแกนจาก RBAC ทั้ง web+mobile | backend.md §3.4 · ทั้ง 3 ฉบับ |
+| **F-010** (web restart จุดแรกของจอจริง) | **ก่อนโค้ด web feature ใดๆ: "จุด restart"** = TanStack Query + `ApiFailure` web + `tool/check-boundaries.mjs` · จากนั้น `data-table/` + `form/` (RHF+zod) + ประเมิน i18n lib | web.md §3.1, §3.4–3.6, §5.2 |
+| **F-011** | ⭐ `ledgerWrite` primitive (LedgerPlan → idempotent insert → sorted `SELECT…FOR UPDATE` → projection → transactional outbox) + **grep gate `stockMovement.create` ถูกกฎหมายไฟล์เดียว ทันทีที่ merge แรก** + `StockLevel.version` + ตาราง `LedgerCommand`/`Outbox` — ห้ามมี write เงิน/สต๊อกเส้นอื่นเกิดก่อน (R8 รวมในนี้) | backend.md §3.1, §2.5 |
+| **F-013** | mobile list infra: `PagedListController` + `AsyncStateView` + `PagedListView` (cursor `{items,nextCursor}`) — เกิดพร้อมจอ list แรก | mobile.md §3.3 |
+| **F-020–F-025** | `packages/connectors`: `core/` (port + `ConnectorCapabilities` + typed `ConnectorError` + registry) + **`fake/` เกิดพร้อม `core/` วันแรก** (เสริม G-3 เดิม) + `shopee/` (DTO jail `mapping/vN/` — config=endpoint/limit/retry, code=mapping) + contract-test kit · queue naming ตาม backend.md §2.3 + `APP_ROLE=api\|worker\|all` assembly · webhook idempotency (`WebhookEvent` unique) · depcruise ชุด connectors | backend.md §3.2, §2.3 |
+| **F-021** | jobs resource (`202` + `GET /jobs/:id`) ฝั่ง backend + web `use-job-polling`/`JobStatusBanner` · web OAuth popup+postMessage เกิดที่ F-020 | backend.md §3.6 · web.md §3.7–3.8 |
+| **F-004b / F-040** | `DocumentSequence` gapless per-org (`UPDATE…RETURNING` ใน tx เดียวกับ insert เอกสาร) + **50-way concurrency test บังคับ** · PDF = queue job (เสริมแถวเลขรันเดิมของ F-004b) | backend.md §3.7 |
+| **F-092** | web `DataTable` bulk action bar เต็มรูป | web.md §3.5 |
+| **F-093** | mobile `OutboxQueue` implementation จริง (จนกว่านั้นเป็น port เปล่า — อย่า build เกิน) | mobile.md §4 |
+| **F-028 / F-080 / F-086** | notification sender / payment gateway / AI provider = port+adapter idiom เดียวกับ connectors | backend.md §3.8 |
+| **F-087** (API gateway) | @devops ยืนยัน trust boundary ของ `x-request-id`/`x-trace-id` (gateway-injected vs client-supplied) — ตอนนี้ filter validate `^[A-Za-z0-9._-]{1,128}$` แล้วค่อย echo (★ sanity-pass 2026-07-11) | ★ review finding L-2 |
+| **เมื่อ user เคาะรอบ design นี้** | log decision เป็น D-XXX (สถานะปัจจุบัน = proposal ที่ user สั่งทำ ยังไม่ ratify เป็น decision) + ยกร่าง CLAUDE.md §7 ฉบับเต็มเข้าแทน "target pointers" เมื่อ infra เกิดจริงครบ | refactor-plan §6–7 |
+
 ## → BOUND TRIGGERS สำหรับงานที่ยังเปิดค้าง (firm-up 2026-07-06 — กัน "มี owner แต่ไม่มี trigger")
 
 > ⚠️ **GAP ที่ต้อง user/product เคาะ:** backlog **ไม่มี feature "production deploy / hosting"** เลย (F-000 = scaffold เท่านั้น). งาน 2 ตัวล่างพึ่ง target นั้น → **ต้องสร้าง feature ใหม่ (เสนอ: `F-009 Production deploy & hosting`, tier ⚙️ infra)** ให้เป็นเจ้าของ, ไม่งั้นมันจะลอยจริง. จนกว่าจะมี feature นั้น = ผูกไว้ที่ **launch-readiness bucket** (ก่อนขายนอก dogfood).

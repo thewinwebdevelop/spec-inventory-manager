@@ -1,7 +1,7 @@
 import 'package:flutter/material.dart';
 
-import '../i18n/auth_th.dart';
-import '../../app/theme/app_theme.dart';
+import '../l10n/l10n.dart';
+import '../theme/app_theme.dart';
 
 /// `PasswordField` (ui.md §2.1) — password input + show/hide eye toggle +
 /// helper-text slot + inline error slot. Reused for signup, login,
@@ -45,6 +45,7 @@ class _PasswordFieldState extends State<PasswordField> {
 
   @override
   Widget build(BuildContext context) {
+    final t = AppLocalizations.of(context);
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
@@ -64,7 +65,7 @@ class _PasswordFieldState extends State<PasswordField> {
             errorText: widget.errorText,
             suffixIcon: Semantics(
               button: true,
-              label: _obscure ? AuthTh.commonPasswordShow : AuthTh.commonPasswordHide,
+              label: _obscure ? t.commonPasswordShow : t.commonPasswordHide,
               child: IconButton(
                 constraints: const BoxConstraints(
                   minWidth: AppSizes.tapTargetMin,

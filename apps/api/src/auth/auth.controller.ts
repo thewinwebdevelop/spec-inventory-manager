@@ -16,7 +16,6 @@ import {
   Post,
   Req,
   Res,
-  UnauthorizedException,
   UseGuards,
 } from "@nestjs/common";
 import type { Request, Response } from "express";
@@ -37,6 +36,7 @@ import {
 } from "./csrf";
 import { COOKIE_REFRESH } from "./auth.constants";
 import { RateLimitedException } from "./rate-limited.exception";
+import { domainError } from "../common/domain-exception";
 
 /** Derive the client IP for throttle (trusted-proxy resolution is @devops via
  *  express `trust proxy`; here we read the resolved req.ip). */
@@ -123,7 +123,7 @@ export class AuthController {
 
     const presented = resolvePresentedRefreshToken(req, dto.refreshToken);
     if (!presented) {
-      throw new UnauthorizedException({ error: { code: "NO_REFRESH_TOKEN", message: "ไม่พบ refresh token" } });
+      throw domainError("NO_REFRESH_TOKEN");
     }
     // CSRF applies whenever the token is resolved from the cookie (N-3).
     enforceCsrfIfCookiePath(req);
@@ -133,7 +133,7 @@ export class AuthController {
     if (!result.ok) {
       // Generic 401 INVALID_REFRESH for ALL non-ok reasons (expired / benign
       // retry / cap / reuse) — reuse is logged distinctly server-side.
-      throw new UnauthorizedException({ error: { code: "INVALID_REFRESH", message: "เซสชันหมดอายุ กรุณาเข้าสู่ระบบใหม่" } });
+      throw domainError("INVALID_REFRESH");
     }
     // Rotation follows the PRESENTED transport (cookie in → cookie out).
     return this.deliverTokens(
