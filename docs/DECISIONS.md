@@ -274,3 +274,14 @@ Decision: **(1) Feature-first + pragmatic clean architecture 4 ชั้น** (`
 Rationale: feature-first scale ตาม backlog (feature ใหม่ = โฟลเดอร์ใหม่) · Riverpod ให้ DI+state ตัวเดียว, `AsyncValue` ตรง 4 states ของ design-system, ceremony ต่ำกว่า Bloc สำหรับแอป CRUD+sync, GetX ตัดทิ้ง (discipline) · จุดแก้หลัก: แยก refresh-machinery (→ `core/api`, ทุก feature ได้ silent-refresh ฟรี) ออกจาก auth endpoints (→ `features/auth/data`)
 Affects: apps/mobile ทั้งหมด (โครง + pubspec + เทสต์ 127 ตัว migrate) · `apps/mobile/CLAUDE.md` (แผนที่โครงใหม่ + exemplar = `features/auth/`) · CI flutter-ci lane (+boundary gate) · ทุก mobile feature ถัดไป (F-006/013/024/027/028/030/050/084/093) ใช้ template นี้ · supersedes โครง flat ของ T-001-17 (พฤติกรรม/สัญญา ★ ไม่เปลี่ยน)
 Status: decided
+
+---
+
+### D-024 · 2026-07-12 · mobile (cross-feature)
+
+Q: user ขอเปลี่ยน pin Flutter จาก 3.27.3 (D-015) เป็น stable ล่าสุดผ่าน fvm — ขยับทั้งโปรเจกต์เลยไหม (jump 3.27.3 → 3.44.6, Dart 3.6 → 3.12) หรือขยับแค่ local?
+Asked by: @user Owner: @user (Type 1 — toolchain-wide dependency bump)
+Decision: **Pin ทั้งโปรเจกต์เป็น Flutter 3.44.6 stable** (`.fvm/fvm_config.json` + `.flutter-version` — CI อ่านไฟล์นี้ผ่าน `flutter-version-file` อยู่แล้ว ไม่ต้องแก้ ci.yml) · `intl: ^0.19.0` → `^0.20.2` (SDK บังคับผ่าน `flutter_localizations`) · gen_l10n: synthetic `package:flutter_gen/...` ถูกถอดออกจาก SDK นี้ (ไม่ใช่แค่ deprecate) → ย้าย output เป็น `lib/l10n/gen/` (gitignored) + import ผ่าน `package:mobile/l10n/gen/...` — จุดแก้เดียวคือ `lib/core/l10n/l10n.dart` (seam ที่ตั้งใจไว้ตาม R4 ทำงานตามที่ออกแบบ) · Android toolchain ขยับขั้นต่ำที่ SDK 3.44.6 ยอมรับ (Gradle 8.3→8.9, AGP 8.1.0→8.6.0, Kotlin 1.8.22→2.0.0) **ไม่ใช่** template default ของ SDK นี้ (Gradle 9.1/AGP 9.0.1) เพราะ AGP 9+ บังคับ migrate ทั้งโปรเจกต์เป็น Kotlin-DSL (`settings.gradle.kts`) — เกินสโคปงานนี้ (`android.newDsl=false` ที่ Flutter migrator ใส่มาเองรองรับ Groovy DSL เดิมได้พอ) · verified เขียวครบ: `flutter analyze` (0 issues), `flutter test` (224/224), boundary gate (54 files/0 violations), `flutter build apk --debug` (สำเร็จ, JDK 17)
+Rationale: user ขอ stable เวอร์ชันล่าสุดตรงๆ ไม่ใช่แค่ patch bump — ให้ตามที่ขอทั้งโปรเจกต์ (ไม่ใช่ local-only) เพราะ dev/CI ต้องใช้ toolchain เดียวกันเสมอ (กันปัญหาแบบ D-015 เอง) · AGP9 DSL migration เป็นงานแยกที่ไม่ล็อกกับการ pin เวอร์ชัน Flutter — ขยับขั้นต่ำที่พอทำให้ build ผ่านคือความเสี่ยงต่ำสุดที่ตอบโจทย์วันนี้ ค่อยยก AGP9 เป็น task แยกเมื่อจำเป็นจริง (native compile lane ยังไม่อยู่ใน CI ด้วยซ้ำ — ดู forward-commitments)
+Affects: `apps/mobile/.fvm/fvm_config.json`, `.flutter-version`, `pubspec.yaml` (intl), `l10n.yaml` + `lib/core/l10n/l10n.dart` (import path), `.gitignore` (`lib/l10n/gen/`), `android/{settings.gradle,gradle/wrapper/gradle-wrapper.properties}`, `apps/mobile/CLAUDE.md` (toolchain line), `docs/features/forward-commitments.md` (native compile lane row — JDK17 + concrete versions noted) · ไม่กระทบ contract/API/business logic
+Status: decided

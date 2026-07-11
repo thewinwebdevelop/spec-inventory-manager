@@ -12,8 +12,10 @@ Flutter mobile app ของ OmniStock — **client หลักฝั่ง use
 
 ## Stack / toolchain
 
-Flutter **3.27.3** (Dart 3.6) — pin ผ่าน **FVM** (`.fvm/`) + `apps/mobile/scripts/flutter.sh`
+Flutter **3.44.6 stable** (Dart 3.12) — pin ผ่าน **FVM** (`.fvm/`) + `apps/mobile/scripts/flutter.sh`
 (turbo→flutter adapter; dev ใช้ `fvm flutter ...` เสมอ) · state/DI = **Riverpod** (manual providers, ไม่ใช้ codegen)
+· Android toolchain: Gradle 8.9 · AGP 8.6.0 · Kotlin 2.0.0 (ต่ำสุดที่ SDK นี้ยอมรับ, Groovy DSL เดิม —
+`android.newDsl=false`; รายละเอียด/เหตุผล: [forward-commitments.md](../../docs/features/forward-commitments.md) แถว "native compile lane")
 
 ## โครงสร้าง (D-023 — feature-first + 4 ชั้น)
 

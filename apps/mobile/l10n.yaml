@@ -8,3 +8,14 @@ template-arb-file: app_th.arb
 output-localization-file: app_localizations.dart
 output-class: AppLocalizations
 nullable-getter: false
+# Flutter 3.44.6 pin (was 3.27.3) stopped auto-registering the synthetic
+# `package:flutter_gen/...` package this file's imports used to rely on
+# (flutter analyze: uri_does_not_exist) — the flag that used to control this
+# (`synthetic-package: false`) is itself now a no-op/deprecated (Flutter
+# warns: "no longer has any effect and should be removed" — synthetic
+# packages are gone outright, this is the only mode now). Generating into
+# the app's own lib/ and importing via `package:mobile/l10n/gen/...`
+# (lib/core/l10n/l10n.dart) is the still-supported path — gitignored like the
+# old synthetic output was (lib/l10n/gen/ is build output, not committed
+# source).
+output-dir: lib/l10n/gen
