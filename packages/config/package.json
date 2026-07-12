@@ -9,7 +9,8 @@
     "./env": "./src/env.ts"
   },
   "bin": {
-    "omnistock-purity-gate": "./depcruise/run-purity-gate.mjs"
+    "omnistock-purity-gate": "./depcruise/run-purity-gate.mjs",
+    "omnistock-api-boundaries": "./depcruise/run-api-boundaries.mjs"
   },
   "scripts": {
     "build": "echo ok",

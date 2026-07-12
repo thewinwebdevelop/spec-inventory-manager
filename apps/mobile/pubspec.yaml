@@ -31,6 +31,16 @@ dependencies:
   flutter:
     sdk: flutter
 
+  # R4 (docs/architecture/refactor-plan.md §4, mobile.md §3.7, user-approved
+  # new dependency — gen_l10n/intl are pre-approved by the arch doc) — the
+  # generated AppLocalizations (lib/l10n/app_th.arb -> lib/l10n/gen/) needs
+  # both: flutter_localizations wires MaterialApp's localization delegates
+  # (also gives Thai MaterialLocalizations for free, mobile.md §3.7); intl is
+  # the runtime gen_l10n's generated code calls into directly.
+  flutter_localizations:
+    sdk: flutter
+  intl: ^0.20.2
+
   # The following adds the Cupertino Icons font to your application.
   # Use with the CupertinoIcons class for iOS style icons.
   cupertino_icons: ^1.0.8
@@ -91,6 +101,11 @@ dev_dependencies:
 
 # The following section is specific to Flutter packages.
 flutter:
+
+  # R4 — turns on gen_l10n codegen from lib/l10n/app_th.arb (config: l10n.yaml
+  # at the package root) on every `flutter pub get`/build/test. No
+  # build_runner (mobile.md §3.7: "gen_l10n เป็นของ built-in ใน flutter tool").
+  generate: true
 
   # The following line ensures that the Material Icons font is
   # included with your application, so that you can use the icons in

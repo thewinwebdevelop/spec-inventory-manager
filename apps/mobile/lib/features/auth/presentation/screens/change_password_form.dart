@@ -1,8 +1,8 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
-import '../../../../core/i18n/auth_th.dart';
-import '../../../../app/theme/app_theme.dart';
+import '../../../../core/l10n/l10n.dart';
+import '../../../../core/theme/app_theme.dart';
 import '../../../../core/security/screenshot_guard.dart';
 import '../../application/change_password_controller.dart';
 import '../../../../core/ui/error_banner.dart';
@@ -80,26 +80,27 @@ class _ChangePasswordFormState extends ConsumerState<ChangePasswordForm> {
     final changePasswordState = ref.watch(changePasswordControllerProvider);
     final throttle = ref.read(changePasswordControllerProvider.notifier).throttle;
     final disabled = changePasswordState.submitting || throttle.isActive;
+    final t = AppLocalizations.of(context);
 
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
-        Text(AuthTh.changePasswordSectionTitle, style: AppTypography.headingSm),
+        Text(t.authChangePasswordSectionTitle, style: AppTypography.headingSm),
         const SizedBox(height: AppSpacing.s4),
         ThrottleBanner(controller: throttle),
         if (changePasswordState.generalError != null) ErrorBanner(message: changePasswordState.generalError!),
         PasswordField(
-          label: AuthTh.changePasswordCurrentLabel,
+          label: t.authChangePasswordCurrentLabel,
           controller: _currentController,
           errorText: changePasswordState.currentError,
           enabled: !disabled,
         ),
         const SizedBox(height: AppSpacing.formGap),
         PasswordField(
-          label: AuthTh.changePasswordNewLabel,
+          label: t.authChangePasswordNewLabel,
           controller: _newController,
-          placeholder: AuthTh.changePasswordNewPlaceholder,
-          helperText: AuthTh.changePasswordNewHelper,
+          placeholder: t.authChangePasswordNewPlaceholder,
+          helperText: t.authChangePasswordNewHelper,
           errorText: changePasswordState.newError,
           enabled: !disabled,
           textInputAction: TextInputAction.done,
@@ -115,8 +116,8 @@ class _ChangePasswordFormState extends ConsumerState<ChangePasswordForm> {
                   child: CircularProgressIndicator(strokeWidth: 2, color: AppColors.primaryFg),
                 )
               : Text(changePasswordState.submitting
-                  ? AuthTh.changePasswordSubmitLoading
-                  : AuthTh.changePasswordSubmit),
+                  ? t.authChangePasswordSubmitLoading
+                  : t.authChangePasswordSubmit),
         ),
       ],
     );

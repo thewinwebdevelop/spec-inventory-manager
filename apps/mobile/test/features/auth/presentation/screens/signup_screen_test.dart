@@ -3,6 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:omnistock_api_client/omnistock_api_client.dart';
 
+import 'package:mobile/core/l10n/l10n.dart';
 import 'package:mobile/features/auth/application/auth_providers.dart';
 import 'package:mobile/features/auth/data/auth_repository_impl.dart';
 import 'package:mobile/features/auth/presentation/screens/signup_screen.dart';
@@ -18,10 +19,16 @@ AuthRepositoryImpl buildClient(FakeHttpClientAdapter adapter) {
 }
 
 /// D-023 PASS 2 — provider-override wiring (see login_screen_test.dart doc).
+/// R4 — `localizationsDelegates`/`supportedLocales` added since the screen
+/// now reads copy via `AppLocalizations.of(context)!` (gen_l10n).
 Widget wrap(AuthRepositoryImpl client, Widget child) {
   return ProviderScope(
     overrides: [authRepositoryProvider.overrideWithValue(client)],
-    child: MaterialApp(home: child),
+    child: MaterialApp(
+      localizationsDelegates: AppLocalizations.localizationsDelegates,
+      supportedLocales: AppLocalizations.supportedLocales,
+      home: child,
+    ),
   );
 }
 

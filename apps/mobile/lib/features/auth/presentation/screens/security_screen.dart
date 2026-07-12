@@ -1,7 +1,7 @@
 import 'package:flutter/material.dart';
 
-import '../../../../core/i18n/auth_th.dart';
-import '../../../../app/theme/app_theme.dart';
+import '../../../../core/l10n/l10n.dart';
+import '../../../../core/theme/app_theme.dart';
 import 'change_password_form.dart';
 import 'session_list.dart';
 
@@ -35,7 +35,7 @@ class _SecurityScreenState extends State<SecurityScreen> {
     ScaffoldMessenger.of(context).showSnackBar(
       SnackBar(
         content: Text(
-          AuthTh.changePasswordSuccessToast,
+          AppLocalizations.of(context).authChangePasswordSuccessToast,
           style: const TextStyle(color: AppColors.successText),
         ),
         backgroundColor: AppColors.successBg,
@@ -49,7 +49,7 @@ class _SecurityScreenState extends State<SecurityScreen> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      appBar: AppBar(title: Text(AuthTh.sessionsTitle)),
+      appBar: AppBar(title: Text(AppLocalizations.of(context).authSessionsTitle)),
       body: SafeArea(
         child: SingleChildScrollView(
           padding: const EdgeInsets.all(AppSpacing.screenPadding),

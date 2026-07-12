@@ -2,7 +2,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../data/auth_exceptions.dart';
 import '../../../core/error/error_messages.dart';
-import '../../../core/i18n/auth_th.dart';
+import '../../../core/l10n/l10n.dart';
 import '../domain/validation.dart';
 import 'auth_providers.dart';
 import 'throttle_countdown_controller.dart';
@@ -74,7 +74,7 @@ class SignupController extends AutoDisposeNotifier<SignupState> {
   void validateEmailOnBlur(String email) {
     state = state.copyWith(
       clearEmailError: email.isEmpty || isValidEmailShape(email),
-      emailError: email.isEmpty || isValidEmailShape(email) ? null : AuthTh.signupErrorEmailInvalid,
+      emailError: email.isEmpty || isValidEmailShape(email) ? null : l10n.authSignupErrorEmailInvalid,
     );
   }
 
@@ -85,8 +85,8 @@ class SignupController extends AutoDisposeNotifier<SignupState> {
     if (state.submitting || _throttled) return null;
 
     final trimmedEmail = email.trim();
-    final emailError = isValidEmailShape(trimmedEmail) ? null : AuthTh.signupErrorEmailInvalid;
-    final passwordError = isPasswordLongEnough(password) ? null : AuthTh.signupErrorPasswordTooShort;
+    final emailError = isValidEmailShape(trimmedEmail) ? null : l10n.authSignupErrorEmailInvalid;
+    final passwordError = isPasswordLongEnough(password) ? null : l10n.authSignupErrorPasswordTooShort;
     state = state.copyWith(
       clearGeneralError: true,
       emailError: emailError,
@@ -109,17 +109,17 @@ class SignupController extends AutoDisposeNotifier<SignupState> {
         state = state.copyWith(submitting: false);
       } else if (e.status == 422 || e.status == 409) {
         if (e.code == 'PASSWORD_TOO_SHORT' || e.code == 'PASSWORD_BREACHED') {
-          state = state.copyWith(submitting: false, passwordError: signupErrorMessage(e.code));
+          state = state.copyWith(submitting: false, passwordError: signupErrorMessage(l10n, e.code));
         } else {
-          state = state.copyWith(submitting: false, emailError: signupErrorMessage(e.code));
+          state = state.copyWith(submitting: false, emailError: signupErrorMessage(l10n, e.code));
         }
       } else {
-        state = state.copyWith(submitting: false, generalError: signupErrorMessage(e.code));
+        state = state.copyWith(submitting: false, generalError: signupErrorMessage(l10n, e.code));
       }
       return null;
     } catch (_) {
       if (_disposed) return null;
-      state = state.copyWith(submitting: false, generalError: AuthTh.signupErrorGeneric);
+      state = state.copyWith(submitting: false, generalError: l10n.authSignupErrorGeneric);
       return null;
     }
   }

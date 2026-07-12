@@ -1,5 +1,14 @@
 import 'package:flutter/material.dart';
 
+/// Boundary-gate extension (docs/architecture/refactor-plan.md §4, mobile.md
+/// §5.2 new rule 6: "features/**, core/** ห้าม import app/**") — moved from
+/// `lib/app/theme/app_theme.dart`. Design tokens are cross-cutting
+/// infrastructure every layer (`core/ui/`, every feature's `presentation/`)
+/// needs, not something the composition root (`app/`) owns exclusively —
+/// `app/app.dart` still calls [buildAppTheme] to build the app-wide
+/// `ThemeData`, it just does so by importing `core/theme/` like everyone
+/// else now, instead of being the one file everyone imported FROM `app/`.
+///
 /// Design tokens ported 1:1 from docs/design-system.md §1 (owned by `ux`) —
 /// values only, no off-token colors/spacing (design-system.md §6: "ห้าม
 /// off-token / ห้าม hardcode สี-spacing; ห้าม web↔mobile drift"). Mirrors the

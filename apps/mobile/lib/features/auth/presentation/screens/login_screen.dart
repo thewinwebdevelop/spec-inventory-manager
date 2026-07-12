@@ -1,8 +1,8 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
-import '../../../../core/i18n/auth_th.dart';
-import '../../../../app/theme/app_theme.dart';
+import '../../../../core/l10n/l10n.dart';
+import '../../../../core/theme/app_theme.dart';
 import '../../../../core/security/screenshot_guard.dart';
 import '../../application/login_controller.dart';
 import '../../../../core/ui/error_banner.dart';
@@ -95,6 +95,7 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
     }
 
     final disabled = loginState.submitting || throttle.isActive;
+    final t = AppLocalizations.of(context);
     return Scaffold(
       body: SafeArea(
         child: SingleChildScrollView(
@@ -103,12 +104,12 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
             crossAxisAlignment: CrossAxisAlignment.stretch,
             children: [
               const SizedBox(height: AppSpacing.s8),
-              Text(AuthTh.loginTitle, style: AppTypography.headingMd, textAlign: TextAlign.center),
+              Text(t.authLoginTitle, style: AppTypography.headingMd, textAlign: TextAlign.center),
               const SizedBox(height: AppSpacing.s8),
               ThrottleBanner(controller: throttle),
               if (loginState.generalError != null) ErrorBanner(message: loginState.generalError!),
               LabeledTextField(
-                label: AuthTh.loginEmailLabel,
+                label: t.authLoginEmailLabel,
                 controller: _emailController,
                 enabled: !disabled,
                 keyboardType: TextInputType.emailAddress,
@@ -116,7 +117,7 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
               ),
               const SizedBox(height: AppSpacing.formGap),
               PasswordField(
-                label: AuthTh.loginPasswordLabel,
+                label: t.authLoginPasswordLabel,
                 controller: _passwordController,
                 focusNode: _passwordFocusNode,
                 enabled: !disabled,
@@ -129,7 +130,7 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
                 alignment: Alignment.centerRight,
                 child: TextButton(
                   onPressed: widget.onNavigateToHelp,
-                  child: Text(AuthTh.loginForgotPassword),
+                  child: Text(t.authLoginForgotPassword),
                 ),
               ),
               const SizedBox(height: AppSpacing.s4),
@@ -141,13 +142,13 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
                         width: 20,
                         child: CircularProgressIndicator(strokeWidth: 2, color: AppColors.primaryFg),
                       )
-                    : Text(loginState.submitting ? AuthTh.loginSubmitLoading : AuthTh.loginSubmit),
+                    : Text(loginState.submitting ? t.authLoginSubmitLoading : t.authLoginSubmit),
               ),
               const SizedBox(height: AppSpacing.s4),
               Center(
                 child: TextButton(
                   onPressed: widget.onNavigateToSignup,
-                  child: Text(AuthTh.loginLinkToSignup),
+                  child: Text(t.authLoginLinkToSignup),
                 ),
               ),
             ],

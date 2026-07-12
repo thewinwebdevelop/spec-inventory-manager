@@ -2,7 +2,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../data/auth_exceptions.dart';
 import '../../../core/error/error_messages.dart';
-import '../../../core/i18n/auth_th.dart';
+import '../../../core/l10n/l10n.dart';
 import 'auth_providers.dart';
 import 'throttle_countdown_controller.dart';
 
@@ -111,16 +111,16 @@ class LoginController extends AutoDisposeNotifier<LoginState> {
         state = state.copyWith(
           submitting: false,
           hasCredentialsError: true,
-          generalError: loginErrorMessage(e.code),
+          generalError: loginErrorMessage(l10n, e.code),
           clearPasswordSignal: state.clearPasswordSignal + 1,
         );
       } else {
-        state = state.copyWith(submitting: false, generalError: AuthTh.loginErrorGeneric);
+        state = state.copyWith(submitting: false, generalError: l10n.authLoginErrorGeneric);
       }
       return false;
     } catch (_) {
       if (_disposed) return false;
-      state = state.copyWith(submitting: false, generalError: AuthTh.loginErrorGeneric);
+      state = state.copyWith(submitting: false, generalError: l10n.authLoginErrorGeneric);
       return false;
     }
   }

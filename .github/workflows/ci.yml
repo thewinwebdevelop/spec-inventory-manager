@@ -70,9 +70,11 @@ jobs:
       - name: AC5/6/7/8 — schema shape + ledger immutability
         run: pnpm --filter @omnistock/db run verify:ac
 
-  # AC9 — core-domain purity. Standalone from ESLint (§2.5). The gate script runs
-  # BOTH the clean check (must pass) and the negative-fixture check (must fail),
-  # so this single step proves the guard is live, not decorative.
+  # AC9 + R1 — architectural boundary gates (dependency-cruiser, §2.5, backend.md
+  # §5.2). `pnpm depcruise` (turbo) runs EVERY package's gate: core-domain purity
+  # AND the apps/api boundaries gate (config set #3). Each gate runs BOTH a clean
+  # check (must pass) and a negative-fixture check (must fail), proving the guard
+  # is live, not decorative.
   depcruise:
     runs-on: ubuntu-latest
     steps:
@@ -83,8 +85,30 @@ jobs:
       - uses: pnpm/action-setup@v4
       - run: pnpm install --frozen-lockfile
       - run: pnpm turbo build --filter=@omnistock/core-domain # tsPreCompilationDeps needs built types
-      - name: AC9 — core-domain purity gate (clean passes + fixture fails)
+      # apps/api boundary gate resolves imports into @omnistock/db (packages/db/src),
+      # whose index re-exports the generated Prisma client — generate it so the
+      # dependency graph resolves cleanly.
+      - name: generate Prisma client (apps/api boundary graph resolves @omnistock/db)
+        run: pnpm --filter @omnistock/db exec prisma generate
+      - name: AC9 + R1 — boundary gates (core-domain purity + apps/api boundaries)
         run: pnpm depcruise
+
+  # R1 (backend.md §3.6, §5.2 item 5) — OpenAPI breaking-change gate. Complements
+  # `contracts-drift` (catches "forgot to regen") by catching "changed the shipped
+  # contract in a breaking way". Compares the working-tree spec against its
+  # merge-base version via oasdiff (Docker image — no install/new npm dep).
+  oasdiff:
+    runs-on: ubuntu-latest
+    steps:
+      # fetch-depth: 0 so `git merge-base` + the base-branch ref are available.
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - name: fetch base branch (PRs) for merge-base
+        if: github.base_ref != ''
+        run: git fetch --no-tags --depth=1 origin "${{ github.base_ref }}"
+      - name: oasdiff — fail on breaking OpenAPI changes
+        run: bash packages/contracts/scripts/oasdiff-breaking.sh
 
   # AC13 — Flutter analyze + test, own job/own required check. Mobile shell only;
   # the generated api_client package is excluded from analyze (analysis_options).

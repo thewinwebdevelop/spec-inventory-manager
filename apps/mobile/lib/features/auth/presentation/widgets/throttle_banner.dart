@@ -1,14 +1,14 @@
 import 'package:flutter/material.dart';
 
-import '../../../../core/i18n/auth_th.dart';
-import '../../../../app/theme/app_theme.dart';
+import '../../../../core/l10n/l10n.dart';
+import '../../../../core/theme/app_theme.dart';
 import '../../domain/throttle_countdown.dart';
 import '../../application/throttle_countdown_controller.dart';
 
 /// `ThrottleBanner` (ui.md §2.1, D-005) — yellow/warning banner + real-time
 /// countdown. **Never** red/danger (D-005: "รอได้ ไม่ใช่หายนะ"), never says
 /// "ล็อก"/"ระงับ". Reused verbatim across login/signup/change-password
-/// (ui.md §2.1.1) — one component, one copy source (`AuthTh.throttle*`).
+/// (ui.md §2.1.1) — one component, one copy source (`AppLocalizations.authThrottle*`).
 ///
 /// `type.numeric.tabular` (design-system.md §1.2): the countdown digits use
 /// `FontFeature.tabularFigures()` so the banner doesn't jitter/reflow every
@@ -30,7 +30,12 @@ class ThrottleBanner extends StatelessWidget {
       animation: controller,
       builder: (context, _) {
         if (!controller.isActive) return const SizedBox.shrink();
-        final message = formatThrottleMessage(controller.remainingSeconds);
+        final t = AppLocalizations.of(context);
+        final message = formatThrottleMessage(
+          controller.remainingSeconds,
+          longForm: t.authThrottleBannerLong,
+          shortForm: t.authThrottleBannerShort,
+        );
         final announceNow = controller.remainingSeconds % 10 == 0 || controller.remainingSeconds <= 1;
         return Container(
           width: double.infinity,
@@ -57,7 +62,7 @@ class ThrottleBanner extends StatelessWidget {
               ),
               const SizedBox(height: AppSpacing.s2),
               Text(
-                AuthTh.throttleHelper,
+                t.authThrottleHelper,
                 style: AppTypography.bodySm.copyWith(color: AppColors.warningText),
               ),
             ],

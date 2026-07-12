@@ -3,6 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:omnistock_api_client/omnistock_api_client.dart';
 
+import 'package:mobile/core/l10n/l10n.dart';
 import 'package:mobile/features/auth/application/auth_providers.dart';
 import 'package:mobile/features/auth/data/auth_repository_impl.dart';
 import 'package:mobile/features/auth/data/token_store.dart';
@@ -24,11 +25,17 @@ AuthRepositoryImpl buildClient(FakeHttpClientAdapter adapter, {TokenStore? token
 /// `ProviderScope` override of [authRepositoryProvider] instead of a
 /// constructor argument on [BootstrapScreen] (which no longer takes one —
 /// the screen now reads the repository through
-/// `application/bootstrap_controller.dart`'s Riverpod provider graph).
+/// `application/bootstrap_controller.dart`'s Riverpod provider graph). R4 —
+/// `localizationsDelegates`/`supportedLocales` added since the screen now
+/// reads copy via `AppLocalizations.of(context)!`.
 Widget wrap(AuthRepositoryImpl client, Widget child) {
   return ProviderScope(
     overrides: [authRepositoryProvider.overrideWithValue(client)],
-    child: MaterialApp(home: child),
+    child: MaterialApp(
+      localizationsDelegates: AppLocalizations.localizationsDelegates,
+      supportedLocales: AppLocalizations.supportedLocales,
+      home: child,
+    ),
   );
 }
 

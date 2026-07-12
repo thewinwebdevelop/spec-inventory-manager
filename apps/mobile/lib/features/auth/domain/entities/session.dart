@@ -25,7 +25,7 @@ class Session {
 
   /// True for the family matching the caller's `omni_rt` cookie (C-1) — on
   /// mobile (Bearer-only, body-transport) this is always `false` server-side
-  /// (api-spec §2.6); see `AuthTh.sessionsMobileCannotIdentifyCurrent` /
+  /// (api-spec §2.6); see `AppLocalizations.authSessionsMobileCannotIdentifyCurrent` /
   /// `SessionListState`'s L-4 notice.
   final bool current;
 }

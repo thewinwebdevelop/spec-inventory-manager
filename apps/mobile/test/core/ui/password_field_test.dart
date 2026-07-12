@@ -1,9 +1,18 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:mobile/core/l10n/l10n.dart';
 import 'package:mobile/core/ui/password_field.dart';
 
 void main() {
-  Widget wrap(Widget child) => MaterialApp(home: Scaffold(body: child));
+  // R4 — PasswordField now reads its a11y labels via
+  // `AppLocalizations.of(context)!` (gen_l10n), so every host MaterialApp in
+  // this test needs the localization delegates wired, same as the real app
+  // (`app/app.dart`).
+  Widget wrap(Widget child) => MaterialApp(
+        localizationsDelegates: AppLocalizations.localizationsDelegates,
+        supportedLocales: AppLocalizations.supportedLocales,
+        home: Scaffold(body: child),
+      );
 
   testWidgets('starts obscured (password hidden) and toggles on eye tap', (tester) async {
     final controller = TextEditingController(text: 'secret123');

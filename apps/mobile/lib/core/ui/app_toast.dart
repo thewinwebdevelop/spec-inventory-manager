@@ -1,6 +1,6 @@
 import 'package:flutter/material.dart';
 
-import '../../app/theme/app_theme.dart';
+import '../theme/app_theme.dart';
 
 /// `Toast` (ui.md §2.1) — bottom, above safe-area (ux-wireframe §8: "Mobile:
 /// ด้านล่างจอ เหนือ safe-area"). Built on [SnackBar] (the Flutter-native

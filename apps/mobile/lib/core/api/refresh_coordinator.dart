@@ -93,6 +93,32 @@ class RefreshCoordinator {
     return outcome == RefreshOutcome.success;
   }
 
+  /// R2 (docs/architecture/refactor-plan.md §4) — public seam for
+  /// `core/api/refresh_interceptor.dart`'s "refresh succeeded but the
+  /// RETRIED call still 401s" branch (mirrors [requestWithRefresh]'s own
+  /// `await _onLogout()` at that exact point — see this coordinator's
+  /// [requestWithRefresh] for the reference implementation this interceptor
+  /// replicates at the Dio-request level instead of the
+  /// `Future<T> Function()` level). Purely additive: does not change
+  /// [onLogout]'s existing call sites or semantics, just exposes the same
+  /// callback for a second, equally-legitimate caller.
+  Future<void> forceLogout() => _onLogout();
+
+  /// R2 — monotonically-bumped once per SUCCESSFUL refresh (never on
+  /// failure/transient outcomes). Lets `core/api/refresh_interceptor.dart`
+  /// detect "a refresh already happened since THIS request was originally
+  /// sent" for a request that was merely QUEUED behind another request's
+  /// in-flight refresh (Dio's `QueuedInterceptor` processes queued 401s
+  /// one at a time — by the time a queued request's turn comes, an earlier
+  /// one may have already completed its whole refresh+retry cycle) — such
+  /// a request can be retried directly with the now-current token instead
+  /// of triggering a second, redundant network refresh call. Purely
+  /// additive: does not change [refreshDetailed]'s return value or any
+  /// existing caller's observable behavior, only adds this counter as a
+  /// side effect.
+  int get generation => _generation;
+  int _generation = 0;
+
   /// Runs [doRefresh] with single-flight dedupe — concurrent callers all
   /// await the same in-flight attempt rather than triggering their own.
   Future<RefreshOutcome> refreshDetailed() async {
@@ -100,7 +126,9 @@ class RefreshCoordinator {
     final future = _doRefresh();
     _inflightRefresh = future;
     try {
-      return await future;
+      final outcome = await future;
+      if (outcome == RefreshOutcome.success) _generation++;
+      return outcome;
     } finally {
       _inflightRefresh = null;
     }

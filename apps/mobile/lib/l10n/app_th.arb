@@ -1,0 +1,117 @@
+{
+  "@@locale": "th",
+  "@@last_modified": "2026-07-11",
+
+  "authSignupTitle": "สมัครใช้งาน OmniStock",
+  "authSignupSubtitle": "เริ่มต้นจัดการสต๊อกและบัญชีร้านค้าของคุณ",
+  "authSignupEmailLabel": "อีเมล",
+  "authSignupEmailPlaceholder": "เช่น somchai@shop.com",
+  "authSignupPasswordLabel": "รหัสผ่าน",
+  "authSignupPasswordPlaceholder": "อย่างน้อย 8 ตัวอักษร",
+  "authSignupPasswordHelper": "ใช้ตัวอักษร ตัวเลข หรือวลีที่จำง่าย — ไม่ต้องมีอักขระพิเศษก็ได้",
+  "authSignupSubmit": "สมัครใช้งาน",
+  "authSignupSubmitLoading": "กำลังสมัคร...",
+  "authSignupLinkToLogin": "มีบัญชีอยู่แล้ว? เข้าสู่ระบบ",
+  "authSignupSuccessToast": "สมัครสำเร็จ! เข้าสู่ระบบเพื่อเริ่มใช้งาน",
+  "authSignupErrorEmailInvalid": "รูปแบบอีเมลไม่ถูกต้อง",
+  "authSignupErrorPasswordTooShort": "รหัสผ่านสั้นเกินไป ต้องมีอย่างน้อย 8 ตัวอักษร",
+  "authSignupErrorPasswordBreached": "รหัสผ่านนี้ถูกใช้งานทั่วไปมาก ไม่ปลอดภัย ลองตั้งรหัสผ่านที่คาดเดายากขึ้น",
+  "authSignupErrorEmailTaken": "อีเมลนี้มีผู้ใช้งานแล้ว",
+  "authSignupErrorEmailTakenLoginLink": "เข้าสู่ระบบ",
+  "authSignupErrorGeneric": "เกิดข้อผิดพลาด กรุณาลองใหม่อีกครั้ง",
+
+  "authLoginTitle": "เข้าสู่ระบบ",
+  "authLoginEmailLabel": "อีเมล",
+  "authLoginPasswordLabel": "รหัสผ่าน",
+  "authLoginSubmit": "เข้าสู่ระบบ",
+  "authLoginSubmitLoading": "กำลังเข้าสู่ระบบ...",
+  "authLoginForgotPassword": "ลืมรหัสผ่าน?",
+  "authLoginLinkToSignup": "ยังไม่มีบัญชี? สมัครใช้งาน",
+  "authLoginErrorInvalidCredentials": "อีเมลหรือรหัสผ่านไม่ถูกต้อง",
+  "authLoginErrorGeneric": "เกิดข้อผิดพลาด กรุณาลองใหม่อีกครั้ง",
+
+  "authThrottleBannerLong": "ลองเข้าสู่ระบบถี่เกินไป กรุณารอสักครู่แล้วลองใหม่ · เหลือ {mm}:{ss} นาที",
+  "@authThrottleBannerLong": {
+    "placeholders": {
+      "mm": { "type": "String" },
+      "ss": { "type": "String" }
+    }
+  },
+  "authThrottleBannerShort": "รอสักครู่แล้วลองใหม่ · เหลือ {n} วินาที",
+  "@authThrottleBannerShort": {
+    "placeholders": {
+      "n": { "type": "int" }
+    }
+  },
+  "authThrottleHelper": "เพื่อความปลอดภัยของบัญชีคุณ ระบบจะให้ลองใหม่ได้เองเมื่อครบเวลา",
+
+  "authHelpTitle": "ลืมรหัสผ่าน?",
+  "authHelpBody": "ตอนนี้ระบบยังไม่รองรับการขอรีเซ็ตรหัสผ่านด้วยตัวเอง กรุณาติดต่อเจ้าของร้าน/ผู้ดูแลระบบ (Owner/Admin) ในทีมของคุณ เพื่อให้ตั้งรหัสผ่านใหม่ให้",
+  "authHelpBodySoloOwner": "หากคุณเป็นเจ้าของร้านเพียงคนเดียวและลืมรหัสผ่าน กรุณารอสักครู่แล้วลองพิมพ์รหัสผ่านที่คิดว่าถูกต้องอีกครั้ง (ระบบจะไม่ล็อกบัญชีคุณถาวร)",
+  "authHelpBackToLogin": "กลับไปเข้าสู่ระบบ",
+
+  "authSessionsTitle": "อุปกรณ์ที่เข้าสู่ระบบ",
+  "authSessionsSubtitle": "รายการอุปกรณ์ที่กำลังเข้าใช้งานบัญชีของคุณอยู่",
+  "authSessionsBadgeCurrent": "อุปกรณ์นี้",
+  "authSessionsLastActive": "ใช้งานล่าสุด: {relativeTime}",
+  "@authSessionsLastActive": {
+    "placeholders": {
+      "relativeTime": { "type": "String" }
+    }
+  },
+  "authSessionsDeviceUnknown": "อุปกรณ์ไม่ทราบชื่อ",
+  "authSessionsActionLogoutDevice": "ออกจากอุปกรณ์นี้",
+  "authSessionsActionLogoutAll": "ออกจากระบบทุกอุปกรณ์",
+  "authSessionsErrorLoadFailed": "โหลดรายการอุปกรณ์ไม่สำเร็จ",
+  "authSessionsActionRetry": "ลองใหม่",
+  "authSessionsToastDeviceLoggedOut": "ออกจากอุปกรณ์แล้ว",
+  "authSessionsToastDeviceLogoutFailed": "ออกจากอุปกรณ์ไม่สำเร็จ กรุณาลองใหม่",
+  "authSessionsErrorLogoutAllFailed": "ออกจากระบบทุกอุปกรณ์ไม่สำเร็จ ลองใหม่อีกครั้ง",
+  "authSessionsMobileCannotIdentifyCurrent": "อุปกรณ์นี้ไม่สามารถระบุตัวเองในรายการด้านล่างได้ — หากไม่แน่ใจว่าแถวไหนคืออุปกรณ์ที่ถืออยู่ กรุณาระวังก่อนกด \"ออกจากอุปกรณ์นี้\"",
+
+  "authConfirmLogoutDeviceTitle": "ออกจากอุปกรณ์นี้?",
+  "authConfirmLogoutDeviceBody": "อุปกรณ์นี้จะต้องเข้าสู่ระบบใหม่อีกครั้ง",
+  "authConfirmLogoutDeviceCancel": "ยกเลิก",
+  "authConfirmLogoutDeviceConfirm": "ออกจากอุปกรณ์นี้",
+  "authConfirmLogoutAllTitle": "ออกจากระบบทุกอุปกรณ์?",
+  "authConfirmLogoutAllBody": "ทุกอุปกรณ์ที่เข้าสู่ระบบอยู่ (รวมเครื่องนี้) จะถูกออกจากระบบทันที และต้องเข้าสู่ระบบใหม่ทุกเครื่อง",
+  "authConfirmLogoutAllCancel": "ยกเลิก",
+  "authConfirmLogoutAllConfirm": "ออกจากระบบทุกอุปกรณ์",
+  "authConfirmLogoutAllToast": "ออกจากระบบทุกอุปกรณ์แล้ว",
+
+  "authSessionExpiredToast": "เซสชันหมดอายุ กรุณาเข้าสู่ระบบอีกครั้ง",
+
+  "authChangePasswordSectionTitle": "เปลี่ยนรหัสผ่าน",
+  "authChangePasswordCurrentLabel": "รหัสผ่านปัจจุบัน",
+  "authChangePasswordNewLabel": "รหัสผ่านใหม่",
+  "authChangePasswordNewPlaceholder": "อย่างน้อย 8 ตัวอักษร",
+  "authChangePasswordNewHelper": "ใช้ตัวอักษร ตัวเลข หรือวลีที่จำง่าย — ไม่ต้องมีอักขระพิเศษก็ได้",
+  "authChangePasswordSubmit": "เปลี่ยนรหัสผ่าน",
+  "authChangePasswordSubmitLoading": "กำลังเปลี่ยนรหัสผ่าน...",
+  "authChangePasswordErrorInvalidCurrent": "รหัสผ่านปัจจุบันไม่ถูกต้อง",
+  "authChangePasswordErrorPasswordTooShort": "รหัสผ่านสั้นเกินไป ต้องมีอย่างน้อย 8 ตัวอักษร",
+  "authChangePasswordErrorPasswordBreached": "รหัสผ่านนี้ถูกใช้งานทั่วไปมาก ไม่ปลอดภัย ลองตั้งรหัสผ่านที่คาดเดายากขึ้น",
+  "authChangePasswordErrorGeneric": "เกิดข้อผิดพลาด กรุณาลองใหม่อีกครั้ง",
+  "authChangePasswordSuccessToast": "เปลี่ยนรหัสผ่านแล้ว · อุปกรณ์อื่นถูกออกจากระบบเพื่อความปลอดภัย",
+
+  "commonPasswordShow": "แสดงรหัสผ่าน",
+  "commonPasswordHide": "ซ่อนรหัสผ่าน",
+  "commonRetry": "ลองใหม่",
+  "commonCancel": "ยกเลิก",
+
+  "authBootstrapLoading": "กำลังตรวจสอบสถานะการเข้าสู่ระบบ...",
+  "authBootstrapOfflineTitle": "เชื่อมต่อไม่สำเร็จ",
+  "authBootstrapOfflineBody": "ตรวจสอบอินเทอร์เน็ตแล้วลองใหม่อีกครั้ง บัญชีของคุณยังเข้าสู่ระบบอยู่",
+  "authBootstrapOfflineRetry": "ลองใหม่",
+  "authBootstrapOfflineUseLoginInstead": "เข้าสู่ระบบด้วยรหัสผ่าน",
+
+  "errorNetwork": "เชื่อมต่อไม่ได้ กรุณาลองใหม่",
+  "errorThrottled": "คำขอถี่เกินไป กรุณารอสักครู่แล้วลองใหม่อีกครั้ง",
+  "errorForbidden": "คุณไม่มีสิทธิ์ทำรายการนี้",
+  "errorEntitlement": "ฟีเจอร์นี้ยังไม่รวมอยู่ในแพ็กเกจของคุณ กรุณาอัปเกรดเพื่อใช้งาน",
+  "errorValidation": "ข้อมูลไม่ถูกต้อง กรุณาตรวจสอบอีกครั้ง",
+  "errorConflict": "ข้อมูลมีการเปลี่ยนแปลงแล้ว กรุณาลองใหม่อีกครั้ง",
+  "errorNotFound": "ไม่พบข้อมูลที่ต้องการ",
+  "errorServer": "ระบบขัดข้องชั่วคราว",
+  "errorForceUpdate": "กรุณาอัปเดตแอปเป็นเวอร์ชันล่าสุดเพื่อใช้งานต่อ"
+}

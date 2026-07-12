@@ -1,10 +1,16 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:mobile/core/l10n/l10n.dart';
 import 'package:mobile/features/auth/application/throttle_countdown_controller.dart';
 import 'package:mobile/features/auth/presentation/widgets/throttle_banner.dart';
 
 void main() {
-  Widget wrap(Widget child) => MaterialApp(home: Scaffold(body: child));
+  // R4 — ThrottleBanner now reads copy via `AppLocalizations.of(context)!`.
+  Widget wrap(Widget child) => MaterialApp(
+        localizationsDelegates: AppLocalizations.localizationsDelegates,
+        supportedLocales: AppLocalizations.supportedLocales,
+        home: Scaffold(body: child),
+      );
 
   testWidgets('renders nothing when the controller is inactive', (tester) async {
     final controller = ThrottleCountdownController();

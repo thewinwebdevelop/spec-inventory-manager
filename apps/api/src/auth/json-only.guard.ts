@@ -7,14 +7,9 @@
 // Runs as the FIRST guard on auth POST handlers so the 415 short-circuits ahead
 // of validation, user lookup, and verify (I5c.1 — no throttle increment, no
 // credential work on the rejected path).
-import {
-  CanActivate,
-  ExecutionContext,
-  HttpException,
-  HttpStatus,
-  Injectable,
-} from "@nestjs/common";
+import { CanActivate, ExecutionContext, Injectable } from "@nestjs/common";
 import type { Request } from "express";
+import { domainError } from "../common/domain-exception";
 
 @Injectable()
 export class JsonOnlyGuard implements CanActivate {
@@ -24,10 +19,9 @@ export class JsonOnlyGuard implements CanActivate {
     // Accept `application/json` optionally with parameters (e.g. charset).
     const isJson = /^application\/json\b/i.test(contentType.trim());
     if (!isJson) {
-      throw new HttpException(
-        { error: { code: "UNSUPPORTED_MEDIA_TYPE", message: "ต้องส่งเป็น application/json" } },
-        HttpStatus.UNSUPPORTED_MEDIA_TYPE,
-      );
+      // R1: typed error via the central registry (DomainException extends
+      // HttpException → still 415 + `{ error: { code, message } }`).
+      throw domainError("UNSUPPORTED_MEDIA_TYPE");
     }
     return true;
   }
