@@ -18,29 +18,37 @@
  */
 
 @theme {
-  /* 1.1 Color */
-  --color-primary: #1f6feb;
+  /* 1.1 Color — light (brand "Calm Teal deep", D-026 · design-system.md §1.1).
+   * Dark theme (§1.1b) + button tokens (§1.1c) land at the web restart together
+   * with the dark-mode toggle — this pass is the light recolor only. */
+  --color-primary: #0c6155;
   --color-primary-fg: #ffffff;
-  --color-primary-hover: #1a5fcc;
-  --color-danger: #d92d20;
+  --color-primary-hover: #094e45;
+  --color-accent: #f2a65a;
+  --color-accent-soft: #fbebd6;
+  --color-accent-text: #9a631a;
+  --color-danger: #c0362c;
   --color-danger-fg: #ffffff;
-  --color-danger-bg: #fef3f2;
-  --color-danger-border: #fda29b;
-  --color-danger-text: #b42318;
-  --color-warning-bg: #fffaeb;
-  --color-warning-border: #fec84b;
-  --color-warning-text: #b54708;
-  --color-success-bg: #ecfdf3;
-  --color-success-text: #067647;
-  --color-badge-current-bg: #ecfdf3;
-  --color-badge-current-text: #067647;
+  --color-danger-bg: #fbedeb;
+  --color-danger-border: #eab6b0;
+  --color-danger-text: #8f291f;
+  --color-warning: #b5730e;
+  --color-warning-bg: #fbf1df;
+  --color-warning-border: #ebcb8a;
+  --color-warning-text: #7e5008;
+  --color-success: #2f7d57;
+  --color-success-bg: #e7f3ec;
+  --color-success-border: #b7dcc6;
+  --color-success-text: #1f5d3d;
+  --color-badge-current-bg: #e7f3ec;
+  --color-badge-current-text: #1f5d3d;
   --color-surface: #ffffff;
-  --color-surface-muted: #f9fafb;
-  --color-bg: #f2f4f7;
-  --color-text: #101828;
-  --color-text-muted: #667085;
-  --color-border-default: #d0d5dd;
-  --color-overlay: rgb(16 24 40 / 40%);
+  --color-surface-muted: #e7efec;
+  --color-bg: #f3f7f5;
+  --color-text: #112320;
+  --color-text-muted: #566b65;
+  --color-border-default: #cfdcd7;
+  --color-overlay: rgb(11 22 20 / 45%);
 
   /* 1.2 Typography */
   --font-thai: "Sarabun", "Noto Sans Thai", system-ui, sans-serif;
