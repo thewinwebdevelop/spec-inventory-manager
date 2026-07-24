@@ -21,28 +21,77 @@
 
 | Token | Hex | ใช้ที่ไหน |
 |---|---|---|
-| `color.primary` | `#1F6FEB` | ปุ่มหลัก, ลิงก์, focus ring (สีแบรนด์หลัก) |
+> **แบรนด์: "Calm Teal (deep)"** — เขียว-teal เข้ม (เชื่อใจ+calm) + apricot อุ่น (เป็นมิตร) บนพื้น
+> near-neutral · เคาะ 2026-07-19 จาก mockup [mockup/foundation.html](mockup/foundation.html) (ทิศทาง E) →
+> D-026 · แทนที่ชุดฟ้า `#1F6FEB` เดิม (F-000/F-001) — โค้ด F-001 ต้อง refactor ตาม (Phase 2)
+
+| `color.primary` | `#0C6155` | ปุ่มหลัก (light), ลิงก์, focus ring (แบรนด์ teal เข้ม) |
 | `color.primary.fg` | `#FFFFFF` | ตัวอักษรบนปุ่มหลัก |
-| `color.primary.hover` | `#1A5FCC` | hover/pressed ปุ่มหลัก |
-| `color.danger` | `#D92D20` | ปุ่ม destructive, border field ผิด |
+| `color.primary.hover` | `#094E45` | hover/pressed ปุ่มหลัก |
+| `color.accent` | `#F2A65A` | เน้น "มูลค่า/เงิน" · highlight (apricot อุ่น) |
+| `color.accent.soft` | `#FBEBD6` | พื้น chip/แถบเน้นอ่อน |
+| `color.accent.text` | `#9A631A` | ตัวอักษรบนพื้น accent อ่อน (ผ่าน AA) |
+| `color.danger` | `#C0362C` | ปุ่ม destructive, border field ผิด |
 | `color.danger.fg` | `#FFFFFF` | ตัวอักษรบนปุ่ม destructive |
-| `color.danger.bg` | `#FEF3F2` | พื้น `ErrorBanner` |
-| `color.danger.border` | `#FDA29B` | เส้นขอบ `ErrorBanner`, field ผิด |
-| `color.danger.text` | `#B42318` | ตัวอักษรใน `ErrorBanner` (บนพื้นอ่อน — ผ่าน AA) |
-| `color.warning.bg` | `#FFFAEB` | พื้น `ThrottleBanner` — เหลืองอ่อน "รอได้ ไม่ใช่หายนะ" |
-| `color.warning.border` | `#FEC84B` | เส้นขอบ `ThrottleBanner` |
-| `color.warning.text` | `#B54708` | ตัวอักษร/countdown ใน `ThrottleBanner` (ผ่าน AA บนพื้นเหลืองอ่อน) |
-| `color.success.bg` | `#ECFDF3` | พื้น toast สำเร็จ |
-| `color.success.text` | `#067647` | ตัวอักษร/ไอคอน toast สำเร็จ |
-| `color.badge.current.bg` | `#ECFDF3` | พื้น badge "อุปกรณ์นี้" (เขียวอ่อน) |
-| `color.badge.current.text` | `#067647` | ตัวอักษร badge "อุปกรณ์นี้" |
+| `color.danger.bg` | `#FBEDEB` | พื้น `ErrorBanner` |
+| `color.danger.border` | `#EAB6B0` | เส้นขอบ `ErrorBanner`, field ผิด |
+| `color.danger.text` | `#8F291F` | ตัวอักษรใน `ErrorBanner` (บนพื้นอ่อน — ผ่าน AA) |
+| `color.warning` | `#B5730E` | ไอคอน/เส้น warning เข้ม |
+| `color.warning.bg` | `#FBF1DF` | พื้น `ThrottleBanner` — "รอได้ ไม่ใช่หายนะ" |
+| `color.warning.border` | `#EBCB8A` | เส้นขอบ `ThrottleBanner` |
+| `color.warning.text` | `#7E5008` | ตัวอักษร/countdown ใน `ThrottleBanner` (ผ่าน AA) |
+| `color.success` | `#2F7D57` | ไอคอน success เข้ม |
+| `color.success.bg` | `#E7F3EC` | พื้น toast สำเร็จ |
+| `color.success.border` | `#B7DCC6` | เส้นขอบ success |
+| `color.success.text` | `#1F5D3D` | ตัวอักษร/ไอคอน toast สำเร็จ |
+| `color.badge.current.bg` | `#E7F3EC` | พื้น badge "อุปกรณ์นี้" |
+| `color.badge.current.text` | `#1F5D3D` | ตัวอักษร badge "อุปกรณ์นี้" |
 | `color.surface` | `#FFFFFF` | พื้น card ฟอร์ม, row session, dialog |
-| `color.surface.muted` | `#F9FAFB` | พื้นรอง (skeleton base, hover row) |
-| `color.bg` | `#F2F4F7` | พื้นหลังหน้า (behind card, web) |
-| `color.text` | `#101828` | ตัวอักษรหลัก (heading/body) |
-| `color.text.muted` | `#667085` | helper text, last-active, subtitle |
-| `color.border.default` | `#D0D5DD` | field border ปกติ, เส้นคั่น row |
-| `color.overlay` | `#101828` @ 40% | ฉากมืดหลัง modal (web) |
+| `color.surface.muted` | `#E7EFEC` | พื้นรอง (skeleton base, hover row) |
+| `color.bg` | `#F3F7F5` | พื้นหลังหน้า (behind card, web) |
+| `color.text` | `#112320` | ตัวอักษรหลัก (heading/body) |
+| `color.text.muted` | `#566B65` | helper text, last-active, subtitle |
+| `color.border.default` | `#CFDCD7` | field border ปกติ, เส้นคั่น row |
+| `color.overlay` | `#0B1614` @ 45% | ฉากมืดหลัง modal (web) |
+
+### 1.1b Color — Dark theme (semantic roles เดียวกัน, ค่าต่าง)
+
+> ธีมมืดเปิดผ่าน `prefers-color-scheme` + toggle (`data-theme`) · พื้น **neutral charcoal** (ไม่อมเขียว
+> จัด) เพื่อให้ปุ่ม/สีแบรนด์ป็อป · status ปรับให้อ่านบนพื้นมืด
+
+| Token | Hex (dark) | หมายเหตุ |
+|---|---|---|
+| `color.primary` | `#2FBBA6` | ลิงก์/focus/ไอคอน/โลโก้บนพื้นมืด (สว่างพอให้อ่านออก — **ไม่ใช่สีปุ่ม**, ดู §1.1c) |
+| `color.primary.hover` | `#45C7B3` | hover ลิงก์/ghost |
+| `color.accent` | `#EEB073` | highlight/chip (apricot หรี่) |
+| `color.accent.soft` | `#33291B` | พื้น chip เน้นอ่อน |
+| `color.accent.text` | `#F1C48C` | ตัวอักษรบน accent.soft |
+| `color.danger` / `.bg` / `.border` / `.text` | `#E9897F` / `#2C1A18` / `#5A322D` / `#F0A79E` | error (dark) |
+| `color.warning` / `.bg` / `.border` / `.text` | `#E0B25A` / `#2A2213` / `#544321` / `#EBC981` | throttle (dark) |
+| `color.success` / `.bg` / `.border` / `.text` | `#6FC194` / `#16261D` / `#2C4636` / `#8FD3AD` | success (dark) |
+| `color.surface` | `#212423` | พื้น card/dialog |
+| `color.surface.muted` | `#2A2D2C` | พื้นรอง |
+| `color.bg` | `#171918` | พื้นหลังหน้า (neutral charcoal) |
+| `color.text` | `#E9EEEB` | ตัวอักษรหลัก |
+| `color.text.muted` | `#98A29D` | helper/subtitle |
+| `color.border.default` | `#363A38` | เส้นคั่น/field border |
+
+### 1.1c Interaction tokens (ปุ่ม — token แยกจาก `color.primary`)
+
+- **ปุ่มหลักมี token ปุ่มของตัวเอง** (`btn.bg`/`btn.fg`/`btn.hover`/`btn.border`/`btn.shadow`) เพราะบนพื้นมืด
+  `color.primary` ต้องสว่าง (สำหรับตัวอักษร/ลิงก์) แต่ปุ่มต้องเข้มทึบ:
+  - **light:** `btn.bg = color.primary` (`#0C6155`) · `btn.fg = #FFFFFF` (fallback — ไม่ override)
+  - **dark:** `btn.bg = #0A5A45` (เขียวป่าลึก solid) · `btn.hover = #0C6B52` · `btn.fg = #FFFFFF` ·
+    `btn.shadow = 0 3px 8px rgba(0,0,0,.55)` (ยกตัวจากการ์ด — **ไม่ใช้ขอบมินต์สว่าง** กันดูพาสเทล)
+- **ปุ่มรอง/outline border** = `color-mix(in srgb, color.text.muted 60%, color.border.default)` ทั้ง 2 ธีม —
+  border.default เดี่ยว ๆ (contrast ~1.35 vs surface) จางเกินสำหรับปุ่ม; mix นี้ผ่าน ~3:1 ทั้ง light/dark
+- **ปุ่ม destructive มี token แยกเช่นกัน** (`btn.danger.bg`/`.hover`) เพราะ `color.danger` ในโหมดมืดเป็นสี
+  สว่าง (salmon สำหรับ icon/text) ใช้เป็นพื้นปุ่มจะดูซีด:
+  - **light:** `btn.danger.bg = #C0362C` (= color.danger)
+  - **dark:** `btn.danger.bg = #A32D22` (แดงอิฐเข้ม solid) + `btn.fg = #FFFFFF` (white 7.1:1) + `btn.shadow`
+    (โครงเดียวกับปุ่มหลัก dark — solid + เงา ไม่ใช้ขอบสว่าง)
+- **WCAG:** ทุกคู่ fg-on-bg + ปุ่ม fill vs surface ผ่าน AA · ข้อยกเว้นจงใจ: ปุ่ม dark เข้มสุด boundary
+  ~1.9:1 vs surface อาศัย shadow + label ขาว (8.2:1) พยุง (เป็น design intent ไม่ใช่ bug)
 
 ### 1.2 Typography
 
@@ -134,7 +183,7 @@ mechanical restyle.
 
 | state | มาตรฐาน |
 |---|---|
-| **loading** | **Skeleton shimmer** (reusable widget) — *ไม่ใช่ spinner* |
+| **loading** | **Skeleton shimmer** (reusable widget) — *ไม่ใช่ spinner* · แถบไล่แสง (`shimmerHi` เหนือ `surface.muted`) **วิ่งผ่าน** (ไม่ใช่ opacity pulse — มองไม่เห็นว่า animate) · โครง skeleton **ตาม layout จริงของจอนั้น** |
 | **empty** | ข้อความ + CTA เริ่มต้น (เช่น "ยังไม่มีสินค้า เริ่มเพิ่มชิ้นแรก") |
 | **error** | ข้อความ (จาก error mapping i18n) + ปุ่ม "ลองใหม่" |
 | **success/data** | แสดงข้อมูลปกติ |
@@ -164,3 +213,47 @@ design system นี้เป็นของ **กลาง 1 ชุด ไม�
 - task design ใน Gate 2 มี 2 แบบ: `reuse` หรือ `add ใหม่เข้า design system`
 - token เปลี่ยนแบบ breaking → ux แจ้ง frontend + log `D-XXX` ใน [DECISIONS.md](DECISIONS.md)
 - **Claude Design → Flutter:** port ได้แค่ token; component HTML ต้องแปลเป็น Flutter widget เอง
+
+## 7. ScreenHeader / AppBar (nav shell)
+
+> **เจ้าของ implement = F-006** (navigation shell: go_router + AppBar + back + deep link — mobile.md §3.5)
+> · spec นี้ออกแบบ **ล่วงหน้า** ให้ DS ครบ + กัน "จอย่อยไม่มีปุ่ม back" (F-001 เป็น placeholder inline flow
+> ยังไม่มี chrome นี้) · mockup: [mockup/components.html](mockup/components.html) §09
+
+- **สูง 56px** · พื้น `color.surface` · เส้นล่าง `color.border.default` · icon-button (back/action) **tap 44px**
+- **title** = `type.heading.sm` (18/28/600) ชิดซ้าย · **back** = ไอคอนลูกศรซ้าย ชิดซ้ายสุด สี `color.text`
+- **กติกา:** ทุก **จอย่อย (pushed route) ต้องมี back ซ้ายเสมอ** · จอ **root** (tab หลัก) ไม่มี back — โชว์แบรนด์/หัวข้อ
+  + action ขวา (ถ้ามี เช่น help/เมนู)
+- ทั้ง web/mobile ใช้ visual language เดียวกัน (web = header bar, mobile = AppBar) · F-006 สร้างเป็น
+  reusable shell widget ให้ทุกจอเรียก แล้ว contribute-back component นี้เข้า DS
+
+## 8. Responsive (web) — desktop-first → tablet
+
+> posture (เคาะ 2026-07): web = **admin console จอใหญ่** (mobile app = client on-the-go) →
+> **desktop-first + รองรับลงถึง tablet (~768px) · phone browser ไม่อยู่ใน scope** (คนใช้มือถือ → ใช้แอป)
+> · web track **restart** implement ตามนี้ · mobile app (Flutter) ไม่เกี่ยว (จอเดียว native)
+
+### 8.1 Breakpoints (align Tailwind default → frontend ใช้ `md:`/`lg:`/`xl:` ได้ตรง)
+
+| token | ค่า | ช่วง | design target |
+|---|---|---|---|
+| (base) | `<768px` | phone browser | **out of scope** — ต้องไม่พังยับ แต่ไม่ optimize |
+| `bp.md` | `768px` | tablet | รองรับ (condensed) |
+| `bp.lg` | `1024px` | desktop | layout หลัก (เต็มรูป) |
+| `bp.xl` | `1280px` | wide desktop | cap ความกว้างเนื้อหา |
+
+- `size.content.max-w` = **1280px** (เนื้อหา centered; page เต็มกว้าง + padding)
+- page padding: `space.6` (24px) ที่ ≥lg · `space.4` (16px) ที่ md
+
+### 8.2 กติกา responsive ต่อ component (desktop → tablet)
+
+| component | desktop (≥lg) | tablet (md 768–1023) |
+|---|---|---|
+| **AppShell nav** (org switcher + เมนู) | sidebar ถาวรซ้าย | ยุบเป็น top bar + drawer (hamburger) |
+| **DataTable** | คอลัมน์เต็ม | `overflow-x:auto` ในกรอบ (เลื่อนแนวนอน) — คอลัมน์คีย์คงไว้ |
+| **Form** | 1–2 คอลัมน์ตามเหมาะ | 1 คอลัมน์ |
+| **Auth card** | centered `size.auth-card.max-w` (400px) | เหมือนกัน (ใช้ได้ทุกกว้าง) |
+| **Header/ScreenHeader** (§7) | full bar | เหมือนกัน |
+
+- **ทุกจอห้าม body scroll แนวนอน** — เนื้อกว้าง (table/chart/code) อยู่ในกรอบ `overflow-x:auto` ของตัวเอง
+- **mockup ตั้งแต่นี้ไป: เช็ค responsive อย่างน้อย 2 จุด (desktop + tablet) ก่อน sign-off** (กัน gap แบบที่เพิ่งเจอ)

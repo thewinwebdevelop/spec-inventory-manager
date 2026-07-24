@@ -297,3 +297,14 @@ Decision: **[DRAFT — รอ user เคาะตอน review PR #6]** รั�
 Rationale: ปัญหาตั้งต้น = subagent เริ่ม implement โดยไม่รู้ภาพใหญ่ ไม่ได้ design เผื่อ backlog (~40+ features) — รอบนี้ให้ fable ออกแบบจากศูนย์ต่อ platform โดยอ่าน design-brief (capability inventory + design-for cases A1–F4) ก่อน แล้วค่อย gap-analyze กับของจริง · ผล "ไม่มี REBUILD" ยืนยันว่าฐาน F-000/F-001 ถูกทาง · validated: ★ security sanity pass (no new surface) + CI เขียวครบรวม 3 ด่านที่ local พิสูจน์ไม่ได้ (oasdiff engine, integration-api lane, flutter-ci)
 Affects: docs/architecture/* (authority ใหม่) · apps/{mobile,web,api}/CLAUDE.md · docs/features/forward-commitments.md (trigger bindings) · ทุก feature ตั้งแต่ F-006/F-010 เป็นต้นไป · ไม่แตะ contract/AC ที่ ship แล้ว
 Status: decided
+
+---
+
+### D-026 · 2026-07-19 · design-system (cross-platform, visual)
+
+Q: brand/foundation refresh — เปลี่ยนจากชุดฟ้า `#1F6FEB` (F-000/F-001 seed) เป็นทิศทางใหม่ไหม? ทำ mockup ให้ user เห็น+เซ็นก่อน
+Asked by: @user Owner: @user (Type 1 — token contract ที่ F-001 ship แล้ว build ตาม)
+Decision: **รับทิศทาง "Calm Teal (deep)" (mockup ทิศทาง E)** — เคาะจาก interactive mockup [docs/design-system/mockup/foundation.html](design-system/mockup/foundation.html) (Sarabun ฝังจริง, 10 ทางให้เทียบ, light+dark). **Foundation เท่านั้น** (สี/typography/spacing/dark/ปุ่ม) — component เต็มยังไม่ทำ. Key: `color.primary` `#1F6FEB`→**`#0C6155`** (teal เข้ม) · เพิ่ม `color.accent` = `#F2A65A` (apricot, เน้นเงิน/highlight) · พื้น light = near-neutral อมอุ่น (`#F3F7F5`) · **เพิ่ม dark theme เต็มชุด** (พื้น neutral charcoal `#171918`, §1.1b) · **token ปุ่มแยกจาก primary** (`btn.*`, §1.1c): dark button = solid เขียวป่าลึก `#0A5A45` + อักษรขาว + shadow (ไม่ใช้ขอบมินต์ กันดูพาสเทล), outline border = `color-mix(text.muted 60%, border)` (กันเส้นจาง). Typography (Sarabun) + spacing (4-pt) เดิม **ไม่เปลี่ยน**. sync-back: [docs/design-system.md §1.1–1.1c](design-system.md) updated.
+Rationale: user report จริง = "implement UI เสร็จเห็นของจริงไม่ตรง ต้องเขียนใหม่" → แทรก mockup-signoff step ก่อน build (spec [2026-07-18-ux-mockup-signoff-step-design.md](superpowers/specs/2026-07-18-ux-mockup-signoff-step-design.md)). ชุดฟ้าเดิมเป็น SaaS ทั่วไปไม่มีเอกลักษณ์; teal+apricot = เชื่อใจ(บัญชี/เงิน)+เป็นมิตร(SME ไทยไม่สาย tech) และเลี่ยงสีทุกแพลตฟอร์ม (Shopee/Lazada/TikTok). พื้น near-neutral (ไม่ครีมจัด) เพราะแอปอัดตัวเลข/ตาราง ต้องคม-precise. ทุกคู่สีผ่าน WCAG AA (ยกเว้นปุ่ม dark เข้มสุด boundary ~1.9 อาศัย shadow+label — design intent).
+Affects: `docs/design-system.md` §1.1/1.1b/1.1c (token ใหม่) · **apps/web + apps/mobile (F-001 UI) ต้อง refactor ตาม token ใหม่ = Phase 2** (Tailwind `@theme`/`tokens.css` + Flutter `ThemeData` + เพิ่ม dark theme) · ไม่แตะ contract/API/business logic/AC. ยังไม่ล็อก component-level visual (รอบถัดไป).
+Status: decided
