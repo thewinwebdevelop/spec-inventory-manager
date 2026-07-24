@@ -123,9 +123,9 @@ class SessionListState extends ConsumerState<SessionList> {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
-        Text(t.authSessionsTitle, style: AppTypography.headingSm),
+        Text(t.authSessionsTitle, style: Theme.of(context).textTheme.titleMedium),
         const SizedBox(height: AppSpacing.s1),
-        Text(t.authSessionsSubtitle, style: AppTypography.bodySm),
+        Text(t.authSessionsSubtitle, style: Theme.of(context).textTheme.bodySmall),
         const SizedBox(height: AppSpacing.s4),
         // T-001-17 ★ (L-4): mobile can never resolve `current` (api-spec
         // §2.6 — Bearer-only calls get `current: false` on every row, since
@@ -144,7 +144,7 @@ class SessionListState extends ConsumerState<SessionList> {
           Center(
             child: Column(
               children: [
-                Text(t.authSessionsErrorLoadFailed, style: AppTypography.bodyMd),
+                Text(t.authSessionsErrorLoadFailed, style: Theme.of(context).textTheme.bodyLarge),
                 const SizedBox(height: AppSpacing.s3),
                 OutlinedButton(onPressed: load, child: Text(t.authSessionsActionRetry)),
               ],
@@ -159,7 +159,7 @@ class SessionListState extends ConsumerState<SessionList> {
           const SizedBox(height: AppSpacing.s3),
           ElevatedButton(
             onPressed: confirmLogoutAll,
-            style: ElevatedButton.styleFrom(backgroundColor: AppColors.danger),
+            style: ElevatedButton.styleFrom(backgroundColor: context.appColors.btnDangerBg),
             child: Text(t.authSessionsActionLogoutAll),
           ),
         ],
@@ -179,19 +179,19 @@ class _MobileCurrentDeviceNotice extends StatelessWidget {
       width: double.infinity,
       padding: const EdgeInsets.all(AppSpacing.s4),
       decoration: BoxDecoration(
-        color: AppColors.warningBg,
-        border: Border.all(color: AppColors.warningBorder),
+        color: context.appColors.warningBg,
+        border: Border.all(color: context.appColors.warningBorder),
         borderRadius: BorderRadius.circular(AppRadius.card),
       ),
       child: Row(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          const Icon(Icons.info_outline, color: AppColors.warningText, size: 20),
+          Icon(Icons.info_outline, color: context.appColors.warningText, size: 20),
           const SizedBox(width: AppSpacing.s2),
           Expanded(
             child: Text(
               AppLocalizations.of(context).authSessionsMobileCannotIdentifyCurrent,
-              style: AppTypography.bodySm.copyWith(color: AppColors.warningText),
+              style: AppTypography.bodySm.copyWith(color: context.appColors.warningText),
             ),
           ),
         ],

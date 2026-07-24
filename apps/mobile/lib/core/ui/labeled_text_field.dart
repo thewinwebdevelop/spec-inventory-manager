@@ -35,7 +35,7 @@ class LabeledTextField extends StatelessWidget {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        Text(label, style: AppTypography.labelSm),
+        Text(label, style: Theme.of(context).textTheme.labelSmall),
         const SizedBox(height: AppSpacing.s2),
         TextField(
           controller: controller,
@@ -45,7 +45,7 @@ class LabeledTextField extends StatelessWidget {
           onSubmitted: onSubmitted,
           onEditingComplete: onEditingComplete,
           autofocus: autofocus,
-          style: AppTypography.bodyMd,
+          style: Theme.of(context).textTheme.bodyLarge,
           decoration: InputDecoration(
             hintText: placeholder,
             errorText: errorText,

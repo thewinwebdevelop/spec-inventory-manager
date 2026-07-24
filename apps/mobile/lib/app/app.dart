@@ -65,6 +65,8 @@ class _OmniStockAppState extends ConsumerState<OmniStockApp> {
     return MaterialApp(
       title: 'OmniStock',
       theme: buildAppTheme(),
+      darkTheme: buildAppDarkTheme(),
+      themeMode: ThemeMode.system,
       // R4 (docs/architecture/refactor-plan.md §4, mobile.md §3.7) — wires
       // the generated AppLocalizations (Thai only for now, structure ready
       // for `en` later per the ARB doc comment) so every `presentation/`

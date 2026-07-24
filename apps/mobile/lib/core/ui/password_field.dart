@@ -49,7 +49,7 @@ class _PasswordFieldState extends State<PasswordField> {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        Text(widget.label, style: AppTypography.labelSm),
+        Text(widget.label, style: Theme.of(context).textTheme.labelSmall),
         const SizedBox(height: AppSpacing.s2),
         TextField(
           controller: widget.controller,
@@ -59,7 +59,7 @@ class _PasswordFieldState extends State<PasswordField> {
           autofocus: widget.autofocus,
           textInputAction: widget.textInputAction,
           onSubmitted: widget.onSubmitted,
-          style: AppTypography.bodyMd,
+          style: Theme.of(context).textTheme.bodyLarge,
           decoration: InputDecoration(
             hintText: widget.placeholder,
             errorText: widget.errorText,
@@ -81,7 +81,7 @@ class _PasswordFieldState extends State<PasswordField> {
         ),
         if (widget.helperText != null && widget.errorText == null) ...[
           const SizedBox(height: AppSpacing.s2),
-          Text(widget.helperText!, style: AppTypography.bodySm),
+          Text(widget.helperText!, style: Theme.of(context).textTheme.bodySmall),
         ],
       ],
     );

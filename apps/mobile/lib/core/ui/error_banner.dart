@@ -20,14 +20,14 @@ class ErrorBanner extends StatelessWidget {
         padding: const EdgeInsets.all(AppSpacing.s4),
         margin: const EdgeInsets.only(bottom: AppSpacing.s4),
         decoration: BoxDecoration(
-          color: AppColors.dangerBg,
-          border: Border.all(color: AppColors.dangerBorder),
+          color: context.appColors.dangerBg,
+          border: Border.all(color: context.appColors.dangerBorder),
           borderRadius: BorderRadius.circular(AppRadius.card),
         ),
         child: Row(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            const Icon(Icons.error_outline, color: AppColors.dangerText, size: 20),
+            Icon(Icons.error_outline, color: context.appColors.dangerText, size: 20),
             const SizedBox(width: AppSpacing.s2),
             Expanded(
               child: Column(
@@ -35,14 +35,14 @@ class ErrorBanner extends StatelessWidget {
                 children: [
                   Text(
                     message,
-                    style: AppTypography.bodySm.copyWith(color: AppColors.dangerText),
+                    style: AppTypography.bodySm.copyWith(color: context.appColors.dangerText),
                   ),
                   if (onRetry != null) ...[
                     const SizedBox(height: AppSpacing.s2),
                     TextButton(
                       onPressed: onRetry,
                       style: TextButton.styleFrom(
-                        foregroundColor: AppColors.dangerText,
+                        foregroundColor: context.appColors.dangerText,
                         padding: EdgeInsets.zero,
                         minimumSize: const Size(0, AppSizes.tapTargetMin),
                       ),

@@ -82,11 +82,11 @@ class _SignupScreenState extends ConsumerState<SignupScreen> {
             crossAxisAlignment: CrossAxisAlignment.stretch,
             children: [
               const SizedBox(height: AppSpacing.s8),
-              Text(t.authSignupTitle, style: AppTypography.headingMd, textAlign: TextAlign.center),
+              Text(t.authSignupTitle, style: Theme.of(context).textTheme.headlineSmall, textAlign: TextAlign.center),
               const SizedBox(height: AppSpacing.s2),
               Text(
                 t.authSignupSubtitle,
-                style: AppTypography.bodyMd.copyWith(color: AppColors.textMuted),
+                style: AppTypography.bodyMd.copyWith(color: context.appColors.textMuted),
                 textAlign: TextAlign.center,
               ),
               const SizedBox(height: AppSpacing.s8),
