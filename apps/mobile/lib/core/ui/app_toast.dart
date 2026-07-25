@@ -13,8 +13,8 @@ void showAppToast(
   AppToastVariant variant = AppToastVariant.success,
 }) {
   final colors = switch (variant) {
-    AppToastVariant.success => (bg: AppColors.successBg, fg: AppColors.successText),
-    AppToastVariant.danger => (bg: AppColors.dangerBg, fg: AppColors.dangerText),
+    AppToastVariant.success => (bg: context.appColors.successBg, fg: context.appColors.successText),
+    AppToastVariant.danger => (bg: context.appColors.dangerBg, fg: context.appColors.dangerText),
   };
   ScaffoldMessenger.of(context)
     ..hideCurrentSnackBar()

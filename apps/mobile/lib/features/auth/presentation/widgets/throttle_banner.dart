@@ -42,8 +42,8 @@ class ThrottleBanner extends StatelessWidget {
           padding: const EdgeInsets.all(AppSpacing.s4),
           margin: const EdgeInsets.only(bottom: AppSpacing.s4),
           decoration: BoxDecoration(
-            color: AppColors.warningBg,
-            border: Border.all(color: AppColors.warningBorder),
+            color: context.appColors.warningBg,
+            border: Border.all(color: context.appColors.warningBorder),
             borderRadius: BorderRadius.circular(AppRadius.card),
           ),
           child: Column(
@@ -54,7 +54,7 @@ class ThrottleBanner extends StatelessWidget {
                 child: Text(
                   message,
                   style: AppTypography.bodyMd.copyWith(
-                    color: AppColors.warningText,
+                    color: context.appColors.warningText,
                     fontFeatures: const [FontFeature.tabularFigures()],
                     fontWeight: FontWeight.w600,
                   ),
@@ -63,7 +63,7 @@ class ThrottleBanner extends StatelessWidget {
               const SizedBox(height: AppSpacing.s2),
               Text(
                 t.authThrottleHelper,
-                style: AppTypography.bodySm.copyWith(color: AppColors.warningText),
+                style: AppTypography.bodySm.copyWith(color: context.appColors.warningText),
               ),
             ],
           ),

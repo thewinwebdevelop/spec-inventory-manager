@@ -104,7 +104,7 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
             crossAxisAlignment: CrossAxisAlignment.stretch,
             children: [
               const SizedBox(height: AppSpacing.s8),
-              Text(t.authLoginTitle, style: AppTypography.headingMd, textAlign: TextAlign.center),
+              Text(t.authLoginTitle, style: Theme.of(context).textTheme.headlineSmall, textAlign: TextAlign.center),
               const SizedBox(height: AppSpacing.s8),
               ThrottleBanner(controller: throttle),
               if (loginState.generalError != null) ErrorBanner(message: loginState.generalError!),

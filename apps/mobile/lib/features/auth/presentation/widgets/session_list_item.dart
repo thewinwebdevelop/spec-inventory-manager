@@ -34,15 +34,15 @@ class SessionListItem extends StatelessWidget {
       padding: const EdgeInsets.all(AppSpacing.s4),
       margin: const EdgeInsets.only(bottom: AppSpacing.s3),
       decoration: BoxDecoration(
-        color: AppColors.surface,
-        border: Border.all(color: AppColors.borderDefault),
+        color: context.appColors.surface,
+        border: Border.all(color: context.appColors.borderDefault),
         borderRadius: BorderRadius.circular(AppRadius.card),
       ),
       child: Row(
         children: [
           Icon(
             session.deviceId == null ? Icons.help_outline : Icons.devices,
-            color: AppColors.textMuted,
+            color: context.appColors.textMuted,
           ),
           const SizedBox(width: AppSpacing.s3),
           Expanded(
@@ -54,7 +54,7 @@ class SessionListItem extends StatelessWidget {
                     Flexible(
                       child: Text(
                         deviceLabel,
-                        style: AppTypography.labelSm,
+                        style: Theme.of(context).textTheme.labelSmall,
                         overflow: TextOverflow.ellipsis,
                       ),
                     ),
@@ -67,7 +67,7 @@ class SessionListItem extends StatelessWidget {
                 const SizedBox(height: AppSpacing.s1),
                 Text(
                   t.authSessionsLastActive(formatRelativeTimeTh(lastUsed)),
-                  style: AppTypography.bodySm,
+                  style: Theme.of(context).textTheme.bodySmall,
                 ),
               ],
             ),
@@ -76,7 +76,7 @@ class SessionListItem extends StatelessWidget {
             OutlinedButton(
               onPressed: onLogoutDevice,
               style: OutlinedButton.styleFrom(
-                foregroundColor: AppColors.textMuted,
+                foregroundColor: context.appColors.textMuted,
                 minimumSize: const Size(0, AppSizes.tapTargetMin),
               ),
               child: Text(t.authSessionsActionLogoutDevice),
@@ -93,13 +93,13 @@ class _CurrentBadge extends StatelessWidget {
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: AppSpacing.s2, vertical: 2),
       decoration: BoxDecoration(
-        color: AppColors.badgeCurrentBg,
+        color: context.appColors.badgeCurrentBg,
         borderRadius: BorderRadius.circular(AppRadius.badge),
       ),
       child: Text(
         AppLocalizations.of(context).authSessionsBadgeCurrent,
         style: AppTypography.bodySm.copyWith(
-          color: AppColors.badgeCurrentText,
+          color: context.appColors.badgeCurrentText,
           fontWeight: FontWeight.w600,
         ),
       ),

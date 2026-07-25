@@ -36,9 +36,9 @@ class _SecurityScreenState extends State<SecurityScreen> {
       SnackBar(
         content: Text(
           AppLocalizations.of(context).authChangePasswordSuccessToast,
-          style: const TextStyle(color: AppColors.successText),
+          style: TextStyle(color: context.appColors.successText),
         ),
-        backgroundColor: AppColors.successBg,
+        backgroundColor: context.appColors.successBg,
         behavior: SnackBarBehavior.floating,
         duration: const Duration(seconds: 5),
       ),
@@ -61,7 +61,7 @@ class _SecurityScreenState extends State<SecurityScreen> {
                 onSessionExpired: widget.onSessionExpired,
               ),
               const SizedBox(height: AppSpacing.s8),
-              const Divider(color: AppColors.borderDefault),
+              Divider(color: context.appColors.borderDefault),
               const SizedBox(height: AppSpacing.s8),
               SessionList(
                 key: _sessionListKey,

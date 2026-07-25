@@ -122,7 +122,7 @@ class BootstrapScreenState extends ConsumerState<BootstrapScreen> {
                     children: [
                       Text(
                         t.authBootstrapOfflineTitle,
-                        style: AppTypography.headingSm,
+                        style: Theme.of(context).textTheme.titleMedium,
                         textAlign: TextAlign.center,
                       ),
                       const SizedBox(height: AppSpacing.s4),
@@ -146,7 +146,7 @@ class BootstrapScreenState extends ConsumerState<BootstrapScreen> {
                     children: [
                       const CircularProgressIndicator(),
                       const SizedBox(height: AppSpacing.s4),
-                      Text(t.authBootstrapLoading, style: AppTypography.bodyMd),
+                      Text(t.authBootstrapLoading, style: Theme.of(context).textTheme.bodyLarge),
                     ],
                   ),
           ),

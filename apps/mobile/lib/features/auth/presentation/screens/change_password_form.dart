@@ -85,7 +85,7 @@ class _ChangePasswordFormState extends ConsumerState<ChangePasswordForm> {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
-        Text(t.authChangePasswordSectionTitle, style: AppTypography.headingSm),
+        Text(t.authChangePasswordSectionTitle, style: Theme.of(context).textTheme.titleMedium),
         const SizedBox(height: AppSpacing.s4),
         ThrottleBanner(controller: throttle),
         if (changePasswordState.generalError != null) ErrorBanner(message: changePasswordState.generalError!),

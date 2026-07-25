@@ -23,15 +23,15 @@ class LoginHelpScreen extends StatelessWidget {
             crossAxisAlignment: CrossAxisAlignment.stretch,
             children: [
               const SizedBox(height: AppSpacing.s8),
-              Text(t.authHelpTitle, style: AppTypography.headingMd, textAlign: TextAlign.center),
+              Text(t.authHelpTitle, style: Theme.of(context).textTheme.headlineSmall, textAlign: TextAlign.center),
               const SizedBox(height: AppSpacing.s6),
-              Text(t.authHelpBody, style: AppTypography.bodyMd),
+              Text(t.authHelpBody, style: Theme.of(context).textTheme.bodyLarge),
               const SizedBox(height: AppSpacing.s6),
-              const Divider(color: AppColors.borderDefault),
+              Divider(color: context.appColors.borderDefault),
               const SizedBox(height: AppSpacing.s6),
               Text(
                 t.authHelpBodySoloOwner,
-                style: AppTypography.bodySm.copyWith(color: AppColors.textMuted),
+                style: AppTypography.bodySm.copyWith(color: context.appColors.textMuted),
               ),
               const SizedBox(height: AppSpacing.s8),
               ElevatedButton(

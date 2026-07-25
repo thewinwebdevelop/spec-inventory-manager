@@ -24,7 +24,7 @@ Future<bool> showConfirmDialog(
   final result = await showModalBottomSheet<bool>(
     context: context,
     isScrollControlled: true,
-    backgroundColor: AppColors.surface,
+    backgroundColor: context.appColors.surface,
     shape: const RoundedRectangleBorder(
       borderRadius: BorderRadius.vertical(top: Radius.circular(AppRadius.card)),
     ),
@@ -85,9 +85,9 @@ class _ConfirmSheetState extends State<_ConfirmSheet> {
           mainAxisSize: MainAxisSize.min,
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            Text(widget.title, style: AppTypography.headingSm),
+            Text(widget.title, style: Theme.of(context).textTheme.titleMedium),
             const SizedBox(height: AppSpacing.s3),
-            Text(widget.body, style: AppTypography.bodyMd),
+            Text(widget.body, style: Theme.of(context).textTheme.bodyLarge),
             const SizedBox(height: AppSpacing.s6),
             Row(
               children: [
@@ -109,9 +109,10 @@ class _ConfirmSheetState extends State<_ConfirmSheet> {
                   child: ElevatedButton(
                     onPressed: () => Navigator.of(context).pop(true),
                     style: ElevatedButton.styleFrom(
-                      backgroundColor:
-                          widget.destructive ? AppColors.danger : AppColors.primary,
-                      foregroundColor: AppColors.primaryFg,
+                      backgroundColor: widget.destructive
+                          ? context.appColors.btnDangerBg
+                          : context.appColors.btnBg,
+                      foregroundColor: context.appColors.btnFg,
                       minimumSize: const Size.fromHeight(AppSizes.tapTargetMin),
                       shape: RoundedRectangleBorder(
                         borderRadius: BorderRadius.circular(AppRadius.button),
