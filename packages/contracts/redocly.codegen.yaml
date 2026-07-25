@@ -1,0 +1,17 @@
+# Config used ONLY for client codegen (gen:contracts:ts / gen:contracts:dart),
+# NOT for the lint gate. `openapi-typescript`'s bundled `@redocly/openapi-core`
+# is pinned to v1.x, which parses rule severities from `redocly.yaml` (so it
+# still enforces our `error` overrides) but does not honor
+# `.redocly.lint-ignore.yaml` (that ignore-file resolution only exists in the
+# `@redocly/cli` v2 config loader used by `pnpm run validate`).
+#
+# Without this file, codegen would refuse to generate types/clients for the
+# one documented, operation-scoped exception (`GET /health` has no meaningful
+# 4xx — see .redocly.lint-ignore.yaml) because it can't read the ignore file.
+#
+# `pnpm run validate` (packages/contracts/redocly.yaml, extends `recommended`,
+# both security-defined and operation-4xx-response at `error`) remains the
+# actual repo-wide contract gate. This file only lets codegen proceed past the
+# same single pre-approved exception; it does not weaken `validate`.
+extends:
+  - minimal

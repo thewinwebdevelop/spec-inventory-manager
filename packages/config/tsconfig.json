@@ -1,0 +1,10 @@
+{
+  "extends": "./tsconfig/base.json",
+  "compilerOptions": {
+    "noEmit": true,
+    "rootDir": "src",
+    "types": []
+  },
+  "include": ["src/index.ts", "src/env.ts", "src/env.test.ts"],
+  "exclude": ["node_modules", "dist"]
+}

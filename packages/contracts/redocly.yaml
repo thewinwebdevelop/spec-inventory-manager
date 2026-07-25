@@ -1,0 +1,23 @@
+extends:
+  - recommended
+
+rules:
+  # security-defined and operation-4xx-response stay ON globally (repo-wide
+  # gate). /health satisfies both explicitly instead of being exempted:
+  # - security-defined: a top-level `security: [bearerAuth: []]` is declared,
+  #   and /health opts out per-operation via `security: []` (intentionally
+  #   public liveness/readiness probe).
+  # - operation-4xx-response: /health documents a real 503 for the
+  #   unhealthy/dependency-down case (see T-000-08 redis/bullmq probe).
+  # Every endpoint added from F-001 onward must define its own security
+  # scheme usage and a meaningful 4xx/error response — there is no blanket
+  # exemption left to escape into.
+  #
+  # Explicit `error` severity (not relying on the `recommended` ruleset's
+  # default, which is `warn` and does not fail the CLI) so `validate` fails
+  # the build when a future endpoint skips security or error responses.
+  security-defined: error
+  operation-4xx-response: error
+  # F-000 is pre-product; license/localhost checks are not meaningful yet.
+  info-license: off
+  no-server-example.com: off

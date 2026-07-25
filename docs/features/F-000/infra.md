@@ -51,7 +51,7 @@ confirms the assumptions backend-api's architecture.md made about devops's job
     },
     "gen:contracts": {
       "inputs": ["openapi/openapi.yaml"],
-      "outputs": ["src/generated/ts/**", "../../apps/mobile/lib/generated/api/**"],
+      "outputs": ["src/generated/ts/**", "../../apps/mobile/api_client/**"],
       "cache": true
     },
     "depcruise": {
@@ -63,6 +63,7 @@ confirms the assumptions backend-api's architecture.md made about devops's job
 ```
 
 Design notes:
+
 - `db:generate` (Prisma client generation) and `gen:contracts` (OpenAPI codegen) are
   named tasks, not hidden inside `build`, so both are independently cacheable and
   independently re-runnable in the "regen-and-diff" drift checks (§3).
@@ -80,6 +81,7 @@ Design notes:
   since it's long-running/non-cacheable by definition).
 
 ### 1.2 Caching — local now, remote later
+
 - **Now (F-000):** local filesystem cache only (`.turbo/`, gitignored). No remote
   cache token/config shipped in F-000 — nothing to misconfigure or leak.
 - **Later:** Vercel Remote Cache or self-hosted `turborepo-remote-cache` once CI
@@ -101,14 +103,14 @@ no extra vendor. No reason found to deviate.
 
 ### 2.1 Job map
 
-| Job | Triggers on | Blocks merge | Purpose |
-|---|---|---|---|
-| `node-ci` | PR, push to main | yes (required) | pnpm install, lint, typecheck, test (Node workspaces) |
-| `db-migrate` | PR, push to main | yes (required) | ephemeral Postgres, `migrate deploy` + `migrate status` drift gate, negative ledger trigger test |
-| `depcruise` | PR, push to main | yes (required) | core-domain purity, standalone from ESLint |
-| `flutter-ci` | PR, push to main | yes (required) | `flutter analyze` + `flutter test` (mobile shell only, §6.2) |
-| `contracts-drift` | PR, push to main | yes (required) | regen-and-diff for Prisma client + TS/Dart contracts clients |
-| `ci-smoke` | manual/scheduled, on a deliberately-broken fixture branch | n/a (proof job) | AC12 evidence — see §5 |
+| Job               | Triggers on                                               | Blocks merge    | Purpose                                                                                          |
+| ----------------- | --------------------------------------------------------- | --------------- | ------------------------------------------------------------------------------------------------ |
+| `node-ci`         | PR, push to main                                          | yes (required)  | pnpm install, lint, typecheck, test (Node workspaces)                                            |
+| `db-migrate`      | PR, push to main                                          | yes (required)  | ephemeral Postgres, `migrate deploy` + `migrate status` drift gate, negative ledger trigger test |
+| `depcruise`       | PR, push to main                                          | yes (required)  | core-domain purity, standalone from ESLint                                                       |
+| `flutter-ci`      | PR, push to main                                          | yes (required)  | `flutter analyze` + `flutter test` (mobile shell only, §6.2)                                     |
+| `contracts-drift` | PR, push to main                                          | yes (required)  | regen-and-diff for Prisma client + TS/Dart contracts clients                                     |
+| `ci-smoke`        | manual/scheduled, on a deliberately-broken fixture branch | n/a (proof job) | AC12 evidence — see §5                                                                           |
 
 Each is a **separate GitHub Actions job** (not steps inside one job), each with
 its own required-status-check entry in branch protection. This satisfies
@@ -125,8 +127,8 @@ node-ci:
     - uses: actions/checkout@v4
     - uses: actions/setup-node@v4
       with:
-        node-version-file: '.nvmrc'
-    - uses: pnpm/action-setup@v4   # version resolved from packageManager field
+        node-version-file: ".nvmrc"
+    - uses: pnpm/action-setup@v4 # version resolved from packageManager field
     - run: pnpm install --frozen-lockfile
     - run: pnpm turbo lint typecheck test --filter='!./apps/mobile'
 ```
@@ -152,7 +154,7 @@ db-migrate:
         POSTGRES_USER: omnistock
         POSTGRES_PASSWORD: omnistock
         POSTGRES_DB: omnistock_ci
-      ports: ['5432:5432']
+      ports: ["5432:5432"]
       options: >-
         --health-cmd pg_isready
         --health-interval 5s
@@ -163,15 +165,15 @@ db-migrate:
   steps:
     - uses: actions/checkout@v4
     - uses: actions/setup-node@v4
-      with: { node-version-file: '.nvmrc' }
+      with: { node-version-file: ".nvmrc" }
     - uses: pnpm/action-setup@v4
     - run: pnpm install --frozen-lockfile
     - name: migrate deploy (from zero, incl. ledger-trigger migration)
       run: pnpm --filter @omnistock/db exec prisma migrate deploy
     - name: drift gate — assert no pending/failed migrations
       run: pnpm --filter @omnistock/db exec prisma migrate status
-    - name: ledger immutability negative test (AC8)
-      run: pnpm --filter @omnistock/db test:ledger-trigger
+    - name: AC5/6/7/8 — schema shape + ledger immutability
+      run: pnpm --filter @omnistock/db run verify:ac
 ```
 
 - Postgres is a GitHub Actions **service container** — fresh/empty for every run,
@@ -186,13 +188,14 @@ db-migrate:
   captured as a migration, or the schema not matching migration history, makes
   this command exit non-zero / report pending — CI goes red. This is the whole
   of AC4's second half.
-- `test:ledger-trigger` is a small script/test (qa authors the assertion matrix
-  per architecture.md §7; devops wires it to run in this job post-deploy) that
-  connects to the same ephemeral Postgres and asserts: `INSERT` succeeds,
-  `UPDATE`/`DELETE`/`updateMany`/`deleteMany` all throw, on both `StockMovement`
-  and `UsageEvent`. If qa/backend-api decide TRUNCATE is in scope (architecture.md
-  §7 flags this to qa), the same job covers it — no separate infra needed, it's
-  just another assertion in the same script against the same live trigger.
+- **Shipped as `verify:ac`** (`packages/db/src/verify-ac.ts`, qa-authored T-000-11) — a superset of
+  the originally-scoped `test:ledger-trigger`: it connects to the same ephemeral Postgres and asserts
+  AC5 (19 tables + required `@@unique` sets), AC6 (org-scope two-sided allowlist), AC7 (money
+  numeric(18,4) / stock integer / no float creep), AND AC8 (`INSERT` succeeds;
+  `UPDATE`/`DELETE`/`TRUNCATE`/`updateMany`/`deleteMany` all throw — Layer 2 DB-trigger checks
+  matched precisely on `restrict_violation`, Layer 1 Prisma-guard checks matched precisely on
+  `LedgerImmutableError`, not just "threw something" — on both `StockMovement` and `UsageEvent`, with
+  full-row deep-equal confirming the rejected mutation left the row byte-identical).
 
 ### 2.4 `flutter-ci` job (AC13)
 
@@ -203,8 +206,8 @@ flutter-ci:
     - uses: actions/checkout@v4
     - uses: subosito/flutter-action@v2
       with:
-        flutter-version-file: 'apps/mobile/.flutter-version'
-        channel: 'stable'
+        flutter-version-file: "apps/mobile/.flutter-version"
+        channel: "stable"
     - run: flutter pub get
       working-directory: apps/mobile
     - run: flutter analyze
@@ -214,12 +217,16 @@ flutter-ci:
 ```
 
 - Own job, own required-check entry — satisfies AC13 literally ("Flutter analyze
-  + test เป็น required check ... แยกจาก AC12").
+  - test เป็น required check ... แยกจาก AC12").
 - Pinned via `apps/mobile/.flutter-version` (§6), read by
   `subosito/flutter-action`, mirroring how `.nvmrc` pins Node.
 - **Generated Dart client scope (confirms architecture.md §4.3):** F-000's
   `flutter analyze`/`flutter test` run over the hand-written Flutter shell only.
-  The generated client at `apps/mobile/lib/generated/api/` is either (a) excluded
+  The generated client is a sibling package at `apps/mobile/api_client/` (moved
+  out of `lib/` during the T-000-09 build: a Dart package nested inside another
+  package's `lib/` makes the CFE resolve its built_value library files and their
+  `.g.dart` parts at different language versions, breaking `flutter test`/`build`).
+  It is either (a) excluded
   from `analyze` via `analysis_options.yaml`'s `exclude:` globs, or (b) present
   but the job does not fail on its analyzer warnings until F-006 turns it green.
   Chosen approach: **(a) exclude via analysis_options.yaml**, because a silent
@@ -237,24 +244,27 @@ depcruise:
   steps:
     - uses: actions/checkout@v4
     - uses: actions/setup-node@v4
-      with: { node-version-file: '.nvmrc' }
+      with: { node-version-file: ".nvmrc" }
     - uses: pnpm/action-setup@v4
     - run: pnpm install --frozen-lockfile
-    - run: pnpm turbo build --filter=@omnistock/core-domain  # tsPreCompilationDeps needs built types
-    - name: depcruise — core-domain purity
-      run: pnpm depcruise packages/core-domain --config packages/config/depcruise/.dependency-cruiser.cjs
-    - name: negative fixture proof (AC9)
-      run: pnpm depcruise:assert-fixture-fails
+    - run: pnpm turbo build --filter=@omnistock/core-domain # tsPreCompilationDeps needs built types
+    - name: AC9 — core-domain purity gate (clean passes + fixture fails)
+      run: pnpm depcruise
 ```
 
 - Standalone job per backend-api's ask (architecture.md §3.3) — different tool,
   different job, different required-check entry from ESLint; an `eslint-disable`
   anywhere cannot touch this job's outcome.
-- `depcruise:assert-fixture-fails` is a thin wrapper script: runs depcruise
-  against `packages/core-domain/src/__purity_fixtures__/violation.ts` and asserts
-  **non-zero exit + `core-domain-is-pure` in the report**. If the guard ever stops
-  catching the fixture (e.g., someone loosens the rule), this step itself goes
-  red — proving the guard is live, not decorative (per architecture.md §3.4).
+- **Shipped as the single `pnpm depcruise` script** (root `package.json`), not the two separate
+  scripts (`depcruise` + `depcruise:assert-fixture-fails`) originally sketched here — the shipped
+  script internally runs BOTH the clean check (must pass against real `packages/core-domain/src`)
+  AND the negative-fixture check (must fail against
+  `packages/core-domain/src/__purity_fixtures__/violation.ts`, asserting non-zero exit +
+  `core-domain-is-pure` in the report) and only exits `0` if the clean check passes AND the fixture
+  check fails as expected. This is **stronger** than two independent scripts: a single required CI
+  step now proves both "the guard doesn't false-positive on real code" and "the guard is live, not
+  decorative" (per architecture.md §3.4) in one atomic gate — there's no window where one script
+  could be wired into CI while the other is forgotten.
 - The fixture directory is excluded from the app `build`/`typecheck` tasks
   (tsconfig `exclude`) so it never affects the real build, but is not excluded
   from the depcruise invocation used by this proof step.
@@ -267,19 +277,20 @@ contracts-drift:
   steps:
     - uses: actions/checkout@v4
     - uses: actions/setup-node@v4
-      with: { node-version-file: '.nvmrc' }
+      with: { node-version-file: ".nvmrc" }
     - uses: pnpm/action-setup@v4
+    - uses: subosito/flutter-action@v2
+      with: { flutter-version-file: "apps/mobile/.flutter-version" }
     - run: pnpm install --frozen-lockfile
     - name: regenerate Prisma client
       run: pnpm --filter @omnistock/db exec prisma generate
     - name: regenerate TS + Dart contracts clients
       run: pnpm turbo gen:contracts
-    - name: fail on uncommitted diff
+    - name: fail on uncommitted diff (incl. untracked new generated files)
       run: |
-        git diff --exit-code -- packages/db/src/generated \
-                                packages/contracts/src/generated \
-                                apps/mobile/lib/generated/api \
-          || (echo "::error::generated client(s) are stale — run gen commands and commit the diff" && exit 1)
+        test -z "$(git status --porcelain -- packages/contracts/src/generated apps/mobile/api_client)" \
+          || (git status --porcelain -- packages/contracts/src/generated apps/mobile/api_client; \
+              echo "::error::generated client(s) are stale — run gen and commit" && exit 1)
     - name: OpenAPI spec validation (AC11)
       run: pnpm --filter @omnistock/contracts exec redocly lint openapi/openapi.yaml
     - name: TS client typecheck-green (AC11)
@@ -288,21 +299,27 @@ contracts-drift:
 
 - One job covers both drift checks backend-api asked about (architecture.md
   §4.2's Prisma-client-drift spirit + §4.2's contracts regen-diff) — same
-  mechanism (`git diff --exit-code` after a clean regen), so no reason to split
-  into two jobs.
-- Committing generated output (Prisma client under `packages/db/src/generated`,
-  TS/Dart clients under their respective paths) is a deliberate choice
-  (architecture.md §1.1/§4.2 already assume this) — it means normal `pnpm install`
-  + `turbo build` works without a generation step for anyone who isn't touching
-  schema/spec, at the cost of this drift job existing to catch staleness.
+  mechanism (regen then diff-check), so no reason to split into two jobs.
+- **Correction — the Prisma client is NOT committed:** `packages/db/src/generated` is listed in
+  root `.gitignore` (it's gitignored, not tracked). Only the TS contracts client
+  (`packages/contracts/src/generated`) and the Dart client (`apps/mobile/api_client`) are committed
+  generated output; the Prisma client is regenerated fresh every time via the `db:generate` step in
+  the turbo task graph (`build`/`typecheck` both `dependsOn: ["db:generate", ...]`), so there is
+  nothing to diff for it in this job — the "regenerate Prisma client" step above exists only so
+  later steps (e.g. `turbo typecheck`) have a client to import, not as a drift target.
+- **Correction — the diff check uses `git status --porcelain`, not `git diff --exit-code`:**
+  `git diff --exit-code` only reports changes to files git already tracks — it is blind to a
+  **brand-new, untracked** generated file (e.g. a new endpoint's new Dart model class under
+  `apps/mobile/api_client/lib/src/model/`). The porcelain check catches untracked-but-present files
+  too, so a new endpoint whose generated client file was never `git add`-ed still fails this job.
 - `redocly lint` failing here is what makes AC11's "validate ผ่าน" a gate rather
   than a suggestion.
-- The Dart client output path is included in the diff check (it must match what
-  the generator produces even though it isn't analyzer-green yet, §2.4) — drift
-  detection and "green" are separate concerns; we still want the committed Dart
-  source to be exactly what codegen produces today.
+- The Dart client output path is included in the diff check and, as of F-000 (D-015, superseding the
+  original "wired, not green" plan in §2.4), the committed `*.g.dart` companions really do compile —
+  drift detection here also protects that green state, not just wiring.
 
 ### 2.7 Branch protection (required checks)
+
 `node-ci`, `db-migrate`, `depcruise`, `flutter-ci`, `contracts-drift` are all
 added as required status checks on the default branch's protection rule. `main`
 disallows direct pushes; merge requires all five green. This is the concrete
@@ -311,6 +328,7 @@ mechanism behind AC12/AC13/AC9's "required check" language.
 ---
 
 ## 3. DB in CI — summary
+
 Already detailed in §2.3; cross-referenced here because AC4/AC5/AC6/AC7/AC8 are
 all exercised against the **same** ephemeral Postgres instance in the same job,
 in this order: `migrate deploy` → `migrate status` (AC4) → introspection queries
@@ -335,26 +353,40 @@ services:
       POSTGRES_USER: omnistock
       POSTGRES_PASSWORD: omnistock
       POSTGRES_DB: omnistock_dev
-    ports: ['5432:5432']
-    volumes: ['pgdata:/var/lib/postgresql/data']
+    ports: ["5432:5432"]
+    volumes: ["pgdata:/var/lib/postgresql/data"]
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U omnistock -d omnistock_dev"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
   redis:
     image: redis:7
-    ports: ['6379:6379']
-    volumes: ['redisdata:/data']
+    ports: ["6379:6379"]
+    volumes: ["redisdata:/data"]
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
 
 volumes:
   pgdata:
   redisdata:
 ```
 
+> Healthchecks added during the T-000-02 build to match the CI `db-migrate`
+> job's service-container healthcheck pattern (§2.3), so `pnpm dev` waits for
+> Postgres/Redis to be ready before `migrate deploy` / `turbo dev`.
+
 - `pnpm dev` (documented root script) is: `docker compose up -d` →
   `pnpm --filter @omnistock/db exec prisma migrate deploy` → `turbo dev`. This is
   the local path AC4 ("Postgres เปล่า") and AC15 (Redis/BullMQ boot) run against
   outside CI — same migration command as CI, different Postgres instance, so
-  dev/CI never diverge on *how* migrations apply.
+  dev/CI never diverge on _how_ migrations apply.
 - Local dev intentionally uses `migrate deploy`, not `migrate dev`, for anyone
   pulling latest and starting the stack (matches architecture.md §1.3 — `migrate
-  dev` stays a schema-authoring-time command run explicitly by whoever is
+dev` stays a schema-authoring-time command run explicitly by whoever is
   changing the schema, committed as a new migration folder).
 - No named volumes are wiped automatically — a developer who wants a truly clean
   slate runs `docker compose down -v` explicitly; default `docker compose up`
@@ -365,6 +397,7 @@ volumes:
 ## 5. CI-blocks-red smoke (AC12)
 
 Proof, not a permanent pipeline fixture:
+
 1. A throwaway branch/PR introduces a deliberate break — cheapest reliable choice:
    a one-line change in `packages/core-domain` that violates the purity rule
    (`import { PrismaClient } from '@omnistock/db'` in a real, non-fixture file),
@@ -386,9 +419,9 @@ Proof, not a permanent pipeline fixture:
 ## 6. Version pinning
 
 - **Node:** `.nvmrc` at repo root (`22`, matching current LTS at time of scaffold)
-  + `"packageManager": "pnpm@<pinned-version>"` in root `package.json` (Corepack
-  reads this — `corepack enable` gives everyone the exact same pnpm without a
-  separate global install step).
+  - `"packageManager": "pnpm@<pinned-version>"` in root `package.json` (Corepack
+    reads this — `corepack enable` gives everyone the exact same pnpm without a
+    separate global install step).
 - **Flutter:** `apps/mobile/.flutter-version` (consumed by
   `subosito/flutter-action` in CI, §2.4) + the same value documented in
   `apps/mobile/CLAUDE.md` (AC16) so a human setting up locally doesn't have to
@@ -406,8 +439,9 @@ Running Flutter as a Turborepo workspace member buys **one task graph, one CI
 summary, one place AC2 checks "did we skip a workspace"** — worth it for a small
 team where "mobile silently not building" is a real failure mode (that's
 literally AC2's wording). The cost, stated plainly:
+
 - **No real caching benefit from Turborepo for Flutter tasks** — `flutter
-  analyze`/`flutter test`/`flutter build` have their own toolchain and their own
+analyze`/`flutter test`/`flutter build` have their own toolchain and their own
   (separate) build cache; Turborepo's content-hash cache around them only saves
   the "should I even invoke Flutter" decision, not Dart compilation itself.
   Actual Flutter build acceleration would come from Flutter's own incremental
@@ -431,6 +465,7 @@ literally AC2's wording). The cost, stated plainly:
 ## 8. `.env.example` + zod boot validation (AC14) / pre-commit hooks (D-004) / shared config
 
 ### 8.1 `.env.example`
+
 Lives at repo root, lists every variable the api needs to boot (`DATABASE_URL`,
 `REDIS_URL`, `JWT_ACCESS_SECRET`, `JWT_REFRESH_SECRET`, `PORT`, `NODE_ENV`, plus
 placeholders for anything backend-api's F-001+ already knows it will need) with
@@ -438,10 +473,12 @@ placeholder (non-secret) values. No real secret ever committed — this file is
 the shape contract, not a credential source.
 
 ### 8.2 zod boot validation
+
 `packages/config/src/env.ts` exports a zod schema; `apps/api`'s bootstrap
 (`main.ts`, before Nest's `NestFactory.create`) calls `envSchema.parse(process.env)`
 and on failure prints the offending variable name(s) to stderr and calls
 `process.exit(1)`.
+
 - **AC14 negative:** CI/manual step removes a required var (e.g., unsets
   `DATABASE_URL`) and asserts the process exits non-zero with that var's name in
   stderr.
@@ -455,6 +492,7 @@ and on failure prints the offending variable name(s) to stderr and calls
   land (F-000 ships the mechanism + the vars already known today).
 
 ### 8.3 git pre-commit hooks (D-004)
+
 - **Tool: `husky` + `lint-staged`** (root `package.json`), because it's the
   de-facto standard for a pnpm/Turborepo monorepo, needs no per-developer global
   install, and installs itself via `prepare` script on `pnpm install`.
@@ -465,6 +503,7 @@ and on failure prints the offending variable name(s) to stderr and calls
 - No commit-blocking test/typecheck in the hook (kept fast); those stay CI's job.
 
 ### 8.4 Shared eslint/prettier (`packages/config`)
+
 - `packages/config/eslint/base.js` (or flat-config equivalent) — shared ESLint
   rules extended by every workspace's local `eslint.config.js`.
 - `packages/config/prettier/index.js` — shared Prettier config, referenced from
@@ -488,8 +527,12 @@ and on failure prints the offending variable name(s) to stderr and calls
   logic yet — that's F-0xx feature-specific), enough to prove the connection is
   live end to end. The health probe checks the **connection**, not a queue's
   job-processing correctness (there's nothing to process yet).
-- `/health` response shape: `{ status: "ok" | "degraded", checks: { db: "ok"|"fail", redis: "ok"|"fail" } }`.
-  AC3's `GET /health → 200 {status:"ok"}` is the happy path; AC15 additionally
+- `/health` response shape: `{ status: "ok" | "error", checks: { db: "ok"|"fail", redis: "ok"|"fail" } }`.
+  (`status` here is the contract's authoritative `HealthResponse` enum,
+  packages/contracts/openapi/openapi.yaml — the contract wins over this doc's
+  wording; the service's internal "ok"|"degraded" result collapses to
+  "ok"|"error" on the wire, see health.controller.ts.) AC3's
+  `GET /health → 200 {status:"ok"}` is the happy path; AC15 additionally
   asserts the `redis` key is present and `"ok"` when the compose Redis is up.
 - Local dev: Redis comes from `docker-compose.yml` (§4). CI: `db-migrate`-style
   ephemeral service container pattern is available if a job ever needs live

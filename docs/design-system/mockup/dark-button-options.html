@@ -1,0 +1,53 @@
+<title>OmniStock · Dark button options</title>
+<style>
+*{box-sizing:border-box}
+body,.wrap{margin:0}
+.wrap{background:#0e0f10;font-family:'Noto Sans Thai',system-ui,-apple-system,sans-serif;padding:22px;color:#E9EEEB}
+.head{max-width:920px;margin:0 auto 18px}
+.head h1{font-size:19px;font-weight:700;margin:0 0 6px}
+.head p{font-size:14px;color:#9aa29d;margin:0;line-height:1.5}
+.grid{max-width:920px;margin:0 auto;display:grid;grid-template-columns:repeat(auto-fit,minmax(300px,1fr));gap:14px}
+.cell{background:#171918;border:1px solid #2a2d2c;border-radius:14px;padding:22px}
+.lbl{font-size:12.5px;font-weight:700;letter-spacing:.02em;color:#98A29D;margin-bottom:14px}
+.lbl b{color:#E9EEEB}
+.card{background:#212423;border:1px solid #363A38;border-radius:12px;padding:18px;max-width:340px}
+.card h3{font-size:15px;font-weight:600;margin:0}
+.card .sku{font-size:12px;color:#98A29D;margin:2px 0 15px}
+.btns{display:flex;gap:10px;flex-wrap:wrap}
+.btn{font:600 15px 'Noto Sans Thai',system-ui;border:0;border-radius:8px;padding:10px 16px;cursor:pointer}
+.gh{background:transparent;color:#E9EEEB;border:1px solid #717875}
+.note{max-width:920px;margin:18px auto 0;font-size:13px;color:#9aa29d;line-height:1.6}
+.note b{color:#E9EEEB}
+</style>
+<div class="wrap">
+  <div class="head">
+    <h1>ปุ่มโหมดมืด — 4 ทรีตเมนต์ให้เลือก</h1>
+    <p>พื้น dark เดียวกัน (neutral charcoal) · ปุ่มรอง "ซิงก์สต๊อก" ใช้เส้นขอบที่แก้แล้ว (contrast 3.4:1) เหมือนกันทุกช่อง — โฟกัสที่ <b>ปุ่มหลัก</b></p>
+  </div>
+  <div class="grid">
+    <div class="cell">
+      <div class="lbl"><b>1</b> · teal สว่าง + อักษรเข้ม <span style="font-weight:500">(ตัวปัจจุบัน — ที่ว่าดูพาสเทล)</span></div>
+      <div class="card"><h3>เสื้อยืดคอกลม สีขาว</h3><div class="sku">รายการขาย (SKU) · TS-WHITE-M</div>
+        <div class="btns"><button class="btn" style="background:#2FBBA6;color:#052421">บันทึกสินค้า</button><button class="btn gh">ซิงก์สต๊อก</button></div></div>
+    </div>
+    <div class="cell">
+      <div class="lbl"><b>2</b> · teal เข้มทึบ + อักษรขาว <span style="font-weight:500">(ปุ่มจริงจัง คงแบรนด์)</span></div>
+      <div class="card"><h3>เสื้อยืดคอกลม สีขาว</h3><div class="sku">รายการขาย (SKU) · TS-WHITE-M</div>
+        <div class="btns"><button class="btn" style="background:#0D7C6E;color:#FFFFFF">บันทึกสินค้า</button><button class="btn gh">ซิงก์สต๊อก</button></div></div>
+    </div>
+    <div class="cell">
+      <div class="lbl"><b>3</b> · coral อุ่น + อักษรเข้ม <span style="font-weight:500">(CTA อุ่น ตัดกับพื้นเย็น)</span></div>
+      <div class="card"><h3>เสื้อยืดคอกลม สีขาว</h3><div class="sku">รายการขาย (SKU) · TS-WHITE-M</div>
+        <div class="btns"><button class="btn" style="background:#F0885A;color:#2A1206">บันทึกสินค้า</button><button class="btn gh">ซิงก์สต๊อก</button></div></div>
+    </div>
+    <div class="cell">
+      <div class="lbl"><b>4</b> · ขาวนวล + อักษรเข้ม <span style="font-weight:500">(คอนทราสต์สูง สะอาด)</span></div>
+      <div class="card"><h3>เสื้อยืดคอกลม สีขาว</h3><div class="sku">รายการขาย (SKU) · TS-WHITE-M</div>
+        <div class="btns"><button class="btn" style="background:#E9EEEB;color:#171918">บันทึกสินค้า</button><button class="btn gh">ซิงก์สต๊อก</button></div></div>
+    </div>
+  </div>
+  <div class="note">
+    <b>ความเห็นผม → แบบ 2 (teal เข้มทึบ + อักษรขาว)</b> — คงสี teal ของแบรนด์บนปุ่มหลัก แต่ดูเป็นปุ่มจริงจัง ไม่พาสเทล/ยาสีฟัน ·
+    ถ้าอยากได้ป็อป-อุ่น-เชิญชวนกว่า → แบบ 3 (coral) แต่จะกลายเป็นใช้สี accent เป็นปุ่มหลัก · แบบ 4 สะอาดสุดแต่เสียสีแบรนด์บนปุ่ม · ทุกแบบผ่าน contrast AA
+  </div>
+</div>

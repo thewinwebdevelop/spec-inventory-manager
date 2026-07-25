@@ -1,0 +1,13 @@
+# This file instructs Redocly's linter to ignore the rules contained for specific parts of your API.
+# See https://redocly.com/docs/cli/ for more information.
+#
+# Scope: exactly GET /health's responses object, exactly the
+# operation-4xx-response rule. /health is a liveness/readiness probe with a
+# real 503 (unhealthy) response documented, but no 4xx is meaningful for a
+# probe with no client-supplied input to reject. This is an operation-scoped
+# exception, not a global rule disable (see packages/contracts/redocly.yaml —
+# both security-defined and operation-4xx-response stay ON repo-wide). New
+# endpoints are NOT covered by this file and must satisfy the rule normally.
+openapi/openapi.yaml:
+  operation-4xx-response:
+    - '#/paths/~1health/get/responses'
