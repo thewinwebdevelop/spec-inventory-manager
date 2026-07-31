@@ -12,3 +12,8 @@ export {
 // reuse-decision, backoff curve, access-claim builder, token-lifetime/cap,
 // capability constants. Pure, framework-free (golden rules #4/#6).
 export * from "./auth";
+
+// F-002 org pure fns (T-002-08) — Owner ≥ 1 invariant, Owner-only rule
+// (canAssignRole), Thai TIN/branch-code validation, derived invitation status,
+// invitation email mask. Pure, framework-free, clock-free (golden rules #4/#6).
+export * from "./orgs";

@@ -20,14 +20,15 @@
 
 | ID | งาน | ref → target | deps | status | updated_by |
 |----|-----|--------------|------|--------|------------|
-| T-002-01 | ★⚠️ schema delta + **migration 2 ไฟล์** (`f002_expand` → `f002_drop_invitation_token`) · `Invitation.token`→`tokenHash` (D-018) · `Role.key` · partial unique index 2 ตัว · precondition check ที่ **abort ดัง** ถ้า `Invitation` ไม่ว่าง | `data-model.md §2/§4` → `packages/db/prisma/` | G2✓ | todo | — |
+| T-002-01 | ★⚠️ schema delta + **migration 2 ไฟล์** (`f002_expand` → `f002_drop_invitation_token`) · `Invitation.token`→`tokenHash` (D-018) · `Role.key` · partial unique index 2 ตัว · precondition check ที่ **abort ดัง** ถ้า `Invitation` ไม่ว่าง | `data-model.md §2/§4` → `packages/db/prisma/` | G2✓ | done | backend-api |
 | T-002-02 | ★ `withOrgScope` ของจริง (แทน pass-through stub) ครบทุก operation + **"operation นอกตาราง = throw"** + export `USER_SELECT` **frozen** (ทางเดียวที่แตะ `User`) · `orgScopedModels`/`orgAgnosticModels` | `architecture.md §2.2` · `§15 แถว 6` → `packages/db/src/tenancy.ts` | T-002-01 | todo | — |
 | T-002-03 | ★ `lockCurrentOrganization` + **`SET LOCAL lock_timeout`** + `ORG_TX_TIMEOUTS` + แมป `55P03`/`40P01`/`P2028`/pool-timeout → **`409` + `details.reason='busy'` (ห้าม 500)** + export `ORG_LOCK_REQUIRED_OPERATIONS` (7 รายการ) | `architecture.md §5.1/§5.2` · `§15 แถว 6b` → `packages/db/src/org-lock.ts` | T-002-01 | todo | — |
 | T-002-04 | ★ `OrgContextMiddleware` (ALS) + `OrgScopeGuard` **default-deny** + `req.orgAuth` (ห้ามพึ่ง `req.user` — I-4) + **ไม่สร้าง context บน `@UserScoped()`/`@Public()`** (I-3) | `architecture.md §1.1–1.4` · `§15 แถว 5` → `apps/api/src/tenancy/` | T-002-02 | todo | — |
 | T-002-05 | ★ `CapabilityGuard` **fail-closed ครอบ org-scoped route ทุก method รวม `GET`** (NEW-3) + `ROUTE_CAPABILITIES` + `ANY_ACTIVE_MEMBER_ROUTES` แยก 2 tier | `architecture.md §3.1` · `§15 แถว 5b` → `apps/api/src/common/authz/` | T-002-04 | todo | — |
-| T-002-06 | env ใหม่เข้า zod schema (`INVITATION_TOKEN_SECRET` min32 + ต่างจาก JWT ทั้งสอง · `WEB_APP_BASE_URL` url+https · `DEFAULT_ORG_PLAN_KEY` · `MAX_ORGS_PER_USER=50` · `ORG_TX_TIMEOUTS`) + export `ORG_RATE_LIMIT_DEFAULTS` | `architecture.md §6.4` · `§15 แถว 8` → `packages/config/src/env.ts` | — | todo | — |
+| T-002-06 | env ใหม่เข้า zod schema (`INVITATION_TOKEN_SECRET` min32 + ต่างจาก JWT ทั้งสอง · `WEB_APP_BASE_URL` url+https · `DEFAULT_ORG_PLAN_KEY` · `MAX_ORGS_PER_USER=50` · `ORG_TX_TIMEOUTS`) + export `ORG_RATE_LIMIT_DEFAULTS` | `architecture.md §6.4` · `§15 แถว 8` → `packages/config/src/env.ts` | — | done | devops |
 | T-002-07 | seed `PlanDefinition` 4 แถว (idempotent by `key`) — **ไม่มี = `POST /organizations` 503 ทุกเคส** | `data-model.md §5.1` → `packages/db/prisma/seed.ts` | T-002-01 | todo | — |
-| T-002-08 | pure fn ใน core-domain + test matrix: `owner-invariant` · **`canAssignRole`** (Owner-only D-028) · `thai-tax-id` (13 หลัก+checksum) · `invitation-status` · `maskEmail` | `data-model.md §6` → `packages/core-domain/src/orgs/` | — | todo | — |
+| T-002-08 | pure fn ใน core-domain + test matrix: `owner-invariant` · **`canAssignRole`** (Owner-only D-028) · `thai-tax-id` (13 หลัก+checksum) · `invitation-status` · `maskEmail` | `data-model.md §6` → `packages/core-domain/src/orgs/` | — | done | backend-api |
+| T-002-08b | pure fn ที่ตกหล่นจากรอบแรก (**PM เขียน tasks.md ตกเอง — data-model §6 มี 7 ไฟล์ ไม่ใช่ 5**): `invitation-policy.ts` (`invitationTtlHours` 24ชม./7วัน · `canAcceptInvitation`) · `tax-id-mask.ts` (`maskTaxId`) | `data-model.md §6` → `packages/core-domain/src/orgs/` | T-002-08 | done | backend-api |
 
 ## backend-api — แก้โค้ดที่ ship แล้ว (★ ทุกใบ · red→green บังคับ)
 
@@ -57,6 +58,7 @@
 
 | ID | งาน | ref → target | deps | status | updated_by |
 |----|-----|--------------|------|--------|------------|
+| T-002-D1a | ปิด build-breaker: เติม env ใหม่ 3 ตัวเข้า CI job `integration-api` + `auth.e2e.int.test.ts` (T-002-06 ทำให้เป็น required ⇒ int lane แดงถ้าไม่เติม) | `.github/workflows/ci.yml` · `apps/api/src/auth/auth.e2e.int.test.ts` | T-002-06 | done | devops |
 | T-002-D1 | CI job `integration-api`: เพิ่ม env ใหม่ + ขั้น **`prisma db seed`** (ไม่มี = สร้างร้านไม่ได้เลย 503 ทุกเคส) + **`connection_limit` ของ `TEST_DATABASE_URL` ≥ จำนวน request ขนานของ test-plan §8** (ไม่งั้นขนานปลอม) | `architecture.md §12.3` · `§15 แถว 13` → `.github/workflows/` | T-002-06, T-002-07 | todo | — |
 | T-002-D2 | ค่าจริงของ env per-environment: `DEFAULT_ORG_PLAN_KEY` (dogfood = `comp_full`) · `INVITATION_TOKEN_SECRET` · `WEB_APP_BASE_URL` · **log scrubbing: ห้าม log query string ของ `/invitations/*`** | `architecture.md §6.2/§7.3` · `api-spec.md §1` | T-002-06 | todo | — |
 
@@ -64,8 +66,8 @@
 
 | ID | งาน | ref → target | deps | status | updated_by |
 |----|-----|--------------|------|--------|------------|
-| T-002-X1 | **sync-back `design-system.md` ตาม D-031** — icon policy **Phosphor** (§1.6 หัวข้อใหม่) · `color.info.*` · `type.button.sm` · `size.icon.*` · `focus.ring.*` · **tap-target 44px ไม่มีข้อยกเว้น** · `Button` +tertiary/+sm/+confirmed · **กฎโครงสร้าง: theme+base style ที่ `:root`/`body` ไม่ใช่ container** + "utility ที่แปลว่าซ่อนต้องชนะเสมอ" · §9 Component library + นิยาม "ประกาศแล้ว" | `ui.md §7` (diff ครบแล้ว) → `docs/design-system.md` | G2✓ | todo | — |
-| T-002-X2 | ตาราง `icon.<role>` → ชื่อไอคอนจริงของ Phosphor (ทั้ง web + Flutter) + ยืนยันว่ามีครบทุก role ที่ F-002 ใช้ | `ui.md §7 ข้อ 12` · D-031 | T-002-X1 | todo | — |
+| T-002-X1 | **sync-back `design-system.md` ตาม D-031** — icon policy **Phosphor** (§1.6 หัวข้อใหม่) · `color.info.*` · `type.button.sm` · `size.icon.*` · `focus.ring.*` · **tap-target 44px ไม่มีข้อยกเว้น** · `Button` +tertiary/+sm/+confirmed · **กฎโครงสร้าง: theme+base style ที่ `:root`/`body` ไม่ใช่ container** + "utility ที่แปลว่าซ่อนต้องชนะเสมอ" · §9 Component library + นิยาม "ประกาศแล้ว" | `ui.md §7` (diff ครบแล้ว) → `docs/design-system.md` | G2✓ | done | ux |
+| T-002-X2 | ตาราง `icon.<role>` → ชื่อไอคอนจริงของ Phosphor (ทั้ง web + Flutter) + ยืนยันว่ามีครบทุก role ที่ F-002 ใช้ | `ui.md §7 ข้อ 12` · D-031 | T-002-X1 | done | ux |
 
 > **⛔ T-002-X1 บล็อก frontend ทุกใบ** — ถ้า design-system ยังไม่ sync frontend จะ implement จากไฟล์ mockup ซึ่งไม่ใช่ source of truth
 

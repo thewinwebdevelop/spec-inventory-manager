@@ -222,6 +222,25 @@ jobs:
       # Satisfy packages/config's env schema (>=32 chars, must differ, F-001 I-4).
       JWT_ACCESS_SECRET: ci-access-secret-not-a-real-value-000000
       JWT_REFRESH_SECRET: ci-refresh-secret-not-a-real-value-00000
+      # F-002 (T-002-06) added three REQUIRED vars — without them every
+      # `loadEnv` call (main.ts boot + AuthModule factories in the int suites)
+      # exits 1 and this whole job goes red. Placeholders only, same rule as above.
+      # >=32 chars AND must differ from BOTH JWT secrets (schema .superRefine,
+      # F-002 §7.3 key separation) — hence the distinct "invitation" prefix.
+      INVITATION_TOKEN_SECRET: ci-invitation-secret-not-a-real-value-00
+      # Only ever string-concatenated into `inviteUrl` (`${base}/invite?token=…`);
+      # nothing in CI fetches it. Plain http is legal here because the schema
+      # allows http on loopback when NODE_ENV != production (this job sets
+      # NODE_ENV: test) — using a loopback host also guarantees a stray request
+      # can never leave the runner toward a real origin. Port 3001 mirrors
+      # .env.example / the apps/web port the e2e-web job boots, so an asserted
+      # invite URL reads the same locally and in CI. If NODE_ENV here is ever
+      # flipped to production, boot fails loudly on this line — by design.
+      WEB_APP_BASE_URL: http://localhost:3001
+      # Must match a PlanDefinition key seeded by packages/db/prisma/seed.ts
+      # (dogfood complimentary full tier). No fallback exists by design: a wrong
+      # key must surface as 503 ORG_PROVISIONING_UNAVAILABLE, never a free plan.
+      DEFAULT_ORG_PLAN_KEY: comp_full
       PORT: "3000"
       NODE_ENV: test
       # T-001-12 — no proxy in front of the api in CI: trust zero XFF hops so

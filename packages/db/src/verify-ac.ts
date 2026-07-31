@@ -12,6 +12,7 @@
  */
 import { PrismaClient } from "./generated/client";
 import { ledgerGuardExtension, LedgerImmutableError } from "./ledger-guard";
+import { ORG_AGNOSTIC_MODELS } from "./org-models";
 
 const prisma = new PrismaClient();
 const guarded = new PrismaClient().$extends(ledgerGuardExtension);
@@ -55,7 +56,11 @@ const BOUNDARY_ABSENT = [
   "Subscription",
   "Payment",
 ];
-const NO_ORG_ALLOWLIST = ["User", "Channel", "PlanDefinition", "RefreshToken"];
+// Single source of truth (F-002 · T-002-01): the allowlist now lives in
+// src/org-models.ts and is unit-tested against the real datamodel, so this live-DB
+// check and the app's org-scoping layer can no longer disagree about which
+// tables are tenant data.
+const NO_ORG_ALLOWLIST: readonly string[] = ORG_AGNOSTIC_MODELS;
 // Organization is the tenant root — satisfies the rule via its own id.
 const REQUIRED_UNIQUES: Array<[string, string[]]> = [
   ["StockLevel", ["warehouseId", "inventoryItemId"]],
@@ -70,7 +75,9 @@ const REQUIRED_UNIQUES: Array<[string, string[]]> = [
   ["OrgEntitlement", ["organizationId"]],
   ["User", ["email"]],
   ["Channel", ["key"]],
-  ["Invitation", ["token"]],
+  // F-002 (T-002-01): `token` was replaced by `tokenHash` (hash-at-rest, D-018).
+  ["Invitation", ["tokenHash"]],
+  ["Role", ["organizationId", "key"]], // F-002 — display slug, unique per org
   ["PlanDefinition", ["key"]],
 ];
 const MONEY_COLS: Array<[string, string]> = [

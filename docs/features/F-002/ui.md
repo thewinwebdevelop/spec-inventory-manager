@@ -17,7 +17,7 @@ signoff: approved   # user 2026-07-29 (หลัง mockup sign-off D-026/D-031)
 4. **แก้ของเดิมแบบ additive 2 จุด:** `ConfirmDialog` รับ `body` เป็นหลายบรรทัด + prop `focusCancel` (default = true เมื่อ `variant="destructive"`) · `Button` เพิ่ม variant `tertiary` + size `sm` + state `confirmed` — ไม่ breaking
 5. **token ใหม่ (ค่าใหม่ล้วน ไม่ทับของเดิม):** `size.sidebar.w` 240 · `size.dialog.max-w` 480 · `size.list-row.min-h` 56 · `color.badge.neutral.*` · **`color.info.bg/.border/.text`** (tone info ของ `Banner` — เดิมประกาศ component แต่ไม่มี token) · **`focus.ring.w/.offset/.color`** · **`size.icon.sm/md/lg/xl` + `icon.stroke`** — รายการเต็ม + เหตุผล §7
 5ก. **ทุกอย่างที่กดได้สูง ≥ `size.tap-target.min` (44px) ไม่มีข้อยกเว้น** — `Button size="sm"` = แน่นที่ตัวอักษร/ระยะข้าง **ไม่ใช่** เตี้ยลง (§2.5)
-5ข. **ไอคอน = outline/stroke เท่านั้น** grid 24 · stroke 2 · `currentColor` · ห้าม emoji/รูป/ไอคอนทึบ — นโยบายเต็ม + **ชุดไอคอนที่รอ user เคาะ** §7 ข้อ 5
+5ข. **ไอคอน = `Phosphor` (MIT · weight regular) — เคาะแล้ว D-031** outline/stroke เท่านั้น · grid 24 · stroke 2 · `currentColor` · ห้าม emoji/รูป/ไอคอนทึบ · **โค้ดอ้าง `icon.<role>` ตาม design-system §1.6.2 (ตารางชื่อไอคอนจริง web+Flutter) ไม่ import ชื่อ vendor ตรง ๆ**
 6. **4 states ทุกจอ** ตาม DS §2 (skeleton ตาม layout จริง, ไม่ใช่ spinner) — ตาราง §4
 7. **ป้ายสถานะห้ามสื่อด้วยสีอย่างเดียว** — `Badge` มีข้อความไทยเสมอ (a11y + WCAG AA ทุกคู่สี)
 8. **i18n namespace `org.*`** — copy ทั้งหมดเป็น key (DS §3) ตาราง §3 · **ห้าม hardcode "7 วัน"/"24 ชั่วโมง"** ทุกที่ (ใช้ `expiresAt`)
@@ -451,7 +451,27 @@ signoff: approved   # user 2026-07-29 (หลัง mockup sign-off D-026/D-031)
 
 ## 7. Sync-back → `docs/design-system.md` (ux เป็นคนเติมหลัง sign-off)
 
-> ไฟล์ design-system.md เป็นของกลาง — diff ที่เสนอ (ยังไม่แก้ไฟล์)
+> ## ✅ SYNCED แล้ว — 2026-07-31 (ux · T-002-X1 + T-002-X2)
+> ข้อ 1–12 ด้านล่าง **ลงไฟล์กลาง `docs/design-system.md` ครบแล้ว** (additive ล้วน — ไม่แตะ token เดิมของ D-026) ·
+> **แหล่งความจริงตั้งแต่นี้ไป = `docs/design-system.md`** ส่วน §7 นี้เก็บไว้เป็นบันทึกที่มา/เหตุผลของ diff เท่านั้น
+> — ถ้าค่าสองที่ไม่ตรงกัน ให้ยึด design-system.md
+>
+> | diff ข้อ | ลงที่ section ไหนใน design-system.md |
+> |---|---|
+> | 1 (`color.info.*`, `color.badge.neutral.*`) | §1.1 + §1.1b (+ หมายเหตุเจตนา "info = กลาง ไม่ใช่สีสถานะ") |
+> | 2 (`type.button.sm`) | §1.2 |
+> | 3 (size/icon/focus token + กติกา tap-target) | §1.3 (+ กล่องกติกา 44px ไม่มีข้อยกเว้น) |
+> | 4 (focus ring · ปุ่มใน Banner · Button variant) | §1.1c-1 / §1.1c-2 / §1.1c-3 (ใหม่) |
+> | 5 (Iconography) | **§1.6 (หัวข้อใหม่)** — ชุดไอคอน = **Phosphor** ตาม D-031 (ไม่ค้างรอ user แล้ว) + §1.6.2 ตาราง `icon.<role>` → ชื่อจริง web/Flutter 21 role |
+> | 6 (กฎเชิงโครงสร้าง: portal/theme + `.hidden`) | **§1.0 (หัวข้อใหม่ ก่อนตาราง token)** |
+> | 7 (error/loading แยกต่อส่วน) | §2 |
+> | 8 (Component library + นิยาม "ประกาศแล้ว") | **§9 (หัวข้อใหม่)** + §6.1 |
+> | 9 (mobile root = org switcher) | §7 |
+> | 10 (`/invite` + เช็คลิสต์ก่อน sign-off) | §8.3 + §8.4 |
+> | 11 (Claude Design push เฉพาะของกลาง) | §9.2 (ท้ายหัวข้อ) |
+> | 12 (tertiary hover / `Link` / แถวปุ่ม + หมายเหตุ `color.primary` vs `btn.bg`) | §1.1c-3 + หมายเหตุท้าย §1.1c |
+
+> ไฟล์ design-system.md เป็นของกลาง — diff ที่เสนอ (บันทึกไว้เป็นที่มา · ลงไฟล์กลางแล้ว)
 > **⚠️ รอบแก้ 2026-07-28:** รอบแรกประกาศไม่ครบ — mockup สร้าง `btn-sm` · `tlink` · `banner.info` · `focusring`
 > ขึ้นมาใช้เองโดยไม่มีใครเป็นเจ้าของค่า (ขัด DS §6 ที่ ux เป็นเจ้าของกฎเอง) · ข้อ 2–6 ด้านล่างคือของที่หายไป
 
@@ -478,7 +498,9 @@ signoff: approved   # user 2026-07-29 (หลัง mockup sign-off D-026/D-031)
    - **`Button` เพิ่ม `variant="tertiary"` + `size="sm"` + `state="confirmed"`** — additive, ไม่แตะ variant เดิม (ตาราง §2.5) · `tertiary` แยกจาก `Link` ในเนื้อความ (ลิงก์ในย่อหน้าขีดเส้นใต้ตลอด)
 5. **เพิ่ม §1.6 "Iconography" (ใหม่ทั้งหัวข้อ — DS ไม่เคยมีนโยบายไอคอน)** = ตารางใน §2.7 ทั้งหมด
    (outline เท่านั้น · grid 24 / stroke 2 · ขนาด 4 ระดับ · `currentColor` · ห้าม emoji/รูป · ห้ามฝังสัญลักษณ์ใน i18n string · ไอคอนต้องมีข้อความคู่)
-   **🚩 ค้างรอ user เคาะ — เลือกชุดไอคอน (ต้องมีทั้ง web + Flutter จากชุดเดียวกัน):**
+   **✅ เคาะแล้ว (D-031 ข้อ 1) = ตัวเลือก C · Phosphor (MIT)** — ตาราง `icon.<role>` → ชื่อไอคอนจริงทั้ง web
+   (`@phosphor-icons/react`) และ Flutter (`phosphor_flutter`) อยู่ที่ **design-system.md §1.6.2** ·
+   ตารางตัวเลือกด้านล่างเก็บไว้เป็นบันทึกเหตุผลเท่านั้น:
 
    | ตัวเลือก | license | web | Flutter | ทำไมเลือก / ทำไมไม่ |
    |---|---|---|---|---|
@@ -486,7 +508,8 @@ signoff: approved   # user 2026-07-29 (หลัง mockup sign-off D-026/D-031)
    | **B · Material Symbols (Outlined)** | Apache-2.0 | `@material-symbols/*` หรือ SVG ตรง | `material_symbols_icons` + Flutter มี `Icons.*` ในตัวอยู่แล้ว | ✅ ปลอดภัยที่สุดระยะยาว (Google ดูแลทั้ง 2 ฝั่ง) + ครอบคลุมมากสุด + มีแกน fill ให้ทำ "แท็บที่เลือกอยู่ = ทึบ" ฟรี · ⚠️ หน้าตา "เป็น Google" ไม่มีคาแรกเตอร์ และเรขาคณิตแข็งกว่าโทน friendly ของเรา |
    | **C · Phosphor (weight `regular`)** ⭐ *ผมเอนไปทางนี้* | MIT | `@phosphor-icons/react` | `phosphor_flutter` — **ทีมเดียวกับต้นทางดูแลเอง** | ✅ ชุดเดียวที่ "เจ้าของเดียวกันทั้ง web + Flutter" ⇒ กันwebกับmobile drift ได้จริง · มุมโค้งนุ่ม เข้ากับโทน "เป็นมิตรกับแม่ค้า" ของ Calm Teal · 9,000+ ไอคอน · ⚠️ ทีม dev คุ้นน้อยกว่า Lucide และต้องเพิ่ม dependency ฝั่ง web (ไม่ได้มากับ shadcn) |
 
-   > ทุกตัวเลือกมีไอคอนครบ 18 role ที่ F-002 ใช้ · mockup วาดเป็น "รูปกลาง" ที่ทั้ง 3 ชุดเหมือนกัน ⇒ **เลือกทีหลังได้ ไม่บล็อก sign-off จอ** แต่ต้องเคาะ**ก่อน frontend เริ่ม build**
+   > ทุกตัวเลือกมีไอคอนครบ 18 role ที่ F-002 ใช้ · mockup วาดเป็น "รูปกลาง" ที่ทั้ง 3 ชุดเหมือนกัน ⇒ เปลี่ยนชุดทีหลังได้โดยจอไม่เปลี่ยนความหมาย
+   > · **สรุป: ใช้ Phosphor · frontend อ้าง `icon.<role>` ไม่ import ชื่อไอคอนของ vendor ตรง ๆ ในโค้ด feature**
 6. **เพิ่มกติกาโครงสร้าง (เข้า §1 ก่อนตาราง token) — ที่มา: บั๊กจริงที่เจอตอนรีวิว mockup รอบนี้**
    - **theme token + base style (font / color / background) ต้องประกาศที่ `:root`/`body` เท่านั้น ห้ามผูกกับ container ของหน้า** —
      modal/toast/dropdown ที่ portal ออกไป `document.body` (Next.js `createPortal`, Radix Portal) หรือ Flutter `Overlay`

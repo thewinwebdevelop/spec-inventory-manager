@@ -30,6 +30,15 @@ if (enabled) {
   process.env.JWT_REFRESH_SECRET = "e2e-refresh-secret-32-chars-different-val!";
   process.env.PORT = "3000";
   process.env.NODE_ENV = "test";
+  // F-002 (T-002-06) required vars — loadEnv validates the WHOLE shape, so the
+  // AuthModule factories here exit(1) without them even though auth never reads
+  // them. Test-only placeholders, mirroring CI's integration-api job.
+  // Must be >=32 chars and differ from both JWT secrets (schema .superRefine).
+  process.env.INVITATION_TOKEN_SECRET = "e2e-invitation-secret-32-chars-distinct!!";
+  // http on loopback is accepted because NODE_ENV=test (production requires
+  // https); same value as CI so an asserted inviteUrl reads identically.
+  process.env.WEB_APP_BASE_URL = "http://localhost:3001";
+  process.env.DEFAULT_ORG_PLAN_KEY = "comp_full";
 }
 
 const STRONG_PW = "correct-horse-battery-staple-9f3aK!";

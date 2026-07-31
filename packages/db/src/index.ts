@@ -21,3 +21,15 @@ export type { LedgerModel, ForbiddenLedgerOperation } from "./ledger-guard";
 // See architecture.md §5 and ./tenancy.ts's header comment.
 export { withOrgScope } from "./tenancy";
 export type { OrgScopeContext } from "./tenancy";
+
+// Tenancy register (F-002 · T-002-01) — which models are org-scoped, which are
+// deliberately org-agnostic, and which is the tenant root. Unit-tested against
+// the real datamodel (org-models.test.ts) so it cannot drift from the schema.
+// The enforcement that consumes it is T-002-02's real `withOrgScope`.
+export {
+  ORGANIZATION_MODEL,
+  ORG_SCOPED_MODELS,
+  ORG_AGNOSTIC_MODELS,
+  isOrgScopedModel,
+} from "./org-models";
+export type { OrgScopedModel, OrgAgnosticModel } from "./org-models";
