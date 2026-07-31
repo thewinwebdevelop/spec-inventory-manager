@@ -308,3 +308,81 @@ Decision: **รับทิศทาง "Calm Teal (deep)" (mockup ทิศท�
 Rationale: user report จริง = "implement UI เสร็จเห็นของจริงไม่ตรง ต้องเขียนใหม่" → แทรก mockup-signoff step ก่อน build (spec [2026-07-18-ux-mockup-signoff-step-design.md](superpowers/specs/2026-07-18-ux-mockup-signoff-step-design.md)). ชุดฟ้าเดิมเป็น SaaS ทั่วไปไม่มีเอกลักษณ์; teal+apricot = เชื่อใจ(บัญชี/เงิน)+เป็นมิตร(SME ไทยไม่สาย tech) และเลี่ยงสีทุกแพลตฟอร์ม (Shopee/Lazada/TikTok). พื้น near-neutral (ไม่ครีมจัด) เพราะแอปอัดตัวเลข/ตาราง ต้องคม-precise. ทุกคู่สีผ่าน WCAG AA (ยกเว้นปุ่ม dark เข้มสุด boundary ~1.9 อาศัย shadow+label — design intent).
 Affects: `docs/design-system.md` §1.1/1.1b/1.1c (token ใหม่) · **apps/web + apps/mobile (F-001 UI) ต้อง refactor ตาม token ใหม่ = Phase 2** (Tailwind `@theme`/`tokens.css` + Flutter `ThemeData` + เพิ่ม dark theme) · ไม่แตะ contract/API/business logic/AC. ยังไม่ล็อก component-level visual (รอบถัดไป).
 Status: decided
+
+---
+
+### D-027 · 2026-07-27 · F-002
+
+Q: Gate-2 design ของ F-002 ชนกับถ้อยคำ AC ที่ user เคาะไปแล้ว 2 จุด — (1) US-3 "re-send = copy ลิงก์เดิม (token/อายุเดิม)" ขัดกับ **D-018 hash-at-rest** (hash ย้อนกลับไม่ได้ → คืน token เดิมไม่ได้) (2) US-5 "refresh token **ในorg นี้** ถูกเพิกถอน" ขัดกับโมเดล token org-agnostic (`RefreshToken` ไม่มี `organizationId` — docs/01 + F-001 as-built) และขัดกับ AC บรรทัดถัดไปของ US-5 เอง ("ยังล็อกอินได้ เห็น org อื่น") — แก้ AC ยังไง?
+Asked by: @backend-api (🚧 BLOCKED) → @product (advisory) Owner: @user (Type 1 — แก้ AC ที่ sign-off แล้ว)
+Decision: **แก้ถ้อยคำ AC ทั้ง 2 จุด + เติม AC ที่ขาด 3 ข้อ**
+**(1) US-3 invite link:** token ถูกเก็บเป็น **hash เท่านั้น** ⇒ แสดงลิงก์ให้ copy ได้ **ครั้งเดียวตอนสร้าง** · "re-send" = ปุ่ม **"ออกลิงก์ใหม่"** → rotate token, **ลิงก์เดิมใช้ไม่ได้ทันที**, email/role ไม่เปลี่ยน, **อายุนับใหม่ 7 วัน** (เลือก (a) ตาม product — สอดคล้องกับ reissue ตอนคำเชิญหมดอายุ และเลี่ยงเคส "ลิงก์ใหม่เหลืออายุ 4 ชม."; backend-api เดิมเสนอคงอายุเดิม) · UI **ต้องเตือน/ยืนยันก่อนกด** และห้ามใช้คำว่า "คัดลอกลิงก์เดิม" · ทุกครั้งที่ออกลิงก์ใหม่ต้อง emit event
+**(2) US-5 revoke:** "เพิกถอน refresh token ในorg นี้" = **ตัดสิทธิ์ที่ membership** (ไม่แตะ token row) — ทุก request org-scoped เช็ค `Membership.status='active'` สดจาก DB (ไม่ cache) ⇒ ถอดแล้ว request ถัดไป **403 ทันที = 0 request ที่ยังทำได้** (แรงกว่าการ revoke token ซึ่งยังปล่อย access token เดิมอีก 15 นาที) · session ไม่ถูกทำลาย (ตาม AC บรรทัดถัดไป) · **เพิ่ม AC:** org ที่ถูกถอดต้องหายจาก org switcher/`/me/organizations` ทันที
+**(3) เติม AC ที่ขาด:** US-3 ระบุว่า token เก็บแบบ hash · US-3 เมื่อเจอ pending ซ้ำต้องเสนอทางออก "ออกลิงก์ใหม่/ยกเลิก" ตรงนั้น (กันผู้ใช้ตัน) · US-4 เคสล็อกอินด้วย email คนละตัวกับที่เชิญ ต้องแจ้งชัด (`INVITATION_EMAIL_MISMATCH`)
+Rationale: ทางเลือกตามตัวอักษรของ AC เดิมทั้งคู่แพงกว่าและแย่กว่า — (1) เก็บ token แบบเข้ารหัสย้อนกลับได้ = แหก D-018 + เพิ่ม key management ที่ไม่มีเจ้าภาพ · (2) ใส่ `organizationId` ลง `RefreshToken` = ต้องล็อกอินใหม่ทุกครั้งที่สลับ org + รื้อ auth module ที่ ship แล้ว · `security-reviewer` พยายาม falsify ทั้งสองข้อแล้ว **ยืนยันว่าถูก** (security-review.md §E ข้อ 2–3) · ผลข้างเคียงของ (1) เป็นเรื่อง copy/UX ไม่ใช่ความสามารถที่หาย และได้ security เพิ่มจริง (ลิงก์เก่าที่ค้างในแชตตายทันที)
+Affects: `docs/features/F-002-organization-license-membership.md` US-3/US-4/US-5 (แก้ถ้อยคำ) · F-002 architecture §4/§7 · api-spec §3.12/§3.15 · ux copy (ปุ่ม+dialog เตือน) · test-plan (qa ต้องวัดตาม AC ใหม่)
+Status: decided
+
+---
+
+### D-028 · 2026-07-27 · F-002
+
+Q: security review ของ Gate-2 F-002 (verdict: **ไม่ผ่านตามที่ร่าง** — Critical 4 · Important 10) ยก 5 finding ที่เป็นการตัดสินความเสี่ยง/นโยบาย ไม่ใช่เรื่องเทคนิค — รับมาตรการไหน?
+Asked by: @security-reviewer (advisory) Owner: @user (Type 1 — ความปลอดภัย + ลดความสามารถของ endpoint ที่ ship แล้ว)
+Decision: **รับข้อเสนอของ security-reviewer ทั้ง 4 กลุ่ม**
+**(C-1) privilege escalation — Owner-only:** เฉพาะผู้มี `full_access` (=Owner) เท่านั้นที่ (ก) กำหนด/เชิญด้วย role `Owner` (ข) แก้/ถอด membership ที่ปัจจุบันเป็น Owner · บังคับด้วย pure fn `canAssignRole()` ใน core-domain + test matrix · เดิม design ให้ `manage_members` (=Admin) ทำได้ ⇒ Admin ยกตัวเองเป็น Owner แล้วถอดเจ้าของจริงออกได้ โดยไม่มีทางกู้ (back-office = Phase 5)
+**(C-2) cross-tenant account takeover — fail-closed:** `POST /orgs/{orgId}/members/{userId}/reset-password` (F-001) ต้อง **ปฏิเสธเมื่อ target มี `Membership active` ใน org อื่นนอกเหนือจาก org นี้** → คืน 404 รูปเดิม (คง 404-never-403, ไม่แตะ wire/contract) · เหตุ: `passwordHash` เป็น credential **ระดับ global** — F-002 ทำให้ "1 user หลาย org" เป็นจริง จึงเปิดช่องให้ Admin org B ยึดบัญชีที่เป็น Owner org A · ทางเลือก "ยอมรับความเสี่ยงแบบ dogfood" ถูกปฏิเสธเพราะเคสนี้ **อยู่ใน persona ของ Gate 1 เอง** (รับจ้างทำบัญชีให้ร้านอื่น) ไม่ใช่เคสสมมติ
+**(I-1 + I-7) invitation hardening (ชุดเต็ม):** (ก) `DELETE members/{userId}` ต้องยกเลิกคำเชิญ `pending` ของ email นั้นใน org เดียวกัน **ใน tx เดียวกัน** (ข) `accept` ต้องปฏิเสธถ้ามี membership เดิม `revoked` ที่ `revokedAt > invitation.tokenIssuedAt` (เชิญกลับ = ต้องเชิญใหม่หลังถอด) (ค) คำเชิญที่ให้ role สูง (Owner/Admin) TTL เหลือ **24 ชม.** (ง) emit `org.member.reactivated` แยก + `acceptedByUserId`/`userCreatedAt` เพื่อสืบย้อน (จ) UI ผู้เชิญเห็นว่าใครรับไปแล้วเมื่อไหร่ · **บันทึกลง threat model ว่า Phase 0 ยืนยัน email ไม่ได้** (`User.verified` ไม่เคยเป็น true, login ไม่เช็ค) ⇒ การผูกคำเชิญกับ email เป็น defense-in-depth ไม่ใช่ control — ปิดจริงที่ F-081 (SMTP)
+**(I-8 + N-4) PDPA / field-level authz:** `taxProfile.taxId` เต็ม = เฉพาะ `manage_org_settings` · คนอื่นได้ mask (4 ตัวท้าย) หรือแค่ `taxProfileComplete` · **รายชื่อสมาชิก + email = ต้องมี `manage_members`** (เดิม design ให้สมาชิก active ทุกคนอ่านได้) — ตอบ Q2 ของ api-spec §6 ด้วย
+Rationale: C-1/C-2 เป็น **สิ่งที่ไม่มีในเอกสาร** ไม่ใช่สิ่งที่เขียนผิด (reviewer ระบุเองว่านี่คือ 2 ข้อสำคัญสุด) · ทั้งคู่เป็นช่องยึดอำนาจ/บัญชีแบบถาวรที่ Phase 0 ไม่มีเครื่องมือกู้ · C-2 คือกรณีคลาสสิกที่ feature ใหม่เปลี่ยนความหมายของ endpoint เก่าโดยไม่มีใครแก้เอกสาร · TIN 13 หลักของบุคคลธรรมดา = เลขบัตรประชาชน → จำกัดตาม PDPA ตั้งแต่แรกถูกกว่ามาแก้ตอน launch-readiness · C-3 (nested include/allowlist), C-4 (`passwordHash` ขึ้น wire), I-2..I-6, I-9, I-10 และ Minor/Nit ทั้งหมด = @backend-api แก้เองในเอกสาร ไม่ต้องเป็น decision
+Affects: F-002 architecture §3/§5/§7/§9 · data-model §3.5/§5.2/§6 (+`canAssignRole`) · api-spec §2/§3.3/§3.7/§3.8/§3.11/§3.15/§4 · **`apps/api/src/auth/` (admin-reset — ลดความสามารถของ endpoint ที่ ship แล้ว)** · AC US-6 (ยืนยันเจตนา Owner-only) · test-plan (route-registry test + org-leak kit หลาย persona) · forward-commitments (email verification → F-081)
+Status: decided
+
+---
+
+### D-029 · 2026-07-28 · F-002
+
+Q: 3 จุดค้างหลัง `ux` ∥ `qa` เสร็จ ก่อน lock contract — (1) คำที่ผู้ใช้เห็นบนจอ: "องค์กร" หรือ "ร้าน"? (2) `ux` จับช่องว่างที่ Gate 1 ไม่เคยครอบ: **Staff ออกจาก org เองไม่ได้** เพราะ `DELETE members/{userId}` ต้องมี `manage_members` (3) `MAX_ORGS_PER_USER = 50` ที่ backend ตั้งเองเป็นค่าเชิงนโยบาย — ยืนยันไหม?
+Asked by: @ux (unresolved 2 ข้อ) + @backend-api (ค่านโยบาย) Owner: @user
+Decision:
+**(1) UI copy ใช้คำว่า "ร้าน"** ทั้ง feature (web + mobile) — **โค้ด/API/schema/OpenAPI ยังเป็น `organization` เหมือนเดิม** (Language policy: identifier = อังกฤษ) · ย้อนได้ที่ i18n key จุดเดียวถ้า Phase 2 (นิติบุคคล/หลายสาขา/TIN) พบว่าคำแคบไป
+**(2) เพิ่มความสามารถ "ออกจากร้านนี้" ด้วยตัวเอง** — self-service leave ไม่ต้องมี `manage_members` (แยก authz จากการถอดคนอื่น) · ยังติดกฎ **Owner คนสุดท้ายออกไม่ได้** (`409 LAST_OWNER`) · เป็น AC ใหม่ของ US-5
+**(3) `MAX_ORGS_PER_USER = 50`** ตามที่ backend ตั้ง — env-tunable ขยับทีหลังได้โดยไม่ต้อง migrate
+**(4) [auto]** รับ AC coverage **34/34 (เต็ม 31 · partial 3)** ของ test-plan: AC-1.2 (plan จาก license ที่ซื้อ → F-080/F-082) · AC-5.4 (พื้นผิว ledger/audit → F-005) · AC-7.3 (tier gating → F-007) — ทั้งสามเป็น "**พื้นผิวยังไม่เกิดใน Phase 0**" ไม่ใช่ "ไม่มีคนเขียนเทสต์" และ Gate-2 doc มอบหมายปลายทางไว้ครบแล้ว ⇒ ไม่บล็อก Gate B
+Rationale: (1) target = SME ไทยไม่สาย tech — "ร้าน" ตรงกับสิ่งที่ผู้ใช้เรียกของตัวเอง; ต้นทุนการเปลี่ยนใจต่ำเพราะแยก UI copy ออกจาก identifier ตั้งแต่แรก · (2) เป็นช่องที่ Gate 1 พลาดจริง ไม่ใช่ scope creep — สมาชิกควรถอนตัวเองออกจากที่ที่ตนไม่อยากอยู่ได้ (PDPA-friendly) และการทำตอนนี้ถูกกว่ามาก (endpoint เดิม + เงื่อนไขไข authz) เทียบกับปล่อยให้ ux ทำปุ่มที่จะได้ 403 หรือรอ F-003 · (3) dogfood จริงคาด 1–3 ร้าน — 50 เหลือเฟือแต่ยังกัน abuse ตอน rate limit fail-open · (4) บังคับให้มีเทสต์ของพื้นผิวที่ยังไม่มีโค้ด = เทสต์หลอก
+Affects: `docs/features/F-002-organization-license-membership.md` US-5 (+AC leave) · api-spec (endpoint/authz ของ leave + `ORG_LIMIT_REACHED`) · architecture §13 · ux-wireframe S10 + i18n key ทั้งชุด (`org.*` label = "ร้าน") · design-system i18n note · test-plan (เคส leave + Owner คนสุดท้าย)
+Status: decided
+
+---
+
+### D-030 · 2026-07-28 · F-002
+
+Q: **security delta review** (§H ของ `security-review.md`, หลัง amend 2 รอบ) พบว่า finding เดิมปิดจริง 25/29 แต่โผล่ **Critical ใหม่ NEW-1**: ตัวกรองของ D-028/C-2 (ห้ามรีเซ็ตรหัส target ที่สังกัดหลาย org) **ไม่ทำงานเมื่อ Owner สังกัดร้านเดียว** — ซึ่งเป็นกรณีปกติที่สุด ⇒ Admin รีเซ็ตรหัส Owner แล้วสวมรอยได้ = ข้ามกฎ Owner-only (D-028/C-1) ทั้งดุ้น · และ NEW-11 ถามว่าใครควรกดดู TIN เต็มผ่าน `POST …/tax-profile/reveal` ได้
+Asked by: @security-reviewer (delta review) Owner: @user (Type 1 — ความปลอดภัย + ลดความสามารถที่ผู้ใช้รู้สึก)
+Decision:
+**(1) NEW-1 — ห้าม `manage_members` รีเซ็ตรหัสของสมาชิกที่เป็น Owner** · เฉพาะผู้มี `full_access` (Owner) เท่านั้นที่รีเซ็ตรหัส Owner ด้วยกันได้ → คืน **404 รูปเดิม** (คง 404-never-403 เหมือน C-2) · **ราคาที่รับ:** ร้านที่มี Owner คนเดียวแล้วลืมรหัส = กู้เองไม่ได้จนกว่าจะมี **F-081 self-serve reset** → ต้องเป็น forward-commitment ที่ผูก trigger ไว้ · เหตุผลที่ไม่เลือก "ห้ามรีเซ็ตคนที่สิทธิ์สูงกว่าหรือเท่าตัวเอง" (ทั่วไปกว่า): F-002 ยังไม่มี capability registry จริง (เป็นของ F-003) จึงเทียบ "สิทธิ์สูงกว่า" ไม่ได้อย่างถูกต้อง — ทำตอน F-003 พร้อม NEW-10 (privilege-superset)
+**(2) NEW-11 — `POST /orgs/{orgId}/tax-profile/reveal` เปิดถึง `manage_org_settings` (Owner + Admin)** ตามที่ contract lock ไว้ · เหตุผล: คนที่ดูแลเอกสารภาษีต้องกรอกเลขนี้จริง · ตัวคุมคือ rate limit 20/ชม. + emit `org.tax_profile.revealed` (ไม่มีค่า TIN ใน event) + `no-store`/`no-referrer` ไม่ใช่การซ่อนจากคนที่ต้องใช้งาน
+**(3) เงื่อนไขอีก 3 ข้อของ delta review = @backend-api ปิดในเอกสาร ไม่ต้องเป็น decision:** NEW-2 (`reissue` ต้องผ่าน `canAssignRole` — ไม่งั้น Admin re-mint คำเชิญ role Owner ได้ไม่จำกัด) · NEW-3 (fail-closed ต้องครอบ **read** route ด้วย ไม่ใช่แค่ mutating) · NEW-6 (`data-model §3.3` ยังเขียนกฎ TIN แบบเก่า ขัด api-spec ที่ LOCKED) + NEW-4 (นโยบาย tx/lock timeout)
+Rationale: NEW-1 เป็นตัวอย่างว่า **การแก้ finding รอบก่อนอาจปิดไม่ครบ** — delta review ที่ไล่ตรวจว่า "ปิดได้จริงไหม" (ไม่ใช่เชื่อคำบรรยาย) คือสิ่งที่จับได้ · การรีเซ็ตรหัสเป็นการยึดบัญชีที่แรงกว่าการยกสิทธิ์ ⇒ ถ้ากฎ Owner-only มีความหมาย เส้นทางนี้ต้องปิดด้วย ไม่งั้นกฎเป็นแค่การตกแต่ง · NEW-11: ซ่อน TIN จาก Admin ทำให้ Phase 2 (ออกเอกสารภาษี) ทำงานไม่ได้ และ Phase 0 ยังไม่มีเอกสารภาษีเลย ⇒ ผ่อนทีหลังถูกกว่าบล็อกตอนนี้
+Affects: `apps/api/src/auth/auth.service.ts` (`adminResetPassword` — เงื่อนไขที่ 2 ต่อจาก D-028/C-2, ★-task เดียวกัน) · F-002 architecture §15 + §3.3 · api-spec §3.16 (ยืนยัน authz เดิม) · data-model §3.3 (แก้ให้ตรง api-spec) · test-plan (regression NEW-1) · **forward-commitments: F-081 = ทางกู้บัญชี Owner เพียงทางเดียว** · F-003 (NEW-10 privilege-superset)
+Status: decided
+
+---
+
+### D-031 · 2026-07-28 · design-system (cross-platform, visual)
+
+Q: รอบ mockup sign-off ของ F-002 (D-026) user รีวิว `docs/design-system/mockup/f002-org.html` แล้วพบ 5 ประเด็น — ตรวจแล้วทั้งหมดมีรากเดียวกัน: **ux สร้าง variant ใหม่ (`btn-sm`, `tlink`, `banner.info`, `focusring`) โดยไม่ประกาศ contribute-back** ⇒ ไม่มีใน `design-system.md` และไม่มีเจ้าของ · บวกของแถมที่วัดได้: **27 องค์ประกอบกดได้ต่ำกว่า `size.tap-target.min` 44px** และ **design-system ไม่มีนโยบายไอคอนเลย** — เคาะยังไง?
+Asked by: @user (รีวิว mockup) → @ux Owner: @user (Type 1 — กระทบทุก feature หลังจากนี้)
+Decision:
+**(1) ไอคอน = `Phosphor` (MIT)** — outline/stroke เท่านั้น · **ห้าม emoji · ห้ามไอคอนทึบ · ห้ามรูปภาพ** · `currentColor` เสมอ · ไอคอนห้ามสื่อความหมายเดี่ยว ๆ (ต้องมีข้อความกำกับ) · **ห้ามฝังสัญลักษณ์ใน i18n string** · ship แบบ tree-shake ไม่ใช้ icon font · ux ถือตาราง `icon.<role>` → ชื่อไอคอนของชุดนี้
+   เหตุผลที่เลือก Phosphor เหนือ Lucide/Material Symbols: **เป็นชุดเดียวที่ผู้ดูแลรายเดียวกันทำทั้ง web และ Flutter** ⇒ ความเสี่ยง "ไอคอนสองฝั่งไม่ตรงกัน" ต่ำสุด ซึ่งเป็นความเสี่ยงที่แพงที่สุดของโปรเจกต์ที่ ship 2 client จาก design system เดียว · Lucide เข้ากับ shadcn ดีที่สุดแต่ Flutter เป็น community package · Material Symbols ปลอดภัยเรื่องการดูแลแต่ไม่มีคาแรกเตอร์
+**(2) tap-target 44px = ไม่มีข้อยกเว้น** — `btn-sm` ยังมีอยู่แต่ **นิยามใหม่**: แน่นที่ตัวอักษร (`type.button.sm` 14/20/600) + ระยะข้าง **แต่สูง ≥44px เสมอทุก platform** · **ปฏิเสธ**ข้อเสนอ "ยกเว้นบริบท pointer-only" เพราะ web รองรับ tablet ที่เป็น touch + Flutter ใช้ token ชุดเดียวกัน ⇒ ข้อยกเว้นจะรั่วและทดสอบไม่ได้
+**(3) ปุ่มในกล่องสถานะใช้โทนของกล่องนั้น** — ตัวอักษร `currentColor` (= `<tone>.text`) · ขอบ `color-mix(currentColor 65%, transparent)` (≥3:1 ทั้ง 2 ธีม) · **ห้ามปุ่ม fill ในกล่อง danger/warning/success**
+**(4) focus ring มี token จริง** — `focus.ring.color/.w 2.5px/.offset 2px` · **`:focus-visible` เท่านั้น ห้ามโชว์ค้าง ห้ามใช้แทนปุ่มเด่น**
+**(5) `tlink` → `Button variant="tertiary"`** สี `color.primary` เสมอ (เลิกใช้ `text.muted`) + สูง 44px · **hover = พื้นหลังจาง (`surface.muted`) ไม่ขีดเส้นใต้** (user เคาะ 2026-07-28 — ปุ่มไม่ใช่ลิงก์ จึงไม่ควรมีสัญญะของลิงก์) · focus = `:focus-visible` ring ตามข้อ (4) · **แยกจาก `Link` ในย่อหน้า** ซึ่ง**ยังขีดเส้นใต้ตลอด** (WCAG: ห้ามสื่อว่าเป็นลิงก์ด้วยสีอย่างเดียวเมื่ออยู่ในเนื้อความ)
+**(6) เพิ่ม role `color.info.*`** (bg/border/text ทั้ง light+dark) — **ค่าคงเดิม** แต่มีชื่อ/มีเจ้าของ · user รับแล้วว่าตัวอักษรเหมือนข้อความทั่วไป (แถบ info เป็นข้อมูลเสริม ไม่ควรแย่งความสนใจกับเนื้อหาหลัก) · ไม่ใช้สีฟ้าเพราะชนกับ teal ของแบรนด์
+**(7) กฎเชิงโครงสร้าง 2 ข้อ (จากบั๊กจริงที่เจอตอนรีวิว):** (ก) **theme token + base style (font/color) ต้องอยู่ที่ `:root`/`body` ไม่ใช่ container** — เพราะ overlay/dialog ที่ portal ไป `document.body` จะหลุดออกจาก style ทั้งหมด (mockup เจอจริง: ได้ Times + สีดำ + token ชุด dark บนหน้า light) (ข) **utility class ที่แปลว่า "ซ่อน" ต้องชนะเสมอ** — `.hidden` ที่ประกาศก่อน `.modal` ด้วย specificity เท่ากันถูกทับ ⇒ ซ่อนไม่ได้เลยแบบเงียบ ๆ
+**(8) เพิ่ม "นับ tap target" เข้าเช็คลิสต์ก่อน sign-off mockup** · และ §9 Component library นิยามคำว่า **"ประกาศแล้ว"** = ถ้าไม่มีชื่อในไฟล์นี้ = ยังไม่มีเจ้าของ
+Rationale: D-026 ตั้ง mockup-signoff step ขึ้นมาเพื่อจับ "เห็นของจริงแล้วไม่ตรง" ก่อน build — รอบนี้พิสูจน์ว่าคุ้ม: จับได้ทั้งของที่มองเห็น (5 ข้อ), ของที่มองไม่เห็นถ้าไม่วัด (tap target 27 จุด), และบั๊กเชิงโครงสร้างที่จะตามไปถึงโค้ดจริงบน Next.js (portal + specificity) · ต้นทุนถ้าเจอหลัง build = รื้อทุก feature ที่ลอก pattern ไปแล้ว ไม่ใช่รื้อจอเดียว
+Affects: **`docs/design-system.md`** — §1.1/§1.1b (+`color.info.*`) · §1.2 (+`type.button.sm`) · §1.3 (+`size.icon.*`, `focus.ring.*`, กฎ tap-target ไม่มีข้อยกเว้น) · **§1.6 Iconography (หัวข้อใหม่)** · §2 · §6 · §9 (Component library + นิยาม "ประกาศแล้ว") · `ui.md §7` = diff ที่รอ sync-back · `docs/design-system/mockup/f002-org.html` · **ทุก feature หลังจากนี้** (icon + tap target + focus ring) · apps/web + apps/mobile ตอน build
+Status: decided

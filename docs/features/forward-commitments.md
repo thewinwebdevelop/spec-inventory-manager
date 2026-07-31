@@ -71,6 +71,25 @@
 | Super-admin config entitlement/plan/usage/support (UI) | F-007 mutation = internal API ให้ console ทับ |
 | Super-admin actor + cross-org access **เปิดใช้จริง**   | F-003 US-8 cross-org seam + F-005 audit       |
 
+## → จาก F-002 Gate 2 (2026-07-27..29 · D-027..D-031) — ผูก trigger ทุกแถว
+
+> **ปิดแล้วใน F-002:** D-018 invitation token hash-at-rest (ทำจริง — `Invitation.tokenHash`) ·
+> `@RequireCapability` decorator+guard (**registry/role CRUD ยังเป็น F-003**) · `OrgContextMiddleware`+`ORG_PRISMA`+`withOrgScope` enforcement
+
+| แถว | สิ่งที่ต้องรับเข้า | **TRIGGER** | ที่มา |
+| --- | --- | --- | --- |
+| **F-081 — ทางกู้บัญชี Owner (ทางเดียว)** ⚠️ | หลัง D-030 **ไม่มีใครในระบบรีเซ็ตรหัสให้ Owner ได้** (Admin ได้ 404) ⇒ ร้านที่มี Owner คนเดียวแล้วลืมรหัส **กู้เองไม่ได้** · F-081 ต้องส่งมอบ **self-serve password reset ทาง email** + **"must change password on next login" หลัง admin-reset** (ปิด NEW-5ข) | **ทันทีที่มี SMTP** — และ **บล็อกการเปิดขายจริง (non-dogfood)**: ระบบที่ผู้ใช้กู้บัญชีเองไม่ได้ ห้ามมีลูกค้าจริง | D-030 · NEW-1/NEW-5 |
+| **F-081 — email verification** | จนกว่าจะมี การผูกคำเชิญกับ email เป็น **defense-in-depth ไม่ใช่ control** (`User.verified` ไม่เคยเป็น true + login ไม่เช็ค) ⇒ ใครได้ลิงก์ก็สมัครด้วย email นั้นแล้ว accept ได้ | มี SMTP | D-028 · I-7 |
+| **F-003 — privilege-superset** | `canAssignRole` ของ F-002 เทียบเฉพาะ `full_access` ⇒ ต้องเพิ่ม "actor มอบได้เฉพาะ capability ที่ตัวเองถือ" + **"ห้ามรีเซ็ตรหัสของคนที่สิทธิ์ ⊇ ตัวเอง"** พร้อม capability registry จริง · มี tripwire `G-15` รออยู่แล้ว | **feature ใดก็ตามที่เปิดให้สร้าง/แก้ `capabilities` ของ role** | NEW-10 · D-030 |
+| **F-003 — `Role.key` ของ custom role** | F-002 ตอบว่า `null` · F-003 ตัดสินว่าจะเปิดให้ตั้งเองไหม (ถ้าเปิด ต้องกันชนค่าสงวน `owner\|admin\|staff`) | F-003 Gate 2 | amend #3 |
+| **F-003 — cache membership** | ถ้าเปิด cache ต้อง **invalidate ตอน revoke** + มี test ว่า revoke แล้ว request ถัดไป 403 ทันที ไม่งั้น AC US-5 พังเงียบ | เมื่อ resolve แพงขึ้น (capabilities+entitlements) | arch §1.5 |
+| **F-005 — จอ audit ของ Owner** | event `org.tax_profile.revealed` / `org.member.role_changed` / `auth.password.admin_reset_blocked_*` ต้องมี **จอที่ Owner เห็นจริง** — "ให้ Admin ดู TIN ได้แต่ตรวจสอบได้" ยังเป็นจริงครึ่งเดียวจนกว่าจะมีจอนี้ | F-005 เริ่ม | NEW-11 |
+| **F-011 — `Idempotency-Key`** | F-002 ไม่มี ⇒ กดสร้างร้าน/เชิญซ้ำเร็ว ๆ อาจได้ 2 รายการ (คุมด้วย cap 50 + UI disable ปุ่มไปพลาง) | interceptor กลางเกิดที่ F-011 | api-spec §Contract |
+| **PDPA — retention ของคำเชิญ** | email ของผู้ถูกเชิญที่**ไม่เคยรับ** ค้างในตาราง `Invitation` ตลอดกาล = ข้อมูลส่วนบุคคลของคนที่ไม่เคยเป็นผู้ใช้เรา ⇒ ต้องมี job ลบ/anonymize คำเชิญ `cancelled`/expired ที่เก่ากว่า N เดือน (ค่า N = product/legal) | launch-readiness | M-11 |
+| **F-087 — RLS** | ชั้น client-extension ไม่ครอบ nested read/raw ⇒ การบังคับระดับ DB ยังไม่มี | F-087 hardening | C-3 |
+| **security delta review รอบ 2 (ค้าง)** | user เลือกเลื่อน (spend limit) ⇒ ให้ `security-reviewer` ตรวจตอน **review โค้ดจริงของ ★-task** แทนการตรวจเอกสารซ้ำ — ต้องครอบ: เงื่อนไข §H.4 ทั้ง 4 · NEW-1..12 · ช่องใหม่จาก amend #4 (`409 busy` probe/DoS · `ANY_ACTIVE_MEMBER_ROUTES` 2 tier · `USER_SELECT` frozen บังคับได้จริงไหม · `Role.key` ถูกใช้ตัดสินสิทธิ์ไหม) | **★-task review ก่อน merge (บังคับอยู่แล้ว §3.6)** | D-030 · user 2026-07-29 |
+| **ux — sync-back `design-system.md`** | D-031 ทั้ง 8 ข้อ (icon policy Phosphor §1.6 ใหม่ · `color.info.*` · `type.button.sm` · `size.icon.*` · `focus.ring.*` · tap-target 44px ไม่มีข้อยกเว้น · Button +tertiary/+sm · กฎ theme ที่ `:root` + utility ต้องชนะ) — diff เต็มอยู่ `F-002/ui.md §7` | **ก่อน frontend เริ่ม task UI ตัวแรกของ F-002** | D-031 |
+
 ## → F-081 (Phase 5 — Onboarding) + email infra
 
 | สิ่งที่เลื่อน                                                                                                                                                 | seam ที่วางแล้ว                                                              |

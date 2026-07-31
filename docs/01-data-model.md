@@ -33,18 +33,32 @@ Channel listing   →   Sellable SKU   →   Bundle composition   →   Inventor
 ### Tenancy & Auth
 > **1 License = 1 Organization = (ถ้าทำบัญชี) 1 TIN** · 1 User → หลาย Org ได้ (org switcher) · ดู F-001/F-002/F-003/F-007
 ```
-Organization   id, name, logo?, timezone, currency (THB), createdAt
+Organization   id, name, logo?, timezone, currency (THB), createdAt, createdByUserId?
                taxProfile?: { entityType (personal|company), taxId(13), vatRegistered(bool), branchCode? }
                             // optional — บังคับเมื่อเปิด Full tier (accounting). 1 org = 1 TIN
+               // taxId มี index แต่ NOT unique ข้าม org (unique = cross-tenant oracle) — F-002
+               // TIN เต็มออกทาง POST /orgs/{id}/tax-profile/reveal เท่านั้น (PDPA — D-028)
+               // สร้าง org = Organization + system Roles(Owner/Admin/Staff) + Membership(Owner,active)
+               //            + OrgEntitlement + default Warehouse ใน transaction เดียว (F-002)
 User           id, email, passwordHash, verified(bool), ...
                // identifier นามธรรม (เผื่อ phone+OTP); auth ไม่ผูก organizationId
-Membership     id, organizationId, userId, roleId, status (active|invited|revoked)
+               // ⚠ passwordHash = credential ระดับ "ผู้ใช้" ไม่ใช่ระดับ org → admin-reset ถูกจำกัด (D-028/D-030)
+Membership     id, organizationId, userId, roleId, status (active|invited|revoked),
+               activatedAt?, revokedAt?, revokedByUserId?     // ← F-002: deactivate ไม่ delete
                // role/permission เป็นของราย org (ผ่าน roleId) — deactivate ไม่ delete
-Role           id, organizationId, name, isSystem (Owner=ล็อก), capabilities[]  // editable ราย org
+               // status='invited' = dead state ใน Phase 0 (membership เกิดตอน accept เท่านั้น)
+               // สมาชิกออกจาก org เองได้ (D-029) — บันทึกเป็น revoked แต่เป็นคนละ event
+Role           id, organizationId, name, key?, isSystem (Owner=ล็อก), capabilities[]  // editable ราย org
+               // key = owner|admin|staff สำหรับ system role · custom role (F-003) = null
+               // @@unique([organizationId, key]) · ⚠ ห้ามใช้ key ตัดสินสิทธิ์ — สิทธิ์ = capabilities
                // capability registry (open-ended): full_access, manage_members, manage_org_settings,
                // manage_billing, manage_products, manage_stock, manage_channels, manage_orders,
                // view_financials, access_accounting(Full tier) ...
-Invitation     id, organizationId, email, roleId, status (pending|accepted|expired), token, expiresAt
+Invitation     id, organizationId, email, roleId, status (pending|accepted|cancelled),
+               tokenHash (HMAC keyed, unique), tokenIssuedAt, expiresAt,   // ← F-002/D-018: hash-at-rest
+               invitedByUserId?, acceptedAt?, acceptedByUserId?, acceptedUserCreatedAt?, cancelledAt?
+               // expired = derived (pending && expiresAt < now) ไม่มี job เขียนสถานะ
+               // acceptedUserCreatedAfterInvite เทียบกับ createdAt ไม่ใช่ tokenIssuedAt (rotate ต้องไม่ล้างร่องรอย)
 RefreshToken   id, userId, deviceId, familyId, tokenHash (HMAC, unique), rotatedFrom?, revokedAt?,
                expiresAt, familyExpiresAt (login+90d cap — D-007), lastUsedAt?
                // rotation + reuse detection (+60s leeway D-011) — รายละเอียด: features/F-001/data-model.md (G2✓)

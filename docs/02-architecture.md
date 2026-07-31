@@ -83,7 +83,16 @@ interface ChannelConnector {
 
 ## 5. Multi-tenant & security
 
-- **ทุก query กรอง `organizationId`** — บังคับผ่าน Prisma middleware / repository layer (กันลืม)
+- **ทุก query กรอง `organizationId`** — กลไกจริงตั้งแต่ **F-002**:
+  `X-Organization-Id` header → `OrgContextMiddleware` (AsyncLocalStorage) → resolve membership `active`
+  → `ORG_PRISMA` = `withOrgScope(...)` (Prisma client extension ที่ inject org filter ให้ทุก operation)
+  · `SYSTEM_PRISMA` (ไม่มี org filter) = **allowlist ระดับไฟล์** `auth/`, `orgs/system/`, `tenancy/`, `health/`, `prisma/`
+  · **org-scoped route ทุกเส้น รวม `GET`** ต้องประกาศ `@RequireCapability`/`@AnyActiveMember` — ไม่ประกาศ = **403 + CI แดง** (ลืม = พัง ไม่ใช่ลืม = รั่ว)
+  · **ข้อจำกัดที่ต้องรู้:** ชั้น client-extension **ไม่ครอบ nested read** และไม่ครอบ query ที่ตั้งต้นจาก model org-agnostic
+    (`User`/`RefreshToken`/`Channel`/`PlanDefinition`) ⇒ ห้าม feature module ตั้งต้น query จาก model เหล่านี้ ·
+    ห้าม traverse relation *ผ่าน* model org-agnostic กลับเข้า model org-scoped · แตะ `User` ได้ทางเดียวคือ `USER_SELECT` ที่ frozen
+  · tx ที่คว้า row lock ต้องกำหนด `lock_timeout`/`timeout` และแมป timeout/deadlock เป็น **`409`** ไม่ใช่ 500
+  · RLS ของ Postgres = hardening option ของ F-087 (ไม่ทำใน Phase 0 — ผูก session state กับ pooling)
 - token marketplace **เข้ารหัสก่อนเก็บ** (`ChannelAccount.authData`)
 - RBAC: role + fine-grained permission ต่อ membership
 - audit log สำหรับ action สำคัญ (แก้สต๊อก, ออกเอกสาร, **back-office ทุก action**)
