@@ -51,3 +51,11 @@ void scopedGuarded.stockLevel.findMany;
 // too (composition is genuinely nested, not just "compiles by accident" via
 // a loose `any`).
 void scopedGuarded.$extends;
+
+// 4) F-002 · T-002-02 — the `ORG_PRISMA` provider reads the context out of
+// AsyncLocalStorage, which can legitimately be absent, so a possibly-null ctx
+// must typecheck here (the failure is deliberately deferred to query time as
+// `MissingOrgContextError`; see tenancy.ts). If this ever stops compiling,
+// someone will be tempted to build an unscoped fallback client instead.
+const maybeCtx: OrgScopeContext | null = Math.random() > 1 ? ctx : null;
+void withOrgScope(guardedClient, maybeCtx).stockLevel.findMany;

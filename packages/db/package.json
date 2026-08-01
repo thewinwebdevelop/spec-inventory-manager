@@ -11,12 +11,13 @@
     "db:migrate:deploy": "prisma migrate deploy",
     "db:migrate:status": "prisma migrate status",
     "verify:ac": "tsx src/verify-ac.ts",
-    "lint": "eslint \"src/**/*.{ts,tsx}\" --ignore-pattern \"src/generated/**\"",
+    "lint": "eslint \"src/**/*.{ts,tsx}\" \"prisma/**/*.{ts,tsx}\" --ignore-pattern \"src/generated/**\"",
     "typecheck": "tsc -p tsconfig.json --noEmit",
     "test": "vitest run"
   },
   "prisma": {
-    "schema": "prisma/schema.prisma"
+    "schema": "prisma/schema.prisma",
+    "seed": "tsx prisma/seed.ts"
   },
   "dependencies": {
     "@prisma/client": "^5.22.0"

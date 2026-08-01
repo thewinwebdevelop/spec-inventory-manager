@@ -16,11 +16,34 @@ export {
 } from "./ledger-guard";
 export type { LedgerModel, ForbiddenLedgerOperation } from "./ledger-guard";
 
-// organizationId scoping seam (F-000 · T-000-08 · golden rule 3).
-// STUB ONLY — pass-through today; F-002/F-003 implement real enforcement.
-// See architecture.md §5 and ./tenancy.ts's header comment.
-export { withOrgScope } from "./tenancy";
-export type { OrgScopeContext } from "./tenancy";
+// organizationId scoping seam (F-000 · T-000-08 seam → F-002 · T-002-02 real
+// enforcement · golden rule 3). `withOrgScope` now injects/verifies the org on
+// every model operation and fails closed on anything it cannot prove; the
+// per-operation contract is F-002 architecture §2.2, and the strategy table is
+// exported so tests enumerate it instead of re-declaring it (U-DB-07).
+export {
+  withOrgScope,
+  applyOrgScope,
+  ORG_SCOPE_OPERATION_STRATEGY,
+  MissingOrgContextError,
+  OrgScopeViolationError,
+  UnsupportedOrgScopeOperationError,
+  UnregisteredOrgScopeModelError,
+} from "./tenancy";
+export type {
+  OrgScopeContext,
+  OrgScopeCompatibleClient,
+  OrgScopeOperation,
+  OrgScopeStrategy,
+  ApplyOrgScopeParams,
+} from "./tenancy";
+
+// C-4 / NEW-8 — the ONLY sanctioned projection of the org-agnostic `User`
+// model. Feature modules must use this instead of an inline `select` (and never
+// `include: { user: true }`): it has no relation keys, so the "walk through User
+// back down into another org's rows" shape cannot be written. See ./user-select.ts.
+export { USER_SELECT } from "./user-select";
+export type { UserSelect } from "./user-select";
 
 // Tenancy register (F-002 · T-002-01) — which models are org-scoped, which are
 // deliberately org-agnostic, and which is the tenant root. Unit-tested against
