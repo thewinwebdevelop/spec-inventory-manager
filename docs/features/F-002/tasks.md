@@ -59,6 +59,8 @@
 | ID | งาน | ref → target | deps | status | updated_by |
 |----|-----|--------------|------|--------|------------|
 | T-002-D1a | ปิด build-breaker: เติม env ใหม่ 3 ตัวเข้า CI job `integration-api` + `auth.e2e.int.test.ts` (T-002-06 ทำให้เป็น required ⇒ int lane แดงถ้าไม่เติม) | `.github/workflows/ci.yml` · `apps/api/src/auth/auth.e2e.int.test.ts` | T-002-06 | done | devops |
+| T-002-D1b | **ปิดกับดัก "เขียวเพราะไม่ได้รัน"**: ให้ lane `db-migrate` รัน DB-backed test จริง + `tool/ci/assert-tests-ran.mjs` (skip/หาย/ลดจำนวน = CI แดง) · แก้ `integration-api` ที่เดิมมีสาขา "ถ้ามี script ค่อยรัน" | `.github/workflows/ci.yml` · `tool/ci/` | T-002-02 | done | devops |
+| T-002-D1c | เพิ่มขั้น `prisma db seed` ใน lane `integration-api` — **ไม่มี `PlanDefinition` ⇒ `POST /organizations` = 503 ทุกเคส** (architecture §12.3 ข้อ 2) | `.github/workflows/ci.yml` | T-002-07 | todo | — |
 | T-002-D1 | CI job `integration-api`: เพิ่ม env ใหม่ + ขั้น **`prisma db seed`** (ไม่มี = สร้างร้านไม่ได้เลย 503 ทุกเคส) + **`connection_limit` ของ `TEST_DATABASE_URL` ≥ จำนวน request ขนานของ test-plan §8** (ไม่งั้นขนานปลอม) | `architecture.md §12.3` · `§15 แถว 13` → `.github/workflows/` | T-002-06, T-002-07 | todo | — |
 | T-002-D2 | ค่าจริงของ env per-environment: `DEFAULT_ORG_PLAN_KEY` (dogfood = `comp_full`) · `INVITATION_TOKEN_SECRET` · `WEB_APP_BASE_URL` · **log scrubbing: ห้าม log query string ของ `/invitations/*`** | `architecture.md §6.2/§7.3` · `api-spec.md §1` | T-002-06 | todo | — |
 

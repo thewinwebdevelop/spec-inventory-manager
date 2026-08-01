@@ -29,6 +29,12 @@ jobs:
         # block scalar on purpose: the inline JS contains ": " which is illegal in a YAML plain scalar
         run: |
           pnpm exec turbo build --dry=json | node -e "const g=JSON.parse(require('fs').readFileSync(0));const names=new Set(g.tasks.map(t=>t.package));for(const p of ['@omnistock/core-domain','@omnistock/db','@omnistock/connectors','@omnistock/contracts','@omnistock/config','api','web','mobile','back-office']){if(!names.has(p)){console.error('::error::workspace missing from build graph: '+p);process.exit(1)}}console.log('all workspaces present')"
+      # NOTE (F-002 T-002-D1b): this lane has NO database, so packages/db's
+      # src/tenancy.db.test.ts and apps/api's *.int.test.ts self-skip here — by
+      # design, and visibly (the suites print a loud warning). Their real,
+      # merge-blocking run lives in `db-migrate` and `integration-api`, each
+      # protected by the lane-enabled guard (I-37). Do not read a green node-ci
+      # as "tenancy isolation was proven".
       - run: pnpm turbo lint typecheck test --filter='!./apps/mobile'
 
   # AC4/AC5/AC6/AC7/AC8 — one ephemeral Postgres, empty → migrated → introspected → trigger-armed (§3).
@@ -49,6 +55,14 @@ jobs:
           --health-retries 10
     env:
       DATABASE_URL: postgresql://omnistock:omnistock@localhost:5432/omnistock_ci
+      # F-002 T-002-D1b — packages/db's DB-backed tenancy proof
+      # (src/tenancy.db.test.ts, security-review M-9) gates on TEST_DATABASE_URL
+      # and self-skips otherwise. `node-ci` has no database, so WITHOUT this line
+      # those 15 cases (extendedWhereUnique / upsert / $transaction inheritance /
+      # nested-read leak) would skip on every PR and CI would be "green because it
+      # never ran" (F-001 lesson). Same ephemeral container the migrations above
+      # run against, so the suite meets the exact schema this PR ships.
+      TEST_DATABASE_URL: postgresql://omnistock:omnistock@localhost:5432/omnistock_ci
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
@@ -69,6 +83,33 @@ jobs:
       # status` won't catch it (T-000-05 security review, Important-2).
       - name: AC5/6/7/8 — schema shape + ledger immutability
         run: pnpm --filter @omnistock/db run verify:ac
+      # ── F-002 T-002-D1b · the DB-backed tenancy proof + its lane-enabled guard ──
+      # Runs HERE (not in node-ci, not in integration-api) because this lane already
+      # owns a Postgres that has just been `migrate deploy`d + drift-checked, so the
+      # suite meets exactly the schema under test and the ordering is guaranteed by
+      # step order. integration-api boots the HTTP app and is about API behaviour;
+      # this is a package-level proof about Prisma-vs-Postgres and belongs next to
+      # the schema checks, where a failure points straight at the tenancy extension.
+      - name: I-37 — fail fast if this lane is not DB-enabled
+        run: |
+          if [ -z "${TEST_DATABASE_URL:-}" ]; then
+            echo "::error::db-migrate: TEST_DATABASE_URL is unset — packages/db's DB-backed tenancy proof (M-9) would SILENTLY SKIP and this job would go green having proven nothing. Restore it in this job's env: block."
+            exit 1
+          fi
+          echo "TEST_DATABASE_URL is set — the DB-backed suite will actually run."
+      - name: T-002-02 (M-9) — packages/db suite incl. the DB-backed tenancy proof
+        # --reporter=default keeps the human log; --reporter=json feeds the guard.
+        run: pnpm --filter @omnistock/db run test --reporter=default --reporter=json --outputFile.json=/tmp/db-tests.json
+      - name: I-37 lane-enabled guard — a skipped tenancy proof is RED, not green
+        # Asserts the run really happened: 0 skipped cases, tenancy.db.test.ts
+        # contributed >= 15 PASSED cases, and the package suite as a whole >= 100.
+        # Raising these numbers is welcome; lowering one is a reviewable diff.
+        run: |
+          node tool/ci/assert-tests-ran.mjs \
+            --report /tmp/db-tests.json \
+            --lane "db-migrate · packages/db" \
+            --require "src/tenancy.db.test.ts=15" \
+            --min-passed 100
 
   # AC9 + R1 — architectural boundary gates (dependency-cruiser, §2.5, backend.md
   # §5.2). `pnpm depcruise` (turbo) runs EVERY package's gate: core-domain purity
@@ -177,12 +218,11 @@ jobs:
   # "→ F-001 (e2e-in-CI for AC3 / AC15)"): a supertest-equivalent HTTP hit
   # against a booted `/health`, now wired as a required, merge-blocking check
   # instead of local-only verification.
-  # D-014: no `echo ok`/fake-pass steps. Once backend-api lands T-001-07's
-  # supertest suite under the `test:integration` script convention, this job
-  # picks it up automatically (no CI file change needed) — see the explicit
-  # existence check below, which fails loudly rather than silently skipping
-  # if the convention name is wrong, and prints a visible (not silent) notice
-  # when the script genuinely doesn't exist yet.
+  # D-014: no `echo ok`/fake-pass steps. T-001-07's supertest suite has landed
+  # under the `test:integration` script convention, so this job now RUNS it as a
+  # hard gate (F-002 T-002-D1b): the old "run it only if the script exists,
+  # otherwise print a notice" branch is gone — a missing script, an unmatched
+  # filename filter or a self-skipped suite must all be RED here, not a notice.
   integration-api:
     runs-on: ubuntu-latest
     services:
@@ -288,13 +328,36 @@ jobs:
           echo "::error::apps/api never answered 200 on /health within 30s"
           cat /tmp/api.log || true
           exit 1
-      - name: run api integration suite (T-001-07 supertest, once it lands)
+      # ── F-002 T-002-D1b · same silent-skip trap as packages/db, closed the same way ──
+      # The `test:integration` script exists now (F-001 T-001-07 landed), so the old
+      # "run it if it exists, print a notice otherwise" branch is gone: a missing
+      # script must be RED, not a notice. The *.int.test.ts suites self-skip without
+      # TEST_DATABASE_URL/TEST_REDIS_URL and `vitest run int.test` exits 0 while
+      # skipping — verified locally: 29/29 skipped, exit 0. Hence the two steps below.
+      - name: I-37 — fail fast if this lane is not DB+Redis-enabled
         run: |
-          if node -e "process.exit(require('./apps/api/package.json').scripts['test:integration'] ? 0 : 1)"; then
-            pnpm --filter api run test:integration
-          else
-            echo "::notice::apps/api has no 'test:integration' script yet (F-001 T-001-07/T-001-18 not landed) — the required /health boot-smoke above still ran and gated this job; this step is a no-op until backend-api adds the script."
+          # plain `if`s, not `[ … ] && x=…`: GitHub runs this with `bash -e`, where a
+          # false test as the last command of an && list would fail the step itself.
+          missing=""
+          if [ -z "${TEST_DATABASE_URL:-}" ]; then missing="$missing TEST_DATABASE_URL"; fi
+          if [ -z "${TEST_REDIS_URL:-}" ]; then missing="$missing TEST_REDIS_URL"; fi
+          if [ -n "$missing" ]; then
+            echo "::error::integration-api: missing$missing — every *.int.test.ts case would SILENTLY SKIP and this job would go green having proven nothing. Restore them in this job's env: block (they point at the service containers above)."
+            exit 1
           fi
+          echo "TEST_DATABASE_URL + TEST_REDIS_URL are set — the int suites will actually run."
+      - name: api integration suite (*.int.test.ts against the real Postgres + Redis)
+        # Calls apps/api's own script (backend-api owns WHICH files are "integration");
+        # the appended flags only add the JSON report the guard reads.
+        run: pnpm --filter api run test:integration --reporter=default --reporter=json --outputFile.json=/tmp/api-int-tests.json
+      - name: I-37 lane-enabled guard — skipped/absent int suites are RED, not green
+        run: |
+          node tool/ci/assert-tests-ran.mjs \
+            --report /tmp/api-int-tests.json \
+            --lane "integration-api · apps/api *.int.test.ts" \
+            --require "src/auth/auth.e2e.int.test.ts=21" \
+            --require "src/auth/refresh-token.service.int.test.ts=8" \
+            --min-passed 29
       - name: dump api log on failure
         if: failure()
         run: cat /tmp/api.log || true
