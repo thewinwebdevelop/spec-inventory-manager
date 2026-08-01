@@ -44,6 +44,30 @@ describe("ERROR_CODES registry", () => {
     }
   });
 
+  // F-002 · api-spec §4. ORG_MISMATCH is 422 (a client bug), NOT 403 — and
+  // ORG_ACCESS_DENIED must stay a code of its own, separate from FORBIDDEN (I-5):
+  // "not a member of this org" sends the client back to the org picker, while
+  // "member without the capability" keeps it on the page. Collapsing them
+  // guarantees the client does the wrong one.
+  it("pins the F-002 org-context codes → status (api-spec §4)", () => {
+    expect(ERROR_CODES.ORG_CONTEXT_REQUIRED.status).toBe(422);
+    expect(ERROR_CODES.ORG_MISMATCH.status).toBe(422);
+    expect(ERROR_CODES.ORG_ACCESS_DENIED.status).toBe(403);
+    expect(ERROR_CODES.FORBIDDEN.status).toBe(403);
+    expect(ERROR_CODES.ORG_ACCESS_DENIED.code).not.toBe(ERROR_CODES.FORBIDDEN.code);
+  });
+
+  it("uses the D-029 wording ('ร้าน', not 'องค์กร') in the org-context messages", () => {
+    for (const def of [
+      ERROR_CODES.ORG_CONTEXT_REQUIRED,
+      ERROR_CODES.ORG_MISMATCH,
+      ERROR_CODES.ORG_ACCESS_DENIED,
+    ]) {
+      expect(def.message).toContain("ร้าน");
+      expect(def.message).not.toContain("องค์กร");
+    }
+  });
+
   it("pins the exact shipped Thai messages (client shows them verbatim)", () => {
     expect(ERROR_CODES.INVALID_CREDENTIALS.message).toBe("อีเมลหรือรหัสผ่านไม่ถูกต้อง");
     expect(ERROR_CODES.EMAIL_TAKEN.message).toBe("อีเมลนี้ถูกใช้แล้ว");

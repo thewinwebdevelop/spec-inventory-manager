@@ -38,6 +38,39 @@ export type {
   ApplyOrgScopeParams,
 } from "./tenancy";
 
+// Organization serialization anchor + tx/lock timeout policy (F-002 · T-002-03
+// · architecture §5.1/§5.2). `runInOrgLockTransaction` is how every §5 write
+// opens its transaction: it applies the §5.2 timeouts, takes the anchor as the
+// first statement, and turns lock contention into `OrgBusyError` (409 CONFLICT +
+// `details.reason="busy"`) instead of a 500. `ORG_LOCK_REQUIRED_OPERATIONS` is
+// the single list of operations that MUST do so (§12.2 row 6) — qa enumerates
+// it, nobody re-declares it.
+export {
+  ORG_LOCK_REQUIRED_OPERATIONS,
+  ORG_BUSY_HTTP_STATUS,
+  ORG_BUSY_ERROR_CODE,
+  ORG_BUSY_DETAILS,
+  OrgBusyError,
+  OrgLockAnchorMissingError,
+  OrgLockContextMismatchError,
+  OrgLockOutsideTransactionError,
+  classifyOrgLockError,
+  getOrgContext,
+  lockCurrentOrganization,
+  rethrowOrgLockError,
+  runInOrgLockTransaction,
+  runWithOrgContext,
+  toOrgBusyError,
+} from "./org-lock";
+export type {
+  OrgBusyReason,
+  OrgLockCapableClient,
+  OrgLockRequiredOperation,
+  OrgLockTransactionClient,
+  OrgLockTransactionOptions,
+  OrgLockTxOf,
+} from "./org-lock";
+
 // C-4 / NEW-8 — the ONLY sanctioned projection of the org-agnostic `User`
 // model. Feature modules must use this instead of an inline `select` (and never
 // `include: { user: true }`): it has no relation keys, so the "walk through User

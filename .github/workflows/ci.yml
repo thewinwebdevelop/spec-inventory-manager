@@ -109,7 +109,8 @@ jobs:
             --report /tmp/db-tests.json \
             --lane "db-migrate · packages/db" \
             --require "src/tenancy.db.test.ts=15" \
-            --min-passed 100
+            --require "src/org-lock.db.test.ts=5" \
+            --min-passed 165
 
   # AC9 + R1 — architectural boundary gates (dependency-cruiser, §2.5, backend.md
   # §5.2). `pnpm depcruise` (turbo) runs EVERY package's gate: core-domain purity
@@ -305,6 +306,15 @@ jobs:
         run: pnpm --filter @omnistock/db exec prisma generate
       - name: migrate deploy (empty CI database)
         run: pnpm --filter @omnistock/db exec prisma migrate deploy
+      # F-002 T-002-07/architecture.md §12.3 item 2 — without this, PlanDefinition
+      # has 0 rows and EVERY POST /organizations in the int suite below fails
+      # closed with 503 ORG_PROVISIONING_UNAVAILABLE (§6.2 fail-closed, no silent
+      # fallback to `free`). Must run after `migrate deploy` (no PlanDefinition
+      # table = nothing to seed into) and before the api boots / any test step.
+      # No `|| true` / continue-on-error: a failed seed must fail this job loudly,
+      # the same way a failed migration does above.
+      - name: T-002-D1c — prisma db seed (PlanDefinition rows, §12.3 item 2)
+        run: pnpm --filter @omnistock/db exec prisma db seed
       - name: boot apps/api in the background
         # Boot the REAL app via tsx (not `node dist/main.js`): @omnistock/config,
         # @omnistock/db and @omnistock/contracts still ship a TS-source `main`

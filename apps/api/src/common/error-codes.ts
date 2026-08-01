@@ -63,6 +63,21 @@ export const ERROR_CODES = {
     message: "รหัสผ่านนี้อยู่ในรายการที่ถูกเปิดเผยแล้ว กรุณาใช้รหัสอื่น",
   },
 
+  // ── 422 org context (F-002 · api-spec §4) ─────────────────────────────────
+  // Both are VALIDATION-class on purpose: they say "this request was addressed
+  // wrong", not "you may not". Answering 403 here would bounce a perfectly
+  // valid member out of the org they are looking at (N-1).
+  ORG_CONTEXT_REQUIRED: {
+    code: "ORG_CONTEXT_REQUIRED",
+    status: HttpStatus.UNPROCESSABLE_ENTITY,
+    message: "ต้องระบุร้านที่ต้องการเข้าถึง",
+  },
+  ORG_MISMATCH: {
+    code: "ORG_MISMATCH",
+    status: HttpStatus.UNPROCESSABLE_ENTITY,
+    message: "ร้านใน header กับใน URL ไม่ตรงกัน",
+  },
+
   // ── 409 conflict ──────────────────────────────────────────────────────────
   EMAIL_TAKEN: {
     code: "EMAIL_TAKEN",
@@ -107,6 +122,17 @@ export const ERROR_CODES = {
     code: "FORBIDDEN",
     status: HttpStatus.FORBIDDEN,
     message: "ไม่มีสิทธิ์เข้าถึง",
+  },
+  // F-002 · I-5 — deliberately SEPARATE from FORBIDDEN. "You are not an active
+  // member of this org" (incl. the org not existing, or you having been removed)
+  // must be distinguishable by the client from "you are a member but lack this
+  // capability": the first sends the user back to the org picker + refetches
+  // /me/organizations, the second keeps them on the page with a toast. One code
+  // for both guarantees the client does the wrong one of the two.
+  ORG_ACCESS_DENIED: {
+    code: "ORG_ACCESS_DENIED",
+    status: HttpStatus.FORBIDDEN,
+    message: "คุณไม่ได้เป็นสมาชิกของร้านนี้",
   },
 
   // ── 404 not found (same-shape auth 404-never-403) ─────────────────────────
