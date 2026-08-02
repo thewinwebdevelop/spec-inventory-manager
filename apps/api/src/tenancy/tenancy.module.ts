@@ -4,6 +4,7 @@
 //   OrgContextMiddleware  every request  → verify bearer, resolve org, open the
 //                                          ONE AsyncLocalStorage (packages/db)
 //   OrgScopeGuard (APP_GUARD)            → default-deny; 401/422/403 per §1.4
+//   CapabilityGuard (APP_GUARD, second)  → fail-closed capability layer (§3.1)
 //   ORG_PRISMA / SYSTEM_PRISMA           → the only two clients a provider may
 //                                          inject (§2.1)
 //
@@ -21,6 +22,11 @@ import { APP_GUARD, DiscoveryModule } from "@nestjs/core";
 import { loadEnv } from "@omnistock/config";
 import { PrismaModule } from "../prisma/prisma.module";
 import { PrismaService } from "../prisma/prisma.service";
+import {
+  CapabilityGuard,
+  CAPABILITY_EVENT_SINK,
+  LoggingCapabilityEventSink,
+} from "../common/authz";
 import { OrgContextStore } from "./org-context";
 import { OrgContextMiddleware } from "./org-context.middleware";
 import { OrgScopeGuard } from "./org-scope.guard";
@@ -58,6 +64,17 @@ import { createOrgPrismaProxy } from "./org-prisma.provider";
       inject: [PrismaService, OrgContextStore],
     },
     { provide: APP_GUARD, useClass: OrgScopeGuard },
+    // ORDER MATTERS: Nest runs APP_GUARDs in registration order, and this one
+    // must run SECOND. OrgScopeGuard answers "are you an active member of this
+    // org?" (`ORG_ACCESS_DENIED`); only then does the capability layer ask "may
+    // you do THIS?" (`FORBIDDEN`). Swapped, a non-member of the org would be
+    // told they lack a capability — the exact conflation I-5 forbids.
+    { provide: APP_GUARD, useClass: CapabilityGuard },
+    // Default sink for `org.access.capability_denied`: log-only. The real
+    // `SecurityEventsService` lives in `auth/`, which `tenancy/` and `common/`
+    // may not import (depcruise `api-leafward-only`), so the composition root
+    // binds it — see capability-events.ts.
+    { provide: CAPABILITY_EVENT_SINK, useClass: LoggingCapabilityEventSink },
   ],
   exports: [OrgContextStore, ORG_PRISMA, SYSTEM_PRISMA],
 })

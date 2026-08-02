@@ -20,6 +20,7 @@ import { OrgContextStore } from "./org-context";
 import { TenancyModule } from "./tenancy.module";
 import { RouteScopeRegistry } from "./route-scope.registry";
 import { Public, SystemScoped, UserScoped } from "./route-scope.decorator";
+import { AnyActiveMember } from "../common/authz";
 import { ACCESS_TOKEN_VERIFIER, type AccessTokenVerifier } from "./access-token-verifier";
 
 // ── fixtures ────────────────────────────────────────────────────────────────
@@ -80,12 +81,22 @@ class ProbeController {
     return this.snapshot();
   }
 
-  /** NOT marked → org-scoped by default (this is the "lืมแล้วพัง" case). */
+  /**
+   * NOT marked with a TIER → org-scoped by default (this is the "ลืมแล้วพัง" case
+   * this file exists to prove).
+   *
+   * `@AnyActiveMember()` is a different axis and is required since T-002-05:
+   * `CapabilityGuard` refuses any org-scoped route — read included — that
+   * declares no capability (NEW-3). Without it these probes would 403 on the
+   * capability layer before they could say anything about the org layer.
+   */
+  @AnyActiveMember()
   @Get("probe/org")
   orgRoute() {
     return this.snapshot();
   }
 
+  @AnyActiveMember()
   @Get("orgs/:orgId/probe")
   orgPathRoute() {
     return this.snapshot();
@@ -114,6 +125,7 @@ class ProbeController {
   }
 
   /** A NEW route under the same prefix must NOT inherit the legacy bridge. */
+  @AnyActiveMember()
   @Get("orgs/:orgId/members")
   members() {
     return this.snapshot();
