@@ -13,8 +13,27 @@
 // exists from day one instead of being a promise.
 import { Injectable, Logger } from "@nestjs/common";
 
-/** The one event this layer emits (F-002 architecture §9, already in the registry). */
+/** Capability layer: "you are a member, but you may not do THIS" (§9). */
 export const CAPABILITY_DENIED_EVENT = "org.access.capability_denied" as const;
+
+/**
+ * Tenancy layer: "you are not an active member of this org at all" (§9).
+ *
+ * Added after the security review of f66451f (Medium): §9 registered this event
+ * and `SecurityEventsService` declared its payload rule, but **nothing emitted
+ * it**. `OrgScopeGuard` threw `ORG_ACCESS_DENIED` / `ORG_MISMATCH` with no
+ * signal at all, so F-002's headline insider-probing question — "is someone
+ * walking organizations they don't belong to?" — had no answer in the audit
+ * trail. Only the narrower capability denial did.
+ *
+ * It rides the same sink as the capability event rather than getting its own
+ * port: two ports would mean two things to bind, and forgetting one is exactly
+ * the silent-evidence-loss failure this seam exists to prevent.
+ */
+export const ORG_ACCESS_DENIED_EVENT = "org.access.denied" as const;
+
+/** Access denials this seam carries. */
+export type AccessDenialEvent = typeof CAPABILITY_DENIED_EVENT | typeof ORG_ACCESS_DENIED_EVENT;
 
 /**
  * Minimal emit port. Structurally satisfied by `SecurityEventsService.emit`, so
@@ -22,7 +41,7 @@ export const CAPABILITY_DENIED_EVENT = "org.access.capability_denied" as const;
  * — no adapter class, no duplicated payload rules.
  */
 export interface CapabilityEventSink {
-  emit(type: typeof CAPABILITY_DENIED_EVENT, payload: Record<string, unknown>): void;
+  emit(type: AccessDenialEvent, payload: Record<string, unknown>): void;
 }
 
 /** DI token for {@link CapabilityEventSink}. */
@@ -52,7 +71,7 @@ export const CAPABILITY_EVENT_SINK_OVERRIDE = Symbol("CAPABILITY_EVENT_SINK_OVER
 export class LoggingCapabilityEventSink implements CapabilityEventSink {
   private readonly logger = new Logger("SecurityEvents");
 
-  emit(type: typeof CAPABILITY_DENIED_EVENT, payload: Record<string, unknown>): void {
+  emit(type: AccessDenialEvent, payload: Record<string, unknown>): void {
     this.logger.log(`${type} ${JSON.stringify(payload)}`);
   }
 }

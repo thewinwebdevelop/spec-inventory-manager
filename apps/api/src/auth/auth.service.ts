@@ -13,6 +13,7 @@ import {
   normalizeEmail,
   isValidEmailShape,
   decideAdminReset,
+  isAdminResetCallerAuthorized,
   type AdminResetDecision,
   type AdminResetInput,
   type AdminResetMembershipFacts,
@@ -251,6 +252,34 @@ export class AuthService {
    * would still let an Admin kick the Owner out of every device on repeat (a
    * DoS the status code cannot see, U-API-07(ซ)).
    */
+  /**
+   * One membership, read as the pure decision fn wants it. Takes the client so
+   * the SAME shape is read by the cheap pre-check (on `this.db`) and by the
+   * authoritative reads inside the transaction (on `tx`) — two readers with
+   * subtly different `select`s is how a decision starts disagreeing with itself.
+   */
+  private async readMembershipFacts(
+    client: {
+      membership: {
+        findUnique: (args: {
+          where: { organizationId_userId: { organizationId: string; userId: string } };
+          select: { status: true; role: { select: { capabilities: true } } };
+        }) => Promise<{ status: string; role: { capabilities: string[] } } | null>;
+      };
+    },
+    organizationId: string,
+    userId: string,
+  ): Promise<AdminResetMembershipFacts> {
+    const m = await client.membership.findUnique({
+      where: { organizationId_userId: { organizationId, userId } },
+      select: { status: true, role: { select: { capabilities: true } } },
+    });
+    return {
+      status: (m?.status as AdminResetMembershipFacts["status"]) ?? null,
+      capabilities: m?.role.capabilities ?? [],
+    };
+  }
+
   async adminResetPassword(
     callerUserId: string,
     orgId: string,
@@ -264,6 +293,44 @@ export class AuthService {
       refused: null,
       targetEmail: null,
     };
+
+    // (0) Password policy FIRST, before anything reads the database.
+    //
+    // It used to run after the decision, which made the 422 an oracle (security
+    // review of f66451f, Medium-1): send a deliberately weak password, and a
+    // 422 meant "this target was allowed" while a 404 meant "this target is an
+    // Owner or belongs to another org" — the exact question the uniform 404
+    // exists to refuse, answered for free, without touching the password and
+    // (on the 422 branch) without emitting a single event.
+    //
+    // Moving it here costs nothing: `checkPasswordPolicy` is a pure fn with no
+    // I/O, and the policy is already public through signup, so an unauthorized
+    // caller learns nothing they could not learn by registering an account.
+    // Now a weak password yields 422 for EVERY target, and a well-formed one
+    // yields the uniform 404 for every refusal.
+    const policy = checkPasswordPolicy(newPassword);
+    if (!policy.ok) mapPolicyError(policy.error);
+
+    // (0b) Gate the EXPENSIVE work on the caller, then hash OUTSIDE the
+    // transaction (security review of f66451f, Medium-3).
+    //
+    // argon2 is 19 MiB / t=2 on node's 4-thread libuv pool, shared with every
+    // login verify. Hashing inside the transaction meant a Postgres connection
+    // sat idle-in-transaction — holding a `FOR UPDATE` lock on the target's
+    // `User` row — for however long that queue took. Under a login flood that
+    // is a self-inflicted lock-timeout (and, per §15 row 6b's gap, a 500).
+    //
+    // The property this must not lose is "an unauthorized caller cannot make us
+    // burn an argon2 hash", so the caller is checked first — through the SAME
+    // pure fn `decideAdminReset` uses, never a second copy. The target is NOT
+    // decided here: those facts are the ones that must be read under the lock.
+    const callerFacts = await this.readMembershipFacts(this.db, orgId, callerUserId);
+    if (!isAdminResetCallerAuthorized(callerFacts)) {
+      // Silent, exactly as F-001 shipped it: holding a token is not a licence to
+      // write alerts into another organization's audit trail.
+      throw domainError("NOT_FOUND");
+    }
+    const newHash = await this.hashing.hash(newPassword);
 
     try {
       await this.db.$transaction(
@@ -282,15 +349,12 @@ export class AuthService {
 
           /** Every fact the decision needs, ALL read through `tx` (M-2). */
           const readFacts = async (): Promise<AdminResetInput> => {
-            const membershipOf = async (userId: string): Promise<AdminResetMembershipFacts> => {
-              const m = await tx.membership.findUnique({
-                where: { organizationId_userId: { organizationId: orgId, userId } },
-                select: { status: true, role: { select: { capabilities: true } } },
-              });
-              return { status: m?.status ?? null, capabilities: m?.role.capabilities ?? [] };
-            };
-            const caller = await membershipOf(callerUserId);
-            const target = await membershipOf(targetUserId);
+            // Re-read the caller too, even though (0b) already checked them
+            // outside the transaction: a membership revoked while we were
+            // hashing must stop the write, and the pre-check is an optimisation,
+            // never the authority.
+            const caller = await this.readMembershipFacts(tx, orgId, callerUserId);
+            const target = await this.readMembershipFacts(tx, orgId, targetUserId);
             // The ONE deliberately cross-org query in this file (C-2). It is
             // legal here because `auth/` is on the SYSTEM_PRISMA allowlist
             // (architecture §2.1) and because the whole point of the check is
@@ -316,11 +380,8 @@ export class AuthService {
             throw new AdminResetRefusedRollback();
           }
 
-          const policy = checkPasswordPolicy(newPassword);
-          if (!policy.ok) mapPolicyError(policy.error);
-
-          // (4) Write.
-          const newHash = await this.hashing.hash(newPassword);
+          // (4) Write. The hash was computed BEFORE the transaction opened —
+          // see the comment at the `hashing.hash` call below for why.
           await tx.user.update({ where: { id: targetUserId }, data: { passwordHash: newHash } });
 
           // (5) Re-decide on freshly read facts before committing (NEW-5ก).

@@ -103,7 +103,12 @@ forward-commitments แถว **F-002 / F-003** (จาก architecture deep-des
 > · unit test บังคับ: `@UserScoped()` + `X-Organization-Id` ของ org ที่ผู้เรียกเป็นสมาชิก → `OrgContextStore.get()` ต้องเป็น `undefined`
 
 > **ผลต่อ route ที่ ship แล้ว (F-001):** `/auth/*` ทั้งหมด mark `@Public()` และ
-> `POST /orgs/{orgId}/members/{userId}/reset-password` mark `@UserScoped()` — **พฤติกรรมบน wire ไม่เปลี่ยนแม้แต่ status เดียว**
+> `POST /orgs/{orgId}/members/{userId}/reset-password` mark `@UserScoped()` — **พฤติกรรมบน wire เปลี่ยน 1 จุดเท่านั้น**
+> (แก้ข้อความเดิม "ไม่เปลี่ยนแม้แต่ status เดียว" ตอน build T-002-13 — ของเดิมไม่จริง)
+> · **จุดที่เปลี่ยน:** request ที่ **ทั้งไม่มี token และ Content-Type ไม่ใช่ JSON** บน `reset-password`
+> เดิมได้ `415` จาก `JsonOnlyGuard` ตอนนี้ได้ `401` เพราะ global guard ตอบก่อน controller guard เสมอ
+> · body ของ 401 เหมือนกันทุกไบต์ทั้งสองทาง (`ERROR_CODES.UNAUTHENTICATED` เป็นแหล่งเดียว) และไม่มีเทสต์/สัญญาที่ ship แล้ว pin 415 บน endpoint นี้
+> (เทสต์ L-2 ครอบ `/auth/signup` ซึ่งเป็น `@Public()` และยังคง 415-first เหมือนเดิม) · pin ไว้ที่ `org-scope.guard.test.ts`
 > โดยเฉพาะ reset-password ที่คง capability check inline + **404-never-403 เดิม** (backend.md §6: "KEEP จนถึง F-003")
 > เหตุผลที่ไม่ยกไปใช้ 403 แบบ F-002: จะเปลี่ยน status ของ endpoint ที่ ship แล้ว = ผิด contract-evolution
 

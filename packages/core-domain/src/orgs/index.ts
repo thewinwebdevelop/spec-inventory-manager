@@ -58,6 +58,7 @@ export { maskTaxId, TAX_ID_MASK_CHAR, TAX_ID_VISIBLE_SUFFIX_LENGTH } from "./tax
 // NEW-1/D-030). Same `canAssignRole` rule as the membership routes, no copy.
 export {
   decideAdminReset,
+  isAdminResetCallerAuthorized,
   type AdminResetDecision,
   type AdminResetInput,
   type AdminResetMembershipFacts,

@@ -111,11 +111,24 @@ function refuse(...refusals: AdminResetRefusal[]): AdminResetDecision {
  * check and write must not slip through. That is the service's job; this
  * function is called twice.
  */
+/**
+ * Step 1 alone: may this caller perform admin resets in this org at all?
+ *
+ * Exposed so the service can gate the EXPENSIVE work (an argon2 hash: 19 MiB,
+ * two passes, on the shared libuv threadpool) before it opens a transaction —
+ * without a second, subtly different copy of "who may". `decideAdminReset` calls
+ * this same function, so the two can never drift apart.
+ *
+ * It answers nothing about the TARGET on purpose: the target conditions are
+ * re-read under the row lock, inside the transaction, where they are the ones
+ * that must not go stale.
+ */
+export function isAdminResetCallerAuthorized(caller: AdminResetMembershipFacts): boolean {
+  return caller.status === "active" && hasCapability(caller.capabilities, CAPABILITY_MANAGE_MEMBERS);
+}
+
 export function decideAdminReset(input: AdminResetInput): AdminResetDecision {
-  const callerOk =
-    input.caller.status === "active" &&
-    hasCapability(input.caller.capabilities, CAPABILITY_MANAGE_MEMBERS);
-  if (!callerOk) return refuse("caller_not_authorized");
+  if (!isAdminResetCallerAuthorized(input.caller)) return refuse("caller_not_authorized");
 
   const targetOk = input.targetUserExists && input.target.status === "active";
   if (!targetOk) return refuse("target_not_active_member");

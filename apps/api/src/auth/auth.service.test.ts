@@ -162,18 +162,31 @@ function expect404(err: unknown): HttpException {
 function expectNoEffect(h: Harness): void {
   expect(h.tx.user.update).not.toHaveBeenCalled();
   expect(h.client.user.update).not.toHaveBeenCalled();
-  expect(h.hashing.hash).not.toHaveBeenCalled();
   // (ซ) — a blocked call must not touch sessions or the backoff counter.
   expect(h.refresh.revokeAllForUser).not.toHaveBeenCalled();
   expect(h.throttle.clearAccount).not.toHaveBeenCalled();
 }
 
-/** M-2 — the root client is never used for a decision or a write. */
-function expectEverythingRanOnTheTransaction(h: Harness): void {
-  expect(h.client.membership.findUnique).not.toHaveBeenCalled();
+/**
+ * M-2 — every TARGET fact and the write run on the transaction.
+ *
+ * Exactly ONE read is allowed on the root client: the caller pre-check that
+ * gates the argon2 hash before the transaction opens (security review of
+ * f66451f, Medium-3 — hashing inside the tx held a `FOR UPDATE` lock for the
+ * duration of a 19 MiB argon2 on a shared threadpool). It is an optimisation,
+ * never the authority: the caller is re-read inside the tx and re-decided
+ * after the write.
+ *
+ * Asserting the exact call list — not just "≤ 1 root call" — is the point. A
+ * second root read creeping in is precisely how a decision starts being made
+ * on data from before the lock.
+ */
+function expectDecisionRanOnTheTransaction(h: Harness): void {
   expect(h.client.membership.count).not.toHaveBeenCalled();
   expect(h.client.user.update).not.toHaveBeenCalled();
-  expect(h.calls.filter((c) => c.startsWith("root:"))).toEqual([]);
+  expect(h.calls.filter((c) => c.startsWith("root:"))).toEqual([
+    `root:membership.findUnique(${ORG},${CALLER})`,
+  ]);
 }
 
 describe("U-API-07 · adminResetPassword — fail-closed × 2 conditions, one transaction", () => {
@@ -193,7 +206,7 @@ describe("U-API-07 · adminResetPassword — fail-closed × 2 conditions, one tr
     expect(h.throttle.clearAccount).toHaveBeenCalledWith(TARGET_EMAIL.toLowerCase());
     expect(h.sink.types()).toEqual(["auth.password.admin_reset"]);
     expect(h.state.committed).toBe(true);
-    expectEverythingRanOnTheTransaction(h);
+    expectDecisionRanOnTheTransaction(h);
   });
 
   it("(ข)+(จ) C-2 · target is active in another org → 404, NO write, emits blocked_multi_org", async () => {
@@ -207,7 +220,7 @@ describe("U-API-07 · adminResetPassword — fail-closed × 2 conditions, one tr
       targetUserId: TARGET,
     });
     expect(h.state.rolledBack).toBe(true);
-    expectEverythingRanOnTheTransaction(h);
+    expectDecisionRanOnTheTransaction(h);
   });
 
   it("(ค) target's OTHER membership is not active (revoked/invited) → still succeeds", async () => {
@@ -268,13 +281,16 @@ describe("U-API-07 · adminResetPassword — fail-closed × 2 conditions, one tr
     expect(h.sink.types()).toEqual(["auth.password.admin_reset"]);
   });
 
-  it("(1) NEW-5ก · SELECT … FOR UPDATE on the target User is the FIRST statement, and every read is on `tx`", async () => {
+  it("(1) NEW-5ก · SELECT … FOR UPDATE is the first statement IN the tx, and every target fact is on `tx`", async () => {
     await run(h);
-    expect(h.calls[0]).toMatch(/^tx:\$executeRawUnsafe\(SET LOCAL lock_timeout = '\d+ms'\)$/);
-    expect(h.calls[1]).toBe(`tx:$queryRawUnsafe(SELECT id, email FROM "User" WHERE id = $1 FOR UPDATE|${TARGET})`);
-    // Nothing was read or written before the lock was taken.
-    expect(h.calls.slice(2).every((c) => c.startsWith("tx:"))).toBe(true);
-    expectEverythingRanOnTheTransaction(h);
+    // The caller pre-check is the only thing allowed to precede the lock — it
+    // reads nothing about the target, so it cannot make a stale decision.
+    expect(h.calls[0]).toBe(`root:membership.findUnique(${ORG},${CALLER})`);
+    expect(h.calls[1]).toMatch(/^tx:\$executeRawUnsafe\(SET LOCAL lock_timeout = '\d+ms'\)$/);
+    expect(h.calls[2]).toBe(`tx:$queryRawUnsafe(SELECT id, email FROM "User" WHERE id = $1 FOR UPDATE|${TARGET})`);
+    // Nothing about the TARGET was read or written before the lock was taken.
+    expect(h.calls.slice(3).every((c) => c.startsWith("tx:"))).toBe(true);
+    expectDecisionRanOnTheTransaction(h);
     // …and the transaction is bounded (a $transaction with no timeout/maxWait
     // queues on the shared pool forever).
     expect(h.state.txOptions).toEqual({ timeout: expect.any(Number), maxWait: expect.any(Number) });
@@ -366,26 +382,46 @@ describe("U-API-07 · adminResetPassword — fail-closed × 2 conditions, one tr
     expect(JSON.parse(bodies[0]).error.code).toBe("NOT_FOUND");
   });
 
-  it("policy is still validated only AFTER authorization (an unauthorized caller cannot probe it)", async () => {
-    h = buildHarness({ caller: { status: "active", capabilities: ["manage_products"] } });
-    let thrown: unknown;
-    try {
-      await h.service.adminResetPassword(CALLER, ORG, TARGET, "short");
-    } catch (err) {
-      thrown = err;
+  it("a weak password is 422 for EVERY target — the 422 must not classify the target", async () => {
+    // REVERSED deliberately (security review of f66451f, Medium-1). The policy
+    // check used to run after the decision, which made the 422 an oracle: send
+    // "short" and a 422 meant "this target was allowed", a 404 meant "this
+    // target is an Owner or belongs to another org". The uniform 404 exists to
+    // refuse exactly that question, and the caller got it answered for free —
+    // without touching the password, and with no event emitted on the 422 side.
+    //
+    // Now the policy runs first, so the 422 depends ONLY on the password the
+    // caller typed. Nothing about the target leaks, and nothing is lost: the
+    // policy is already public through signup.
+    const scenarios: Array<[string, Harness]> = [
+      ["plain member (would have been allowed)", buildHarness()],
+      ["Owner target — NEW-1 would refuse", buildHarness({
+        target: { status: "active", capabilities: [CAPABILITY_FULL_ACCESS] },
+      })],
+      ["multi-org target — C-2 would refuse", buildHarness({ otherOrgActiveCounts: [1, 1] })],
+      ["caller lacks manage_members", buildHarness({
+        caller: { status: "active", capabilities: ["manage_products"] },
+      })],
+    ];
+
+    for (const [label, harness] of scenarios) {
+      let thrown: unknown;
+      try {
+        await harness.service.adminResetPassword(CALLER, ORG, TARGET, "short");
+      } catch (err) {
+        thrown = err;
+      }
+      expect((thrown as HttpException).getStatus(), label).toBe(422);
+      // …and no target fact was ever read, so there was nothing to leak.
+      expect(harness.client.membership.count, label).not.toHaveBeenCalled();
+      expect(harness.tx.membership.count, label).not.toHaveBeenCalled();
+      expect(harness.hashing.hash, label).not.toHaveBeenCalled();
     }
-    // 404, NOT 422 PASSWORD_TOO_SHORT.
-    expect404(thrown);
-    // An authorized caller with the same weak password DOES get the 422.
-    const ok = buildHarness();
-    let policyErr: unknown;
-    try {
-      await ok.service.adminResetPassword(CALLER, ORG, TARGET, "short");
-    } catch (err) {
-      policyErr = err;
+    // No transaction was ever opened for any of them — the policy check is
+    // pure and happens before we reach for the database at all.
+    for (const [label, harness] of scenarios) {
+      expect(harness.tx.user.update, label).not.toHaveBeenCalled();
+      expect(harness.client.$transaction, label).not.toHaveBeenCalled();
     }
-    expect((policyErr as HttpException).getStatus()).toBe(422);
-    expect(ok.tx.user.update).not.toHaveBeenCalled();
-    expect(ok.state.rolledBack).toBe(true);
   });
 });

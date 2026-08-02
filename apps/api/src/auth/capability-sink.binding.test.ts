@@ -60,9 +60,11 @@ class FakeAuthModule {}
 
 @Module({
   imports: [
-    TenancyModule.withCapabilityEventSink({
+    TenancyModule.withCompositionRootBindings({
       imports: [FakeAuthModule],
-      provider: { provide: CAPABILITY_EVENT_SINK_OVERRIDE, useExisting: SecurityEventsService },
+      providers: [
+        { provide: CAPABILITY_EVENT_SINK_OVERRIDE, useExisting: SecurityEventsService },
+      ],
     }),
     FakeAuthModule,
   ],

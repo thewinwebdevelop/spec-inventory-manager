@@ -45,7 +45,7 @@
 
 | ID | งาน | ref → target | deps | status | updated_by |
 |----|-----|--------------|------|--------|------------|
-| T-002-14 | rate-limit guard กลาง (Redis sliding window) — create org / invite / reissue / preview+accept · fail-open + emit event | `architecture.md §8` → `apps/api/src/common/org-rate-limit.guard.ts` | T-002-06, T-002-11 | todo | — |
+| T-002-14 | rate-limit guard กลาง (Redis sliding window) — create org / invite / reissue / preview+accept · fail-open + emit event | `architecture.md §8` → `apps/api/src/common/org-rate-limit.guard.ts` | T-002-06, T-002-11 | done | product (ทำเอง) — guard ลงทะเบียน **หลัง** authz โดยเจตนา (นับก่อน = คนนอกเผาโควตาของ org ได้) |
 | T-002-15 | ★ `POST /organizations` — **1 tx**: Organization + system Roles(3) + Membership(Owner) + **OrgEntitlement** + default Warehouse · plan จาก env seam (**fail closed 503** ห้าม fallback free) · **cap 50 org/user** (`409 ORG_LIMIT_REACHED`) | `api-spec.md §3.1` · `architecture.md §6` → `apps/api/src/orgs/` | T-002-03, T-002-07, T-002-14 | todo | — |
 | T-002-16 | `GET /me/organizations` (cursor · `?status=all` คืนแค่ id/ชื่อ/สถานะ) + `GET /orgs/{id}` + `PATCH /orgs/{id}` (`logo` รับเฉพาะ `null` ใน Phase 0) | `api-spec.md §3.2–3.4` → `apps/api/src/orgs/` | T-002-05 | todo | — |
 | T-002-17 | ★ tax profile: `PUT /orgs/{id}/tax-profile` (ครบชุดหรือว่างทั้งชุด) + **`POST /orgs/{id}/tax-profile/reveal`** (TIN เต็ม · `manage_org_settings` · rate 20/ชม. · `no-store`+`no-referrer` · emit event **ที่ไม่มีค่า TIN**) · **`GET` ไม่คืน TIN เต็มอีกแล้ว** | `api-spec.md §3.5/§3.16` · `data-model.md §3.3` | T-002-08, T-002-16 | todo | — |
@@ -53,7 +53,7 @@
 | T-002-19 | ★ คำเชิญ (ฝั่ง org): `POST /invitations` (hash-at-rest · TTL **24 ชม.** สำหรับ role สูง / 7 วัน ที่เหลือ · `409 INVITATION_PENDING` พก `details.invitationId`) · `GET` · `POST .../link` (**rotate + อายุนับใหม่** D-027 · **ผ่าน `canAssignRole`** NEW-2 · **DB ต้องไม่ขยับถ้า 403**) · `DELETE` | `api-spec.md §3.10–3.13` · `architecture.md §7` | T-002-06, T-002-18 | todo | — |
 | T-002-20 | ★ รับคำเชิญ: **`POST /invitations/preview`** (public · token ใน **body** ไม่ใช่ query — I-6) · `POST /invitations/accept` (`409 ALREADY_MEMBER` ไม่ทับ role · `409 INVITATION_SUPERSEDED` ถ้าออกก่อนถูกถอด · ตรวจ role ยังเป็นของ org นั้น) | `api-spec.md §3.14–3.15` · `architecture.md §7.4` | T-002-19 | todo | — |
 | T-002-21 | ⚠️ OpenAPI: เพิ่ม 17 endpoint + schema · **แตกไฟล์เป็น `paths/*.yaml` + `components/*.yaml` → `redocly bundle`** · regen TS + Dart client | `api-spec.md §5` · `§15 แถว 11` → `packages/contracts/` | T-002-20 | todo | — |
-| T-002-22 | test kit ที่ qa เป็นผู้ใช้: `f002-seed.kit.ts` + CLI (`--scenario` · ตั้ง/สลับ `Role.key`) · `org-leak.kit.ts` (**4 persona**) · route-registry helper · assertion กลาง (PII/header/traceId/schema) · **500-fixture ที่ compile เฉพาะโปรไฟล์ test** · **meta-test ว่า kit แดงได้จริง** | `architecture.md §12.2` · `test-plan.md §19.1` → `apps/api/test/` | T-002-05 | todo | — |
+| T-002-22 | test kit ที่ qa เป็นผู้ใช้: `f002-seed.kit.ts` + CLI (`--scenario` · ตั้ง/สลับ `Role.key`) · `org-leak.kit.ts` (**4 persona**) · route-registry helper · assertion กลาง (PII/header/traceId/schema) · **500-fixture ที่ compile เฉพาะโปรไฟล์ test** · **meta-test ว่า kit แดงได้จริง** | `architecture.md §12.2` · `test-plan.md §19.1` → `apps/api/test/` | T-002-05 | done | qa — 6 kit + meta-test แดงได้จริงทุกตัว · **ค้าง: `hashInvitationToken` ยังไม่มีใน `packages/**`** ⇒ 3 scenario ของ invite ยัง throw (pin ไว้ให้เขียวเองวันที่ export ลง — เจ้าของ: T-002-19) |
 
 ## devops
 
@@ -118,3 +118,31 @@
 
 > **จุดที่ห้ามลัด:** `T-002-02` (`withOrgScope`) และ `T-002-04/05` (guard) คือสิ่งที่ทำให้ "ลืมแล้วพัง ไม่ใช่ลืมแล้วรั่ว"
 > เป็นจริง — ทุก endpoint ของ F-002 และ **~40 feature ถัดไป** พึ่งชั้นนี้ · ถ้าทำ endpoint ก่อนชั้นนี้เสร็จ จะได้ pattern ที่ผิดแล้วถูกลอกต่อ
+
+---
+
+## ผลตรวจ security review ของ wave 5 (commit `f66451f`) — 2026-08-03
+
+verdict: **ready-with-recommendations · ไม่มี Critical** · reviewer พิสูจน์แล้วว่า C-2/D-028 และ NEW-1/D-030 บังคับใช้จริงกับ Postgres จริง
+และไล่หา wire delta ที่ 4 จากการลบ bridge **ไม่เจอ** (มีแค่ 415→401 ที่บันทึกไว้แล้ว)
+
+**ปิดแล้วใน wave 6:**
+
+| finding | สิ่งที่ทำ |
+|---|---|
+| **High-1** `@UserScoped()` อยู่ที่ class `MembersController` — handler ใหม่ (`PATCH`/`DELETE` member ของ T-002-18) จะสืบทอด แล้ว **ใครก็ได้ที่ล็อกอินจะแก้ role/ถอดสมาชิกของ org ไหนก็ได้** | ย้ายไป handler + `members.controller.test.ts` บังคับกฎ "controller ที่ path มี `:orgId` ห้าม mark ที่ class" (แดงจริงเมื่อย้ายกลับ) |
+| **Medium-1** 422 เป็น oracle จำแนก target (weak password → 422 = "target นี้ผ่าน", 404 = "target เป็น Owner/หลาย org") | ย้าย `checkPasswordPolicy` มาก่อน tx ⇒ 422 ขึ้นกับรหัสที่ผู้เรียกพิมพ์เท่านั้น · เทสต์เดิมกลับด้าน 4 scenario |
+| **Medium-3** argon2 รันใน tx ⇒ ถือ `FOR UPDATE` บนแถว `User` ตลอดคิว libuv | pre-check ผู้เรียกนอก tx (ผ่าน pure fn เดิม ไม่มีสำเนาที่สอง) → hash นอก tx → tx: lock → ตัดสิน → เขียน → ตัดสินซ้ำ |
+| **Medium-4** `org.access.denied` ประกาศใน §9 แต่ **ไม่มีใคร emit** ⇒ สัญญาณ "มีคนไล่เข้า org ที่ไม่ใช่ของตัวเอง" ไม่มีอยู่จริงใน audit trail · `capability_denied` reason `metadata_missing` ก็ไม่เคย emit | emit ทั้งสองผ่าน sink เดิม · wire ยังแยก 3 เหตุผลไม่ได้ (I-5) แต่ **event แยกได้** — คนสืบเคสต้องรู้ว่า "ไม่เคยเป็นสมาชิก" ต่างจาก "ถูกถอด" |
+| **Low** ค่า env 22 หลักผ่าน `/^\d+$/` แล้วกลายเป็น `1e+21` ใน SQL ⇒ 500 ตอน request ไม่ใช่ตอน boot | ใส่เพดาน `POSITIVE_INT_ENV_MAX` + เทสต์ |
+| **Low** เอกสาร 2 ฉบับยังเขียนว่า "wire ไม่เปลี่ยนแม้แต่ status เดียว" | แก้ `architecture.md §1.1` + `F-001-authentication.md` ให้ตรงกับ 415→401 |
+
+**ยังค้าง — ต้องให้ user เคาะ (เป็น scope/contract ไม่ใช่บั๊ก):**
+
+| # | เรื่อง | ทำไมต้องถาม |
+|---|---|---|
+| A | **High-2** `adminResetPassword` อนุญาตให้ `caller === target` — token หลุด = ตั้งรหัสใหม่ได้โดยไม่ต้องรู้รหัสเดิม แล้ว `revokeAllForUser` เตะเจ้าตัวออกทุกเครื่อง (`/auth/change-password` บังคับ `currentPassword` เพื่อกันเรื่องนี้พอดี) | ปิด = **บีบ endpoint ที่ ship แล้วเป็นครั้งที่ 3** ต้องขึ้นทะเบียน §15 เหมือน C-2/NEW-1 |
+| B | **Medium-2** lock/tx contention บน admin-reset ตอนนี้เป็น **500** · §15 แถว 6b บอก `55P03/40P01/P2028` → `409 + details.reason='busy'` "ห้าม 500" | map = **เพิ่ม status ใหม่บน endpoint ที่ ship แล้ว** (contract-evolution) · ไม่ map = ยอมรับ 500 อย่างเป็นทางการ |
+| C | **Medium** `auth.password.admin_reset_blocked_*` สร้าง oracle ซ้ำใน audit UI ของ F-005 — org admin ที่เห็น event จะรู้ทันทีว่า target เป็น Owner | ตัดสินตอนนี้ครั้งเดียว ดีกว่าไปเจอตอน F-005 สร้างจอ |
+
+**หนี้จาก qa (T-002-22):** `hashInvitationToken` ยังไม่มีใน `packages/**` (architecture §12.2 item 2ก) ⇒ 3 invite scenario ของ kit ยัง throw · `RESPONSE_HEADER_POLICY` / `TOKEN_RESPONSE_ALLOWLIST` / `TAX_ID_RESPONSE_ALLOWLIST` ยังไม่ถูก export ⇒ header assertion ยังตรวจไม่ได้ · เจ้าของ: T-002-17/19

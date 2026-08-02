@@ -369,6 +369,18 @@ describe("U-CFG-07 · ORG_TX_TIMEOUTS (§5.2 · NEW-4)", () => {
     }
   });
 
+  it("NEGATIVE: an absurdly large value fails at BOOT, not at request time", () => {
+    // Security review of f66451f (Low): digits-only made the value safe to
+    // interpolate into `SET LOCAL lock_timeout = '<n>ms'`, but a 22-digit
+    // number passes that check and then stringifies as `1e+21` — Postgres
+    // rejects it, so the failure surfaced as a 500 on a real request instead of
+    // a refusal to start. The named-variable boot error is the whole point.
+    expect(failedVars({ ...validEnv, ORG_LOCK_TIMEOUT_MS: "1".repeat(22) })).toContain(
+      "ORG_LOCK_TIMEOUT_MS",
+    );
+    expect(String(Number("1".repeat(22)))).toContain("e+"); // why the bound exists
+  });
+
   it("NEGATIVE: lockTimeout === txTimeout → boot fails (not a warning)", () => {
     expect(
       failedVars({ ...validEnv, ORG_LOCK_TIMEOUT_MS: "5000", ORG_TX_TIMEOUT_MS: "5000" }),

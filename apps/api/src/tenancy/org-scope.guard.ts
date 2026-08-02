@@ -16,9 +16,21 @@
 // F-000's note on this file still stands and is why the ALS lives in the
 // middleware: a `CanActivate` cannot wrap the rest of the request, so it cannot
 // be the thing that opens the org context.
-import { Inject, Injectable, Logger, type CanActivate, type ExecutionContext } from "@nestjs/common";
+import {
+  Inject,
+  Injectable,
+  Logger,
+  Optional,
+  type CanActivate,
+  type ExecutionContext,
+} from "@nestjs/common";
 import { Reflector } from "@nestjs/core";
 import { domainError } from "../common";
+import {
+  CAPABILITY_EVENT_SINK,
+  ORG_ACCESS_DENIED_EVENT,
+  type CapabilityEventSink,
+} from "../common/authz";
 import type { OrgAuthRequest, OrgAuthState } from "./org-auth";
 import { ROUTE_SCOPE_KEY, type RouteScope } from "./route-scope.decorator";
 
@@ -31,7 +43,39 @@ export class OrgScopeGuard implements CanActivate {
 
   // Explicit @Inject — see the note in org-context.middleware.ts (tsx emits no
   // decorator metadata, so type-based DI would resolve `undefined` in dev).
-  constructor(@Inject(Reflector) private readonly reflector: Reflector) {}
+  constructor(
+    @Inject(Reflector) private readonly reflector: Reflector,
+    // Optional so every existing test module that builds TenancyModule keeps
+    // working; the composition root binds the real `SecurityEventsService`.
+    @Optional()
+    @Inject(CAPABILITY_EVENT_SINK)
+    private readonly events: CapabilityEventSink | null = null,
+  ) {}
+
+  /**
+   * Record a tenancy denial (§9 `org.access.denied`).
+   *
+   * Emitted for the three membership outcomes and for `mismatch`, because those
+   * are the ones that describe someone reaching for an organization: the
+   * *headline* insider-probing signal of F-002. Not emitted for
+   * `UNAUTHENTICATED` — that is "no token", which F-001's auth events already
+   * cover and which any unauthenticated scanner would flood.
+   *
+   * `userId` may be absent (`tokenValid` false paths do not reach here) and
+   * `organizationId` is whatever the caller ASKED for — the value is a claim,
+   * not a proven membership, which is exactly what makes it worth recording.
+   */
+  private recordDenial(
+    reason: "no_membership" | "revoked" | "not_active" | "mismatch",
+    auth: OrgAuthState,
+    organizationId: string | undefined,
+  ): void {
+    this.events?.emit(ORG_ACCESS_DENIED_EVENT, {
+      userId: auth.userId,
+      organizationId,
+      reason,
+    });
+  }
 
   canActivate(context: ExecutionContext): boolean {
     if (context.getType() !== "http") {
@@ -102,12 +146,15 @@ export class OrgScopeGuard implements CanActivate {
         throw domainError("FORBIDDEN");
 
       case "org":
-        return this.decideOrgScoped(auth);
+        {
+          const requested = req.params?.orgId;
+          return this.decideOrgScoped(auth, typeof requested === "string" ? requested : undefined);
+        }
     }
   }
 
   /** §1.4, rows 1–5. */
-  private decideOrgScoped(auth: OrgAuthState): boolean {
+  private decideOrgScoped(auth: OrgAuthState, requestedOrgId?: string): boolean {
     if (!auth.tokenValid) throw domainError("UNAUTHENTICATED");
 
     switch (auth.orgOutcome) {
@@ -119,6 +166,7 @@ export class OrgScopeGuard implements CanActivate {
         // 422, NOT 403: header and path disagreeing is a CLIENT BUG, and
         // answering 403 would bounce a perfectly valid member out of the org
         // they are looking at (N-1 / api-spec §4).
+        this.recordDenial("mismatch", auth, requestedOrgId);
         throw domainError("ORG_MISMATCH");
       case "no_membership":
       case "revoked":
@@ -126,6 +174,12 @@ export class OrgScopeGuard implements CanActivate {
         // One code for all three — including "the org does not exist" (I-5).
         // ⛔ Never split these: differentiating them is a cross-tenant existence
         // oracle. `FORBIDDEN` stays reserved for "member, but lacks capability".
+        //
+        // The EVENT does carry the precise reason, and that is not a
+        // contradiction: the wire must not distinguish them because the caller
+        // must learn nothing, while an investigator reading the audit trail
+        // needs to tell "never was a member" from "was removed and came back".
+        this.recordDenial(auth.orgOutcome, auth, requestedOrgId);
         throw domainError("ORG_ACCESS_DENIED");
       case "skipped":
         // org-scoped but the middleware never resolved — unreachable unless the

@@ -112,7 +112,7 @@ export class CapabilityGuard implements CanActivate {
         );
         throw domainError("INTERNAL");
 
-      case "none":
+      case "none": {
         // ⛔ Do not reintroduce a `method` test here. The amend #3 draft had
         // `if (!MUTATING.includes(method)) return true;` on this line, which is
         // precisely the hole NEW-3 closed: `GET /orgs/{id}/members` would fall
@@ -124,7 +124,22 @@ export class CapabilityGuard implements CanActivate {
           `capability_metadata_missing on ${route}: an org-scoped route must declare ` +
             `@RequireCapability(...) or @AnyActiveMember() — refusing`,
         );
+        // §9 registers `metadata_missing` as one of this event's reasons, and it
+        // was never emitted (security review of f66451f). It matters more than
+        // the log line suggests: the caller sees the same 403 as a genuine
+        // permission denial, so without the event an endpoint that silently
+        // refuses EVERY caller because someone forgot a decorator looks
+        // identical, in the audit trail, to normal traffic being turned away.
+        const missingCtx = this.contextOrNull();
+        this.events?.emit(CAPABILITY_DENIED_EVENT, {
+          userId: missingCtx?.userId,
+          organizationId: missingCtx?.organizationId,
+          route,
+          requiredCapability: null,
+          reason: "metadata_missing",
+        });
         throw domainError("FORBIDDEN");
+      }
 
       case "any-active-member":
         // A positive declaration, not an omission. `OrgScopeGuard` already
@@ -156,6 +171,16 @@ export class CapabilityGuard implements CanActivate {
    * middleware opened the ALS. Missing ⇒ the chain is mis-wired ⇒ fail loud
    * rather than evaluate a capability against an empty list.
    */
+  /**
+   * The org context if one exists, else `null` — for the emit paths, which must
+   * describe a refusal without CAUSING one. `requireContext` throws by design;
+   * calling it while reporting `metadata_missing` would turn our own
+   * misconfiguration into a 500 and lose the event we were trying to write.
+   */
+  private contextOrNull() {
+    return this.store.get() ?? null;
+  }
+
   private requireContext(route: string) {
     const ctx = this.store.get();
     if (!ctx) {

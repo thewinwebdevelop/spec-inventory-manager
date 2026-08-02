@@ -36,7 +36,12 @@ import {
   type AccessTokenVerifier,
 } from "../../tenancy/access-token-verifier";
 import { AnyActiveMember, RequireCapability } from "./capability.decorator";
-import { CAPABILITY_EVENT_SINK, type CapabilityEventSink } from "./capability-events";
+import {
+  CAPABILITY_EVENT_SINK,
+  CAPABILITY_DENIED_EVENT,
+  ORG_ACCESS_DENIED_EVENT,
+  type CapabilityEventSink,
+} from "./capability-events";
 import { CAPABILITY_MANAGE_ORG_SETTINGS } from "./route-capabilities";
 import { enumerateRoutes } from "./route-declarations";
 
@@ -502,10 +507,21 @@ describe("CapabilityGuard — fail-closed by omission (§3.1 · I-2 · NEW-3)", 
     expect(outsider.status).toBe(403);
     expect(staff.body.error.code).toBe("FORBIDDEN");
     expect(outsider.body.error.code).toBe("ORG_ACCESS_DENIED");
-    // The outsider never reached this guard, so no capability event exists for
-    // them: OrgScopeGuard answered first (§1.3 ordering).
-    expect(emitted).toHaveLength(1);
-    expect(emitted[0]!.payload.userId).toBe(USER);
+    // The outsider never reached THIS guard, so no CAPABILITY event exists for
+    // them: OrgScopeGuard answered first (§1.3 ordering). It does produce an
+    // `org.access.denied` on the same sink — the two layers are distinguishable
+    // in the audit trail exactly as they are on the wire, which is the point of
+    // I-5. Filtering by type is what makes that assertion mean something.
+    const capabilityEvents = emitted.filter((e) => e.type === CAPABILITY_DENIED_EVENT);
+    expect(capabilityEvents).toHaveLength(1);
+    expect(capabilityEvents[0]!.payload.userId).toBe(USER);
+
+    const tenancyEvents = emitted.filter((e) => e.type === ORG_ACCESS_DENIED_EVENT);
+    expect(tenancyEvents).toHaveLength(1);
+    expect(tenancyEvents[0]!.payload).toMatchObject({
+      userId: "usr_outsider",
+      reason: "no_membership",
+    });
   });
 
   it("a revoked member on a capability route gets ORG_ACCESS_DENIED, not FORBIDDEN", async () => {
@@ -513,7 +529,13 @@ describe("CapabilityGuard — fail-closed by omission (§3.1 · I-2 · NEW-3)", 
     capabilities = ["full_access"];
     const res = await request(app.getHttpServer()).get("/probe/members").set(auth());
     expect(res.body.error.code).toBe("ORG_ACCESS_DENIED");
-    expect(emitted).toEqual([]);
+    // No CAPABILITY event — this guard never ran. The tenancy layer records the
+    // denial instead, and with the precise reason: the wire cannot distinguish
+    // "revoked" from "never a member" (I-5), but an investigator must.
+    expect(emitted.filter((e) => e.type === CAPABILITY_DENIED_EVENT)).toEqual([]);
+    expect(emitted.filter((e) => e.type === ORG_ACCESS_DENIED_EVENT)[0]?.payload).toMatchObject({
+      reason: "revoked",
+    });
   });
 
   // ── the guard reads the ALS, it does not re-query ────────────────────────

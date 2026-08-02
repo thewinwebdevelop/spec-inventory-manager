@@ -32,6 +32,13 @@ import {
   LoggingCapabilityEventSink,
   type CapabilityEventSink,
 } from "../common/authz";
+import { OrgRateLimitGuard } from "../common/org-rate-limit.guard";
+import {
+  ORG_RATE_LIMIT_EVENT_SINK,
+  ORG_RATE_LIMIT_EVENT_SINK_OVERRIDE,
+  LoggingRateLimitEventSink,
+  type RateLimitEventSink,
+} from "../common/org-rate-limit.tokens";
 import { OrgContextStore } from "./org-context";
 import { OrgContextMiddleware } from "./org-context.middleware";
 import { OrgScopeGuard } from "./org-scope.guard";
@@ -87,37 +94,52 @@ import { createOrgPrismaProxy } from "./org-prisma.provider";
         override ?? new LoggingCapabilityEventSink(),
       inject: [{ token: CAPABILITY_EVENT_SINK_OVERRIDE, optional: true }],
     },
+    // THIRD — abuse control runs AFTER authorization, deliberately (T-002-14).
+    // Counting a request before we know the caller belongs to the org would let
+    // an outsider burn a legitimate org's quota: spam `POST /orgs/{id}/invitations`
+    // as a non-member and the real members get 429s. Authorization answers 403
+    // first; only requests that were going to be served are counted.
+    { provide: APP_GUARD, useClass: OrgRateLimitGuard },
+    // Fallback sink, same shape as the capability one above: the real
+    // `SecurityEventsService` arrives from the composition root.
+    {
+      provide: ORG_RATE_LIMIT_EVENT_SINK,
+      useFactory: (override: RateLimitEventSink | null) =>
+        override ?? new LoggingRateLimitEventSink(),
+      inject: [{ token: ORG_RATE_LIMIT_EVENT_SINK_OVERRIDE, optional: true }],
+    },
   ],
   exports: [OrgContextStore, ORG_PRISMA, SYSTEM_PRISMA],
 })
 export class TenancyModule implements NestModule {
   /**
-   * T-002-13 — hand the capability layer its REAL event sink.
+   * T-002-13 / T-002-14 — hand the global guards registered above the
+   * collaborators they cannot reach for themselves.
    *
-   * `CapabilityGuard` is registered here (order versus `OrgScopeGuard` is
-   * load-bearing — see above), so it resolves `CAPABILITY_EVENT_SINK` in THIS
-   * module's injector. `SecurityEventsService` lives in `auth/`, which this file
-   * may not import (depcruise `api-leafward-only`). So the composition root
-   * passes both the module that owns the service and a binding for
-   * `CAPABILITY_EVENT_SINK_OVERRIDE`, which the provider above prefers over the
-   * log-only fallback.
+   * Both guards are registered HERE because their order relative to each other
+   * is load-bearing (see the providers above), so they resolve their tokens in
+   * THIS module's injector. But `SecurityEventsService` lives in `auth/` and the
+   * Redis connection behind `health/`, and `tenancy/` may import neither
+   * (depcruise `api-leafward-only`). So the composition root passes the modules
+   * that own them plus bindings for the OVERRIDE tokens, which the fallback
+   * providers above prefer over their log-only defaults.
    *
-   * Without this, `org.access.capability_denied` only ever reaches a log line:
-   * `collectSecurityEvents()` — @qa's collector and F-005's future outbox —
-   * subscribes to `SecurityEventsService` and would never see a single denial.
-   * The guard would still deny correctly, which is exactly what makes the gap
-   * easy to miss: nothing is broken, the evidence is just gone.
+   * Without the capability binding, `org.access.capability_denied` only ever
+   * reaches a log line: `collectSecurityEvents()` — @qa's collector and F-005's
+   * future outbox — subscribes to `SecurityEventsService` and would never see a
+   * single denial. The guard would still deny correctly, which is exactly what
+   * makes the gap easy to miss: nothing is broken, the evidence is just gone.
    */
-  static withCapabilityEventSink(options: {
-    /** Module(s) that provide the sink — e.g. `[AuthModule]`. */
+  static withCompositionRootBindings(options: {
+    /** Module(s) providing what the bindings reference — e.g. `[AuthModule]`. */
     readonly imports: NonNullable<ModuleMetadata["imports"]>;
-    /** Binding for `CAPABILITY_EVENT_SINK_OVERRIDE`. */
-    readonly provider: Provider;
+    /** Bindings for the OVERRIDE tokens the providers above ask for. */
+    readonly providers: Provider[];
   }): DynamicModule {
     return {
       module: TenancyModule,
       imports: options.imports,
-      providers: [options.provider],
+      providers: options.providers,
     };
   }
 

@@ -94,6 +94,9 @@
    - emit `auth.password.admin_reset_blocked_multi_org` / `…_blocked_owner_target`
    - **ผลที่ต้องยอมรับ:** ร้านที่มี Owner คนเดียวแล้วลืมรหัส **กู้เองไม่ได้จนกว่าจะมี F-081** (self-serve reset) — ผูกเป็น forward-commitment ที่บล็อกการเปิดขายจริงแล้ว
 2. **error envelope มี `traceId` ทุกครั้ง** ตั้งแต่ F-002 (เดิมมีเฉพาะเมื่อมี correlation id จาก gateway) ⇒ เทสต์เดิมใน `common/domain-exception.filter.test.ts` ที่ assert ว่า "ไม่มี traceId" **ต้องกลับด้าน** (แก้ในคอมมิตเดียวกับโค้ด · ห้าม skip)
-3. **`/auth/*` ถูกจัดชั้นเป็น `@Public()`** และ `reset-password` เป็น `@UserScoped()` ภายใต้ default-deny guard ใหม่ — **พฤติกรรมบน wire ไม่เปลี่ยนแม้แต่ status เดียว** และคง **404-never-403** ของ F-001 ไว้ตามเดิม (ต่างจาก F-002 ที่ใช้ 403 โดยเจตนา)
+3. **`/auth/*` ถูกจัดชั้นเป็น `@Public()`** และ `reset-password` เป็น `@UserScoped()` ภายใต้ default-deny guard ใหม่ — คง **404-never-403** ของ F-001 ไว้ตามเดิม (ต่างจาก F-002 ที่ใช้ 403 โดยเจตนา)
+   · **wire เปลี่ยน 1 จุด** (แก้ย้อนหลังตอน build T-002-13 — ข้อความเดิมเขียนว่า "ไม่เปลี่ยนแม้แต่ status เดียว" ซึ่งไม่จริง):
+   request บน `reset-password` ที่ **ไม่มี token และ Content-Type ไม่ใช่ JSON** เดิม `415` → ตอนนี้ `401`
+   เพราะ global guard ตอบก่อน controller guard · body ของ 401 เหมือนกันทุกไบต์ทั้งสองทาง
 
 > รายละเอียดเต็ม + test ที่บังคับ: [F-002/architecture.md §15](F-002/architecture.md) · decision: [D-028](../DECISIONS.md) · [D-030](../DECISIONS.md)

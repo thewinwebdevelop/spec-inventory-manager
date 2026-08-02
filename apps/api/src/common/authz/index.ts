@@ -16,6 +16,8 @@ export {
   CAPABILITY_EVENT_SINK,
   CAPABILITY_EVENT_SINK_OVERRIDE,
   CAPABILITY_DENIED_EVENT,
+  ORG_ACCESS_DENIED_EVENT,
+  type AccessDenialEvent,
   LoggingCapabilityEventSink,
   type CapabilityEventSink,
 } from "./capability-events";
@@ -23,6 +25,8 @@ export {
   ROUTE_CAPABILITIES,
   ANY_ACTIVE_MEMBER_ROUTES,
   CAPABILITY_MANAGE_ORG_SETTINGS,
+  capabilityLookupMethod,
+  capabilityForRoute,
   MUTATING_HTTP_METHODS,
   READ_HTTP_METHODS,
   isMutatingMethod,

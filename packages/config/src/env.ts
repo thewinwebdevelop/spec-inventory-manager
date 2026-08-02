@@ -24,11 +24,29 @@ import {
  * `"1.5"` and any non-digit input fail at boot — a zero quota/timeout is never
  * an intended configuration, it is a typo that would silently disable the knob.
  */
+/**
+ * Upper bound on every positive-integer env var.
+ *
+ * Digits-only already made these safe to interpolate into SQL, but a 22-digit
+ * value passes that check and then stringifies as `1e+21` — which would reach
+ * Postgres as `SET LOCAL lock_timeout = '1e+21ms'` and fail at REQUEST time
+ * with a 500, long after boot (security review of f66451f, Low). Bounding it
+ * here turns that into a startup failure with a named variable. `Number.
+ * MAX_SAFE_INTEGER` is where the exponent notation starts to matter; the real
+ * ceiling is well below it for every current use (timeouts in ms, hourly
+ * quotas), so this is a guard against typos, not a policy limit.
+ */
+const POSITIVE_INT_ENV_MAX = 1_000_000_000;
+
 function positiveIntEnv(name: string, defaultValue: number) {
   return z
     .string()
     .regex(/^\d+$/, `${name} must be a positive integer (digits only)`)
     .refine((v) => Number(v) >= 1, `${name} must be at least 1`)
+    .refine(
+      (v) => Number(v) <= POSITIVE_INT_ENV_MAX,
+      `${name} must be at most ${POSITIVE_INT_ENV_MAX}`,
+    )
     .default(String(defaultValue));
 }
 
