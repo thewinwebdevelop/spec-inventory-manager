@@ -267,13 +267,13 @@ importers:
 
   packages/db:
     dependencies:
+      '@omnistock/config':
+        specifier: workspace:*
+        version: link:../config
       '@prisma/client':
         specifier: ^5.22.0
         version: 5.22.0(prisma@5.22.0)
     devDependencies:
-      '@omnistock/config':
-        specifier: workspace:*
-        version: link:../config
       prisma:
         specifier: ^5.22.0
         version: 5.22.0
