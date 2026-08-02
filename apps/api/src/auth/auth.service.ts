@@ -21,6 +21,7 @@ import {
   type PasswordPolicyError,
 } from "@omnistock/core-domain";
 import { domainError } from "../common/domain-exception";
+import { rethrowOrgLockError } from "@omnistock/db";
 import { PrismaService } from "../prisma/prisma.service";
 import type { SecurityEventType } from "./security-events.service";
 import { HashingService } from "./hashing.service";
@@ -369,6 +370,7 @@ export class AuthService {
               target,
               targetActiveMembershipsInOtherOrgs,
               targetUserExists: targetUser !== undefined,
+              callerIsTarget: callerUserId === targetUserId,
             };
           };
 
@@ -400,7 +402,17 @@ export class AuthService {
       );
     } catch (err) {
       // Our own rollback signal is the ONLY thing swallowed here.
-      if (!(err instanceof AdminResetRefusedRollback)) throw err;
+      if (err instanceof AdminResetRefusedRollback) {
+        // fall through to the refusal handling below
+      } else {
+        // §15 row 6b — `SET LOCAL lock_timeout` firing, a deadlock, or a pool
+        // timeout is "the database made us stop", not "we are broken". Left
+        // unmapped these surfaced as 500s: on-call paged for ordinary
+        // contention, and a status that stands out against this endpoint's
+        // uniform 404. `rethrowOrgLockError` converts exactly those and
+        // rethrows everything else untouched (user decision 2026-08-03).
+        rethrowOrgLockError(err, "adminResetPassword");
+      }
     }
 
     const refused = outcome.refused;

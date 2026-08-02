@@ -597,6 +597,35 @@ d("auth endpoints (E2E, DB+Redis)", () => {
     }
   });
 
+  it("I5.9 (High-2) an admin cannot reset their OWN password here → 404, password untouched", async () => {
+    // Narrows a shipped endpoint for the third time, so it gets the same
+    // end-to-end proof as C-2 and NEW-1. The attack it closes: steal a
+    // `manage_members` holder's short-lived ACCESS token, self-reset (no current
+    // password required), and you hold the account permanently — while
+    // `revokeAllForUser` logs the real person out of every device.
+    const { orgId, adminId, adminAccess } = await seedOrgWithAdmin();
+    const admin = await prisma.user.findUniqueOrThrow({ where: { id: adminId } });
+
+    const res = await request(server())
+      .post(`/orgs/${orgId}/members/${adminId}/reset-password`)
+      .set("Content-Type", "application/json")
+      .set("Authorization", `Bearer ${adminAccess}`)
+      .send({ newPassword: "token-thief-takes-over-8Uu!" });
+
+    expect(res.status).toBe(404);
+    // The admin's own password still works, and the attacker's does not.
+    const stillOriginal = await request(server())
+      .post("/auth/login")
+      .set("Content-Type", "application/json")
+      .send({ email: admin.email, password: STRONG_PW });
+    expect(stillOriginal.status).toBe(200);
+    const attempted = await request(server())
+      .post("/auth/login")
+      .set("Content-Type", "application/json")
+      .send({ email: admin.email, password: "token-thief-takes-over-8Uu!" });
+    expect(attempted.status).toBe(401);
+  });
+
   it("logout-all / sessions / change-password require Bearer → 401 without it", async () => {
     expect((await request(server()).get("/auth/sessions")).status).toBe(401);
     expect((await request(server()).post("/auth/logout-all").set("Content-Type", "application/json").send({})).status).toBe(401);

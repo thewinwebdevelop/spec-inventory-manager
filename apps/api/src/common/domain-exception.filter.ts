@@ -48,6 +48,7 @@ import {
 } from "@nestjs/common";
 import type { Request, Response } from "express";
 import { ERROR_CODES, codeForStatus } from "./error-codes";
+import { describeOrgBusy } from "../prisma/org-busy";
 import { DomainException, type DomainErrorBody } from "./domain-exception";
 
 /** Wire envelope shape — `traceId` is always present on an error response. */
@@ -107,6 +108,41 @@ export class DomainExceptionFilter implements ExceptionFilter {
           message: this.messageOf(exception),
           details: exception.details,
           fieldErrors: exception.fieldErrors,
+          traceId,
+        },
+        upstreamRequestId,
+      });
+      return;
+    }
+
+    // ── 1b. Lock/transaction contention → 409 busy, never 500 ─────────────
+    // architecture §5.2 / §15 row 6b: `55P03` (lock_timeout), `40P01`
+    // (deadlock), `40001` (serialization) and Prisma's `P2028`/pool timeout are
+    // "the database made us stop", not "we are broken". `packages/db` already
+    // classifies them and packages the decided status/code/details; rendering
+    // is all that was missing, so every one of them surfaced as a 500 —
+    // paging on-call for ordinary contention, and standing out against the
+    // uniform 404 on admin-reset.
+    //
+    // Rendered here rather than at each call site so a service only has to
+    // `rethrowOrgLockError(err, op)`; every org-locked write in F-002 and after
+    // gets the same wire answer without repeating this mapping. The Postgres
+    // knowledge stays in `prisma/org-busy.ts` — `common/` must not import
+    // `@omnistock/db` (boundary gate `api-db-client-allowlisted`).
+    const busy = describeOrgBusy(exception);
+    if (busy) {
+      if (busy.alert) {
+        this.logger.error(`${busy.summary} — off-policy lock order? ${JSON.stringify(busy.diagnostic)}`);
+      } else {
+        this.logger.warn(busy.summary);
+      }
+      this.send(res, busy.status, {
+        error: {
+          code: busy.code,
+          message: ERROR_CODES.CONFLICT.message,
+          // `{ reason: "busy" }` — the client's cue to retry. `diagnostic`
+          // (SQLSTATE, Prisma code) is deliberately NOT here: it is log-only.
+          details: busy.details,
           traceId,
         },
         upstreamRequestId,

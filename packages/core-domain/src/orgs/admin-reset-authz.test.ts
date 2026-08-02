@@ -18,6 +18,7 @@ function input(over: Partial<AdminResetInput> = {}): AdminResetInput {
     target: { status: "active", capabilities: STAFF },
     targetActiveMembershipsInOtherOrgs: 0,
     targetUserExists: true,
+    callerIsTarget: false,
     ...over,
   };
 }
@@ -134,5 +135,45 @@ describe("U-API-07 · decideAdminReset — the 2 fail-closed conditions (C-2 + N
     const snapshot = JSON.parse(JSON.stringify(i));
     expect(decideAdminReset(i)).toEqual(decideAdminReset(i));
     expect(i).toEqual(snapshot);
+  });
+
+  // ── High-2 · self-reset (security review of f66451f, user decision) ───────
+
+  it("caller resetting their OWN password → refused, however senior they are", () => {
+    // The whole point: this is the case where the caller passes every other
+    // check. An Owner with full_access trips nothing else at all.
+    expect(decideAdminReset(input({ callerIsTarget: true }))).toEqual({
+      allowed: false,
+      refusals: ["caller_is_target"],
+    });
+    expect(
+      decideAdminReset(
+        input({
+          caller: { status: "active", capabilities: [CAPABILITY_FULL_ACCESS] },
+          target: { status: "active", capabilities: [CAPABILITY_FULL_ACCESS] },
+          callerIsTarget: true,
+        }),
+      ),
+    ).toEqual({ allowed: false, refusals: ["caller_is_target"] });
+  });
+
+  it("self-reset is reported ALONGSIDE the other refusals, not instead of them", () => {
+    // Both must appear: an investigator reading "caller_is_target" alone would
+    // conclude someone fat-fingered their own account, and miss that the same
+    // request was also an attempt on a multi-org credential.
+    const decision = decideAdminReset(
+      input({ callerIsTarget: true, targetActiveMembershipsInOtherOrgs: 1 }),
+    );
+    expect(decision.allowed).toBe(false);
+    expect([...decision.refusals].sort()).toEqual(
+      ["caller_is_target", "target_active_in_other_org"].sort(),
+    );
+  });
+
+  it("resetting SOMEBODY ELSE is untouched — the rule is about the caller, not the endpoint", () => {
+    expect(decideAdminReset(input({ callerIsTarget: false }))).toEqual({
+      allowed: true,
+      refusals: [],
+    });
   });
 });

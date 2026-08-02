@@ -38,6 +38,7 @@ import type { HashingService } from "./hashing.service";
 import type { RefreshTokenService } from "./refresh-token.service";
 import type { AccessTokenService } from "./access-token.service";
 import type { ThrottleService } from "./throttle.service";
+import { OrgBusyError } from "@omnistock/db";
 import { SecurityEventsService, collectSecurityEvents } from "./security-events.service";
 
 const ORG = "org_caller";
@@ -423,5 +424,54 @@ describe("U-API-07 · adminResetPassword — fail-closed × 2 conditions, one tr
       expect(harness.tx.user.update, label).not.toHaveBeenCalled();
       expect(harness.client.$transaction, label).not.toHaveBeenCalled();
     }
+  });
+
+  // ── High-2 + §15 row 6b (user decisions 2026-08-03) ──────────────────────
+
+  it("self-reset (caller === target) → the same 404, no write, no session revoke", async () => {
+    // A stolen ACCESS token must not become a permanent account takeover:
+    // admin-reset asks for no current password, and `revokeAllForUser` would
+    // throw the real owner off every device on the way out.
+    const h2 = buildHarness();
+    let thrown: unknown;
+    try {
+      await h2.service.adminResetPassword(CALLER, ORG, CALLER, NEW_PW);
+    } catch (err) {
+      thrown = err;
+    }
+    expect404(thrown);
+    expect(h2.tx.user.update).not.toHaveBeenCalled();
+    expect(h2.refresh.revokeAllForUser).not.toHaveBeenCalled();
+    expect(h2.state.rolledBack).toBe(true);
+  });
+
+  it("§15 row 6b · lock contention → 409 busy, NOT 500", async () => {
+    // `SET LOCAL lock_timeout` firing is the database telling us to back off.
+    // Unmapped it was a 500: on-call paged for ordinary contention, and a
+    // status that stands out against this endpoint's otherwise uniform 404.
+    const busy = buildHarness();
+    const lockTimeout = Object.assign(new Error("lock timeout"), { code: "55P03" });
+    busy.tx.$queryRawUnsafe.mockRejectedValueOnce(lockTimeout);
+
+    let thrown: unknown;
+    try {
+      await busy.service.adminResetPassword(CALLER, ORG, TARGET, NEW_PW);
+    } catch (err) {
+      thrown = err;
+    }
+    expect(thrown).toBeInstanceOf(OrgBusyError);
+    const busyErr = thrown as OrgBusyError;
+    expect(busyErr.httpStatus).toBe(409);
+    expect(busyErr.details).toEqual({ reason: "busy" });
+    // Nothing was written, and the caller is told to retry rather than told
+    // "not found" — contention is not an authorization answer.
+    expect(busy.tx.user.update).not.toHaveBeenCalled();
+  });
+
+  it("a NON-contention error is rethrown untouched (the mapper must not swallow bugs)", async () => {
+    const broken = buildHarness();
+    const bug = new Error("column does not exist");
+    broken.tx.$queryRawUnsafe.mockRejectedValueOnce(bug);
+    await expect(broken.service.adminResetPassword(CALLER, ORG, TARGET, NEW_PW)).rejects.toBe(bug);
   });
 });

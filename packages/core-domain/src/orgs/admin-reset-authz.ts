@@ -49,7 +49,25 @@ export type AdminResetRefusal =
   /** C-2 / D-028 — target is ACTIVE in at least one OTHER organization. */
   | "target_active_in_other_org"
   /** NEW-1 / D-030 — target is an Owner and the caller does not hold `full_access`. */
-  | "target_is_owner";
+  | "target_is_owner"
+  /**
+   * High-2 (security review of f66451f, user decision 2026-08-03) — the caller
+   * is the target.
+   *
+   * Admin-reset sets a password WITHOUT proving knowledge of the current one;
+   * that is exactly what makes it useful for helping a locked-out colleague, and
+   * exactly what makes it dangerous pointed at yourself. Steal a
+   * `manage_members` holder's short-lived ACCESS token and self-reset: you own
+   * the account permanently, and `revokeAllForUser` throws the real owner off
+   * every device on the way out. `/auth/change-password` requires
+   * `currentPassword` to prevent precisely this, so allowing it here was a
+   * documented bypass of that control for the highest-value accounts.
+   *
+   * Nothing legitimate is lost: someone who knows their password uses
+   * change-password, and someone who does not needs the F-081 recovery flow —
+   * which D-030 already made the only route to an Owner account.
+   */
+  | "caller_is_target";
 
 /** One side's membership as read INSIDE the transaction (M-2: never a client
  *  read from before the lock). `status: null` = no membership row at all. */
@@ -75,6 +93,8 @@ export interface AdminResetInput {
    * refusal rather than an assumption further down.
    */
   readonly targetUserExists: boolean;
+  /** Is the caller resetting their OWN password? (High-2 — see the refusal.) */
+  readonly callerIsTarget: boolean;
 }
 
 export type AdminResetDecision =
@@ -134,6 +154,12 @@ export function decideAdminReset(input: AdminResetInput): AdminResetDecision {
   if (!targetOk) return refuse("target_not_active_member");
 
   const refusals: AdminResetRefusal[] = [];
+
+  // High-2 — refuse self-reset. Checked here rather than short-circuiting so a
+  // caller who trips this AND another rule reports both.
+  if (input.callerIsTarget) {
+    refusals.push("caller_is_target");
+  }
 
   // C-2 / D-028.
   if (input.targetActiveMembershipsInOtherOrgs > 0) {
