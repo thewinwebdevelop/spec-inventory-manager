@@ -7,16 +7,21 @@
 // INVALID_CREDENTIALS shape. Throttle is ALWAYS its own 429 (M-1), never folded
 // into the 401.
 import { Injectable } from "@nestjs/common";
+import { ORG_TX_TIMEOUTS } from "@omnistock/config";
 import {
   checkPasswordPolicy,
   normalizeEmail,
   isValidEmailShape,
-  hasCapability,
-  CAPABILITY_MANAGE_MEMBERS,
+  decideAdminReset,
+  type AdminResetDecision,
+  type AdminResetInput,
+  type AdminResetMembershipFacts,
+  type AdminResetRefusal,
   type PasswordPolicyError,
 } from "@omnistock/core-domain";
 import { domainError } from "../common/domain-exception";
 import { PrismaService } from "../prisma/prisma.service";
+import type { SecurityEventType } from "./security-events.service";
 import { HashingService } from "./hashing.service";
 import { RefreshTokenService, type IssuedRefresh } from "./refresh-token.service";
 import { AccessTokenService } from "./access-token.service";
@@ -28,6 +33,55 @@ import { ThrottleService } from "./throttle.service";
 // same Thai message that F-001 shipped.
 function mapPolicyError(error: PasswordPolicyError): never {
   throw domainError(error);
+}
+
+// ── T-002-09 ★ admin-reset: the two fail-closed conditions ─────────────────
+// architecture §3.3 · §15 row 1 · C-2/D-028 + NEW-1/D-030 + NEW-5(ก).
+
+/**
+ * Thrown INSIDE the admin-reset transaction purely to roll it back. It never
+ * reaches the wire: `adminResetPassword` catches exactly this type and converts
+ * it into the same 404 the endpoint has always returned. Anything else thrown in
+ * there (a policy 422, a driver error) propagates untouched.
+ */
+class AdminResetRefusedRollback extends Error {
+  constructor() {
+    super("admin reset refused — rolling back");
+    this.name = "AdminResetRefusedRollback";
+  }
+}
+
+/**
+ * Refusal → audit event (architecture §3.3, "แยกใบ"). Only the two policy
+ * refusals get an event; "not a member" / "no capability" stay silent exactly as
+ * F-001 shipped them, so holding a token is not a licence to write alerts into
+ * another organization's audit trail.
+ *
+ * The two are separate event types on purpose: "an Admin tried to reset the shop
+ * OWNER's password" is an account-takeover signal, not a side effect of the
+ * multi-org policy, and an investigator must be able to tell them apart.
+ */
+const ADMIN_RESET_REFUSAL_EVENTS: Readonly<Partial<Record<AdminResetRefusal, SecurityEventType>>> =
+  Object.freeze({
+    target_active_in_other_org: "auth.password.admin_reset_blocked_multi_org",
+    target_is_owner: "auth.password.admin_reset_blocked_owner_target",
+  });
+
+/**
+ * `SET LOCAL lock_timeout` value for the admin-reset transaction. Read from
+ * @omnistock/config (env-tunable, U-CFG-07) — never inlined, or the policy and
+ * the behaviour drift. Validated as a positive integer because it is
+ * interpolated into SQL (`SET LOCAL` takes no bind parameters), so a non-integer
+ * would be both a policy error and an injection surface.
+ */
+function adminResetLockTimeoutMs(): number {
+  const ms = ORG_TX_TIMEOUTS.lockTimeoutMs;
+  if (!Number.isInteger(ms) || ms <= 0) {
+    throw new Error(
+      `ORG_TX_TIMEOUTS.lockTimeoutMs must be a positive integer (got ${String(ms)})`,
+    );
+  }
+  return ms;
 }
 
 @Injectable()
@@ -163,14 +217,39 @@ export class AuthService {
   }
 
   // ─── US-5 admin reset — FULL inline capability check (C-1, api-spec §2.8) ──
+  // ─── + T-002-09 ★ C-2/D-028 · NEW-1/D-030 · NEW-5(ก), all in ONE tx ────────
 
   /**
    * Reset a member's password. Implements the FULL capability check INLINE (no
-   * stub, no external guard): the caller must hold an ACTIVE Membership(orgId)
-   * whose Role.capabilities ⊇ manage_members, AND the target must be an ACTIVE
-   * member of orgId (H-2). Any failure → the SAME-SHAPE 404 (never 403 — no
-   * org-existence/status/capability oracle). On success: set target hash, revoke
-   * ALL target families, emit admin_reset.
+   * stub, no external guard), and since F-002 that check has FOUR conditions —
+   * every one of which lands on the SAME-SHAPE 404 (never 403, never a
+   * distinguishable body: no org-existence/status/capability/ownership oracle):
+   *
+   *   1. caller holds an ACTIVE Membership(orgId) with `manage_members` (F-001)
+   *   2. target is an ACTIVE member of orgId (F-001, H-2)
+   *   3. **C-2 / D-028** — target is NOT active in any OTHER organization.
+   *      `User.passwordHash` is a GLOBAL credential; F-002 made "one person,
+   *      many orgs" real, so without this an Admin of org B could reset the
+   *      password of someone who is the Owner of org A and log in as them.
+   *   4. **NEW-1 / D-030** — if the target is an Owner (`full_access`), the
+   *      caller must hold `full_access` too. Condition 3 is INERT in the most
+   *      common dogfood case (an Owner belonging to exactly one org), so
+   *      without this the Owner-only rule is decoration: an Admin takes the
+   *      shop over through the credential instead of through the role.
+   *
+   * **NEW-5(ก) — one transaction, checked twice.** The reads that decide and
+   * the write that acts must not be able to disagree: the transaction opens by
+   * taking `SELECT … FOR UPDATE` on the target `User` row (serializing
+   * concurrent resets of the same person), every read goes through that same
+   * `tx` (M-2 — never `this.db`), and the whole decision is re-evaluated AFTER
+   * the write and BEFORE commit. A membership created in another org while we
+   * were deciding therefore rolls the write back instead of slipping through.
+   *
+   * On success: set target hash, revoke ALL target families, clear the login
+   * backoff, emit `admin_reset`. On a refusal the write never happens, sessions
+   * are NOT revoked and the backoff is NOT cleared — otherwise a "blocked" 404
+   * would still let an Admin kick the Owner out of every device on repeat (a
+   * DoS the status code cannot see, U-API-07(ซ)).
    */
   async adminResetPassword(
     callerUserId: string,
@@ -178,43 +257,122 @@ export class AuthService {
     targetUserId: string,
     newPassword: string,
   ): Promise<void> {
-    // (2) Caller check — active membership + capability, read fresh.
-    const callerMembership = await this.db.membership.findUnique({
-      where: { organizationId_userId: { organizationId: orgId, userId: callerUserId } },
-      select: { status: true, role: { select: { capabilities: true } } },
-    });
-    const callerOk =
-      callerMembership?.status === "active" &&
-      hasCapability(callerMembership.role.capabilities, CAPABILITY_MANAGE_MEMBERS);
+    // Carried out of the transaction callback in a box: the values must survive
+    // the deliberate rollback, and TypeScript does not track assignments made
+    // inside a callback.
+    const outcome: { refused: AdminResetDecision | null; targetEmail: string | null } = {
+      refused: null,
+      targetEmail: null,
+    };
 
-    // (3) Target check — must be an ACTIVE member of orgId (H-2).
-    const targetMembership = await this.db.membership.findUnique({
-      where: { organizationId_userId: { organizationId: orgId, userId: targetUserId } },
-      select: { status: true },
-    });
-    const targetOk = targetMembership?.status === "active";
+    try {
+      await this.db.$transaction(
+        async (tx) => {
+          // (1) Serialize on the target's User row. `SET LOCAL` first so the
+          // wait is bounded (and scoped to this transaction, so a pooled
+          // connection never carries it to the next request).
+          await tx.$executeRawUnsafe(`SET LOCAL lock_timeout = '${adminResetLockTimeoutMs()}ms'`);
+          const locked = await tx.$queryRawUnsafe<Array<{ id: string; email: string }>>(
+            'SELECT id, email FROM "User" WHERE id = $1 FOR UPDATE',
+            targetUserId,
+          );
+          // FOR UPDATE on zero rows succeeds and locks NOTHING — that must read
+          // as "no target", not as "locked".
+          const targetUser = Array.isArray(locked) ? locked[0] : undefined;
 
-    // (4) Any failure → same-shape 404 (never 403). Do policy validation only
-    // AFTER authorization so an unauthorized caller cannot probe policy either.
-    if (!callerOk || !targetOk) {
+          /** Every fact the decision needs, ALL read through `tx` (M-2). */
+          const readFacts = async (): Promise<AdminResetInput> => {
+            const membershipOf = async (userId: string): Promise<AdminResetMembershipFacts> => {
+              const m = await tx.membership.findUnique({
+                where: { organizationId_userId: { organizationId: orgId, userId } },
+                select: { status: true, role: { select: { capabilities: true } } },
+              });
+              return { status: m?.status ?? null, capabilities: m?.role.capabilities ?? [] };
+            };
+            const caller = await membershipOf(callerUserId);
+            const target = await membershipOf(targetUserId);
+            // The ONE deliberately cross-org query in this file (C-2). It is
+            // legal here because `auth/` is on the SYSTEM_PRISMA allowlist
+            // (architecture §2.1) and because the whole point of the check is
+            // "does this person exist outside the caller's tenant?" — a
+            // question no org-scoped client can answer. It reads a COUNT only:
+            // no id, name or email of another org ever leaves this scope.
+            const targetActiveMembershipsInOtherOrgs = await tx.membership.count({
+              where: { userId: targetUserId, status: "active", organizationId: { not: orgId } },
+            });
+            return {
+              caller,
+              target,
+              targetActiveMembershipsInOtherOrgs,
+              targetUserExists: targetUser !== undefined,
+            };
+          };
+
+          // (2)+(3) Decide BEFORE any work — an unauthorized caller must not be
+          // able to probe the password policy or burn an argon2 hash either.
+          const before = decideAdminReset(await readFacts());
+          if (!before.allowed) {
+            outcome.refused = before;
+            throw new AdminResetRefusedRollback();
+          }
+
+          const policy = checkPasswordPolicy(newPassword);
+          if (!policy.ok) mapPolicyError(policy.error);
+
+          // (4) Write.
+          const newHash = await this.hashing.hash(newPassword);
+          await tx.user.update({ where: { id: targetUserId }, data: { passwordHash: newHash } });
+
+          // (5) Re-decide on freshly read facts before committing (NEW-5ก).
+          // Read Committed gives each statement a new snapshot, so a membership
+          // another transaction committed while we were hashing IS visible here
+          // — and rolls this write back.
+          const after = decideAdminReset(await readFacts());
+          if (!after.allowed) {
+            outcome.refused = after;
+            throw new AdminResetRefusedRollback();
+          }
+
+          outcome.targetEmail = targetUser?.email ?? null;
+        },
+        { timeout: ORG_TX_TIMEOUTS.txTimeoutMs, maxWait: ORG_TX_TIMEOUTS.maxWaitMs },
+      );
+    } catch (err) {
+      // Our own rollback signal is the ONLY thing swallowed here.
+      if (!(err instanceof AdminResetRefusedRollback)) throw err;
+    }
+
+    const refused = outcome.refused;
+    if (refused !== null) {
+      // POST-COMMIT (here: post-ROLLBACK) — the block really happened, and the
+      // payload is `{ actorUserId, orgId, targetUserId }`: no password, no hash,
+      // no email. `SecurityEventsService` additionally filters these two event
+      // types down to exactly those keys, so a future "just one debug field"
+      // cannot leak either.
+      for (const reason of refused.refusals) {
+        const type = ADMIN_RESET_REFUSAL_EVENTS[reason];
+        if (type) {
+          this.securityEvents.emit(type, { actorUserId: callerUserId, orgId, targetUserId });
+        }
+      }
+      // The SAME 404 as "user not found" — same code, same message, same
+      // fields. Constructed at ONE place for all four refusals so the bodies
+      // cannot drift apart into an oracle.
       throw domainError("NOT_FOUND");
     }
 
-    const policy = checkPasswordPolicy(newPassword);
-    if (!policy.ok) mapPolicyError(policy.error);
+    const targetEmail = outcome.targetEmail;
+    if (targetEmail === null) {
+      // Unreachable: `targetUserExists` is part of the decision above.
+      throw new Error("admin reset committed without a target email");
+    }
 
-    const newHash = await this.hashing.hash(newPassword);
-    const target = await this.db.user.update({
-      where: { id: targetUserId },
-      data: { passwordHash: newHash },
-      select: { email: true },
-    });
     await this.refresh.revokeAllForUser(targetUserId);
     // Anti-lockout escape hatch (arch §8.2/§10, I5.4): a reset must clear the
     // target's login backoff so they can immediately sign in with the new
     // password even if they were mid-backoff. The login account counter keys on
     // the normalized email (throttle:acct:{emailNorm}, data-model §4).
-    await this.throttle.clearAccount(normalizeEmail(target.email));
+    await this.throttle.clearAccount(normalizeEmail(targetEmail));
     this.securityEvents.emit("auth.password.admin_reset", {
       actorUserId: callerUserId,
       orgId,

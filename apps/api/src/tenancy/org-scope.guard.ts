@@ -20,11 +20,10 @@ import { Inject, Injectable, Logger, type CanActivate, type ExecutionContext } f
 import { Reflector } from "@nestjs/core";
 import { domainError } from "../common";
 import type { OrgAuthRequest, OrgAuthState } from "./org-auth";
-import { isLegacySelfGovernedRoute } from "./legacy-routes";
 import { ROUTE_SCOPE_KEY, type RouteScope } from "./route-scope.decorator";
 
 /** The tier as the DECORATORS declare it — the authority. */
-type EffectiveTier = RouteScope | "org" | "legacy";
+type EffectiveTier = RouteScope | "org";
 
 @Injectable()
 export class OrgScopeGuard implements CanActivate {
@@ -57,8 +56,10 @@ export class OrgScopeGuard implements CanActivate {
       context.getHandler(),
       context.getClass(),
     ]);
-    const legacy = isLegacySelfGovernedRoute(req.method, req.originalUrl ?? req.url);
-    const tier: EffectiveTier = declared ?? (legacy ? "legacy" : "org");
+    // T-002-13 — no bridge left: a route is what its decorators say, and saying
+    // nothing means org-scoped. That is the whole default-deny rule, with no
+    // second path that could quietly grow.
+    const tier: EffectiveTier = declared ?? "org";
 
     // The middleware had to identify the tier from Nest's route metadata (it has
     // no Reflector). Here we know for certain — so any disagreement means the
@@ -82,9 +83,9 @@ export class OrgScopeGuard implements CanActivate {
 
     switch (tier) {
       case "public":
-      case "legacy":
-        // `legacy` = an F-001 route that still governs itself (legacy-routes.ts).
-        // Its own controller guards decide, exactly as they do today.
+        // No token required and no org context (I-3). The route's own guards
+        // (JsonOnlyGuard, JwtAuthGuard on the Bearer `/auth/*` endpoints, CSRF,
+        // throttle) decide — this guard only declines to add a tenant check.
         return true;
 
       case "user":

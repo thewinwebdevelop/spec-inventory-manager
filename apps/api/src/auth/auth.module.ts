@@ -69,6 +69,10 @@ export const AUTH_REDIS = Symbol("AUTH_REDIS");
     },
     AuthService,
   ],
-  exports: [JwtAuthGuard, AccessTokenService],
+  // `SecurityEventsService` is exported (T-002-13) so the composition root can
+  // bind it as the capability layer's `CAPABILITY_EVENT_SINK`. It stays ONE
+  // instance: the guard emits into the same emitter `collectSecurityEvents()`
+  // subscribes to. A second emitter would split the audit trail in half.
+  exports: [JwtAuthGuard, AccessTokenService, SecurityEventsService],
 })
 export class AuthModule {}

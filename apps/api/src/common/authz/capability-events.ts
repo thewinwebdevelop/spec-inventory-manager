@@ -29,6 +29,20 @@ export interface CapabilityEventSink {
 export const CAPABILITY_EVENT_SINK = Symbol("CAPABILITY_EVENT_SINK");
 
 /**
+ * Optional token the composition root binds to the REAL sink
+ * (`SecurityEventsService`) — see `TenancyModule.withCapabilityEventSink`.
+ *
+ * ⚠️ Why a second token instead of just re-providing `CAPABILITY_EVENT_SINK`:
+ * a provider supplied through a dynamic module does NOT override the module's
+ * own static provider for the same token — Nest keeps the static one. Doing it
+ * that way looks correct, compiles, and silently keeps the log-only default;
+ * the app would have shipped with the audit trail half missing and every test
+ * green. So the override is its own token and the default provider explicitly
+ * asks for it.
+ */
+export const CAPABILITY_EVENT_SINK_OVERRIDE = Symbol("CAPABILITY_EVENT_SINK_OVERRIDE");
+
+/**
  * Default binding: log-only, in the same `"<type> <json>"` shape
  * `SecurityEventsService` uses, so an operator greps one string either way.
  * It is not a silent no-op on purpose — a denial that nothing records is a

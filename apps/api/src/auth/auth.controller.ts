@@ -37,6 +37,7 @@ import {
 import { COOKIE_REFRESH } from "./auth.constants";
 import { RateLimitedException } from "./rate-limited.exception";
 import { domainError } from "../common/domain-exception";
+import { Public } from "../tenancy/route-scope.decorator";
 
 /** Derive the client IP for throttle (trusted-proxy resolution is @devops via
  *  express `trust proxy`; here we read the resolved req.ip). */
@@ -48,6 +49,15 @@ function throttled(retryAfter: number): never {
   throw new RateLimitedException(retryAfter);
 }
 
+// T-002-13 — the whole `/auth/*` surface is `@Public()` (architecture §1.1).
+// "Public" here means only "the global org-scope guard steps aside and NO org
+// context is built" (I-3): each endpoint keeps the guards it already had —
+// JsonOnlyGuard, JwtAuthGuard on the Bearer routes, CSRF in-handler, throttle
+// before credential work. Marking it at the controller replaces the temporary
+// path-regex bridge (tenancy/legacy-routes.ts) with a declaration that lives
+// where the routes do, so a new `/auth/*` endpoint inherits it instead of
+// needing someone to remember a list in another file.
+@Public()
 @Controller("auth")
 export class AuthController {
   constructor(

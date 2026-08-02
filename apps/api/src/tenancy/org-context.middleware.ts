@@ -18,7 +18,6 @@ import type { NextFunction, Response } from "express";
 import type { GuardedPrismaClient } from "../prisma/prisma.service";
 import { OrgContextStore, type OrgRequestContext } from "./org-context";
 import type { AssumedRouteTier, OrgAuthOutcome, OrgAuthRequest } from "./org-auth";
-import { isLegacySelfGovernedRoute } from "./legacy-routes";
 import { RouteScopeRegistry } from "./route-scope.registry";
 import { SYSTEM_PRISMA } from "./prisma-tokens";
 import { ACCESS_TOKEN_VERIFIER, type AccessTokenVerifier } from "./access-token-verifier";
@@ -56,13 +55,6 @@ export class OrgContextMiddleware implements NestMiddleware {
     req.orgAuth = auth;
 
     const path = req.originalUrl ?? req.url;
-
-    // Routes F-001 shipped keep governing themselves until T-002-13.
-    if (isLegacySelfGovernedRoute(req.method, path)) {
-      auth.routeTier = "legacy";
-      next();
-      return;
-    }
 
     const match = this.routes.match(req.method, path);
     // I-3 — anything that is not org-scoped gets NO context. An unidentifiable

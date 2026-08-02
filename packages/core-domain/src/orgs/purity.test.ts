@@ -16,6 +16,8 @@ const SOURCE_FILES = [
   // T-002-08b — the two files data-model §6 asks for on top of T-002-08.
   "invitation-policy.ts",
   "tax-id-mask.ts",
+  // T-002-09 — the admin-reset gate (C-2 + NEW-1).
+  "admin-reset-authz.ts",
   "index.ts",
 ] as const;
 

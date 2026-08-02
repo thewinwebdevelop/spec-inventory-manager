@@ -14,7 +14,6 @@
 import { RequestMethod, type INestApplication } from "@nestjs/common";
 import { METHOD_METADATA, PATH_METADATA } from "@nestjs/common/constants";
 import { DiscoveryService, MetadataScanner, Reflector } from "@nestjs/core";
-import { isLegacySelfGovernedRoute } from "../../tenancy/legacy-routes";
 import { ROUTE_SCOPE_KEY, type RouteScope } from "../../tenancy/route-scope.decorator";
 import { ANY_ACTIVE_MEMBER_KEY, CAPABILITY_KEY } from "./capability.decorator";
 import { isMutatingMethod, toTemplatePath } from "./route-capabilities";
@@ -27,8 +26,8 @@ export interface RouteDeclaration {
   readonly method: string;
   /** api-spec dialect: `/orgs/{orgId}/members/{userId}`. */
   readonly path: string;
-  /** Tier — `org` is the default (§1.1); `legacy` = F-001's self-governed set. */
-  readonly scope: RouteScope | "org" | "legacy";
+  /** Tier — `org` is the default (§1.1). */
+  readonly scope: RouteScope | "org";
   readonly declaration: RouteDeclarationKind;
   /** Present only for `declaration === "capability"`. */
   readonly capability?: string;
@@ -79,11 +78,10 @@ export function enumerateRoutes(app: INestApplication): readonly RouteDeclaratio
       for (const controllerPath of controllerPaths) {
         for (const handlerPath of toPaths(Reflect.getMetadata(PATH_METADATA, handler))) {
           const path = toTemplatePath(`${controllerPath}/${handlerPath}`);
-          const legacy = !declaredScope && isLegacySelfGovernedRoute(method, path);
           routes.push({
             method,
             path,
-            scope: declaredScope ?? (legacy ? "legacy" : "org"),
+            scope: declaredScope ?? "org",
             ...declaration,
             mutating: isMutatingMethod(method),
             source: `${metatype.name}.${methodName}`,

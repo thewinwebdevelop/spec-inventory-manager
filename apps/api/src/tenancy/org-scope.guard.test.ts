@@ -11,7 +11,7 @@
 // ExecutionContext cannot be wrong about ordering, so it cannot prove anything
 // about it. Supertest through the real pipeline can.
 import { describe, it, expect, beforeAll, afterAll, beforeEach, vi } from "vitest";
-import { Controller, Get, Module, Post, type INestApplication } from "@nestjs/common";
+import { Controller, Get, Head, Module, Post, type INestApplication } from "@nestjs/common";
 import { Test } from "@nestjs/testing";
 import request from "supertest";
 import { getOrgContext } from "@omnistock/db";
@@ -108,17 +108,42 @@ class ProbeController {
     return this.snapshot();
   }
 
-  // ── routes that F-001 already shipped (T-002-13 marks them for real) ──
+  /** POST with no `@Get()` twin — the "HEAD has nothing to inherit" case. */
+  @AnyActiveMember()
+  @Post("probe/post-only")
+  postOnly() {
+    return this.snapshot();
+  }
+
+  /** An EXPLICIT `@Head()` must beat the HEAD⇒GET fallback (T-002-13). */
+  @Public()
+  @Head("probe/explicit-head")
+  explicitHead() {
+    return this.snapshot();
+  }
+
+  @AnyActiveMember()
+  @Get("probe/explicit-head")
+  explicitHeadGet() {
+    return this.snapshot();
+  }
+
+  // ── routes F-001 shipped, carrying the marks T-002-13 gave them ──────────
+  @Public()
   @Get("health")
   health() {
     return this.snapshot();
   }
 
+  @Public()
   @Post("auth/login")
   login() {
     return this.snapshot();
   }
 
+  /** `@UserScoped()`, not org-scoped — see members.controller.ts for why the
+   *  `:orgId` in the path does not make it one (404-never-403). */
+  @UserScoped()
   @Post("orgs/:orgId/members/:userId/reset-password")
   resetPassword() {
     return this.snapshot();
@@ -438,7 +463,7 @@ describe("OrgContextMiddleware + OrgScopeGuard (architecture §1.1–§1.4)", ()
     expect(res.body.error.code).toBe("FORBIDDEN");
   });
 
-  // ── legacy bridge (F-001 routes, until T-002-13 marks them) ──────────────
+  // ── F-001 routes, now marked for real (T-002-13) ─────────────────────────
 
   it("shipped F-001 routes keep their exact wire behaviour under default-deny", async () => {
     const health = await request(app.getHttpServer()).get("/health");
@@ -448,18 +473,47 @@ describe("OrgContextMiddleware + OrgScopeGuard (architecture §1.1–§1.4)", ()
     const login = await request(app.getHttpServer()).post("/auth/login");
     expect(login.status).toBe(201);
 
-    // reset-password: no Bearer here, and the global guard still lets it through
-    // — its own controller-level JwtAuthGuard is what 401s in the real app, so
-    // the status/body it ships stay untouched.
-    const reset = await request(app.getHttpServer()).post(
-      `/orgs/${ORG_A}/members/${USER}/reset-password`,
-    );
+    // reset-password is `@UserScoped()`: a valid token is required, but NO org
+    // context is built even though `:orgId` sits right there in the path (I-3).
+    // `findUnique` proves no membership lookup happened — i.e. the guard added
+    // no 403 oracle ahead of the endpoint's own identical 404, which is the
+    // whole reason it is not org-scoped.
+    const reset = await request(app.getHttpServer())
+      .post(`/orgs/${ORG_A}/members/${USER}/reset-password`)
+      .set("Authorization", `Bearer ${token(USER)}`);
     expect(reset.status).toBe(201);
     expect(reset.body.ctx).toBeNull();
     expect(findUnique).not.toHaveBeenCalled();
   });
 
-  it("a NEW route under /orgs/:orgId does NOT inherit the legacy bridge (default-deny holds)", async () => {
+  it("reset-password sends an anonymous caller the SAME 401 body its own JwtAuthGuard sends", async () => {
+    // T-002-13 · the one wire delta on this endpoint, pinned deliberately.
+    //
+    // Global guards run BEFORE controller guards, so the 401 now comes from
+    // OrgScopeGuard rather than from the controller's JwtAuthGuard. Same status,
+    // same code, same message — `ERROR_CODES.UNAUTHENTICATED` is the single
+    // source both read from, so a caller cannot tell which layer answered.
+    //
+    // What DOES change: a request that is BOTH unauthenticated AND not
+    // `application/json` used to get 415 from JsonOnlyGuard and now gets this
+    // 401. Both were failures; the new order tells an anonymous caller strictly
+    // less. Nothing shipped pins 415 on this endpoint (the L-2 test covers
+    // `/auth/signup`, which is `@Public()` and keeps its 415-first order).
+    const anon = await request(app.getHttpServer()).post(
+      `/orgs/${ORG_A}/members/${USER}/reset-password`,
+    );
+    expect(anon.status).toBe(401);
+    expect(anon.body.error.code).toBe("UNAUTHENTICATED");
+    expect(anon.body.error.message).toBe("ต้องเข้าสู่ระบบ");
+
+    const nonJson = await request(app.getHttpServer())
+      .post(`/orgs/${ORG_A}/members/${USER}/reset-password`)
+      .set("Content-Type", "text/plain")
+      .send("x");
+    expect(nonJson.status).toBe(401);
+  });
+
+  it("a NEW route under /orgs/:orgId is org-scoped by default (default-deny holds)", async () => {
     const res = await request(app.getHttpServer()).get(`/orgs/${ORG_A}/members`);
     expect(res.status).toBe(401);
     expect(res.body.error.code).toBe("UNAUTHENTICATED");
@@ -503,5 +557,38 @@ describe("OrgContextMiddleware + OrgScopeGuard (architecture §1.1–§1.4)", ()
     // verb + shape are both part of the match
     expect(registry.match("POST", "/probe/org")).toBeUndefined();
     expect(registry.match("GET", "/nothing/here")).toBeUndefined();
+  });
+
+  // ── HEAD ⇒ GET (T-002-13) ────────────────────────────────────────────────
+  // Express answers HEAD from the GET handler, so the registry must resolve it
+  // the same way: HEAD inherits GET's tier and GET's `:orgId`, never anything
+  // weaker. Before this, a HEAD on a `@Get()`-only route was `undefined` here →
+  // no context → a loud 500 at the guard for an ordinary request.
+
+  it("HEAD resolves against its GET counterpart — same tier, same params", () => {
+    expect(registry.match("HEAD", "/probe/org")).toEqual(registry.match("GET", "/probe/org"));
+    expect(registry.match("HEAD", "/probe/public")).toEqual(registry.match("GET", "/probe/public"));
+    expect(registry.match("HEAD", "/probe/user")).toEqual(registry.match("GET", "/probe/user"));
+    expect(registry.match("HEAD", `/orgs/${ORG_A}/probe`)).toEqual({
+      scope: "org",
+      params: { orgId: ORG_A },
+    });
+  });
+
+  it("HEAD on a path with NO GET stays unresolved — fail-closed, unchanged", () => {
+    // `/probe/post-only` is POST-only: there is no GET tier to inherit, so the
+    // middleware creates no context and the guard cannot be talked into one.
+    expect(registry.match("POST", "/probe/post-only")?.scope).toBe("org");
+    expect(registry.match("HEAD", "/probe/post-only")).toBeUndefined();
+    expect(registry.match("HEAD", "/nothing/here")).toBeUndefined();
+  });
+
+  it("an explicit @Head() declaration wins over the GET fallback", () => {
+    // The fallback must be a FALLBACK. `/probe/explicit-head` declares both a
+    // `@Public() @Head()` and an org-scoped `@Get()`; a HEAD there must read the
+    // HEAD declaration, and the presence of a second, disagreeing route must not
+    // make the match ambiguous (`undefined`) either.
+    expect(registry.match("HEAD", "/probe/explicit-head")?.scope).toBe("public");
+    expect(registry.match("GET", "/probe/explicit-head")?.scope).toBe("org");
   });
 });

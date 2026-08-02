@@ -44,6 +44,9 @@ export interface RouteScopeMatch {
   readonly params: Readonly<Record<string, string>>;
 }
 
+/** Several routes claim the same request with disagreeing tiers — refuse. */
+const AMBIGUOUS = Symbol("route-scope:ambiguous");
+
 @Injectable()
 export class RouteScopeRegistry {
   private compiled?: CompiledRoute[];
@@ -58,10 +61,35 @@ export class RouteScopeRegistry {
   /**
    * The tier + path params of the route serving `method path`, or `undefined`
    * when no route (or more than one route, disagreeing) matches.
+   *
+   * HEAD (T-002-13): express answers HEAD from the GET handler, so a `@Get()`-
+   * only route never had a HEAD entry here — the middleware could not identify
+   * it, built no context, and the guard's tier cross-check turned an ordinary
+   * request into a 500. HEAD therefore falls back to its GET counterpart and
+   * inherits GET's tier and GET's `:orgId` — never anything weaker, and only
+   * when no explicit `@Head()` route claimed the request first. No GET either ⇒
+   * still `undefined` ⇒ still fail-closed.
    */
   match(method: string, path: string): RouteScopeMatch | undefined {
-    const routes = (this.compiled ??= this.build());
     const verb = method.toUpperCase();
+    const direct = this.matchVerb(verb, path);
+    // ⛔ Only "nothing matched" falls back. `AMBIGUOUS` must NOT: two disagreeing
+    // @Head() declarations are a refusal we already made on purpose, and quietly
+    // answering it with GET's tier would widen a deliberate deny.
+    if (direct !== undefined || verb !== "HEAD") {
+      return direct === AMBIGUOUS ? undefined : direct;
+    }
+    const viaGet = this.matchVerb("GET", path);
+    return viaGet === AMBIGUOUS ? undefined : viaGet;
+  }
+
+  /**
+   * One verb's match. `AMBIGUOUS` (≠ `undefined`) when several routes claim the
+   * request with DIFFERENT tiers — the caller must not treat that as "nothing
+   * here".
+   */
+  private matchVerb(verb: string, path: string): RouteScopeMatch | typeof AMBIGUOUS | undefined {
+    const routes = (this.compiled ??= this.build());
     const pathname = normalizePath(path);
 
     let found: RouteScopeMatch | undefined;
@@ -75,9 +103,9 @@ export class RouteScopeRegistry {
         if (value !== undefined) params[name] = decodeParam(value);
       });
       // Two different routes claiming the same request with DIFFERENT tiers is
-      // ambiguity we refuse to resolve — report "no match" so no context is
-      // created and the guard fails loudly.
-      if (found && found.scope !== route.scope) return undefined;
+      // ambiguity we refuse to resolve — report it so no context is created and
+      // the guard fails loudly.
+      if (found && found.scope !== route.scope) return AMBIGUOUS;
       found ??= { scope: route.scope, params };
     }
     return found;

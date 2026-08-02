@@ -14,6 +14,7 @@ export {
 export { CapabilityGuard } from "./capability.guard";
 export {
   CAPABILITY_EVENT_SINK,
+  CAPABILITY_EVENT_SINK_OVERRIDE,
   CAPABILITY_DENIED_EVENT,
   LoggingCapabilityEventSink,
   type CapabilityEventSink,

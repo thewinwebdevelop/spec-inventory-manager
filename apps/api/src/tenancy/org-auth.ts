@@ -33,7 +33,7 @@ export type OrgAuthOutcome =
  * disagree — see `OrgScopeGuard`. `unknown` = the middleware could not identify
  * the route at all, so it deliberately created no context.
  */
-export type AssumedRouteTier = "public" | "user" | "system" | "org" | "legacy" | "unknown";
+export type AssumedRouteTier = "public" | "user" | "system" | "org" | "unknown";
 
 /** Attached to every request by `OrgContextMiddleware`; read only by the guard. */
 export interface OrgAuthState {

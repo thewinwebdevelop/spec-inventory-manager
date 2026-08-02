@@ -52,3 +52,14 @@ export {
 } from "./invitation-policy";
 
 export { maskTaxId, TAX_ID_MASK_CHAR, TAX_ID_VISIBLE_SUFFIX_LENGTH } from "./tax-id-mask";
+
+// T-002-09 ★ — the two fail-closed conditions the SHIPPED admin-reset endpoint
+// grew when "one person, many organizations" became real (C-2/D-028 +
+// NEW-1/D-030). Same `canAssignRole` rule as the membership routes, no copy.
+export {
+  decideAdminReset,
+  type AdminResetDecision,
+  type AdminResetInput,
+  type AdminResetMembershipFacts,
+  type AdminResetRefusal,
+} from "./admin-reset-authz";

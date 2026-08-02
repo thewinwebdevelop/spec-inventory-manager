@@ -13,18 +13,13 @@
 // Paths use the api-spec dialect (`{orgId}`), so a row here can be compared
 // byte-for-byte with api-spec §2 by a human, and with the live Nest router via
 // `toTemplatePath()` (see route-declarations.ts).
-import { CAPABILITY_MANAGE_MEMBERS } from "@omnistock/core-domain";
+import { CAPABILITY_MANAGE_MEMBERS, CAPABILITY_MANAGE_ORG_SETTINGS } from "@omnistock/core-domain";
 
-/**
- * Capability guarding org profile + tax profile (api-spec §3.4/§3.5/§3.16).
- *
- * ⚠️ It belongs next to `CAPABILITY_MANAGE_MEMBERS` in
- * `packages/core-domain/src/auth/capabilities.ts` — F-001 opened that registry
- * and F-003 will own it. It is declared here only because T-002-05 must not
- * touch `packages/**`; moving it is a mechanical, single-commit change (the
- * string value is what must never move).
- */
-export const CAPABILITY_MANAGE_ORG_SETTINGS = "manage_org_settings" as const;
+// T-002-08c — `CAPABILITY_MANAGE_ORG_SETTINGS` now lives next to
+// `CAPABILITY_MANAGE_MEMBERS` in core-domain, where F-001 opened the registry
+// and F-003 will own it. Re-exported here so the import sites that T-002-05
+// wrote keep working and the two capabilities stay reachable from one module.
+export { CAPABILITY_MANAGE_ORG_SETTINGS };
 
 /** Verbs that change state. Used to classify a route's tier — §3.1 / G-13(ค). */
 export const MUTATING_HTTP_METHODS: readonly string[] = Object.freeze([
@@ -139,6 +134,36 @@ export const ANY_ACTIVE_MEMBER_ROUTES: {
     row({ method: "GET", path: "/orgs/{orgId}/roles" }),
   ]),
 });
+
+/**
+ * The verb a capability lookup should use (T-002-13).
+ *
+ * `HEAD` is answered by the `@Get()` handler (express), so it requires EXACTLY
+ * what GET requires — never less. The table below carries no `HEAD` rows and
+ * never will: a `HEAD` row could drift away from its `GET` row, and the weaker
+ * of the two would win for a request that returns the same authorization-
+ * relevant headers. Resolving the verb in one place makes that impossible.
+ *
+ * `CapabilityGuard` gets this for free (Nest hands it the GET handler, so the
+ * `@RequireCapability` metadata it reads IS GET's). This function is for the
+ * consumers that look the answer up in the TABLE instead — @qa's route-registry
+ * checks and anything comparing the live router to api-spec §2.
+ */
+export function capabilityLookupMethod(method: string): string {
+  const verb = method.toUpperCase();
+  return verb === "HEAD" ? "GET" : verb;
+}
+
+/**
+ * The capability `method path` demands per {@link ROUTE_CAPABILITIES}, or
+ * `undefined` when the table declares none for it (which is NOT "it is open" —
+ * see `CapabilityGuard`: an org-scoped route declaring nothing is refused).
+ * `path` may be either dialect (`:orgId` or `{orgId}`).
+ */
+export function capabilityForRoute(method: string, path: string): string | undefined {
+  const key = `${capabilityLookupMethod(method)} ${toTemplatePath(path)}`;
+  return ROUTE_CAPABILITIES.find((r) => routeKey(r) === key)?.capability;
+}
 
 /** `/orgs/:orgId/members` (Nest) → `/orgs/{orgId}/members` (api-spec). */
 export function toTemplatePath(path: string): string {

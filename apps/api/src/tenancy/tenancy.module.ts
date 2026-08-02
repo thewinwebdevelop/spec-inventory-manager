@@ -15,8 +15,11 @@ import {
   Global,
   Module,
   RequestMethod,
+  type DynamicModule,
   type MiddlewareConsumer,
+  type ModuleMetadata,
   type NestModule,
+  type Provider,
 } from "@nestjs/common";
 import { APP_GUARD, DiscoveryModule } from "@nestjs/core";
 import { loadEnv } from "@omnistock/config";
@@ -25,7 +28,9 @@ import { PrismaService } from "../prisma/prisma.service";
 import {
   CapabilityGuard,
   CAPABILITY_EVENT_SINK,
+  CAPABILITY_EVENT_SINK_OVERRIDE,
   LoggingCapabilityEventSink,
+  type CapabilityEventSink,
 } from "../common/authz";
 import { OrgContextStore } from "./org-context";
 import { OrgContextMiddleware } from "./org-context.middleware";
@@ -70,15 +75,52 @@ import { createOrgPrismaProxy } from "./org-prisma.provider";
     // you do THIS?" (`FORBIDDEN`). Swapped, a non-member of the org would be
     // told they lack a capability — the exact conflation I-5 forbids.
     { provide: APP_GUARD, useClass: CapabilityGuard },
-    // Default sink for `org.access.capability_denied`: log-only. The real
-    // `SecurityEventsService` lives in `auth/`, which `tenancy/` and `common/`
-    // may not import (depcruise `api-leafward-only`), so the composition root
-    // binds it — see capability-events.ts.
-    { provide: CAPABILITY_EVENT_SINK, useClass: LoggingCapabilityEventSink },
+    // Sink for `org.access.capability_denied`. The real `SecurityEventsService`
+    // lives in `auth/`, which `tenancy/` and `common/` may not import (depcruise
+    // `api-leafward-only`), so the composition root supplies it through
+    // `withCapabilityEventSink` and it arrives here as the OVERRIDE token.
+    // Log-only is the fallback, never the silent default in production wiring —
+    // `capability-sink.binding.test.ts` fails if app.module stops providing it.
+    {
+      provide: CAPABILITY_EVENT_SINK,
+      useFactory: (override: CapabilityEventSink | null) =>
+        override ?? new LoggingCapabilityEventSink(),
+      inject: [{ token: CAPABILITY_EVENT_SINK_OVERRIDE, optional: true }],
+    },
   ],
   exports: [OrgContextStore, ORG_PRISMA, SYSTEM_PRISMA],
 })
 export class TenancyModule implements NestModule {
+  /**
+   * T-002-13 — hand the capability layer its REAL event sink.
+   *
+   * `CapabilityGuard` is registered here (order versus `OrgScopeGuard` is
+   * load-bearing — see above), so it resolves `CAPABILITY_EVENT_SINK` in THIS
+   * module's injector. `SecurityEventsService` lives in `auth/`, which this file
+   * may not import (depcruise `api-leafward-only`). So the composition root
+   * passes both the module that owns the service and a binding for
+   * `CAPABILITY_EVENT_SINK_OVERRIDE`, which the provider above prefers over the
+   * log-only fallback.
+   *
+   * Without this, `org.access.capability_denied` only ever reaches a log line:
+   * `collectSecurityEvents()` — @qa's collector and F-005's future outbox —
+   * subscribes to `SecurityEventsService` and would never see a single denial.
+   * The guard would still deny correctly, which is exactly what makes the gap
+   * easy to miss: nothing is broken, the evidence is just gone.
+   */
+  static withCapabilityEventSink(options: {
+    /** Module(s) that provide the sink — e.g. `[AuthModule]`. */
+    readonly imports: NonNullable<ModuleMetadata["imports"]>;
+    /** Binding for `CAPABILITY_EVENT_SINK_OVERRIDE`. */
+    readonly provider: Provider;
+  }): DynamicModule {
+    return {
+      module: TenancyModule,
+      imports: options.imports,
+      providers: [options.provider],
+    };
+  }
+
   configure(consumer: MiddlewareConsumer): void {
     // Every route, every verb. `*splat` is express-5 wildcard syntax (Nest 11).
     // The middleware is transparent — it only records what it found on

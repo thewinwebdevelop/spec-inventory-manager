@@ -21,7 +21,23 @@ import { JsonOnlyGuard } from "./json-only.guard";
 import { JwtAuthGuard, type AuthedRequest } from "./jwt-auth.guard";
 import { AdminResetDto } from "./dto";
 import { RateLimitedException } from "./rate-limited.exception";
+import { UserScoped } from "../tenancy/route-scope.decorator";
 
+// T-002-13 — `@UserScoped()`, NOT org-scoped, even though `:orgId` is right
+// there in the path (architecture §1.1, §15 row 7).
+//
+// The reason is the 404-never-403 contract this endpoint shipped with. Under
+// the org-scoped tier the global guard answers first and returns 403
+// ORG_ACCESS_DENIED for a caller with no active membership — which is exactly
+// the oracle F-001 spent its design on removing: "403 vs 404" tells an attacker
+// whether an org exists and whether they are in it. `@UserScoped()` keeps the
+// guard out of the way so `AuthService.adminResetPassword` answers all four
+// refusals with one identical 404 (see its doc comment).
+//
+// This costs nothing in tenant isolation: the handler does not reach for
+// ORG_PRISMA, and every read it makes is filtered by `organizationId` explicitly
+// inside its transaction.
+@UserScoped()
 @Controller("orgs/:orgId/members/:userId")
 export class MembersController {
   constructor(

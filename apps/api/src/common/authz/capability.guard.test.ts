@@ -141,6 +141,17 @@ class DeclaredController {
     return { ok: true };
   }
 
+  /**
+   * POST with NO `@Get()` twin — the "HEAD has no GET counterpart" case
+   * (T-002-13). Express serves HEAD from a GET route only, so a HEAD here must
+   * never be served at all.
+   */
+  @RequireCapability(CAPABILITY_MANAGE_MEMBERS)
+  @Post("post-only")
+  postOnly() {
+    return { ok: true };
+  }
+
   /** Contradiction: two declarations at the SAME level. Must fail LOUD. */
   @AnyActiveMember()
   @RequireCapability(CAPABILITY_MANAGE_MEMBERS)
@@ -185,23 +196,53 @@ class ClassDeclaredController {
   }
 }
 
-/** F-001 routes that still govern themselves (legacy-routes.ts) — no metadata. */
+/**
+ * The F-001 routes as T-002-13 marks them for real: `/health` + `/auth/*` are
+ * `@Public()`, admin-reset is `@UserScoped()` (it keeps its inline capability
+ * check and its 404-never-403 shape, so the guard must stay out of its way).
+ * The temporary path-regex bridge that used to grant this is gone.
+ */
+@Public()
 @Controller()
-class LegacyController {
+class PublicLegacyController {
   @Get("health") health() {
     return { ok: true };
   }
   @Post("auth/login") login() {
     return { ok: true };
   }
-  @Post("orgs/:orgId/members/:userId/reset-password") resetPassword() {
+}
+
+@UserScoped()
+@Controller("orgs/:orgId/members/:userId")
+class AdminResetController {
+  @Post("reset-password") resetPassword() {
+    return { ok: true };
+  }
+}
+
+/**
+ * Same shape as admin-reset but WITHOUT a mark — the control that proves the
+ * routes above pass because of their decorators and not because their path
+ * happens to look familiar. With the bridge deleted this must be denied.
+ */
+@Controller("orgs/:orgId/members/:userId")
+class UnmarkedNeighbourController {
+  @Post("set-password") setPassword() {
     return { ok: true };
   }
 }
 
 @Module({
   imports: [TenancyModule],
-  controllers: [NakedController, DeclaredController, ClassDeclaredController, LegacyController],
+  controllers: [
+    NakedController,
+    DeclaredController,
+    ClassDeclaredController,
+    PublicLegacyController,
+    AdminResetController,
+    UnmarkedNeighbourController,
+  ],
 })
 class ProbeModule {}
 
@@ -266,15 +307,61 @@ describe("CapabilityGuard — fail-closed by omission (§3.1 · I-2 · NEW-3)", 
     });
   }
 
-  it("an implicit HEAD (express answering a @Get() route) never reaches a handler either", async () => {
-    // Refused UPSTREAM of this guard: `RouteScopeRegistry` has no HEAD entry for
-    // a `@Get()`-only path, so the middleware could not identify the route,
-    // could not open a context, and `OrgScopeGuard`'s tier cross-check fails
-    // loud (500 INTERNAL, T-002-04). Pinned here because the property that
-    // matters is the same one: an org-scoped read is never served without an
-    // authorization decision. The status belongs to T-002-04, not to us.
-    const res = await request(app.getHttpServer()).head("/probe/naked").set(auth());
-    expect(res.status).toBe(500);
+  // ── HEAD resolves against its GET counterpart (T-002-13) ─────────────────
+  //
+  // ⚠️ REPLACES the T-002-04 test `"an implicit HEAD (express answering a
+  // @Get() route) never reaches a handler either"`, which pinned **500**. That
+  // 500 was a wire artifact, not a policy: `RouteScopeRegistry` had no HEAD
+  // entry for a `@Get()`-only path, so the middleware built no context and
+  // `OrgScopeGuard`'s tier cross-check failed loud. Fail-closed, but wrong on
+  // the wire — an ordinary HEAD raising an operational alarm. HEAD now resolves
+  // against GET for BOTH tier and capability, so it inherits exactly what GET
+  // requires and never anything weaker. The property the old test protected
+  // ("an org-scoped read is never served without an authorization decision") is
+  // still asserted below — the status it produces is simply the right one now.
+
+  it("HEAD on a @Get()-only org-scoped route inherits GET's capability — denied without it", async () => {
+    capabilities = ["some_other_capability"];
+    const res = await request(app.getHttpServer()).head("/probe/members").set(auth());
+    expect(res.status).toBe(403);
+    // Same decision as GET, from the same declaration — and it is the CAPABILITY
+    // layer that answered (500 would mean the chain never got here).
+    expect(emitted).toHaveLength(1);
+    expect(emitted[0]!.payload).toMatchObject({
+      requiredCapability: CAPABILITY_MANAGE_MEMBERS,
+      route: "HEAD /probe/members",
+    });
+  });
+
+  it("HEAD and GET on the same org-scoped route resolve to the SAME tier and the SAME capability", async () => {
+    capabilities = [CAPABILITY_MANAGE_MEMBERS];
+    const head = await request(app.getHttpServer()).head("/probe/members").set(auth());
+    const get = await request(app.getHttpServer()).get("/probe/members").set(auth());
+    expect(head.status).toBe(get.status);
+    expect(head.status).toBe(200);
+    // HEAD carries GET's status with an empty body (protocol).
+    expect(head.body).toEqual({});
+    expect(emitted).toEqual([]);
+  });
+
+  it("HEAD never gets a WEAKER answer than GET: a @Get() route with no declaration refuses both", async () => {
+    capabilities = ["full_access"];
+    const head = await request(app.getHttpServer()).head("/probe/naked").set(auth());
+    const get = await request(app.getHttpServer()).get("/probe/naked").set(auth());
+    expect(head.status).toBe(403); // not 500 (the old artifact), not 200
+    expect(get.status).toBe(403);
+    expect(
+      errors.mock.calls.some((c) => String(c[0]).includes("capability_metadata_missing")),
+    ).toBe(true);
+  });
+
+  it("HEAD on a path with NO GET declaration is still denied (fail-closed, unchanged)", async () => {
+    // `/probe/post-only` exists for POST only. Express answers HEAD from a GET
+    // route or not at all, so there is nothing to inherit and nothing is served.
+    const res = await request(app.getHttpServer()).head("/probe/post-only").set(auth());
+    expect(res.status).toBe(404);
+    expect(res.status).not.toBe(200);
+    expect(emitted).toEqual([]);
   });
 
   it("full_access does NOT rescue a route that forgot to declare (omission is a bug, not a permission)", async () => {
@@ -459,7 +546,7 @@ describe("CapabilityGuard — fail-closed by omission (§3.1 · I-2 · NEW-3)", 
     expect(emitted).toEqual([]);
   });
 
-  it("the F-001 legacy routes keep working untouched (legacy-routes.ts, deleted by T-002-13)", async () => {
+  it("T-002-13 · the F-001 routes keep working on their real decorators, not on a path bridge", async () => {
     const health = await request(app.getHttpServer()).get("/health");
     expect(health.status).toBe(200);
 
@@ -470,6 +557,17 @@ describe("CapabilityGuard — fail-closed by omission (§3.1 · I-2 · NEW-3)", 
       .post(`/orgs/${ORG}/members/${USER}/reset-password`)
       .set("Authorization", `Bearer ${token(USER)}`);
     expect(reset.status).toBe(201);
+    // Reaching the handler is the point: the endpoint answers all of its
+    // refusals itself with one identical 404. A capability denial here would
+    // be a 403 — a brand-new oracle on a shipped endpoint.
+    expect(emitted).toEqual([]);
+  });
+
+  it("an UNMARKED neighbour of admin-reset is refused — the mark is what grants, not the path", async () => {
+    const res = await request(app.getHttpServer())
+      .post(`/orgs/${ORG}/members/${USER}/set-password`)
+      .set(auth());
+    expect(res.status).toBe(403);
   });
 
   // ── enumerateRoutes — what @qa's I-02/G-13 build on (§12.2 item 4) ───────

@@ -34,7 +34,6 @@ import type { Request } from "express";
 import { hasCapability } from "@omnistock/core-domain";
 import { domainError } from "../domain-exception";
 import { OrgContextStore } from "../../tenancy/org-context";
-import { isLegacySelfGovernedRoute } from "../../tenancy/legacy-routes";
 import { normalizePath } from "../../tenancy/route-scope.registry";
 import { ROUTE_SCOPE_KEY, type RouteScope } from "../../tenancy/route-scope.decorator";
 import { ANY_ACTIVE_MEMBER_KEY, CAPABILITY_KEY } from "./capability.decorator";
@@ -90,8 +89,6 @@ export class CapabilityGuard implements CanActivate {
       [context.getHandler(), context.getClass()],
     );
     if (declaredScope) return true;
-    // F-001 routes that still govern themselves (deleted by T-002-13).
-    if (isLegacySelfGovernedRoute(method, req.originalUrl ?? req.url)) return true;
 
     // ── org-scoped: every verb from here, no exceptions (NEW-3) ─────────────
     const declaration = this.readDeclaration(context);

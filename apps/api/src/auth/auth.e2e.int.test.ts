@@ -13,8 +13,13 @@ import cookieParser from "cookie-parser";
 import request from "supertest";
 import { Redis } from "ioredis";
 import { PrismaClient } from "@omnistock/db";
-import { CAPABILITY_MANAGE_MEMBERS } from "@omnistock/core-domain";
+import { CAPABILITY_FULL_ACCESS, CAPABILITY_MANAGE_MEMBERS } from "@omnistock/core-domain";
 import { AuthModule } from "./auth.module";
+import {
+  SecurityEventsService,
+  collectSecurityEvents,
+  type SecurityEventCollector,
+} from "./security-events.service";
 
 const TEST_DB = process.env.TEST_DATABASE_URL;
 const TEST_REDIS = process.env.TEST_REDIS_URL;
@@ -43,10 +48,37 @@ if (enabled) {
 
 const STRONG_PW = "correct-horse-battery-staple-9f3aK!";
 
+/**
+ * Drop the fields that are random PER RESPONSE, so two error bodies can be
+ * compared for "does this tell the caller anything different?".
+ *
+ * Today that is exactly one field: `traceId` (T-002-10 / NEW-7 — a server-issued
+ * random UUID on every error). It is volatile BY DESIGN, so comparing whole
+ * bodies without normalizing it would fail for reasons that have nothing to do
+ * with information leakage. Everything else stays in the comparison, strictly:
+ * a stray field, a different code, a different message would all still be caught.
+ */
+function stripVolatile(body: unknown): unknown {
+  const clone = JSON.parse(JSON.stringify(body ?? null)) as
+    | { error?: { traceId?: string } }
+    | null;
+  if (clone && typeof clone === "object" && clone.error && typeof clone.error === "object") {
+    delete clone.error.traceId;
+  }
+  return clone;
+}
+
+/** The per-response random id, when the filter is wired into the app. */
+function traceIdOf(body: unknown): string | undefined {
+  return (body as { error?: { traceId?: string } } | null)?.error?.traceId;
+}
+
 d("auth endpoints (E2E, DB+Redis)", () => {
   let app: INestApplication;
   let prisma: PrismaClient;
   let redis: Redis;
+  /** F-005 seam used as the test sink (test-plan §19.1 item 3). */
+  let sink: SecurityEventCollector;
 
   beforeAll(async () => {
     prisma = new PrismaClient({ datasources: { db: { url: TEST_DB } } });
@@ -72,9 +104,11 @@ d("auth endpoints (E2E, DB+Redis)", () => {
       }),
     );
     await app.init();
+    sink = collectSecurityEvents(app.get(SecurityEventsService));
   });
 
   afterAll(async () => {
+    sink?.stop();
     if (app) await app.close();
     if (prisma) await prisma.$disconnect();
     if (redis) redis.disconnect();
@@ -182,7 +216,14 @@ d("auth endpoints (E2E, DB+Redis)", () => {
     const unknown = await request(server()).post("/auth/login").set("Content-Type", "application/json").send({ email: uniqueEmail("nobody"), password: "wrong-but-long-enough" });
     expect(wrong.status).toBe(401);
     expect(unknown.status).toBe(401);
-    expect(wrong.body).toEqual(unknown.body);
+    // Everything a caller could learn from must match. `traceId` (T-002-10) is
+    // excluded because it is random per RESPONSE — and enumeration safety
+    // depends on it staying that way, which is asserted right below: two equal
+    // trace ids would mean the value is derived from the request.
+    expect(stripVolatile(wrong.body)).toEqual(stripVolatile(unknown.body));
+    if (traceIdOf(wrong.body) !== undefined) {
+      expect(traceIdOf(wrong.body)).not.toBe(traceIdOf(unknown.body));
+    }
     expect(wrong.body.error.code).toBe("INVALID_CREDENTIALS");
   });
 
@@ -377,6 +418,183 @@ d("auth endpoints (E2E, DB+Redis)", () => {
     expect(res.status).toBe(404);
     const stillOriginal = await request(server()).post("/auth/login").set("Content-Type", "application/json").send({ email: memberEmail, password: STRONG_PW });
     expect(stillOriginal.status).toBe(200);
+  });
+
+  // ── T-002-09 ★ the two F-002 conditions, proven against a real database ───
+  //
+  // These four cases are the ONLY thing that can catch a regression here.
+  // `oasdiff` sees nothing: the request and both response shapes are byte-for-
+  // byte what F-001 shipped. The unit suite (auth.service.test.ts) pins the
+  // decision and the transaction against a fake client; what it cannot prove is
+  // that the cross-org COUNT and the `FOR UPDATE` actually behave this way
+  // against PostgreSQL, with real rows and a real `Membership` unique index.
+
+  /** Put `userId` into a SECOND organization with an active membership (C-2). */
+  async function alsoActiveInAnotherOrg(userId: string): Promise<string> {
+    const other = await prisma.organization.create({
+      data: { name: `Other-${Math.random().toString(36).slice(2)}` },
+    });
+    const role = await prisma.role.create({
+      data: { organizationId: other.id, name: "Staff", capabilities: ["manage_products"] },
+    });
+    await prisma.membership.create({
+      data: { organizationId: other.id, userId, roleId: role.id, status: "active" },
+    });
+    return other.id;
+  }
+
+  it("I5.5 (C-2/D-028) target is active in ANOTHER org → 404, password untouched, event emitted", async () => {
+    const { orgId, adminAccess, memberId, memberEmail } = await seedOrgWithAdmin();
+    await alsoActiveInAnotherOrg(memberId);
+    sink.clear();
+
+    const res = await request(server())
+      .post(`/orgs/${orgId}/members/${memberId}/reset-password`)
+      .set("Content-Type", "application/json")
+      .set("Authorization", `Bearer ${adminAccess}`)
+      .send({ newPassword: "cross-tenant-takeover-3Qq!" });
+
+    expect(res.status).toBe(404);
+    // The takeover attempt failing is not enough — the credential must be
+    // provably unchanged, which is what an attacker would actually use.
+    const stillOriginal = await request(server())
+      .post("/auth/login")
+      .set("Content-Type", "application/json")
+      .send({ email: memberEmail, password: STRONG_PW });
+    expect(stillOriginal.status).toBe(200);
+    const withAttempted = await request(server())
+      .post("/auth/login")
+      .set("Content-Type", "application/json")
+      .send({ email: memberEmail, password: "cross-tenant-takeover-3Qq!" });
+    expect(withAttempted.status).toBe(401);
+
+    expect(sink.ofType("auth.password.admin_reset_blocked_multi_org")).toHaveLength(1);
+    expect(sink.ofType("auth.password.admin_reset")).toHaveLength(0);
+  });
+
+  it("I5.6 (NEW-1/D-030) Admin resets an OWNER → 404, password untouched, owner-target event", async () => {
+    const { orgId, adminAccess, memberId, memberEmail } = await seedOrgWithAdmin();
+    // Promote the target to Owner INSIDE this org — the case C-2 cannot see,
+    // because an Owner of a single shop has no "other org" to trip it.
+    const ownerRole = await prisma.role.create({
+      data: {
+        organizationId: orgId,
+        name: "Owner",
+        capabilities: [CAPABILITY_FULL_ACCESS],
+        isSystem: true,
+      },
+    });
+    await prisma.membership.update({
+      where: { organizationId_userId: { organizationId: orgId, userId: memberId } },
+      data: { roleId: ownerRole.id },
+    });
+    sink.clear();
+
+    const res = await request(server())
+      .post(`/orgs/${orgId}/members/${memberId}/reset-password`)
+      .set("Content-Type", "application/json")
+      .set("Authorization", `Bearer ${adminAccess}`)
+      .send({ newPassword: "admin-takes-the-shop-5Rr!" });
+
+    expect(res.status).toBe(404);
+    const stillOriginal = await request(server())
+      .post("/auth/login")
+      .set("Content-Type", "application/json")
+      .send({ email: memberEmail, password: STRONG_PW });
+    expect(stillOriginal.status).toBe(200);
+
+    expect(sink.ofType("auth.password.admin_reset_blocked_owner_target")).toHaveLength(1);
+    expect(sink.ofType("auth.password.admin_reset")).toHaveLength(0);
+  });
+
+  it("I5.7 control · an Owner (full_access) may still reset another Owner → 200", async () => {
+    // Without this the two rules above could be satisfied by an endpoint that
+    // simply never works — a green suite proving only that nothing happens.
+    const { orgId, memberId, memberEmail } = await seedOrgWithAdmin();
+    const ownerRole = await prisma.role.create({
+      data: {
+        organizationId: orgId,
+        name: "Owner",
+        capabilities: [CAPABILITY_FULL_ACCESS],
+        isSystem: true,
+      },
+    });
+    await prisma.membership.update({
+      where: { organizationId_userId: { organizationId: orgId, userId: memberId } },
+      data: { roleId: ownerRole.id },
+    });
+    // The caller is an Owner too.
+    const ownerEmail = uniqueEmail("owner");
+    await request(server()).post("/auth/signup").set("Content-Type", "application/json").send({ email: ownerEmail, password: STRONG_PW });
+    const owner = await prisma.user.findUniqueOrThrow({ where: { email: ownerEmail } });
+    await prisma.membership.create({
+      data: { organizationId: orgId, userId: owner.id, roleId: ownerRole.id, status: "active" },
+    });
+    const ownerLogin = await request(server()).post("/auth/login").set("Content-Type", "application/json").send({ email: ownerEmail, password: STRONG_PW, tokenTransport: "body" });
+
+    const NEW_PW = "owner-resets-owner-6Ss!";
+    const res = await request(server())
+      .post(`/orgs/${orgId}/members/${memberId}/reset-password`)
+      .set("Content-Type", "application/json")
+      .set("Authorization", `Bearer ${ownerLogin.body.accessToken}`)
+      .send({ newPassword: NEW_PW });
+
+    expect(res.status).toBe(200);
+    const login = await request(server())
+      .post("/auth/login")
+      .set("Content-Type", "application/json")
+      .send({ email: memberEmail, password: NEW_PW });
+    expect(login.status).toBe(200);
+  });
+
+  it("I5.8 every refusal reason returns a BYTE-IDENTICAL 404 — no ownership oracle", async () => {
+    // If "blocked because they are the Owner" looked different from "no such
+    // member", the endpoint would answer a question it must never answer: is
+    // this person the owner of this shop?
+    const { orgId, adminAccess, memberId } = await seedOrgWithAdmin();
+    const NEW_PW = "probe-for-a-difference-7Tt!";
+    const call = (target: string) =>
+      request(server())
+        .post(`/orgs/${orgId}/members/${target}/reset-password`)
+        .set("Content-Type", "application/json")
+        .set("Authorization", `Bearer ${adminAccess}`)
+        .send({ newPassword: NEW_PW });
+
+    // (1) no such user at all
+    const unknownUser = await call("00000000-0000-4000-8000-000000000000");
+    // (2) blocked by C-2
+    const multiOrgTarget = await seedOrgWithAdmin();
+    await alsoActiveInAnotherOrg(multiOrgTarget.memberId);
+    const multiOrg = await request(server())
+      .post(`/orgs/${multiOrgTarget.orgId}/members/${multiOrgTarget.memberId}/reset-password`)
+      .set("Content-Type", "application/json")
+      .set("Authorization", `Bearer ${multiOrgTarget.adminAccess}`)
+      .send({ newPassword: NEW_PW });
+    // (3) blocked by NEW-1
+    const ownerRole = await prisma.role.create({
+      data: {
+        organizationId: orgId,
+        name: "Owner",
+        capabilities: [CAPABILITY_FULL_ACCESS],
+        isSystem: true,
+      },
+    });
+    await prisma.membership.update({
+      where: { organizationId_userId: { organizationId: orgId, userId: memberId } },
+      data: { roleId: ownerRole.id },
+    });
+    const ownerTarget = await call(memberId);
+
+    for (const res of [unknownUser, multiOrg, ownerTarget]) {
+      expect(res.status).toBe(404);
+    }
+    expect(stripVolatile(multiOrg.body)).toEqual(stripVolatile(unknownUser.body));
+    expect(stripVolatile(ownerTarget.body)).toEqual(stripVolatile(unknownUser.body));
+    // …and the one field allowed to differ must actually differ, or it is
+    // derived from the request and becomes an oracle of its own.
+    if (traceIdOf(unknownUser.body) !== undefined) {
+      expect(traceIdOf(ownerTarget.body)).not.toBe(traceIdOf(unknownUser.body));
+    }
   });
 
   it("logout-all / sessions / change-password require Bearer → 401 without it", async () => {
