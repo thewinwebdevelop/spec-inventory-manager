@@ -57,11 +57,24 @@ describe("ERROR_CODES registry", () => {
     expect(ERROR_CODES.ORG_ACCESS_DENIED.code).not.toBe(ERROR_CODES.FORBIDDEN.code);
   });
 
+  // T-002-15 — the two codes `POST /organizations` introduces (api-spec §4).
+  it("pins the org-creation codes → status (api-spec §4)", () => {
+    // 409, not 403: the caller is fine, the request conflicts with a state they
+    // can resolve (architecture §6.3 / I-10).
+    expect(ERROR_CODES.ORG_LIMIT_REACHED.status).toBe(409);
+    // 503, not 500: "we have no plan configured" is our misconfiguration and it
+    // is RETRYABLE once ops fixes it — and it must never be silently replaced by
+    // a free-tier fallback (architecture §6.2).
+    expect(ERROR_CODES.ORG_PROVISIONING_UNAVAILABLE.status).toBe(503);
+  });
+
   it("uses the D-029 wording ('ร้าน', not 'องค์กร') in the org-context messages", () => {
     for (const def of [
       ERROR_CODES.ORG_CONTEXT_REQUIRED,
       ERROR_CODES.ORG_MISMATCH,
       ERROR_CODES.ORG_ACCESS_DENIED,
+      ERROR_CODES.ORG_LIMIT_REACHED,
+      ERROR_CODES.ORG_PROVISIONING_UNAVAILABLE,
     ]) {
       expect(def.message).toContain("ร้าน");
       expect(def.message).not.toContain("องค์กร");

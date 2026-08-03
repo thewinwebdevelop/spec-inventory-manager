@@ -11,6 +11,7 @@ import { PrismaModule } from "./prisma/prisma.module";
 import { TenancyModule } from "./tenancy/tenancy.module";
 import { AuthModule } from "./auth/auth.module";
 import { SecurityEventsService } from "./auth/security-events.service";
+import { OrgsModule } from "./orgs";
 
 @Module({
   imports: [
@@ -37,6 +38,10 @@ import { SecurityEventsService } from "./auth/security-events.service";
     }),
     HealthModule,
     AuthModule,
+    // F-002 · T-002-15/16 — organization creation + profile. Registered after
+    // TenancyModule so the global middleware/guard chain is in place before any
+    // org route can be served.
+    OrgsModule,
   ],
 })
 export class AppModule {}

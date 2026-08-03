@@ -53,6 +53,52 @@ export {
 
 export { maskTaxId, TAX_ID_MASK_CHAR, TAX_ID_VISIBLE_SUFFIX_LENGTH } from "./tax-id-mask";
 
+// T-002-15 ★ — what "create a shop" decides before the transaction opens: the
+// three system roles (data-model §5.2), the fixed defaults (D-013), the
+// fail-closed per-user org cap (I-10) and the body validation of api-spec §3.1.
+export {
+  SYSTEM_ROLE_BLUEPRINT,
+  ownerRoleBlueprint,
+  isOrgCapReached,
+  isSupportedTimezone,
+  validateOrgName,
+  validateNewOrganization,
+  ORG_DEFAULT_TIMEZONE,
+  ORG_DEFAULT_CURRENCY,
+  DEFAULT_WAREHOUSE_NAME,
+  ORG_NAME_MIN_LENGTH,
+  ORG_NAME_MAX_LENGTH,
+  ORG_NAME_REQUIRED_MESSAGE,
+  ORG_NAME_TOO_LONG_MESSAGE,
+  ORG_TIMEZONE_INVALID_MESSAGE,
+  type SystemRoleBlueprint,
+  type NewOrganizationInput,
+  type FieldValidation,
+} from "./org-provisioning";
+
+// T-002-16 — the org profile as the wire sees it: PDPA field-level
+// authorization (§3.3), the Phase-0 `logo` rule (M-4) and the short shape a
+// removed member gets in the org switcher (M-10).
+export {
+  validateOrgProfilePatch,
+  toOrgProfileView,
+  toTaxProfileView,
+  isTaxProfileComplete,
+  toMyOrganizationItem,
+  ORG_LOGO_UNSUPPORTED_MESSAGE,
+  type OrgProfilePatch,
+  type OrgProfileRow,
+  type OrgProfileViewer,
+  type OrgProfileCounts,
+  type OrgProfileView,
+  type OrgEntitlementView,
+  type TaxProfileView,
+  type MyOrganizationSource,
+  type MyOrganizationItem,
+  type MyOrganizationFullItem,
+  type MyOrganizationShortItem,
+} from "./org-profile";
+
 // T-002-09 ★ — the two fail-closed conditions the SHIPPED admin-reset endpoint
 // grew when "one person, many organizations" became real (C-2/D-028 +
 // NEW-1/D-030). Same `canAssignRole` rule as the membership routes, no copy.

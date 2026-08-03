@@ -18,6 +18,9 @@ const SOURCE_FILES = [
   "tax-id-mask.ts",
   // T-002-09 — the admin-reset gate (C-2 + NEW-1).
   "admin-reset-authz.ts",
+  // T-002-15/16 — org creation policy + the profile/switcher mappers.
+  "org-provisioning.ts",
+  "org-profile.ts",
   "index.ts",
 ] as const;
 

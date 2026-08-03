@@ -17,3 +17,16 @@ export const SYSTEM_PRISMA = Symbol("SYSTEM_PRISMA");
 
 /** What `ORG_PRISMA` resolves to: the ledger-guarded client + the org scope. */
 export type OrgScopedPrismaClient = ReturnType<typeof withOrgScope<GuardedPrismaClient>>;
+
+/**
+ * What `SYSTEM_PRISMA` resolves to. Aliased here (T-002-15) so an allowlisted
+ * file can type its injected client by importing from `../tenancy` alone — the
+ * boundary gate `api-db-client-allowlisted` forbids a feature module from
+ * importing `@omnistock/db`, and reaching into `../prisma/prisma.service` for
+ * the type would put a second import path next to the token it belongs to.
+ *
+ * ⚠️ Having the TYPE says nothing about being allowed to inject the TOKEN: that
+ * is the file-level allowlist above, checked by
+ * `orgs/system/system-prisma-allowlist.test.ts`.
+ */
+export type SystemPrismaClient = GuardedPrismaClient;

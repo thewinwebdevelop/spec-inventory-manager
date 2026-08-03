@@ -16,6 +16,7 @@ import { SecurityEventsService } from "../src/auth/security-events.service";
 import { CAPABILITY_EVENT_SINK_OVERRIDE } from "../src/common/authz";
 import { ORG_RATE_LIMIT_EVENT_SINK_OVERRIDE } from "../src/common/org-rate-limit.tokens";
 import { DomainExceptionFilter } from "../src/common/domain-exception.filter";
+import { OrgsModule } from "../src/orgs";
 import { TenancyModule } from "../src/tenancy";
 import { TestFixturesModule } from "./fixtures/test-fixtures.module";
 
@@ -64,10 +65,18 @@ export async function createTestApp(options: TestAppOptions = {}): Promise<TestA
     // `org.access.capability_denied` (and a rate-limit fail-open) instead of
     // only a log line.
     //
-    // NOT bound: `ORG_RATE_LIMIT_REDIS`. It is `@Optional()` on the guard, no
-    // fixture route declares `@OrgRateLimit(...)`, and an unclosed ioredis
-    // socket per test app would leave the runner hanging. A suite that asserts
-    // rate-limit BEHAVIOUR must bind it and close it itself.
+    // NOT bound: `ORG_RATE_LIMIT_REDIS`. It is `@Optional()` on the guard and an
+    // unclosed ioredis socket per test app would leave the runner hanging. A
+    // suite that asserts rate-limit BEHAVIOUR must bind it and close it itself.
+    //
+    // ⚠️ Since T-002-15, `POST /organizations` DOES declare
+    // `@OrgRateLimit("createOrganization")`. With no Redis bound the guard takes
+    // its fail-open path (architecture §8) — the request is served and one
+    // `auth.throttle.fail_open` event is emitted per call. That is the intended
+    // production behaviour when Redis is down, and it is why a suite asserting
+    // on `collectSecurityEvents()` must filter by type instead of asserting on
+    // the whole list. The 50-shop cap is NOT affected: it is enforced
+    // fail-closed in the service (I-10).
     TenancyModule.withCompositionRootBindings({
       imports: [AuthModule],
       providers: [
@@ -76,6 +85,11 @@ export async function createTestApp(options: TestAppOptions = {}): Promise<TestA
       ],
     }),
     AuthModule,
+    // T-002-15/16 — the F-002 endpoints themselves. They belong in the SHARED
+    // app: the route-registry audit walks this router (a table row with no live
+    // route is `pending`), and the leak kit sweeps real endpoints rather than
+    // only the probe fixtures.
+    OrgsModule,
   ];
   if (options.fixtures !== false) imports.push(TestFixturesModule.register());
 

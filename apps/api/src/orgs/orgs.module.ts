@@ -1,0 +1,51 @@
+// F-002 · T-002-15/16 — the `orgs/` feature module (backend.md §2.2).
+//
+// LAYOUT THIS ESTABLISHES (every later F-002 endpoint follows it):
+//
+//   orgs/
+//     *.controller.ts        HTTP shape + tier/authorization declaration only
+//     *.service.ts           org-scoped orchestration — injects ORG_PRISMA
+//     system/                the SYSTEM_PRISMA jail (architecture §2.4)
+//     dto.ts                 request bodies (structure only; rules are pure fns)
+//     response-headers.ts    the header policy tests import
+//
+// WHY `system/` IS A SEPARATE FOLDER AND NOT A FLAG
+// `SYSTEM_PRISMA` is the client with NO tenant filter. Exactly three F-002
+// operations need it (§2.4) and every one of them is a place where forgetting a
+// `userId`/`organizationId` in a `where` is a cross-tenant leak that no test
+// would notice. Keeping them in one directory makes "is this file allowed to
+// hold the unfiltered client?" a question a reviewer answers from the path, and
+// `system/system-prisma-allowlist.test.ts` turns that answer into a red test.
+//
+// `AuthModule` is imported for ONE provider — `SecurityEventsService`, the
+// single audit emitter (`org.created` must reach the same emitter
+// `collectSecurityEvents()` subscribes to). It is imported through `../auth`,
+// the module's barrel, never by deep-importing the file (backend.md §2.2 rule 1).
+import { Module } from "@nestjs/common";
+import { AuthModule } from "../auth";
+import { orgConfigProviders } from "./org-config";
+import { MyOrganizationsController } from "./my-organizations.controller";
+import { OrgProfileController } from "./org-profile.controller";
+import { OrgProfileService } from "./org-profile.service";
+import { OrganizationsController } from "./organizations.controller";
+import { MyOrganizationsService } from "./system/my-organizations.service";
+import { OrgProvisioningService } from "./system/org-provisioning.service";
+import { PlanProvisioningService } from "./system/plan-provisioning.service";
+
+@Module({
+  imports: [AuthModule],
+  controllers: [OrganizationsController, MyOrganizationsController, OrgProfileController],
+  providers: [
+    // env → DI, once at boot (never `loadEnv()` on a request path).
+    ...orgConfigProviders,
+    OrgProfileService,
+    // `system/` providers are registered here, not exported: nothing outside
+    // this module may reach an unfiltered read.
+    OrgProvisioningService,
+    MyOrganizationsService,
+    PlanProvisioningService,
+  ],
+  // Deliberately exports NOTHING yet. `ORG_PRISMA`/`SYSTEM_PRISMA` come from the
+  // global `TenancyModule`, and no other feature needs an orgs provider today.
+})
+export class OrgsModule {}

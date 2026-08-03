@@ -46,8 +46,8 @@
 | ID | งาน | ref → target | deps | status | updated_by |
 |----|-----|--------------|------|--------|------------|
 | T-002-14 | rate-limit guard กลาง (Redis sliding window) — create org / invite / reissue / preview+accept · fail-open + emit event | `architecture.md §8` → `apps/api/src/common/org-rate-limit.guard.ts` | T-002-06, T-002-11 | done | product (ทำเอง) — guard ลงทะเบียน **หลัง** authz โดยเจตนา (นับก่อน = คนนอกเผาโควตาของ org ได้) |
-| T-002-15 | ★ `POST /organizations` — **1 tx**: Organization + system Roles(3) + Membership(Owner) + **OrgEntitlement** + default Warehouse · plan จาก env seam (**fail closed 503** ห้าม fallback free) · **cap 50 org/user** (`409 ORG_LIMIT_REACHED`) | `api-spec.md §3.1` · `architecture.md §6` → `apps/api/src/orgs/` | T-002-03, T-002-07, T-002-14 | todo | — |
-| T-002-16 | `GET /me/organizations` (cursor · `?status=all` คืนแค่ id/ชื่อ/สถานะ) + `GET /orgs/{id}` + `PATCH /orgs/{id}` (`logo` รับเฉพาะ `null` ใน Phase 0) | `api-spec.md §3.2–3.4` → `apps/api/src/orgs/` | T-002-05 | todo | — |
+| T-002-15 | ★ `POST /organizations` — **1 tx**: Organization + system Roles(3) + Membership(Owner) + **OrgEntitlement** + default Warehouse · plan จาก env seam (**fail closed 503** ห้าม fallback free) · **cap 50 org/user** (`409 ORG_LIMIT_REACHED`) | `api-spec.md §3.1` · `architecture.md §6` → `apps/api/src/orgs/` | T-002-03, T-002-07, T-002-14 | done | backend-api |
+| T-002-16 | `GET /me/organizations` (cursor · `?status=all` คืนแค่ id/ชื่อ/สถานะ) + `GET /orgs/{id}` + `PATCH /orgs/{id}` (`logo` รับเฉพาะ `null` ใน Phase 0) | `api-spec.md §3.2–3.4` → `apps/api/src/orgs/` | T-002-05 | done | backend-api |
 | T-002-17 | ★ tax profile: `PUT /orgs/{id}/tax-profile` (ครบชุดหรือว่างทั้งชุด) + **`POST /orgs/{id}/tax-profile/reveal`** (TIN เต็ม · `manage_org_settings` · rate 20/ชม. · `no-store`+`no-referrer` · emit event **ที่ไม่มีค่า TIN**) · **`GET` ไม่คืน TIN เต็มอีกแล้ว** | `api-spec.md §3.5/§3.16` · `data-model.md §3.3` | T-002-08, T-002-16 | todo | — |
 | T-002-18 | ★ สมาชิก: `GET /members` (**ต้องมี `manage_members`** — PDPA) · `PATCH /members/{userId}` · `DELETE /members/{userId}` (soft revoke + **ยกเลิก pending invite ของ email นั้นใน tx เดียว**) · **`DELETE /orgs/{id}/membership`** (ออกเอง — ไม่ต้องมี `manage_members`) · ทุกเส้น **lock + re-check ใน tx** + `canAssignRole` | `api-spec.md §3.7–3.9` · `architecture.md §5` | T-002-03, T-002-08, T-002-15 | todo | — |
 | T-002-19 | ★ คำเชิญ (ฝั่ง org): `POST /invitations` (hash-at-rest · TTL **24 ชม.** สำหรับ role สูง / 7 วัน ที่เหลือ · `409 INVITATION_PENDING` พก `details.invitationId`) · `GET` · `POST .../link` (**rotate + อายุนับใหม่** D-027 · **ผ่าน `canAssignRole`** NEW-2 · **DB ต้องไม่ขยับถ้า 403**) · `DELETE` | `api-spec.md §3.10–3.13` · `architecture.md §7` | T-002-06, T-002-18 | todo | — |
@@ -146,3 +146,17 @@ verdict: **ready-with-recommendations · ไม่มี Critical** · reviewer 
 | C | **Medium** `auth.password.admin_reset_blocked_*` สร้าง oracle ซ้ำใน audit UI ของ F-005 — org admin ที่เห็น event จะรู้ทันทีว่า target เป็น Owner | ตัดสินตอนนี้ครั้งเดียว ดีกว่าไปเจอตอน F-005 สร้างจอ |
 
 **หนี้จาก qa (T-002-22):** `hashInvitationToken` ยังไม่มีใน `packages/**` (architecture §12.2 item 2ก) ⇒ 3 invite scenario ของ kit ยัง throw · `RESPONSE_HEADER_POLICY` / `TOKEN_RESPONSE_ALLOWLIST` / `TAX_ID_RESPONSE_ALLOWLIST` ยังไม่ถูก export ⇒ header assertion ยังตรวจไม่ได้ · เจ้าของ: T-002-17/19
+
+---
+
+## หนี้ที่เปิดใหม่จาก T-002-15/16 (2026-08-04)
+
+| # | เรื่อง | เจ้าของ |
+|---|---|---|
+| 1 | **`DEFAULT_ROLE_SPECS` ของ test kit ไม่ตรงกับ data-model §5.2** — kit ให้ Admin 2 capability / Staff 1 · ของจริงที่ `POST /organizations` สร้างคือ Admin 7 / Staff 3 ⇒ เคส qa ที่ assert "Admin ทำ X ได้" กับ org ที่ seed จาก kit **กำลังทดสอบ Admin คนละคนกับที่ production สร้าง** | qa |
+| 2 | **`cleanup()` ของ kit ไม่ลบ `Warehouse` / `OrgEntitlement`** ⇒ suite ที่สร้าง org ผ่าน endpoint จริงต้องลบเอง ไม่งั้น FK delete พัง · T-002-18/19/20 จะเจอเหมือนกัน | qa |
+| 3 | `auth.e2e.int.test.ts` ทิ้ง fixture `Org-*`/`Other-*` ไว้ใน DB ที่ใช้ร่วมกัน ⇒ ตอบไม่ได้ว่า "DB สกปรกหรือเปล่า" ตอนไล่บั๊ก suite อื่น | qa |
+| 4 | **flake ที่เจอจริงและปิดไปแล้วเฉพาะจุด:** `I1.2` ใช้ bucket IP ร่วมกับทุก suite (`IP_WINDOW_MAX=20`/5 นาที) · vitest รันไฟล์ขนานบน Redis ตัวเดียว ⇒ suite ข้างๆ เติม bucket จนล้นระหว่าง `beforeEach` clear กับ assert ⇒ signup แรกได้ 429 แล้วใบสองได้ 201 แทน 409 · **แก้เฉพาะ `I1.2` ให้มี IP ของตัวเอง — ยังไม่ได้แก้เชิงระบบ** (request อื่นในไฟล์ยังใช้ bucket ร่วม) | qa + backend-api |
+| 5 | `app.kit.ts` เสิร์ฟ route ที่มี `@OrgRateLimit` โดยไม่มี Redis ⇒ guard เข้า fail-open แล้ว emit `auth.throttle.fail_open` ทุกครั้งที่สร้าง org · suite ที่ assert `collectSecurityEvents()` **ต้องกรองตาม type** | qa |
+
+> **แก้ brief ที่ผมเขียนผิดเอง:** ผมสรุปใน task ว่า `GET /me/organizations` "คืนแค่ id/ชื่อ/สถานะ" — **ผิด** · api-spec §3.2 (LOCKED) บอกว่า **แถวที่ยัง active คืนรูปเต็ม** (org + membership/role + entitlement) และ **รูปย่อใช้เฉพาะแถวที่ไม่ active ภายใต้ `?status=all`** (M-10) · agent ทำตาม contract ถูกแล้ว

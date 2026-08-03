@@ -122,6 +122,17 @@ d("auth endpoints (E2E, DB+Redis)", () => {
     if (keys.length > 0) await redis.del(...keys);
   });
 
+  /**
+   * A per-test client IP, so one test's requests cannot exhaust another's
+   * throttle window. 203.0.113.0/24 is TEST-NET-3 (RFC 5737) — documentation
+   * space that can never be a real client.
+   */
+  let ipCounter = 0;
+  function uniqueForwardedIp(): string {
+    ipCounter += 1;
+    return `203.0.113.${ipCounter % 254 + 1}`;
+  }
+
   function uniqueEmail(prefix: string): string {
     return `${prefix}-${Date.now()}-${Math.random().toString(36).slice(2)}@e2e.co`;
   }
@@ -144,9 +155,18 @@ d("auth endpoints (E2E, DB+Redis)", () => {
   });
 
   it("I1.2 duplicate email → 409 EMAIL_TAKEN", async () => {
+    // Own IP bucket. `IP_WINDOW_MAX` is 20 per 5 minutes keyed on the client
+    // address, and without a forwarded IP every request in every suite shares
+    // the localhost bucket. `beforeEach` clears `throttle:*`, but vitest runs
+    // files in parallel against ONE Redis, so a neighbouring suite's signups
+    // refill the bucket between that clear and this assertion: the FIRST signup
+    // 429s, no user is created, and the second returns 201 instead of 409.
+    // Observed once in a full run and reproduced by the arithmetic — the file
+    // already documents this technique, it just was not applied here.
+    const ip = uniqueForwardedIp();
     const email = uniqueEmail("dup");
-    await request(server()).post("/auth/signup").set("Content-Type", "application/json").send({ email, password: STRONG_PW });
-    const res = await request(server()).post("/auth/signup").set("Content-Type", "application/json").send({ email, password: STRONG_PW });
+    await request(server()).post("/auth/signup").set("Content-Type", "application/json").set("X-Forwarded-For", ip).send({ email, password: STRONG_PW });
+    const res = await request(server()).post("/auth/signup").set("Content-Type", "application/json").set("X-Forwarded-For", ip).send({ email, password: STRONG_PW });
     expect(res.status).toBe(409);
     expect(res.body.error.code).toBe("EMAIL_TAKEN");
   });

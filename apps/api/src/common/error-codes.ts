@@ -89,6 +89,16 @@ export const ERROR_CODES = {
     status: HttpStatus.CONFLICT,
     message: "ข้อมูลขัดแย้งกับสถานะปัจจุบัน",
   },
+  // F-002 · api-spec §4 / architecture §6.3 (I-10) — the per-user shop cap.
+  // 409 rather than 403: nothing about the CALLER is wrong, the request simply
+  // conflicts with a state they can resolve (leave a shop, or ask us to raise
+  // it). The throw site attaches `details: { limit }` so the UI can show the
+  // real number instead of hard-coding "50" (which would then drift from env).
+  ORG_LIMIT_REACHED: {
+    code: "ORG_LIMIT_REACHED",
+    status: HttpStatus.CONFLICT,
+    message: "คุณมีร้านครบจำนวนสูงสุดแล้ว",
+  },
 
   // ── 401 unauthenticated / credential / refresh ───────────────────────────
   INVALID_CREDENTIALS: {
@@ -147,6 +157,20 @@ export const ERROR_CODES = {
     code: "RATE_LIMITED",
     status: HttpStatus.TOO_MANY_REQUESTS,
     message: "รอสักครู่แล้วลองใหม่",
+  },
+
+  // ── 503 provisioning (F-002 · api-spec §4 / architecture §6.2) ────────────
+  // The system has no default plan to bind a new shop to. It is OUR
+  // misconfiguration, never the user's input, so it is a 5xx and the message
+  // says "try again / contact us" rather than blaming the request.
+  //
+  // ⛔ The alternative — quietly falling back to the `free` plan — is the bug
+  // this code exists to prevent: it would grant a tier nobody authorised, and
+  // it would do so silently (AC US-1).
+  ORG_PROVISIONING_UNAVAILABLE: {
+    code: "ORG_PROVISIONING_UNAVAILABLE",
+    status: HttpStatus.SERVICE_UNAVAILABLE,
+    message: "ระบบยังเปิดร้านใหม่ไม่ได้ในขณะนี้ กรุณาติดต่อทีมงาน",
   },
 
   // ── 500 unknown fallback (filter maps ANY unrecognized error here) ────────
