@@ -259,6 +259,13 @@ jobs:
       # clash with the booted server above.
       TEST_DATABASE_URL: postgresql://omnistock:omnistock@localhost:5432/omnistock_ci
       TEST_REDIS_URL: redis://localhost:6379
+      # T-002-22's in-test lane guard (I-37) asserts "this process MUST have the
+      # DB+Redis lane enabled". It cannot key that off `CI`: GitHub sets `CI` in
+      # EVERY job, including node-ci, which has no service containers on purpose
+      # and legitimately skips the int suites. Keying off `CI` made node-ci red
+      # for doing exactly what it is supposed to do. This variable marks the one
+      # job where a skipped int suite is a failure rather than a choice.
+      REQUIRE_INT_LANE: "1"
       # CI-only placeholders — never real secrets (root CLAUDE.md constraint).
       # Satisfy packages/config's env schema (>=32 chars, must differ, F-001 I-4).
       JWT_ACCESS_SECRET: ci-access-secret-not-a-real-value-000000

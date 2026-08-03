@@ -22,11 +22,18 @@ const d = INT_LANE_ENABLED ? describe : describe.skip;
 
 // ── I-37 — a lane that silently skipped itself is not a result ──────────────
 describe("int lane guard (I-37)", () => {
-  it("on CI, the DB/Redis lane must be ENABLED — a skipped suite proves nothing", () => {
+  it("in the integration lane, DB/Redis must be ENABLED — a skipped suite proves nothing", () => {
     // Locally the lane may be off (that is a developer's choice and it is
-    // reported as SKIPPED). On CI it may not: "green" would then mean "we ran
-    // nothing", which is the F-001 lesson this project already paid for.
-    if (process.env.CI) {
+    // reported as SKIPPED). In the job that exists to run it, it may not:
+    // "green" would then mean "we ran nothing", which is the F-001 lesson this
+    // project already paid for.
+    //
+    // ⛔ Keyed off REQUIRE_INT_LANE, NOT `CI`. GitHub sets `CI` in every job,
+    // including `node-ci`, which has no service containers by design and
+    // correctly skips these suites — so the `CI` version of this guard failed
+    // node-ci for behaving exactly as intended. The variable names the ONE job
+    // where a skipped int suite is a failure rather than a choice.
+    if (process.env.REQUIRE_INT_LANE) {
       expect(
         INT_LANE_ENABLED,
         "TEST_DATABASE_URL + TEST_REDIS_URL must be set in the integration-api job",

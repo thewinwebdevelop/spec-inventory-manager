@@ -71,8 +71,15 @@ type BucketResolution =
 export class OrgRateLimitGuard implements CanActivate {
   private readonly logger = new Logger("OrgRateLimit");
 
+  // ⚠️ `@Inject(Reflector)` is NOT decoration — it is the difference between an
+  // app that boots and one that does not. `main.ts` runs under `tsx`, which
+  // emits no `design:paramtypes` metadata, so a type-only constructor param
+  // resolves to `undefined` at runtime and Nest refuses to build the guard.
+  // Every test passed without it (vitest compiles the metadata) while
+  // `tsx src/main.ts` died on boot — the failure mode `org-context.middleware.ts`
+  // already warned about, and CI is where it finally showed up.
   constructor(
-    private readonly reflector: Reflector,
+    @Inject(Reflector) private readonly reflector: Reflector,
     @Optional()
     @Inject(ORG_RATE_LIMIT_REDIS)
     private readonly redis: Redis | null = null,
