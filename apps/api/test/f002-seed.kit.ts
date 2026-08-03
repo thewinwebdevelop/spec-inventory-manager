@@ -29,11 +29,7 @@
 // because I-45 (flip Staff's key to "owner", privileges must not move) depends
 // on the database behaving exactly as production does.
 import { randomUUID } from "node:crypto";
-import {
-  CAPABILITY_FULL_ACCESS,
-  CAPABILITY_MANAGE_MEMBERS,
-  CAPABILITY_MANAGE_ORG_SETTINGS,
-} from "@omnistock/core-domain";
+import { SYSTEM_ROLE_BLUEPRINT } from "@omnistock/core-domain";
 import type { PrismaClient } from "@omnistock/db";
 import { HashingService } from "../src/auth/hashing.service";
 
@@ -90,30 +86,33 @@ export interface SeededInvitation {
 }
 
 /**
- * The three system roles every F-002 org is created with (data-model §5.2).
+ * The three system roles every F-002 org is created with — DERIVED from
+ * production's `SYSTEM_ROLE_BLUEPRINT`, never restated here.
+ *
+ * ⚠️ It used to be a hand-written copy, and it had already drifted: the kit gave
+ * Admin 2 capabilities where production gives 7, Staff 1 where production gives
+ * 3, and marked all three `isSystem: true` where production marks only Owner.
+ * Nothing failed — which is the problem. A QA case asserting "an Admin can do X"
+ * against a kit-seeded org was exercising a DIFFERENT Admin from the one
+ * `POST /organizations` creates, so it could pass while the real role was wrong,
+ * or fail for a difference that exists only in the fixture.
+ *
+ * Same rule as `resolveInvitationTokenHasher` right below: a kit that restates
+ * production proves only that the kit agrees with itself.
+ *
  * `key` is a stable slug used ONLY to translate the name on screen — never to
  * decide permissions. That rule is what I-45 tests, using `setRoleKey()`.
  */
-export const DEFAULT_ROLE_SPECS: readonly RoleSpec[] = Object.freeze([
-  Object.freeze({
-    name: "Owner",
-    key: "owner",
-    capabilities: Object.freeze([CAPABILITY_FULL_ACCESS]),
-    isSystem: true,
-  }),
-  Object.freeze({
-    name: "Admin",
-    key: "admin",
-    capabilities: Object.freeze([CAPABILITY_MANAGE_MEMBERS, CAPABILITY_MANAGE_ORG_SETTINGS]),
-    isSystem: true,
-  }),
-  Object.freeze({
-    name: "Staff",
-    key: "staff",
-    capabilities: Object.freeze(["manage_products"]),
-    isSystem: true,
-  }),
-]) as readonly RoleSpec[];
+export const DEFAULT_ROLE_SPECS: readonly RoleSpec[] = Object.freeze(
+  SYSTEM_ROLE_BLUEPRINT.map((role) =>
+    Object.freeze({
+      name: role.name,
+      key: role.key,
+      capabilities: role.capabilities,
+      isSystem: role.isSystem,
+    }),
+  ),
+) as readonly RoleSpec[];
 
 /** Scenario names the CLI accepts (architecture §12.2 item 2/8). */
 export const F002_SCENARIOS = [
@@ -187,13 +186,22 @@ export function resolveInvitationTokenHasher(
 /** Only the models the kit touches — keeps it usable with any Prisma client. */
 export type SeedPrismaClient = Pick<
   PrismaClient,
-  "user" | "organization" | "role" | "membership" | "invitation"
+  | "user"
+  | "organization"
+  | "role"
+  | "membership"
+  | "invitation"
+  // The kit never CREATES these two, but `cleanup()` must delete them: an org
+  // provisioned through `POST /organizations` owns an entitlement and a default
+  // warehouse, and both hold a foreign key to it (T-002-15).
+  | "orgEntitlement"
+  | "warehouse"
 >;
 
 export interface SeedKitOptions {
   /**
    * The module the invitation hasher is looked up in. Defaults to a live
-   * `import("@omnistock/db")`, which today does not export it.
+   * `import("@omnistock/db")`.
    */
   readonly dbModule?: Readonly<Record<string, unknown>>;
   /** Prefix for generated emails/org names, so a shared DB stays greppable. */
@@ -606,6 +614,20 @@ export function createSeedKit(prisma: SeedPrismaClient, options: SeedKitOptions 
       await prisma.role.deleteMany({ where: { id: { in: created.roles } } });
     }
     if (created.orgs.length > 0) {
+      // Rows the kit never creates but `POST /organizations` does (T-002-15
+      // provisions an OrgEntitlement and a default Warehouse in the same
+      // transaction). A suite that creates an org through the REAL endpoint and
+      // then hands the id to `cleanup()` would otherwise fail on the foreign
+      // key — and the failure surfaces in `afterAll`, i.e. attributed to
+      // whichever test happened to run last. Scoped by organizationId, so this
+      // is still "delete exactly what belongs to my orgs", never a broad sweep.
+      await prisma.warehouse.deleteMany({ where: { organizationId: { in: created.orgs } } });
+      await prisma.orgEntitlement.deleteMany({ where: { organizationId: { in: created.orgs } } });
+      // Memberships/roles/invitations created by the endpoint rather than by the
+      // kit hang off the same orgs and are equally unknown to `created.*`.
+      await prisma.invitation.deleteMany({ where: { organizationId: { in: created.orgs } } });
+      await prisma.membership.deleteMany({ where: { organizationId: { in: created.orgs } } });
+      await prisma.role.deleteMany({ where: { organizationId: { in: created.orgs } } });
       await prisma.organization.deleteMany({ where: { id: { in: created.orgs } } });
     }
     if (created.users.length > 0) {

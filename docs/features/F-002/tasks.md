@@ -153,8 +153,8 @@ verdict: **ready-with-recommendations · ไม่มี Critical** · reviewer 
 
 | # | เรื่อง | เจ้าของ |
 |---|---|---|
-| 1 | **`DEFAULT_ROLE_SPECS` ของ test kit ไม่ตรงกับ data-model §5.2** — kit ให้ Admin 2 capability / Staff 1 · ของจริงที่ `POST /organizations` สร้างคือ Admin 7 / Staff 3 ⇒ เคส qa ที่ assert "Admin ทำ X ได้" กับ org ที่ seed จาก kit **กำลังทดสอบ Admin คนละคนกับที่ production สร้าง** | qa |
-| 2 | **`cleanup()` ของ kit ไม่ลบ `Warehouse` / `OrgEntitlement`** ⇒ suite ที่สร้าง org ผ่าน endpoint จริงต้องลบเอง ไม่งั้น FK delete พัง · T-002-18/19/20 จะเจอเหมือนกัน | qa |
+| 1 | ~~`DEFAULT_ROLE_SPECS` ไม่ตรงกับของจริง~~ **ปิดแล้ว** — kit **derive จาก `SYSTEM_ROLE_BLUEPRINT`** ไม่ใช่พิมพ์ซ้ำ · เพี้ยนจริงทั้ง capability (Admin 2 vs 7, Staff 1 vs 3) และ `isSystem` (kit true ทั้งสาม ของจริง Owner ใบเดียว) · เทสต์ที่ hard-code ค่าเดิมก็ derive ตามแล้ว + เทสต์ pin ว่า kit == production (พิสูจน์แดงด้วยการยัด capability ปลอม) | product (ทำแทน qa) |
+| 2 | ~~`cleanup()` ไม่ลบ `Warehouse`/`OrgEntitlement`~~ **ปิดแล้ว** — ลบแถวที่ **endpoint จริงสร้าง** (entitlement, warehouse, membership/role/invitation ที่ kit ไม่รู้จัก) โดย scope ด้วย `organizationId` ของ org ตัวเอง ไม่ใช่กวาดทั้งตาราง · ถ้าไม่ทำ FK จะพังใน `afterAll` แล้วโทษเทสต์ใบสุดท้ายที่บังเอิญรันก่อนหน้า | product (ทำแทน qa) |
 | 3 | `auth.e2e.int.test.ts` ทิ้ง fixture `Org-*`/`Other-*` ไว้ใน DB ที่ใช้ร่วมกัน ⇒ ตอบไม่ได้ว่า "DB สกปรกหรือเปล่า" ตอนไล่บั๊ก suite อื่น | qa |
 | 4 | **flake ที่เจอจริงและปิดไปแล้วเฉพาะจุด:** `I1.2` ใช้ bucket IP ร่วมกับทุก suite (`IP_WINDOW_MAX=20`/5 นาที) · vitest รันไฟล์ขนานบน Redis ตัวเดียว ⇒ suite ข้างๆ เติม bucket จนล้นระหว่าง `beforeEach` clear กับ assert ⇒ signup แรกได้ 429 แล้วใบสองได้ 201 แทน 409 · **แก้เฉพาะ `I1.2` ให้มี IP ของตัวเอง — ยังไม่ได้แก้เชิงระบบ** (request อื่นในไฟล์ยังใช้ bucket ร่วม) | qa + backend-api |
 | 5 | `app.kit.ts` เสิร์ฟ route ที่มี `@OrgRateLimit` โดยไม่มี Redis ⇒ guard เข้า fail-open แล้ว emit `auth.throttle.fail_open` ทุกครั้งที่สร้าง org · suite ที่ assert `collectSecurityEvents()` **ต้องกรองตาม type** | qa |

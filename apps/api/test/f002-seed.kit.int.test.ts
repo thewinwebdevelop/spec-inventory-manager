@@ -6,6 +6,7 @@
 // a TRUNCATE, never a `deleteMany({})`.
 import { describe, it, expect, beforeAll, afterAll } from "vitest";
 import { PrismaClient, hashInvitationToken } from "@omnistock/db";
+import { SYSTEM_ROLE_BLUEPRINT } from "@omnistock/core-domain";
 import { createSeedKit, type SeedKit } from "./f002-seed.kit";
 import { runSeedCli } from "./cli/seed-cli";
 import { applyTestEnv } from "./app.kit";
@@ -37,14 +38,22 @@ d("f002-seed.kit (DB)", () => {
     const org = await kit.createOrg();
     const rows = await prisma.role.findMany({
       where: { organizationId: org.id },
-      select: { name: true, key: true, isSystem: true },
+      select: { name: true, key: true, isSystem: true, capabilities: true },
       orderBy: { name: "asc" },
     });
-    expect(rows).toEqual([
-      { name: "Admin", key: "admin", isSystem: true },
-      { name: "Owner", key: "owner", isSystem: true },
-      { name: "Staff", key: "staff", isSystem: true },
-    ]);
+    // Compared against PRODUCTION's blueprint, not against a list retyped here.
+    // The retyped version had drifted (Admin 2 capabilities instead of 7,
+    // `isSystem: true` on all three instead of Owner only) and stayed green for
+    // it, because it only ever agreed with the kit it was checking.
+    const expected = [...SYSTEM_ROLE_BLUEPRINT]
+      .map((r) => ({
+        name: r.name,
+        key: r.key,
+        isSystem: r.isSystem,
+        capabilities: [...r.capabilities],
+      }))
+      .sort((a, b) => a.name.localeCompare(b.name));
+    expect(rows).toEqual(expected);
   });
 
   it("a seeded user's passwordHash is a real argon2id hash (they can actually log in)", async () => {

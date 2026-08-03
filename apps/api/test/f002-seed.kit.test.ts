@@ -14,7 +14,11 @@ import {
 } from "./f002-seed.kit";
 import { SeedCliUsageError, assertSeedingAllowed, parseSeedArgs, runSeedCli } from "./cli/seed-cli";
 import { TestFixturesDisabledError, TestFixturesModule } from "./fixtures/test-fixtures.module";
-import { CAPABILITY_FULL_ACCESS, CAPABILITY_MANAGE_MEMBERS } from "@omnistock/core-domain";
+import {
+  CAPABILITY_FULL_ACCESS,
+  CAPABILITY_MANAGE_MEMBERS,
+  SYSTEM_ROLE_BLUEPRINT,
+} from "@omnistock/core-domain";
 
 describe("resolveInvitationTokenHasher (condition ก — production fn or nothing)", () => {
   it("RED: refuses when the production hasher does not exist", () => {
@@ -51,6 +55,38 @@ describe("resolveInvitationTokenHasher (condition ก — production fn or nothi
 });
 
 describe("DEFAULT_ROLE_SPECS", () => {
+  it("★ IS production's blueprint — a fixture Admin must be the real Admin", () => {
+    // The reason this is worth its own test rather than trusting the `.map`:
+    // the previous version was a hand-written copy that had already drifted
+    // (Admin 2 capabilities vs 7, Staff 1 vs 3, `isSystem` wrong on two of
+    // three) and NOTHING went red. A QA case asserting "an Admin can do X"
+    // against a kit-seeded org was testing a role that does not exist in
+    // production — so it could pass while the real Admin was broken, or fail
+    // over a difference that lived only in the fixture.
+    expect(
+      DEFAULT_ROLE_SPECS.map((r) => ({
+        name: r.name,
+        key: r.key,
+        isSystem: r.isSystem,
+        capabilities: [...r.capabilities],
+      })),
+    ).toEqual(
+      SYSTEM_ROLE_BLUEPRINT.map((r) => ({
+        name: r.name,
+        key: r.key,
+        isSystem: r.isSystem,
+        capabilities: [...r.capabilities],
+      })),
+    );
+  });
+
+  it("Admin really does carry more than the two capabilities F-002 enforces", () => {
+    // Pins the specific drift that existed, so re-introducing the old literal
+    // list is red for a reason the message states outright.
+    const admin = DEFAULT_ROLE_SPECS.find((r) => r.key === "admin");
+    expect(admin?.capabilities.length).toBeGreaterThan(2);
+  });
+
   it("carries the three system roles with their stable keys (data-model §5.2)", () => {
     expect(DEFAULT_ROLE_SPECS.map((r) => [r.name, r.key])).toEqual([
       ["Owner", "owner"],
