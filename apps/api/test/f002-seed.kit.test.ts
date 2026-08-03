@@ -39,10 +39,14 @@ describe("resolveInvitationTokenHasher (condition ก — production fn or nothi
   });
 
   it("the LIVE @omnistock/db module is the one it will resolve against", async () => {
-    // Pinned so the day the export lands, this test flips from "documented gap"
-    // to "wired" without anybody having to remember it exists.
+    // Was pinned to `undefined` while the export was a documented gap; it
+    // landed (F-002 D-018), so the pin flips here rather than anyone having to
+    // remember the kit was waiting on it. The kit resolves the PRODUCTION
+    // function by name from this module — if it is ever renamed or moved, the
+    // seed scenarios must go back to refusing, not to hashing their own tokens.
     const db = (await import("@omnistock/db")) as Record<string, unknown>;
-    expect(typeof db.hashInvitationToken).toBe("undefined");
+    expect(typeof db.hashInvitationToken).toBe("function");
+    expect(() => resolveInvitationTokenHasher(db)).not.toThrow();
   });
 });
 

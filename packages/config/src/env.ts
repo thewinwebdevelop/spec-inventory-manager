@@ -333,6 +333,30 @@ export function resolveOrgRateLimits(source: NodeJS.ProcessEnv = process.env): O
 }
 
 /**
+ * Resolves `INVITATION_TOKEN_SECRET` alone — the keyed-hash secret behind
+ * `hashInvitationToken` (D-018, F-002 §7).
+ *
+ * A NARROW resolver, like the two above, because `packages/db` is a library:
+ * calling `loadEnv` there would validate the WHOLE application env and
+ * `process.exit(1)` on a variable that has nothing to do with hashing a token.
+ * A library must be able to fail with an exception its caller can see, not take
+ * the process down.
+ *
+ * What it does NOT re-check is the key-separation rule (§7.3: this secret must
+ * differ from both JWT secrets). That lives in `loadEnv`'s whole-env
+ * `superRefine` and is enforced at boot, where the comparison is possible. This
+ * resolver therefore guarantees "present and long enough", not "separate" —
+ * stated plainly because the difference matters if anything ever calls it in a
+ * process that never booted through `loadEnv`.
+ */
+export function resolveInvitationTokenSecret(source: NodeJS.ProcessEnv = process.env): string {
+  return z
+    .string({ required_error: "INVITATION_TOKEN_SECRET is required" })
+    .min(32, "INVITATION_TOKEN_SECRET must be at least 32 chars (256-bit random) — F-002 §7.3")
+    .parse(source.INVITATION_TOKEN_SECRET);
+}
+
+/**
  * Live view of the effective §5.2 timeouts. Accessors read `process.env` on
  * every get (three regex checks — negligible next to a DB round trip) so a lane
  * that sets `ORG_LOCK_TIMEOUT_MS` low before booting the app gets the low value

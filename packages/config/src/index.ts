@@ -16,6 +16,7 @@ export {
   orgRateLimitsSchema,
   orgTxTimeoutsSchema,
   resolveOrgRateLimits,
+  resolveInvitationTokenSecret,
   resolveOrgTxTimeouts,
 } from "./env";
 export {

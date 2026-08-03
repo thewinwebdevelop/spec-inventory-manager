@@ -5,9 +5,10 @@
 // file creates uniquely-named rows and deletes exactly those rows by id — never
 // a TRUNCATE, never a `deleteMany({})`.
 import { describe, it, expect, beforeAll, afterAll } from "vitest";
-import { PrismaClient } from "@omnistock/db";
-import { createSeedKit, MissingProductionDependencyError, type SeedKit } from "./f002-seed.kit";
+import { PrismaClient, hashInvitationToken } from "@omnistock/db";
+import { createSeedKit, type SeedKit } from "./f002-seed.kit";
 import { runSeedCli } from "./cli/seed-cli";
+import { applyTestEnv } from "./app.kit";
 
 const TEST_DB = process.env.TEST_DATABASE_URL;
 const enabled = Boolean(TEST_DB);
@@ -18,6 +19,10 @@ d("f002-seed.kit (DB)", () => {
   let kit: SeedKit;
 
   beforeAll(async () => {
+    // `hashInvitationToken` reads INVITATION_TOKEN_SECRET, so the invitation
+    // scenarios need the same env the app runs under. One helper, so this suite
+    // and the app suites cannot drift into disagreeing about the test env.
+    applyTestEnv();
     prisma = new PrismaClient({ datasources: { db: { url: TEST_DB } } });
     await prisma.$connect();
     kit = createSeedKit(prisma, { label: "seedkit-int" });
@@ -137,12 +142,25 @@ d("f002-seed.kit (DB)", () => {
     expect(row.revokedByUserId).toBe(result.users[0].id);
   });
 
-  it("BLOCKED (truthfully): invitation scenarios refuse rather than invent a token hash", async () => {
-    // `hashInvitationToken` does not exist in production yet. The kit reports
-    // that as a blocked dependency instead of hashing tokens itself — reported
-    // to @backend-api rather than papered over here.
+  it("invitation scenarios seed a tokenHash computed by the PRODUCTION function", async () => {
+    // These three refused while `hashInvitationToken` was missing — the kit
+    // reported a blocked dependency rather than hashing tokens itself, because
+    // a kit that hashes its own tokens proves only that it agrees with itself.
+    // The export landed (D-018), so they run now.
     for (const scenario of ["expired-invite", "superseded-invite", "high-role-invite"] as const) {
-      await expect(kit.scenario(scenario)).rejects.toThrow(MissingProductionDependencyError);
+      const seeded = await kit.scenario(scenario);
+      const [invited] = seeded.invitations;
+      expect(invited, `${scenario} seeded no invitation`).toBeDefined();
+      const row = await prisma.invitation.findUniqueOrThrow({ where: { id: invited!.id } });
+
+      // The stored value is a hash, not the token — the whole point of D-018.
+      // A dump of this table must not hand anybody a working invitation.
+      expect(row.tokenHash).not.toBe(invited!.rawToken);
+      expect(row.tokenHash).toMatch(/^[0-9a-f]{64}$/);
+      // …and it is exactly what the PRODUCTION lookup path computes, so a
+      // scenario seeded here is redeemable by the real endpoint. If the kit had
+      // hashed its own tokens, this equality would be circular.
+      expect(row.tokenHash).toBe(hashInvitationToken(invited!.rawToken));
     }
   });
 
@@ -177,15 +195,35 @@ d("f002-seed.kit (DB)", () => {
   });
 
   it("RED: a CLI failure exits non-zero, writes nothing to stdout, and cleans up", async () => {
+    // The trigger used to be the missing `hashInvitationToken`; that gap closed
+    // (D-018), so it now fails the RUN itself — the database rejects the very
+    // first write. That keeps the test pointed at a failure mode nobody can
+    // "fix" out from under it.
+    //
+    // What is proven is unchanged, and is about the CLI rather than the
+    // trigger: a consumer (Playwright, Flutter) reads stdout as JSON, so a
+    // failed run must exit non-zero and write NOTHING there. Half a JSON object
+    // on stdout plus exit 0 is exactly the shape that lets a downstream suite
+    // pass against a fixture that was never created.
     const lines: string[] = [];
     const errors: string[] = [];
+    const exploding = {
+      ...prisma,
+      organization: {
+        ...prisma.organization,
+        create: async () => {
+          throw new Error("database exploded mid-seed");
+        },
+      },
+    } as unknown as typeof prisma;
+
     const code = await runSeedCli(
-      ["--scenario=expired-invite"],
+      ["--scenario=two-orgs"],
       { NODE_ENV: "test", TEST_DATABASE_URL: TEST_DB },
-      { prisma, stdout: (l) => lines.push(l), stderr: (l) => errors.push(l) },
+      { prisma: exploding, stdout: (l) => lines.push(l), stderr: (l) => errors.push(l) },
     );
-    expect(code).toBe(1);
+    expect(code).toBe(1); // 1 = the run failed; 2 is reserved for bad arguments
     expect(lines).toEqual([]);
-    expect(errors.join("\n")).toContain("MissingProductionDependencyError");
+    expect(errors.join("\n")).not.toBe("");
   });
 });

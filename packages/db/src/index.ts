@@ -89,3 +89,13 @@ export {
   isOrgScopedModel,
 } from "./org-models";
 export type { OrgScopedModel, OrgAgnosticModel } from "./org-models";
+
+// F-002 · D-018 — the ONE code path that turns an invitation token into the
+// value stored in `Invitation.tokenHash` (architecture §7, data-model §2).
+// @qa's seed kit resolves `hashInvitationToken` from this module by name rather
+// than reimplementing it, so it must stay exported under exactly this name.
+export {
+  generateInvitationToken,
+  hashInvitationToken,
+  INVITATION_TOKEN_BYTES,
+} from "./invitation-token";

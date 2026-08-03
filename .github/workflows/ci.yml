@@ -248,7 +248,16 @@ jobs:
           --health-timeout 5s
           --health-retries 10
     env:
-      DATABASE_URL: postgresql://omnistock:omnistock@localhost:5432/omnistock_ci
+      # T-002-D1 · `connection_limit` is EXPLICIT here on purpose (§12.3,
+      # test-plan §8 "pool ต้องมี connection ≥ จำนวน request ขนาน").
+      # Prisma's default pool size is derived from CPU count — 5 on a 2-core
+      # GitHub runner — and the concurrency suite runs several *.int.test.ts
+      # files at once, each with its own client, each firing parallel requests.
+      # If the pool is narrower than the fan-out, the requests queue and run
+      # SERIALLY: every race test then passes without ever having raced, which
+      # is the worst kind of green. 25 is comfortably above the widest fan-out
+      # and far below Postgres 16's default max_connections of 100.
+      DATABASE_URL: postgresql://omnistock:omnistock@localhost:5432/omnistock_ci?connection_limit=25
       REDIS_URL: redis://localhost:6379
       # The *.int.test.ts DB-backed suites gate on TEST_DATABASE_URL/TEST_REDIS_URL
       # (skip otherwise). Point them at the same ephemeral service containers so
@@ -257,7 +266,7 @@ jobs:
       # isolation) actually RUN as a merge gate — not just the /health smoke.
       # They use supertest in-memory (app.init(), no listen) so there is no port
       # clash with the booted server above.
-      TEST_DATABASE_URL: postgresql://omnistock:omnistock@localhost:5432/omnistock_ci
+      TEST_DATABASE_URL: postgresql://omnistock:omnistock@localhost:5432/omnistock_ci?connection_limit=25
       TEST_REDIS_URL: redis://localhost:6379
       # T-002-22's in-test lane guard (I-37) asserts "this process MUST have the
       # DB+Redis lane enabled". It cannot key that off `CI`: GitHub sets `CI` in
