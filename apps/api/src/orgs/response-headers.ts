@@ -98,6 +98,14 @@ export const RESPONSE_HEADER_POLICY: readonly ResponseHeaderPolicyRow[] = Object
   policyRow("PATCH", "/orgs/{orgId}", ORG_PROFILE_RESPONSE_HEADERS, ["tin"]),
   // §3.5 — answers with the §3.3 body, so it inherits the §3.3 rule exactly.
   policyRow("PUT", "/orgs/{orgId}/tax-profile", ORG_PROFILE_RESPONSE_HEADERS, ["tin"]),
+  // T-002-19 — the two routes that hand back a live invitation token get the
+  // stricter policy (`no-referrer` as well as `no-store`): the token is a
+  // bearer credential for membership, and a Referer header would carry it to
+  // whatever the invite page links to next.
+  policyRow("GET", "/orgs/{orgId}/invitations", ORG_PROFILE_RESPONSE_HEADERS, ["tin"]),
+  policyRow("POST", "/orgs/{orgId}/invitations", INVITATION_RESPONSE_HEADERS, ["tin"]),
+  policyRow("POST", "/orgs/{orgId}/invitations/{invitationId}/link", INVITATION_RESPONSE_HEADERS, ["tin"]),
+  policyRow("DELETE", "/orgs/{orgId}/invitations/{invitationId}", ORG_PROFILE_RESPONSE_HEADERS, ["tin"]),
   // §3.16 — the only response in the system with a FULL TIN.
   policyRow("POST", "/orgs/{orgId}/tax-profile/reveal", TAX_ID_REVEAL_RESPONSE_HEADERS, ["tin"]),
   // §3.7 / §3.10–§3.13 — member and invitation lists carry other people's

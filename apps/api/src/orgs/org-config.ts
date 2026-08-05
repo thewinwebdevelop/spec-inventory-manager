@@ -23,10 +23,36 @@ export const DEFAULT_ORG_PLAN_KEY = Symbol("DEFAULT_ORG_PLAN_KEY");
 /** Maximum ACTIVE memberships one user may hold (architecture §6.3). */
 export const MAX_ORGS_PER_USER = Symbol("MAX_ORGS_PER_USER");
 
+/**
+ * Cap on invitations that are pending AND still live (architecture §10, M-3).
+ *
+ * Counting EXPIRED pending rows too would let a shop lock itself out of
+ * inviting anybody simply by leaving old links to rot — a self-inflicted denial
+ * of service with no security benefit. The bound exists so the table cannot
+ * grow without limit, not to ration invitations.
+ */
+export const INVITATION_PENDING_CAP = Symbol("INVITATION_PENDING_CAP");
+
+/** Base URL the invite link is built on (architecture §7, `WEB_APP_BASE_URL`). */
+export const WEB_APP_BASE_URL = Symbol("WEB_APP_BASE_URL");
+
+/** api-spec §10 — the documented ceiling; env-tunable would be a policy change. */
+export const INVITATION_PENDING_CAP_DEFAULT = 100;
+
 export const orgConfigProviders: readonly Provider[] = Object.freeze([
   {
     provide: DEFAULT_ORG_PLAN_KEY,
     useFactory: (): string => loadEnv(process.env).DEFAULT_ORG_PLAN_KEY,
+  },
+  {
+    provide: INVITATION_PENDING_CAP,
+    useFactory: (): number => INVITATION_PENDING_CAP_DEFAULT,
+  },
+  {
+    provide: WEB_APP_BASE_URL,
+    // Validated at boot (url + https outside test), so by the time a request
+    // reaches here the value is known-good and the read is just a lookup.
+    useFactory: (): string => loadEnv(process.env).WEB_APP_BASE_URL,
   },
   {
     provide: MAX_ORGS_PER_USER,

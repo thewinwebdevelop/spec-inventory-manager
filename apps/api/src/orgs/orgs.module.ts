@@ -29,6 +29,8 @@ import { OrgProfileController } from "./org-profile.controller";
 import { OrgProfileService } from "./org-profile.service";
 import { OrganizationsController } from "./organizations.controller";
 import { MembersController } from "./members.controller";
+import { InvitationsController } from "./invitations.controller";
+import { InvitationsService } from "./invitations.service";
 import { MembershipController } from "./membership.controller";
 import { MembersService } from "./members.service";
 import { TaxProfileController } from "./tax-profile.controller";
@@ -56,6 +58,7 @@ import { PlanProvisioningService } from "./system/plan-provisioning.service";
     // what makes "this route can never target somebody else" a property of the
     // file rather than of an `if` (api-spec §3.17 / D-029).
     MembersController,
+    InvitationsController,
     MembershipController,
   ],
   providers: [
@@ -68,6 +71,7 @@ import { PlanProvisioningService } from "./system/plan-provisioning.service";
     // T-002-18 — serves both membership controllers: one service, one
     // transaction shape, one place the Owner ≥ 1 invariant is evaluated.
     MembersService,
+    InvitationsService,
     // `system/` providers are registered here, not exported: nothing outside
     // this module may reach an unfiltered read.
     OrgProvisioningService,

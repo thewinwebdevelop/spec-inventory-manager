@@ -91,3 +91,24 @@ export class PutTaxProfileDto {
   @Allow()
   branchCode?: unknown;
 }
+
+/**
+ * `POST /orgs/{orgId}/invitations` (api-spec §3.11).
+ *
+ * `unknown` for the same reason as every DTO in this file: a class-validator
+ * constraint's MESSAGE is what the global pipe puts in `error.code`, so a
+ * failed `@IsEmail()` would ship a human sentence where the client expects a
+ * machine code. Shape is checked in the handler and the rules live in
+ * core-domain, which keeps `422 VALIDATION_FAILED` + `fieldErrors` uniform.
+ */
+export class CreateInvitationDto {
+  @Allow()
+  email?: unknown;
+
+  @Allow()
+  roleId?: unknown;
+
+  // ⛔ Deliberately NO `expiresAt` / `ttl`. The lifetime is decided by the
+  // ROLE being invited (24h elevated / 7 days otherwise, D-028/I-7). A
+  // caller-supplied expiry would let somebody mint a year-long Owner link.
+}

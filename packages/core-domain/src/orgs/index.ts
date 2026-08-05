@@ -141,3 +141,15 @@ export {
   type AdminResetMembershipFacts,
   type AdminResetRefusal,
 } from "./admin-reset-authz";
+
+// T-002-19 — the invitation row as the wire sees it (api-spec §3.10). Written
+// field by field: the table it comes from has a `tokenHash` column, and a
+// spread would put it on the wire the day somebody widens a select.
+export {
+  toInvitationRow,
+  acceptedUserCreatedAfterInvite,
+  invitationExpiryFrom,
+  type InvitationRow,
+  type InvitationRowSource,
+  type InvitationRowRole,
+} from "./invitation-view";

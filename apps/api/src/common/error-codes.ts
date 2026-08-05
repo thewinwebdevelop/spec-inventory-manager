@@ -117,6 +117,30 @@ export const ERROR_CODES = {
     status: HttpStatus.CONFLICT,
     message: "ข้อมูลขัดแย้งกับสถานะปัจจุบัน",
   },
+  // F-002 · api-spec §3.11 (D-027) — this email already has a live invitation.
+  // It carries `details.invitationId` so the UI can offer "reissue" or "cancel"
+  // instead of a dead end: without the id the only thing a user can do with
+  // this error is retype the address and get it again.
+  INVITATION_PENDING: {
+    code: "INVITATION_PENDING",
+    status: HttpStatus.CONFLICT,
+    message: "อีเมลนี้มีคำเชิญค้างอยู่แล้ว",
+  },
+  // F-002 · api-spec §3.11 / §10 (M-3) — cap on invitations that are pending
+  // AND not yet expired. Counting expired ones too would let a shop lock itself
+  // out of inviting anybody by leaving old links to rot.
+  INVITATION_LIMIT_REACHED: {
+    code: "INVITATION_LIMIT_REACHED",
+    status: HttpStatus.CONFLICT,
+    message: "คำเชิญที่ค้างอยู่ครบจำนวนสูงสุดแล้ว",
+  },
+  // F-002 · api-spec §3.11/§3.15 — the invitee is already in this shop.
+  ALREADY_MEMBER: {
+    code: "ALREADY_MEMBER",
+    status: HttpStatus.CONFLICT,
+    message: "ผู้ใช้นี้เป็นสมาชิกของร้านนี้อยู่แล้ว",
+  },
+
   // F-002 · api-spec §4 / architecture §6.3 (I-10) — the per-user shop cap.
   // 409 rather than 403: nothing about the CALLER is wrong, the request simply
   // conflicts with a state they can resolve (leave a shop, or ask us to raise
