@@ -30,11 +30,13 @@ import { OrgProfileService } from "./org-profile.service";
 import { OrganizationsController } from "./organizations.controller";
 import { MembersController } from "./members.controller";
 import { InvitationsController } from "./invitations.controller";
+import { InvitationRedemptionController } from "./invitation-redemption.controller";
 import { InvitationsService } from "./invitations.service";
 import { MembershipController } from "./membership.controller";
 import { MembersService } from "./members.service";
 import { TaxProfileController } from "./tax-profile.controller";
 import { TaxProfileService } from "./tax-profile.service";
+import { InvitationLookupService } from "./system/invitation-lookup.service";
 import { MyOrganizationsService } from "./system/my-organizations.service";
 import { OrgProvisioningService } from "./system/org-provisioning.service";
 import { PlanProvisioningService } from "./system/plan-provisioning.service";
@@ -59,6 +61,12 @@ import { PlanProvisioningService } from "./system/plan-provisioning.service";
     // file rather than of an `if` (api-spec §3.17 / D-029).
     MembersController,
     InvitationsController,
+    // T-002-20 — the redemption side, in its OWN controller. `InvitationsController`
+    // is org-scoped and `manage_members` on every handler; these two routes are
+    // `@Public()` and `@UserScoped()`. Two tiers one handler apart in the same
+    // class is how the permissive declaration ends up inherited by the route
+    // that needed the strict one (High-1).
+    InvitationRedemptionController,
     MembershipController,
   ],
   providers: [
@@ -77,6 +85,9 @@ import { PlanProvisioningService } from "./system/plan-provisioning.service";
     OrgProvisioningService,
     MyOrganizationsService,
     PlanProvisioningService,
+    // T-002-20 — §2.4 row 3: "which shop is this token for?" cannot be answered
+    // by a client that filters on an organization we do not know yet.
+    InvitationLookupService,
   ],
   // Deliberately exports NOTHING yet. `ORG_PRISMA`/`SYSTEM_PRISMA` come from the
   // global `TenancyModule`, and no other feature needs an orgs provider today.

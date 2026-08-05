@@ -26,17 +26,27 @@
 // appears once in this file — the LIST, which decides nothing.
 import { Inject, Injectable } from "@nestjs/common";
 import {
+  canAcceptInvitation,
   canAssignRole,
   invitationTtlHours,
   invitationExpiryFrom,
   isOwnerRole,
   maskEmail,
   normalizeEmail,
+  resolveInvitationStatus,
+  toInvitationPreview,
+  toInvitationAcceptResult,
   toInvitationRow,
+  userCreatedAfterTokenIssued,
+  type AcceptInvitationDecision,
+  type InvitationPreview,
+  type InvitationAcceptResult,
   type InvitationRow,
+  type MembershipStatus,
+  type StoredInvitationStatus,
 } from "@omnistock/core-domain";
 import { generateInvitationToken, hashInvitationToken } from "../prisma/invitation-token";
-import { domainError } from "../common";
+import { domainError, type ErrorCodeKey } from "../common";
 import { paginate, type KeysetCursor } from "../common/cursor";
 import { SecurityEventsService } from "../auth";
 import {
@@ -47,6 +57,7 @@ import {
   type OrgScopedPrismaClient,
 } from "../tenancy";
 import { INVITATION_PENDING_CAP, WEB_APP_BASE_URL } from "./org-config";
+import { InvitationLookupService } from "./system/invitation-lookup.service";
 
 /** What the caller gets back once, and only once. */
 export interface IssuedInvitation {
@@ -116,6 +127,83 @@ function toRow(row: InvitationSelected): InvitationRow {
   );
 }
 
+// ── T-002-20: redemption ────────────────────────────────────────────────────
+
+/**
+ * Preview: a resolved status that is not `pending` → its wire code
+ * (api-spec §3.14). Exhaustive over the three non-pending values, so a fourth
+ * resolved status could not be added to core-domain without a compile error
+ * here — silently answering 200 for it is the failure this type prevents.
+ */
+const PREVIEW_STATUS_ERRORS = Object.freeze({
+  expired: "INVITATION_EXPIRED",
+  cancelled: "INVITATION_CANCELLED",
+  accepted: "INVITATION_ALREADY_ACCEPTED",
+} as const satisfies Record<"expired" | "cancelled" | "accepted", ErrorCodeKey>);
+
+/** Every way `accept` can refuse. `invalid`/`email_mismatch` are the two the
+ *  pure fn does not answer (a missing row; the authenticated identity). */
+type AcceptRefusal = AcceptInvitationDecision | "invalid" | "email_mismatch";
+
+/**
+ * Refusal → wire code (api-spec §3.15/§4). Written as a total map rather than a
+ * `switch` with a `default`: a new decision value in core-domain must be given
+ * an answer here, and the compiler asks for it.
+ *
+ * `ok` maps to `INTERNAL` because reaching this table with `ok` means the
+ * success path returned a refusal — a bug, and one that must not be rendered as
+ * a plausible 409.
+ */
+const ACCEPT_REFUSAL_ERRORS = Object.freeze({
+  ok: "INTERNAL",
+  invalid: "INVITATION_INVALID",
+  expired: "INVITATION_EXPIRED",
+  cancelled: "INVITATION_CANCELLED",
+  already_accepted: "INVITATION_ALREADY_ACCEPTED",
+  email_mismatch: "INVITATION_EMAIL_MISMATCH",
+  role_unavailable: "INVITATION_ROLE_UNAVAILABLE",
+  already_member: "ALREADY_MEMBER",
+  superseded: "INVITATION_SUPERSEDED",
+} as const satisfies Record<AcceptRefusal, ErrorCodeKey>);
+
+/** The invitation columns the accept decision is made from — read through `tx`. */
+interface AcceptInvitationRow {
+  readonly id: string;
+  readonly email: string;
+  readonly roleId: string;
+  readonly status: string;
+  readonly expiresAt: Date;
+  readonly tokenIssuedAt: Date;
+}
+
+/** The caller's membership in the invitation's org, as it is inside the lock. */
+interface AcceptorMembershipRow {
+  readonly id: string;
+  readonly status: string;
+  readonly revokedAt: Date | null;
+  readonly roleId: string;
+}
+
+/**
+ * What the transaction returns. A refusal is RETURNED, not thrown, for one
+ * reason that matters: `already_member` has to COMMIT a write (closing the
+ * invitation, I-9) before the caller is told "no", and a `throw` would roll it
+ * back. Returning them all keeps one mapping site instead of two.
+ */
+type AcceptOutcome =
+  | {
+      readonly kind: "ok";
+      readonly invitationId: string;
+      readonly tokenIssuedAt: Date;
+      readonly organization: { readonly id: string; readonly name: string };
+      readonly role: { readonly id: string; readonly name: string; readonly key: string | null };
+      /** `revokedAt` of the membership this accept woke up, or `null`. */
+      readonly reactivatedFrom: Date | null;
+    }
+  | { readonly kind: "refused"; readonly decision: AcceptRefusal; readonly emailMasked?: string };
+
+const REFUSED_INVALID: AcceptOutcome = Object.freeze({ kind: "refused", decision: "invalid" });
+
 @Injectable()
 export class InvitationsService {
   constructor(
@@ -124,6 +212,10 @@ export class InvitationsService {
     @Inject(SecurityEventsService) private readonly events: SecurityEventsService,
     @Inject(INVITATION_PENDING_CAP) private readonly pendingCap: number,
     @Inject(WEB_APP_BASE_URL) private readonly webAppBaseUrl: string,
+    // T-002-20 — the ONLY way this service can reach a row before it knows which
+    // tenant it belongs to. Injected rather than reached for directly: the
+    // unfiltered client stays behind the `system/` boundary (§2.4).
+    @Inject(InvitationLookupService) private readonly lookup: InvitationLookupService,
   ) {}
 
   // ── §3.10 list ───────────────────────────────────────────────────────────
@@ -341,6 +433,320 @@ export class InvitationsService {
     });
 
     return { id: cancelled, status: "cancelled" };
+  }
+
+  // ── §3.14 preview (PUBLIC) ───────────────────────────────────────────────
+
+  /**
+   * What the invitee sees before deciding — api-spec §3.14.
+   *
+   * NO ORG CONTEXT EXISTS HERE and none is created (I-3). `this.prisma` is
+   * untouchable on this path: reaching for it would throw
+   * `MissingOrgContextError`, which is the designed failure (architecture §1.4
+   * last row) rather than a quiet read of a caller-chosen tenant.
+   *
+   * ── WHAT IS AND IS NOT DISTINGUISHABLE (architecture §7.6) ──
+   * An UNKNOWN token is `404 INVITATION_INVALID`, one body, one message, for
+   * every reason a token might not resolve: never issued, mistyped, rotated
+   * away by §3.12, or belonging to a shop that was deleted. That is the answer
+   * an enumerator would be mining, so it carries no information at all.
+   *
+   * A token that DID resolve gets the precise state (`expired` / `cancelled` /
+   * `already accepted`) — and that is not a leak, because the caller already
+   * presented a 256-bit secret that matched a stored HMAC. They cannot learn
+   * anything they did not already hold, and AC US-4 needs the distinction: each
+   * state sends the user to a different recovery path.
+   *
+   * The rate limit (`publicInvitationEntry`, 30/hour/IP) is what bounds the only
+   * remaining attack — guessing — and it is declared on the route, not here.
+   */
+  async preview(input: { readonly token: string; readonly now: Date }): Promise<InvitationPreview> {
+    const row = await this.lookup.findByTokenHash(hashInvitationToken(input.token));
+    // ⛔ One answer, whatever the reason. Do NOT add a branch here.
+    if (!row) throw domainError("INVITATION_INVALID");
+
+    // `expired` is DERIVED, never stored (data-model §3.2): there is no job
+    // marking rows dead, so a link is expired the instant the clock says so.
+    const status = resolveInvitationStatus(
+      { status: row.status as StoredInvitationStatus, expiresAt: row.expiresAt },
+      input.now,
+    );
+    if (status !== "pending") throw domainError(PREVIEW_STATUS_ERRORS[status]);
+
+    return toInvitationPreview({
+      organizationName: row.organizationName,
+      roleName: row.roleName,
+      roleKey: row.roleKey,
+      // Masked INSIDE the projection — this service never holds a shape that
+      // could put the full address on a public response.
+      email: row.email,
+      expiresAt: row.expiresAt,
+      status,
+    });
+  }
+
+  // ── §3.15 accept ─────────────────────────────────────────────────────────
+
+  /**
+   * Redeem an invitation — the one write in F-002 whose caller is, by
+   * definition, not yet a member of the organization it writes to.
+   *
+   * ── WHERE THE ORGANIZATION COMES FROM (I-3) ──
+   * From the invitation ROW, read by token hash through `SYSTEM_PRISMA`, and
+   * from nowhere else. `X-Organization-Id` is ignored by the middleware on a
+   * `@UserScoped()` route, so there is no header to read even if this code
+   * wanted to; the context is then opened HERE, over the org the row proves —
+   * the same shape a BullMQ processor uses (§2.1), not a second pattern.
+   *
+   * ── STATEMENT ORDER INSIDE THE TRANSACTION (§5.1) ──
+   *   1. `SET LOCAL lock_timeout` + `SELECT … FROM "Organization" … FOR UPDATE`
+   *      (issued by `runInOrgLockTransaction` before the callback runs)
+   *   2. re-read the invitation BY TOKEN HASH through `tx`
+   *   3. re-read the invitation's role   → still a role of THIS org? (M-6)
+   *   4. re-read the caller's membership → active / revoked / absent
+   *   5. `canAcceptInvitation(...)` on those three facts
+   *   6. the email check, in ITS FIXED SLOT (see below)
+   *   7. write: membership (create or reactivate) + invitation → accepted
+   *   8. read the org row for the response
+   *   POST-COMMIT: `org.invitation.accepted` (+ `org.member.reactivated`)
+   *
+   * Steps 2–4 are re-reads on purpose. The lookup outside the transaction
+   * answers ONE question — "which tenant?" — and anything else it returned is a
+   * snapshot taken before the lock existed. Between the two, a concurrent
+   * `revoke` (which cancels pending invitations, I-1), `cancel` or reissue may
+   * have committed; deciding on the outside read would let `accept` win a race
+   * it must lose.
+   *
+   * ── THE EMAIL CHECK'S SLOT IS PART OF THE CONTRACT ──
+   * api-spec §3.15 pins the order: expired → cancelled/accepted → EMAIL →
+   * role_unavailable → already_member → superseded. The pure fn deliberately
+   * does not know about the email (it answers 403, not 409, and needs the
+   * authenticated user), so the three "clock and status" answers are returned
+   * before it and the rest after. Moving it would change which error a user
+   * sees in a state where several are true at once.
+   */
+  async accept(input: {
+    readonly userId: string;
+    readonly token: string;
+    readonly now: Date;
+  }): Promise<InvitationAcceptResult> {
+    const tokenHash = hashInvitationToken(input.token);
+
+    // OUTSIDE the transaction, and used for ONE thing: which organization is
+    // this? Every field of it is re-read under the lock below.
+    const located = await this.lookup.findByTokenHash(tokenHash);
+    if (!located) throw domainError("INVITATION_INVALID");
+
+    const acceptor = await this.lookup.findAcceptor(input.userId);
+    // The access token verified, so the row must exist. If it does not, the
+    // account was deleted mid-request — refuse rather than join a shop to a
+    // user id nothing can resolve.
+    if (!acceptor) throw domainError("INTERNAL");
+    const acceptorEmail = normalizeEmail(acceptor.email);
+    const organizationId = located.organizationId;
+
+    const outcome = await this.store.run({ organizationId, userId: input.userId }, () =>
+      runInOrgLockTransaction(
+        this.prisma,
+        async (tx): Promise<AcceptOutcome> => {
+          const invitation = (await tx.invitation.findFirst({
+            // The hash, not the id: a rotate (§3.12) replaces the hash, so a
+            // link that was live when we located it above resolves to NOTHING
+            // here — which is exactly `404 INVITATION_INVALID`, the same answer
+            // an unknown token gets (I-C-05).
+            where: { tokenHash },
+            select: {
+              id: true,
+              email: true,
+              roleId: true,
+              status: true,
+              expiresAt: true,
+              tokenIssuedAt: true,
+            },
+          })) as AcceptInvitationRow | null;
+          if (!invitation) return REFUSED_INVALID;
+
+          // M-6 — `ORG_PRISMA` confines this to the invitation's org, so "the
+          // role was deleted" and "the role belongs to another shop" are the
+          // same answer by construction.
+          const role = (await tx.role.findFirst({
+            where: { id: invitation.roleId },
+            select: { id: true, name: true, key: true },
+          })) as { id: string; name: string; key: string | null } | null;
+
+          const membership = (await tx.membership.findFirst({
+            where: { userId: input.userId },
+            select: { id: true, status: true, revokedAt: true, roleId: true },
+          })) as AcceptorMembershipRow | null;
+
+          const decision = canAcceptInvitation({
+            invitation: {
+              status: invitation.status as StoredInvitationStatus,
+              expiresAt: invitation.expiresAt,
+              tokenIssuedAt: invitation.tokenIssuedAt,
+            },
+            membership: membership
+              ? {
+                  status: membership.status as MembershipStatus,
+                  revokedAt: membership.revokedAt,
+                }
+              : null,
+            roleExistsInOrg: role !== null,
+            now: input.now,
+          });
+
+          // 1) the clock and the stored status, before anything about the caller.
+          if (decision === "expired" || decision === "cancelled" || decision === "already_accepted") {
+            return { kind: "refused", decision };
+          }
+
+          // 2) the email binding — its fixed slot (api-spec §3.15).
+          if (acceptorEmail !== invitation.email) {
+            // `details.emailMasked` is what lets the UI say WHICH account to
+            // sign in with. Masked, never the address: whoever is holding this
+            // link may not be its owner (§7.6).
+            return {
+              kind: "refused",
+              decision: "email_mismatch",
+              emailMasked: maskEmail(invitation.email),
+            };
+          }
+
+          // 3) the remaining state answers.
+          if (decision === "role_unavailable" || decision === "superseded") {
+            return { kind: "refused", decision };
+          }
+
+          if (decision === "already_member") {
+            // I-9 — the caller's CURRENT role is not touched, not even to the
+            // role on the invitation. The first draft upserted here, which made
+            // "accept a Staff invitation" a way for the last Owner to demote
+            // themselves and leave the shop with zero Owners.
+            //
+            // The invitation is closed instead of left `pending`, so the list
+            // does not keep offering a link that can never do anything (§3.15).
+            // It commits: this refusal is the one that WRITES.
+            await tx.invitation.update({
+              where: { id: invitation.id },
+              data: { status: "cancelled", cancelledAt: input.now },
+              select: { id: true },
+            });
+            return { kind: "refused", decision: "already_member" };
+          }
+
+          // ── decision === "ok" — the only path that writes a membership ────
+          // `role` is non-null here: `roleExistsInOrg` was false ⇒
+          // `role_unavailable` ⇒ returned above.
+          const grantedRole = role as { id: string; name: string; key: string | null };
+          const reactivatedFrom = membership?.status === "revoked" ? membership.revokedAt : null;
+
+          if (membership) {
+            await tx.membership.update({
+              where: { organizationId_userId: { organizationId, userId: input.userId } },
+              data: {
+                status: "active",
+                roleId: grantedRole.id,
+                activatedAt: input.now,
+                // Cleared because the row is active again and `revokedAt` is
+                // read as "this person is out" by the member list and by I-1.
+                // The history is not lost: `org.member.reactivated` carries
+                // `previousRevokedAt`, and a future removal writes a new one.
+                revokedAt: null,
+                revokedByUserId: null,
+              },
+              select: { id: true },
+            });
+          } else {
+            // `organizationId` is injected by the org scope — never passed in,
+            // so this cannot be aimed at another tenant.
+            await tx.membership.create({
+              data: {
+                userId: input.userId,
+                roleId: grantedRole.id,
+                status: "active",
+                activatedAt: input.now,
+              },
+              select: { id: true },
+            });
+          }
+
+          await tx.invitation.update({
+            where: { id: invitation.id },
+            data: {
+              status: "accepted",
+              acceptedAt: input.now,
+              acceptedByUserId: input.userId,
+              // A SNAPSHOT, not a join (architecture §7.6): the forensic flag
+              // must still answer "was this account made after the invite?"
+              // after the user row is deleted or anonymized under PDPA.
+              acceptedUserCreatedAt: acceptor.createdAt,
+            },
+            select: { id: true },
+          });
+
+          const organization = (await tx.organization.findUnique({
+            where: { id: organizationId },
+            select: { id: true, name: true },
+          })) as { id: string; name: string } | null;
+          if (!organization) throw domainError("INTERNAL"); // unreachable: it is the locked row
+
+          return {
+            kind: "ok",
+            invitationId: invitation.id,
+            tokenIssuedAt: invitation.tokenIssuedAt,
+            organization,
+            role: grantedRole,
+            reactivatedFrom,
+          };
+        },
+        { operation: "acceptInvitation" },
+      ),
+    );
+
+    if (outcome.kind === "refused") {
+      throw domainError(ACCEPT_REFUSAL_ERRORS[outcome.decision], {
+        ...(outcome.emailMasked ? { details: { emailMasked: outcome.emailMasked } } : {}),
+      });
+    }
+
+    // POST-COMMIT (H-3) — a rolled-back transaction must leave no trace saying
+    // it happened, so nothing above this line emits.
+    this.events.emit("org.invitation.accepted", {
+      userId: input.userId,
+      organizationId,
+      invitationId: outcome.invitationId,
+      roleId: outcome.role.id,
+      acceptedByUserId: input.userId,
+      userCreatedAt: acceptor.createdAt.toISOString(),
+      // Compared against `tokenIssuedAt`, deliberately NOT the wire flag's
+      // baseline — see `userCreatedAfterTokenIssued` for why the two differ.
+      userCreatedAfterTokenIssued: userCreatedAfterTokenIssued(
+        acceptor.createdAt,
+        outcome.tokenIssuedAt,
+      ),
+    });
+
+    if (outcome.reactivatedFrom) {
+      // I-1ค/M-7ข — a SEPARATE event. "A removed person came back" and "a new
+      // person joined" are different signals; folded into one type, nobody
+      // investigating a takeover could tell them apart afterwards.
+      this.events.emit("org.member.reactivated", {
+        userId: input.userId,
+        organizationId,
+        invitationId: outcome.invitationId,
+        roleId: outcome.role.id,
+        previousRevokedAt: outcome.reactivatedFrom.toISOString(),
+      });
+    }
+
+    return toInvitationAcceptResult({
+      organization: outcome.organization,
+      membership: {
+        roleId: outcome.role.id,
+        roleName: outcome.role.name,
+        roleKey: outcome.role.key,
+      },
+    });
   }
 
   // ── helpers (every one takes `tx` — M-2) ─────────────────────────────────

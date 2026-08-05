@@ -112,3 +112,24 @@ export class CreateInvitationDto {
   // ROLE being invited (24h elevated / 7 days otherwise, D-028/I-7). A
   // caller-supplied expiry would let somebody mint a year-long Owner link.
 }
+
+/**
+ * `POST /invitations/preview` and `POST /invitations/accept` (api-spec
+ * §3.14/§3.15) — T-002-20.
+ *
+ * ⛔ THE TOKEN ARRIVES IN THE BODY, AND ONLY IN THE BODY (I-6). Neither handler
+ * reads a query parameter, which is why both routes are POSTs at all: a token
+ * in a query string is written to the access log, to every proxy in front of
+ * us, and to the `Referer` header of anything the invite page loads from
+ * another origin. It is the single secret standing between a stranger and
+ * membership of a shop, and in Phase 0 there is no email verification behind it
+ * (architecture §7.6) — whoever holds it can redeem it.
+ *
+ * ⛔ And no other field. `organizationId`, `roleId` or `email` accepted here
+ * would be a caller-chosen value on a route with no org context (I-3); every
+ * one of those facts comes from the invitation ROW instead.
+ */
+export class RedeemInvitationDto {
+  @Allow()
+  token?: unknown;
+}

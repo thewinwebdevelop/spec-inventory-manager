@@ -106,7 +106,13 @@ describe("SYSTEM_PRISMA is confined to the §2.1 allowlist", () => {
       .filter((f) => f.startsWith("orgs/system/"))
       .filter((f) => SYSTEM_PRISMA_USE.test(readFileSync(join(SRC, f), "utf8")))
       .sort();
+    // Four FILES, three §2.4 CASES — the table lists "POST /organizations" once
+    // and it takes two providers (the org transaction and the plan lookup).
+    // T-002-20 adds the third and last case: "invitation by token", where the
+    // caller is not a member yet, so there is no org context to filter by (I-3).
+    // A fifth file appearing here is a review question, not a merge.
     expect(jail).toEqual([
+      "orgs/system/invitation-lookup.service.ts",
       "orgs/system/my-organizations.service.ts",
       "orgs/system/org-provisioning.service.ts",
       "orgs/system/plan-provisioning.service.ts",

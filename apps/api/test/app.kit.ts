@@ -136,7 +136,18 @@ export async function createTestApp(options: TestAppOptions = {}): Promise<TestA
   // THE line `auth.e2e.int.test.ts` lacks: without it nothing issues a traceId
   // and every I-06 assertion would pass by never being evaluated.
   app.useGlobalFilters(new DomainExceptionFilter());
-  await app.init();
+  // LISTEN ONCE, on an ephemeral loopback port.
+  //
+  // With `init()` alone the server is never listening, so supertest starts one
+  // for EVERY request and closes it again — thousands of listen/close cycles in
+  // a full run, across parallel forks. That churn is what produced the int
+  // lane's transport-level flakes: `Parse Error: Expected HTTP/, RTSP/ or ICE/`
+  // and `socket hang up`, landing on arbitrary files (including pure-unit ones)
+  // and having nothing to do with the code under test.
+  //
+  // Once the server IS listening, supertest reuses its address instead, and the
+  // churn disappears. `app.close()` closes the listener, so nothing leaks.
+  await app.listen(0, "127.0.0.1");
 
   return {
     app,

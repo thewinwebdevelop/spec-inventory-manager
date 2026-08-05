@@ -29,7 +29,7 @@ import {
 import { Reflector } from "@nestjs/core";
 import type { Redis } from "ioredis";
 import {
-  ORG_RATE_LIMIT_DEFAULTS,
+  ORG_RATE_LIMITS,
   type OrgRateLimitAction,
   type OrgRateLimitRule,
 } from "@omnistock/config";
@@ -97,7 +97,14 @@ export class OrgRateLimitGuard implements CanActivate {
     // while the authz layers next door are closed.
     if (!action) return true;
 
-    const rule = ORG_RATE_LIMIT_DEFAULTS[action];
+    // ⚠️ `ORG_RATE_LIMITS`, not `ORG_RATE_LIMIT_DEFAULTS`. The first is a LIVE
+    // view whose getters read `process.env` on every access; the second is the
+    // frozen fallback the zod schema uses when a variable is absent. Reading the
+    // frozen one meant architecture §8's "env-tunable" was false in practice:
+    // setting `ORG_RATE_LIMIT_INVITE_PUBLIC_PER_HOUR` changed nothing at
+    // runtime, and nobody would have found out until an incident where turning
+    // a quota down was the response.
+    const rule = ORG_RATE_LIMITS[action];
     const req = context.switchToHttp().getRequest<RateLimitedRequest>();
     const route = `${req.method ?? "?"} ${req.route?.path ?? req.url ?? "?"}`;
     const resolved = this.resolveBucket(rule, req);

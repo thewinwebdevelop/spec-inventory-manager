@@ -101,7 +101,13 @@ describe("CAPABILITY_EVENT_SINK → SecurityEventsService (T-002-13)", () => {
       .compile();
 
     app = moduleRef.createNestApplication();
-    await app.init();
+    // Listen on an ephemeral loopback port instead of leaving the server
+    // unstarted. With `init()` alone supertest starts and closes a server for
+    // EVERY request; across parallel forks that churn produced this lane's
+    // transport flakes (`socket hang up`, `Parse Error: Expected HTTP/`) on
+    // arbitrary files, unrelated to the code under test. A listening server is
+    // reused, and `app.close()` still tears it down.
+    await app.listen(0, "127.0.0.1");
     events = collectSecurityEvents(app.get(SecurityEventsService));
   });
 

@@ -86,6 +86,53 @@ describe("ERROR_CODES registry", () => {
     }
   });
 
+  // T-002-20 ★ — the seven codes redeeming an invitation introduces (api-spec §4).
+  it("pins the invitation-redemption codes → status (api-spec §4)", () => {
+    expect(ERROR_CODES.INVITATION_INVALID.status).toBe(404);
+    expect(ERROR_CODES.INVITATION_EXPIRED.status).toBe(409);
+    expect(ERROR_CODES.INVITATION_CANCELLED.status).toBe(409);
+    expect(ERROR_CODES.INVITATION_ALREADY_ACCEPTED.status).toBe(409);
+    expect(ERROR_CODES.INVITATION_SUPERSEDED.status).toBe(409);
+    expect(ERROR_CODES.INVITATION_ROLE_UNAVAILABLE.status).toBe(409);
+    // 403, not 404: the token IS valid, the account is not the invited one.
+    expect(ERROR_CODES.INVITATION_EMAIL_MISMATCH.status).toBe(403);
+  });
+
+  it("★ the four 'your token is real' outcomes are four DISTINCT codes", () => {
+    // Each sends the user somewhere different (ask for a new link / it was
+    // withdrawn / you already joined / you were removed). Collapsing any two
+    // guarantees the client shows the wrong recovery path (AC US-4).
+    const codes = [
+      ERROR_CODES.INVITATION_EXPIRED.code,
+      ERROR_CODES.INVITATION_CANCELLED.code,
+      ERROR_CODES.INVITATION_ALREADY_ACCEPTED.code,
+      ERROR_CODES.INVITATION_SUPERSEDED.code,
+    ];
+    expect(new Set(codes).size).toBe(4);
+    // …and none of them is the "we will not say" answer.
+    expect(codes).not.toContain(ERROR_CODES.INVITATION_INVALID.code);
+  });
+
+  it("★ no redemption message reveals an address, a token or a shop name", () => {
+    // These bodies are returned to an UNAUTHENTICATED caller (preview) or to
+    // somebody who may not be the invitee (accept). The default copy must carry
+    // no identifier at all — the only per-request datum any of them adds is
+    // `details.emailMasked`, attached at the throw site.
+    for (const def of [
+      ERROR_CODES.INVITATION_INVALID,
+      ERROR_CODES.INVITATION_EXPIRED,
+      ERROR_CODES.INVITATION_CANCELLED,
+      ERROR_CODES.INVITATION_ALREADY_ACCEPTED,
+      ERROR_CODES.INVITATION_SUPERSEDED,
+      ERROR_CODES.INVITATION_ROLE_UNAVAILABLE,
+      ERROR_CODES.INVITATION_EMAIL_MISMATCH,
+    ]) {
+      expect(def.message).not.toContain("@");
+      expect(def.message).not.toMatch(/[A-Za-z0-9_-]{20,}/);
+      expect(def.message).not.toContain("องค์กร"); // D-029 wording
+    }
+  });
+
   it("uses the D-029 wording ('ร้าน', not 'องค์กร') in the org-context messages", () => {
     for (const def of [
       ERROR_CODES.ORG_CONTEXT_REQUIRED,

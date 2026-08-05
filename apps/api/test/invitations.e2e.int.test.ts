@@ -228,7 +228,9 @@ d("F-002 invitations, org side (E2E, DB)", () => {
       .post(`/orgs/${orgId}/invitations/${invitationId}/link`)
       .set("Authorization", `Bearer ${owner.accessToken}`)
       .send();
-    expect(res.status).toBe(201);
+    // api-spec §3.12 — 200: nothing is created, an existing invitation's token
+    // is rotated.
+    expect(res.status).toBe(200);
     expect(res.body.rotated).toBe(true);
     const newToken = res.body.token as string;
     expect(newToken).not.toBe(oldToken);

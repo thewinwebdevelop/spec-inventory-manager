@@ -4,6 +4,7 @@ import {
   acceptedUserCreatedAfterInvite,
   invitationExpiryFrom,
   toInvitationRow,
+  userCreatedAfterTokenIssued,
 } from "./invitation-view";
 
 const CREATED = new Date("2026-07-28T09:00:00.000Z");
@@ -128,6 +129,28 @@ describe("acceptedUserCreatedAfterInvite (NEW-9)", () => {
     // true because the account postdates `createdAt`. Against `tokenIssuedAt`
     // it would read false — the erasure this test exists to prevent.
     expect(row.acceptedUserCreatedAfterInvite).toBe(true);
+  });
+});
+
+describe("userCreatedAfterTokenIssued (T-002-20 — the AUDIT-side comparison)", () => {
+  it("★ is a DIFFERENT question from the wire flag, and gives a different answer", () => {
+    // Same invitation, same account: created after `createdAt` (so the wire flag
+    // is true) but before the link was rotated (so the event flag is false).
+    // Collapsing the two would either break NEW-9 or make the log line lie about
+    // which link was outstanding when the account appeared.
+    const accountCreatedAt = new Date("2026-07-29T09:00:00.000Z");
+    expect(
+      acceptedUserCreatedAfterInvite({ createdAt: CREATED, acceptedUserCreatedAt: accountCreatedAt }),
+    ).toBe(true);
+    expect(userCreatedAfterTokenIssued(accountCreatedAt, ISSUED)).toBe(false);
+  });
+
+  it("is true for an account made after the current link was handed out", () => {
+    expect(userCreatedAfterTokenIssued(new Date(ISSUED.getTime() + 1), ISSUED)).toBe(true);
+  });
+
+  it("the exact instant is NOT after (strict boundary)", () => {
+    expect(userCreatedAfterTokenIssued(new Date(ISSUED.getTime()), ISSUED)).toBe(false);
   });
 });
 

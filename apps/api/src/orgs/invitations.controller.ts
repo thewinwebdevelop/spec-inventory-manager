@@ -16,7 +16,20 @@
 // owns the clock, so every expiry rule is testable without fake timers — which
 // @qa's kit forbids outright, because Postgres' `now()` ignores them and a suite
 // that fakes time is testing a clock the database disagrees with.
-import { Body, Controller, Delete, Get, Inject, Param, Post, Query, Res, UseGuards } from "@nestjs/common";
+import {
+  Body,
+  Controller,
+  Delete,
+  Get,
+  HttpCode,
+  HttpStatus,
+  Inject,
+  Param,
+  Post,
+  Query,
+  Res,
+  UseGuards,
+} from "@nestjs/common";
 import type { Response } from "express";
 import { CAPABILITY_MANAGE_MEMBERS, type InvitationRow } from "@omnistock/core-domain";
 import { domainError } from "../common";
@@ -113,6 +126,11 @@ export class InvitationsController {
   @RequireCapability(CAPABILITY_MANAGE_MEMBERS)
   @OrgRateLimit("reissueInvitationLink")
   @Post(":invitationId/link")
+  // 200, not Nest's default 201 for POST: api-spec §3.12 says 200, and nothing
+  // is CREATED here — the invitation already existed and only its token was
+  // rotated. I shipped 201 in T-002-19; this corrects the implementation to the
+  // locked contract rather than changing the contract to match the code.
+  @HttpCode(HttpStatus.OK)
   async reissueLink(
     @Param("invitationId") invitationId: string,
     @Res({ passthrough: true }) res: Response,

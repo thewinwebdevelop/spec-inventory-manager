@@ -18,6 +18,7 @@ export default defineConfig({
     // slower; give them headroom.
     testTimeout: 30000,
     hookTimeout: 30000,
+
   },
   plugins: [
     swc.vite({

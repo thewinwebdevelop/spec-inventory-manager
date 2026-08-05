@@ -141,6 +141,71 @@ export const ERROR_CODES = {
     message: "ผู้ใช้นี้เป็นสมาชิกของร้านนี้อยู่แล้ว",
   },
 
+  // ── F-002 · T-002-20 — redeeming an invitation (api-spec §3.14/§3.15) ─────
+  //
+  // WHY FOUR SEPARATE 409s AND NOT ONE.
+  // Each one sends the user somewhere different: `EXPIRED` and `SUPERSEDED` say
+  // "ask for a new link", `CANCELLED` says "that link was withdrawn",
+  // `ALREADY_ACCEPTED` says "you are done, sign in". A single code would make
+  // the client guess, and the guess would be wrong most of the time (AC US-4).
+  //
+  // ⚠️ They are only safe to distinguish because the caller ALREADY HOLDS a
+  // token that matched a stored hash (architecture §7.6 "Enumeration"). The line
+  // between them and `INVITATION_INVALID` below is the whole enumeration story:
+  // "your secret is right, here is what happened to it" versus "no".
+  //
+  // F-002 · api-spec §3.15 (I-1/D-028) — the link predates the removal.
+  INVITATION_SUPERSEDED: {
+    code: "INVITATION_SUPERSEDED",
+    status: HttpStatus.CONFLICT,
+    message: "คำเชิญนี้ออกก่อนที่คุณจะถูกถอดจากร้าน กรุณาขอคำเชิญใหม่",
+  },
+  // F-002 · api-spec §3.15 (M-6) — the invited role was deleted, or is no longer
+  // a role of that shop. Checked AT ACCEPT, not only at creation: F-003 lets a
+  // shop delete roles, and a membership pointing at a role from another tenant
+  // is a hole no foreign key would refuse (`roleId` is a single-column key).
+  INVITATION_ROLE_UNAVAILABLE: {
+    code: "INVITATION_ROLE_UNAVAILABLE",
+    status: HttpStatus.CONFLICT,
+    message: "คำเชิญนี้ใช้ไม่ได้แล้ว โปรดขอลิงก์ใหม่",
+  },
+  INVITATION_EXPIRED: {
+    code: "INVITATION_EXPIRED",
+    status: HttpStatus.CONFLICT,
+    message: "ลิงก์คำเชิญหมดอายุแล้ว กรุณาขอลิงก์ใหม่",
+  },
+  INVITATION_CANCELLED: {
+    code: "INVITATION_CANCELLED",
+    status: HttpStatus.CONFLICT,
+    message: "คำเชิญนี้ถูกยกเลิกแล้ว",
+  },
+  INVITATION_ALREADY_ACCEPTED: {
+    code: "INVITATION_ALREADY_ACCEPTED",
+    status: HttpStatus.CONFLICT,
+    message: "คำเชิญนี้ถูกใช้ไปแล้ว",
+  },
+  // 404, and the message says nothing more. An unknown token, a rotated one and
+  // a token that never existed are ONE answer with ONE body: anything else turns
+  // the public preview into an oracle that says "this secret used to be real",
+  // which is the only fact a token-mining attempt could ever collect (I-5/I-6).
+  INVITATION_INVALID: {
+    code: "INVITATION_INVALID",
+    status: HttpStatus.NOT_FOUND,
+    message: "ลิงก์คำเชิญไม่ถูกต้อง",
+  },
+  // 403, with `details.emailMasked` attached at the throw site so the UI can say
+  // "this invitation was issued to u***@example.com — please sign in with that
+  // account" instead of leaving the user to guess which of their addresses it is.
+  //
+  // ⚠️ Defence in depth, NOT a control (architecture §7.6): Phase 0 cannot verify
+  // an email address, so whoever holds the link can sign up AS the invitee. Do
+  // not let this code's existence be read as "invitations are bound to an owner".
+  INVITATION_EMAIL_MISMATCH: {
+    code: "INVITATION_EMAIL_MISMATCH",
+    status: HttpStatus.FORBIDDEN,
+    message: "คำเชิญนี้ออกให้บัญชีอื่น กรุณาเข้าสู่ระบบด้วยบัญชีที่ถูกเชิญ",
+  },
+
   // F-002 · api-spec §4 / architecture §6.3 (I-10) — the per-user shop cap.
   // 409 rather than 403: nothing about the CALLER is wrong, the request simply
   // conflicts with a state they can resolve (leave a shop, or ask us to raise

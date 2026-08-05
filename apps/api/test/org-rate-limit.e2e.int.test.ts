@@ -185,4 +185,27 @@ d("org rate limit through the real stack (architecture §8)", () => {
     // a key space would let one reset the other's window.
     expect(ours.every((k) => !k.startsWith("throttle:"))).toBe(true);
   });
+
+  it("★ the quota is genuinely env-tunable — turning it down takes effect", async () => {
+    // architecture §8 and api-spec §19 both advertise these limits as
+    // env-tunable, and `@omnistock/config` exports the variables and a live
+    // resolver for exactly that. The guard was reading the FROZEN defaults
+    // instead, so setting `ORG_RATE_LIMIT_CREATE_ORG_PER_HOUR` changed nothing
+    // at runtime — a gap nobody would have found until the incident where
+    // turning a quota down was the response.
+    const previous = process.env.ORG_RATE_LIMIT_CREATE_ORG_PER_HOUR;
+    process.env.ORG_RATE_LIMIT_CREATE_ORG_PER_HOUR = "1";
+    try {
+      const user = await newUser();
+      expect((await createOrg(user.accessToken, "ร้านแรก")).status).toBe(201);
+      // With the default of 10 this would still be allowed; it is refused only
+      // because the env value is the one actually in force.
+      expect(RULE.limit).toBeGreaterThan(1);
+      const refused = await createOrg(user.accessToken, "ร้านที่สอง");
+      expect(refused.status).toBe(429);
+    } finally {
+      if (previous === undefined) delete process.env.ORG_RATE_LIMIT_CREATE_ORG_PER_HOUR;
+      else process.env.ORG_RATE_LIMIT_CREATE_ORG_PER_HOUR = previous;
+    }
+  });
 });

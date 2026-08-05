@@ -86,6 +86,31 @@ export function acceptedUserCreatedAfterInvite(source: {
   return source.acceptedUserCreatedAt.getTime() > source.createdAt.getTime();
 }
 
+/**
+ * T-002-20 — the AUDIT-side twin of the flag above, and deliberately NOT the
+ * same comparison.
+ *
+ * `org.invitation.accepted` carries `userCreatedAfterTokenIssued` (architecture
+ * §9, and the payload key is frozen): "was the account made after the link that
+ * was actually redeemed was handed out?". That question is about THIS token, so
+ * it compares against `tokenIssuedAt` — which is exactly the comparison NEW-9
+ * forbade for the WIRE flag, because reissuing a link would move it.
+ *
+ * The two coexist on purpose:
+ *   wire  `acceptedUserCreatedAfterInvite` vs `Invitation.createdAt`
+ *         — must survive a rotate, or the only Phase-0 signal we have can be
+ *           erased by pressing a button (NEW-9).
+ *   event `userCreatedAfterTokenIssued`    vs `Invitation.tokenIssuedAt`
+ *         — an immutable log line written at the moment of redemption; the
+ *           earlier lines are still in the log, so nothing is overwritten.
+ *
+ * Same boundary rule as everywhere else: strictly AFTER, so an account created
+ * in the same millisecond as the link is not flagged.
+ */
+export function userCreatedAfterTokenIssued(userCreatedAt: Date, tokenIssuedAt: Date): boolean {
+  return userCreatedAt.getTime() > tokenIssuedAt.getTime();
+}
+
 /** Project one invitation for `GET /orgs/{orgId}/invitations` (§3.10). */
 export function toInvitationRow(
   invitation: InvitationRowSource,

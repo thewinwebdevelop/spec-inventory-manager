@@ -148,8 +148,22 @@ export {
 export {
   toInvitationRow,
   acceptedUserCreatedAfterInvite,
+  userCreatedAfterTokenIssued,
   invitationExpiryFrom,
   type InvitationRow,
   type InvitationRowSource,
   type InvitationRowRole,
 } from "./invitation-view";
+
+// T-002-20 — the two shapes a stranger can reach (api-spec §3.14/§3.15). The
+// preview mask lives INSIDE the projection: the source type has no field that
+// could carry a full address, an organizationId or a token hash, so "we forgot
+// to mask it" is not a mistake this endpoint can make.
+export {
+  toInvitationPreview,
+  toInvitationAcceptResult,
+  type InvitationPreview,
+  type InvitationPreviewSource,
+  type InvitationAcceptResult,
+  type InvitationAcceptSource,
+} from "./invitation-redemption-view";
