@@ -110,7 +110,34 @@ d("auth endpoints (E2E, DB+Redis)", () => {
   afterAll(async () => {
     sink?.stop();
     if (app) await app.close();
-    if (prisma) await prisma.$disconnect();
+    // Delete exactly what this suite created, in FK order. Before this the
+    // suite left its fixtures behind — 65 organizations and 220 users after a
+    // single run — which made "is the database dirty?" unanswerable while
+    // debugging any LATER suite, and grew without bound on a developer box.
+    if (prisma) {
+      if (createdOrgIds.length > 0) {
+        const where = { organizationId: { in: createdOrgIds } };
+        await prisma.invitation.deleteMany({ where });
+        await prisma.membership.deleteMany({ where });
+        await prisma.role.deleteMany({ where });
+        await prisma.organization.deleteMany({ where: { id: { in: createdOrgIds } } });
+      }
+      if (createdEmails.length > 0) {
+        // Users are created over HTTP (signup), so they are tracked by the one
+        // factory that mints their addresses rather than by id.
+        const users = await prisma.user.findMany({
+          where: { email: { in: createdEmails.map((e) => e.toLowerCase()) } },
+          select: { id: true },
+        });
+        const userIds = users.map((u) => u.id);
+        if (userIds.length > 0) {
+          await prisma.refreshToken.deleteMany({ where: { userId: { in: userIds } } });
+          await prisma.membership.deleteMany({ where: { userId: { in: userIds } } });
+          await prisma.user.deleteMany({ where: { id: { in: userIds } } });
+        }
+      }
+      await prisma.$disconnect();
+    }
     if (redis) redis.disconnect();
   });
 
@@ -133,8 +160,20 @@ d("auth endpoints (E2E, DB+Redis)", () => {
     return `203.0.113.${ipCounter % 254 + 1}`;
   }
 
+  /**
+   * Everything this suite created, so `afterAll` can remove exactly it.
+   *
+   * Postgres is SHARED with the suites vitest runs in parallel, so this is
+   * never a TRUNCATE and never a `deleteMany({})`: those would delete a
+   * neighbour's fixtures and produce a failure nobody can reproduce.
+   */
+  const createdEmails: string[] = [];
+  const createdOrgIds: string[] = [];
+
   function uniqueEmail(prefix: string): string {
-    return `${prefix}-${Date.now()}-${Math.random().toString(36).slice(2)}@e2e.co`;
+    const email = `${prefix}-${Date.now()}-${Math.random().toString(36).slice(2)}@e2e.co`;
+    createdEmails.push(email);
+    return email;
   }
 
   const server = () => app.getHttpServer();
@@ -333,6 +372,7 @@ d("auth endpoints (E2E, DB+Redis)", () => {
     memberEmail: string;
   }> {
     const org = await prisma.organization.create({ data: { name: `Org-${Math.random().toString(36).slice(2)}` } });
+    createdOrgIds.push(org.id);
     const role = await prisma.role.create({
       data: { organizationId: org.id, name: "Admin", capabilities: [CAPABILITY_MANAGE_MEMBERS] },
     });
@@ -454,6 +494,7 @@ d("auth endpoints (E2E, DB+Redis)", () => {
     const other = await prisma.organization.create({
       data: { name: `Other-${Math.random().toString(36).slice(2)}` },
     });
+    createdOrgIds.push(other.id);
     const role = await prisma.role.create({
       data: { organizationId: other.id, name: "Staff", capabilities: ["manage_products"] },
     });
@@ -664,6 +705,8 @@ const ALLOWED_ORIGIN = "http://localhost:3001";
 d("prod-path security wiring (trust proxy 0 + CORS allow-list)", () => {
   let app: INestApplication;
   let redis: Redis;
+  /** Signup emails this block minted, so `afterAll` can remove exactly them. */
+  const spoofEmails: string[] = [];
 
   beforeAll(async () => {
     // Wire the prod path: TRUST_PROXY_HOPS default 0, an explicit CORS origin.
@@ -702,6 +745,25 @@ d("prod-path security wiring (trust proxy 0 + CORS allow-list)", () => {
 
   afterAll(async () => {
     if (app) await app.close();
+    // This block signs users up too, so it removes its own. Same rule as the
+    // suite above: delete exactly what was created, never a table-wide sweep —
+    // vitest runs files in parallel against one shared database.
+    if (spoofEmails.length > 0) {
+      const prisma = new PrismaClient({ datasources: { db: { url: TEST_DB } } });
+      try {
+        const users = await prisma.user.findMany({
+          where: { email: { in: spoofEmails.map((e) => e.toLowerCase()) } },
+          select: { id: true },
+        });
+        const ids = users.map((u) => u.id);
+        if (ids.length > 0) {
+          await prisma.refreshToken.deleteMany({ where: { userId: { in: ids } } });
+          await prisma.user.deleteMany({ where: { id: { in: ids } } });
+        }
+      } finally {
+        await prisma.$disconnect();
+      }
+    }
     if (redis) redis.disconnect();
   });
 
@@ -721,6 +783,7 @@ d("prod-path security wiring (trust proxy 0 + CORS allow-list)", () => {
     // email 422s before the handler, so no bucket would be written). The password
     // strength is irrelevant here — checkIp runs before the policy check.
     const spoofBase = Date.now();
+    spoofEmails.push(`spoof-${spoofBase}-1@example.com`, `spoof-${spoofBase}-2@example.com`);
     await request(server).post("/auth/signup").set("Content-Type", "application/json").set("X-Forwarded-For", "1.2.3.4").send({ email: `spoof-${spoofBase}-1@example.com`, password: STRONG_PW });
     await request(server).post("/auth/signup").set("Content-Type", "application/json").set("X-Forwarded-For", "5.6.7.8").send({ email: `spoof-${spoofBase}-2@example.com`, password: STRONG_PW });
     // Both requests hit the SAME ip bucket → count == 2 under one key.

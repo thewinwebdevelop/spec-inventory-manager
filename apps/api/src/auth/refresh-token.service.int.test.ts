@@ -33,13 +33,25 @@ d("RefreshTokenService (DB-backed, ★ security core)", () => {
     return new RefreshTokenService(prismaServiceStub(), events, REFRESH_SECRET, () => clockMs);
   }
 
+  /** Every user this suite creates, so `afterAll` removes exactly them. */
+  const createdUserIds: string[] = [];
+
   beforeAll(async () => {
     prisma = new PrismaClient({ datasources: { db: { url: TEST_DB } } });
     await prisma.$connect();
   });
 
   afterAll(async () => {
-    if (prisma) await prisma.$disconnect();
+    // One user per TEST is created here, so the suite left one row behind per
+    // case — 8 users a run, forever, in a database shared with every other
+    // suite. Deleted by id, never a table sweep: vitest runs files in parallel.
+    if (prisma) {
+      if (createdUserIds.length > 0) {
+        await prisma.refreshToken.deleteMany({ where: { userId: { in: createdUserIds } } });
+        await prisma.user.deleteMany({ where: { id: { in: createdUserIds } } });
+      }
+      await prisma.$disconnect();
+    }
   });
 
   beforeEach(async () => {
@@ -52,6 +64,7 @@ d("RefreshTokenService (DB-backed, ★ security core)", () => {
       data: { email: `rt-${Date.now()}-${Math.random().toString(36).slice(2)}@t.co`, passwordHash: "x" },
     });
     userId = user.id;
+    createdUserIds.push(user.id);
   });
 
   it("I3.1 rotation happy path — successor inserted, old consumed, chain inherited", async () => {
