@@ -43,3 +43,31 @@ export class UpdateOrganizationDto {
   @Allow()
   timezone?: unknown;
 }
+
+/**
+ * `PUT /orgs/{orgId}/tax-profile` (api-spec §3.5).
+ *
+ * All four values arrive as `unknown` for the reason at the top of this file,
+ * and one more that matters here: the all-or-nothing rule (data-model §3.3) is
+ * a rule ABOUT THE COMBINATION of fields. `@IsOptional() @IsString()` per field
+ * cannot express "these three arrive together or not at all", so splitting the
+ * check between decorators and `validateTaxProfilePut` would leave half the rule
+ * in a place the next reader does not look.
+ *
+ * ⚠️ `taxId` must never be logged — not by an interceptor, not by a validation
+ * error message. That is why no class-validator constraint touches it: a failed
+ * constraint's message is what the global pipe puts on the wire.
+ */
+export class PutTaxProfileDto {
+  @Allow()
+  entityType?: unknown;
+
+  @Allow()
+  taxId?: unknown;
+
+  @Allow()
+  vatRegistered?: unknown;
+
+  @Allow()
+  branchCode?: unknown;
+}

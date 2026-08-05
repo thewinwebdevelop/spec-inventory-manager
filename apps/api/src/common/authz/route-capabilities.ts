@@ -136,6 +136,34 @@ export const ANY_ACTIVE_MEMBER_ROUTES: {
 });
 
 /**
+ * T-002-17 ★ — the endpoints allowed to put a FULL Thai TIN on the wire
+ * (architecture §12.2 item 7 · api-spec §3.16 · test-plan I-04).
+ *
+ * EXACTLY ONE ROW, and that is the assertion — @qa's I-04 pins the length at 1,
+ * so a second endpoint learning to return `taxId` cannot arrive quietly; it has
+ * to make a test red and be argued for. With `entityType="personal"` the number
+ * in question is the shop owner's national ID, so "which endpoints may emit it"
+ * is a list somebody signs, not a property that emerges from the code.
+ *
+ * A LITERAL LIST, NEVER A REGEX (qa's condition, §12.2 item 7): a prefix rule
+ * like `/tax-profile/*` would silently adopt every route added under it.
+ *
+ * ⚠️ This says nothing about WHO may call it — that is `ROUTE_CAPABILITIES`
+ * above (`manage_org_settings`, D-030/NEW-11) plus the rate limit and the
+ * `org.tax_profile.revealed` event. This list answers a different question:
+ * "if a full TIN appears in a response body anywhere else, is that a bug?" Yes.
+ */
+export const TAX_ID_RESPONSE_ALLOWLIST: readonly AnyActiveMemberRoute[] = Object.freeze([
+  row({ method: "POST", path: "/orgs/{orgId}/tax-profile/reveal" }),
+]);
+
+/** May `method path` legitimately return a full TIN? (Exactly one route may.) */
+export function isTaxIdAllowedOnRoute(method: string, path: string): boolean {
+  const key = `${capabilityLookupMethod(method)} ${toTemplatePath(path)}`;
+  return TAX_ID_RESPONSE_ALLOWLIST.some((r) => routeKey(r) === key);
+}
+
+/**
  * The verb a capability lookup should use (T-002-13).
  *
  * `HEAD` is answered by the `@Get()` handler (express), so it requires EXACTLY

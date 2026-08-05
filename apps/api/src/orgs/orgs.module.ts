@@ -28,17 +28,32 @@ import { MyOrganizationsController } from "./my-organizations.controller";
 import { OrgProfileController } from "./org-profile.controller";
 import { OrgProfileService } from "./org-profile.service";
 import { OrganizationsController } from "./organizations.controller";
+import { TaxProfileController } from "./tax-profile.controller";
+import { TaxProfileService } from "./tax-profile.service";
 import { MyOrganizationsService } from "./system/my-organizations.service";
 import { OrgProvisioningService } from "./system/org-provisioning.service";
 import { PlanProvisioningService } from "./system/plan-provisioning.service";
 
 @Module({
   imports: [AuthModule],
-  controllers: [OrganizationsController, MyOrganizationsController, OrgProfileController],
+  controllers: [
+    OrganizationsController,
+    MyOrganizationsController,
+    OrgProfileController,
+    // T-002-17 — mounted at `orgs/:orgId/tax-profile`, a SEPARATE controller
+    // rather than two more handlers on `OrgProfileController`: the reveal route
+    // is the only one in F-002 that returns a full TIN, and keeping it in its
+    // own file is what makes "which code can emit that number" a question a
+    // reviewer answers by opening one file.
+    TaxProfileController,
+  ],
   providers: [
     // env → DI, once at boot (never `loadEnv()` on a request path).
     ...orgConfigProviders,
     OrgProfileService,
+    // Injects `OrgProfileService` (to answer §3.5 with the §3.3 body) and
+    // `SecurityEventsService` (from the imported `AuthModule`).
+    TaxProfileService,
     // `system/` providers are registered here, not exported: nothing outside
     // this module may reach an unfiltered read.
     OrgProvisioningService,

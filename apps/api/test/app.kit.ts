@@ -14,7 +14,10 @@ import cookieParser from "cookie-parser";
 import { AuthModule } from "../src/auth/auth.module";
 import { SecurityEventsService } from "../src/auth/security-events.service";
 import { CAPABILITY_EVENT_SINK_OVERRIDE } from "../src/common/authz";
-import { ORG_RATE_LIMIT_EVENT_SINK_OVERRIDE } from "../src/common/org-rate-limit.tokens";
+import {
+  ORG_RATE_LIMIT_EVENT_SINK_OVERRIDE,
+  ORG_RATE_LIMIT_REDIS,
+} from "../src/common/org-rate-limit.tokens";
 import { DomainExceptionFilter } from "../src/common/domain-exception.filter";
 import { OrgsModule } from "../src/orgs";
 import { TenancyModule } from "../src/tenancy";
@@ -45,6 +48,16 @@ export function applyTestEnv(): void {
 export interface TestAppOptions {
   /** Register the `/__test__` fixtures (boom + probe). Default true. */
   readonly fixtures?: boolean;
+  /**
+   * Bind a Redis connection to `ORG_RATE_LIMIT_REDIS` (T-002-17).
+   *
+   * Left unbound by default and deliberately so: the guard treats it as
+   * `@Optional()` and takes its fail-open path without one, and an ioredis
+   * socket per test app would leave the runner hanging. A suite that asserts
+   * rate-limit BEHAVIOUR passes its own connection here and CLOSES IT ITSELF —
+   * this kit never opens or closes a socket it did not create.
+   */
+  readonly rateLimitRedis?: unknown;
 }
 
 export interface TestApp {
@@ -82,6 +95,10 @@ export async function createTestApp(options: TestAppOptions = {}): Promise<TestA
       providers: [
         { provide: CAPABILITY_EVENT_SINK_OVERRIDE, useExisting: SecurityEventsService },
         { provide: ORG_RATE_LIMIT_EVENT_SINK_OVERRIDE, useExisting: SecurityEventsService },
+        // Only when the caller supplied one — see `TestAppOptions.rateLimitRedis`.
+        ...(options.rateLimitRedis !== undefined
+          ? [{ provide: ORG_RATE_LIMIT_REDIS, useValue: options.rateLimitRedis }]
+          : []),
       ],
     }),
     AuthModule,

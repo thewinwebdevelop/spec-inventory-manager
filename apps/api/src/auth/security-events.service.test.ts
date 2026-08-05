@@ -244,7 +244,14 @@ describe("payload safety — org.tax_profile.* never carries the TIN (M-7ค / D
     const substrings: string[] = [];
     for (let i = 0; i + 4 <= TIN.length; i++) substrings.push(TIN.slice(i, i + 4));
     for (const event of sink.events) {
-      const serialized = JSON.stringify(event);
+      // ⚠️ PAYLOAD only — serializing the whole event includes `at`, an
+      // epoch-millis timestamp, and a 4-digit window of a 13-digit TIN collides
+      // with a 13-digit clock often enough to fail at random. (It did: `at`
+      // 1785890192104 contains "8901".) The claim being made is about what WE
+      // put in the payload; the timestamp is ours, carries no TIN, and its
+      // digits mean nothing here. Scanning it turned a real guarantee into a
+      // coin flip that would have failed in CI on some other day.
+      const serialized = JSON.stringify(event.payload);
       for (const fragment of substrings) expect(serialized).not.toContain(fragment);
     }
     sink.stop();

@@ -99,6 +99,25 @@ export {
   type MyOrganizationShortItem,
 } from "./org-profile";
 
+// T-002-17 ★ — the tax profile: the all-or-nothing write rule (§3.5) and the
+// ONE function in the system that produces a full TIN (§3.16). Everything else
+// that touches the number goes through `maskTaxId` above.
+export {
+  validateTaxProfilePut,
+  toTaxProfileReveal,
+  TAX_PROFILE_CLEARED,
+  TAX_ENTITY_TYPES,
+  TAX_ID_INVALID_MESSAGE,
+  TAX_ENTITY_TYPE_INVALID_MESSAGE,
+  VAT_REGISTERED_INVALID_MESSAGE,
+  BRANCH_CODE_INVALID_MESSAGE,
+  TAX_PROFILE_INCOMPLETE_MESSAGE,
+  type TaxProfileWrite,
+  type TaxProfileValidation,
+  type TaxProfileErrorCode,
+  type RevealedTaxProfile,
+} from "./tax-profile";
+
 // T-002-09 ★ — the two fail-closed conditions the SHIPPED admin-reset endpoint
 // grew when "one person, many organizations" became real (C-2/D-028 +
 // NEW-1/D-030). Same `canAssignRole` rule as the membership routes, no copy.

@@ -78,6 +78,21 @@ export const ERROR_CODES = {
     message: "ร้านใน header กับใน URL ไม่ตรงกัน",
   },
 
+  // ── 422 tax profile (F-002 · api-spec §4 / §3.5 · T-002-17) ───────────────
+  // A DISTINCT code from VALIDATION_FAILED because the client shows different
+  // copy for it: "that is not a real tax id" points at one field the user can
+  // fix, while VALIDATION_FAILED on this endpoint usually means "you have not
+  // finished filling the form" (the all-or-nothing rule, data-model §3.3).
+  //
+  // ⚠️ The message never contains the rejected value — with
+  // `entityType='personal'` a Thai TIN is the owner's national ID (M-7ค), and
+  // an error message is the one string that gets copied into a bug report.
+  TAX_ID_INVALID: {
+    code: "TAX_ID_INVALID",
+    status: HttpStatus.UNPROCESSABLE_ENTITY,
+    message: "เลขผู้เสียภาษีไม่ถูกต้อง",
+  },
+
   // ── 409 conflict ──────────────────────────────────────────────────────────
   EMAIL_TAKEN: {
     code: "EMAIL_TAKEN",

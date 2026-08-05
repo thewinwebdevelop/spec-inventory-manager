@@ -21,6 +21,9 @@ const SOURCE_FILES = [
   // T-002-15/16 — org creation policy + the profile/switcher mappers.
   "org-provisioning.ts",
   "org-profile.ts",
+  // T-002-17 — the tax profile write rule + the single reveal mapper. `now` is
+  // a parameter there too, which is what makes `revealedAt` pinnable.
+  "tax-profile.ts",
   "index.ts",
 ] as const;
 

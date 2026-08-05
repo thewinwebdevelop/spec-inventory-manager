@@ -24,6 +24,8 @@ export {
 export {
   ROUTE_CAPABILITIES,
   ANY_ACTIVE_MEMBER_ROUTES,
+  TAX_ID_RESPONSE_ALLOWLIST,
+  isTaxIdAllowedOnRoute,
   CAPABILITY_MANAGE_ORG_SETTINGS,
   capabilityLookupMethod,
   capabilityForRoute,

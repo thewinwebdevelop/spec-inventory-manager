@@ -12,8 +12,13 @@ import { CURSOR_INVALID_MESSAGE, encodeCursor } from "../common/cursor";
 import { MyOrganizationsController } from "./my-organizations.controller";
 import { OrgProfileController } from "./org-profile.controller";
 import { OrganizationsController } from "./organizations.controller";
-import { ORG_PROFILE_RESPONSE_HEADERS } from "./response-headers";
+import { TaxProfileController } from "./tax-profile.controller";
+import {
+  ORG_PROFILE_RESPONSE_HEADERS,
+  TAX_ID_REVEAL_RESPONSE_HEADERS,
+} from "./response-headers";
 import type { OrgProfileService } from "./org-profile.service";
+import type { TaxProfileService } from "./tax-profile.service";
 import type { MyOrganizationsService } from "./system/my-organizations.service";
 import type { OrgProvisioningService } from "./system/org-provisioning.service";
 
@@ -211,5 +216,130 @@ describe("OrgProfileController", () => {
     const { res } = fakeResponse();
     await controller.update({}, res);
     expect(update).toHaveBeenCalledWith({});
+  });
+});
+
+// ── PUT/POST /orgs/{orgId}/tax-profile(/reveal) — T-002-17 ─────────────────
+
+describe("TaxProfileController", () => {
+  const TIN = "1101700207366";
+
+  function subject() {
+    const set = vi.fn(async (_write?: unknown) => ({ id: "org_1", taxProfile: { taxIdMasked: "•••••••••7366" } }));
+    const reveal = vi.fn(async (_now?: Date) => ({
+      taxId: TIN,
+      entityType: "company",
+      revealedAt: "2026-07-28T09:00:00.000Z",
+    }));
+    const controller = new TaxProfileController({ set, reveal } as unknown as TaxProfileService);
+    return { controller, set, reveal };
+  }
+
+  const COMPLETE = { entityType: "company", taxId: TIN, vatRegistered: true, branchCode: "00000" };
+
+  describe("PUT — api-spec §3.5", () => {
+    it("forwards the four VALIDATED columns (wire names → column names)", async () => {
+      const { controller, set } = subject();
+      const { res } = fakeResponse();
+      await controller.put(COMPLETE, res);
+      expect(set).toHaveBeenCalledWith({
+        taxEntityType: "company",
+        taxId: TIN,
+        vatRegistered: true,
+        taxBranchCode: "00000",
+      });
+    });
+
+    it("★ sets `Cache-Control: no-store` (+ Pragma) — the body carries `taxIdMasked`", async () => {
+      const { controller } = subject();
+      const { res, headers } = fakeResponse();
+      await controller.put(COMPLETE, res);
+      expect(headers).toEqual({ ...ORG_PROFILE_RESPONSE_HEADERS });
+    });
+
+    it("★ a bad TIN is 422 TAX_ID_INVALID (not VALIDATION_FAILED) and writes nothing", async () => {
+      const { controller, set } = subject();
+      const { res, headers } = fakeResponse();
+      const error = (await controller
+        .put({ ...COMPLETE, taxId: "1101700207367" }, res)
+        .catch((e: unknown) => e)) as DomainException;
+      expect(error.getStatus()).toBe(422);
+      expect(error.code).toBe("TAX_ID_INVALID");
+      expect(error.fieldErrors).toHaveProperty("taxId");
+      expect(set).not.toHaveBeenCalled();
+      // The refusal happens before any header work, so a rejected write cannot
+      // be mistaken for a served response.
+      expect(headers).toEqual({});
+    });
+
+    it("★ the 422 body never contains the rejected number", async () => {
+      const { controller } = subject();
+      const { res } = fakeResponse();
+      const bad = "1101700207367";
+      const error = (await controller.put({ ...COMPLETE, taxId: bad }, res).catch((e: unknown) => e)) as DomainException;
+      expect(JSON.stringify(error.getResponse())).not.toContain(bad);
+      expect(JSON.stringify(error.fieldErrors)).not.toContain(bad);
+    });
+
+    it("★ a HALF-declared profile is 422 VALIDATION_FAILED and writes nothing", async () => {
+      const { controller, set } = subject();
+      const { res } = fakeResponse();
+      const error = (await controller
+        .put({ entityType: "company", taxId: TIN }, res)
+        .catch((e: unknown) => e)) as DomainException;
+      expect(error.getStatus()).toBe(422);
+      expect(error.code).toBe("VALIDATION_FAILED");
+      expect(error.fieldErrors).toHaveProperty("vatRegistered");
+      expect(set).not.toHaveBeenCalled();
+    });
+
+    it("an EMPTY body clears the profile (all-or-nothing, the `nothing` half)", async () => {
+      const { controller, set } = subject();
+      const { res } = fakeResponse();
+      await controller.put({}, res);
+      expect(set).toHaveBeenCalledWith({
+        taxEntityType: null,
+        taxId: null,
+        vatRegistered: null,
+        taxBranchCode: null,
+      });
+    });
+  });
+
+  describe("POST reveal — api-spec §3.16", () => {
+    it("★ sets no-store + no-referrer BEFORE the value is fetched", async () => {
+      const { controller, reveal } = subject();
+      const { res, headers } = fakeResponse();
+      // Headers must already be on the response by the time the service is
+      // asked for the number — a path added later that returns early must not
+      // be able to emit a TIN without them.
+      reveal.mockImplementationOnce(async () => {
+        expect(headers).toEqual({ ...TAX_ID_REVEAL_RESPONSE_HEADERS });
+        return { taxId: TIN, entityType: "company", revealedAt: "2026-07-28T09:00:00.000Z" };
+      });
+      await controller.reveal(res);
+      expect(headers).toEqual({ ...TAX_ID_REVEAL_RESPONSE_HEADERS });
+      expect(headers["Referrer-Policy"]).toBe("no-referrer");
+    });
+
+    it("returns the §3.16 body — the one response in the system with a full TIN", async () => {
+      const { controller } = subject();
+      const { res } = fakeResponse();
+      await expect(controller.reveal(res)).resolves.toEqual({
+        taxId: TIN,
+        entityType: "company",
+        revealedAt: "2026-07-28T09:00:00.000Z",
+      });
+    });
+
+    it("★ the edge owns the clock — `now` is passed down, never read below", async () => {
+      const { controller, reveal } = subject();
+      const { res } = fakeResponse();
+      const before = Date.now();
+      await controller.reveal(res);
+      const now = reveal.mock.calls[0][0] as Date;
+      expect(now).toBeInstanceOf(Date);
+      expect(now.getTime()).toBeGreaterThanOrEqual(before);
+    });
   });
 });

@@ -16,7 +16,12 @@ import request from "supertest";
 import { PrismaClient } from "@omnistock/db";
 import { AccessTokenService } from "../src/auth/access-token.service";
 import { collectSecurityEvents } from "../src/auth";
-import { ORG_PROFILE_RESPONSE_HEADERS } from "../src/orgs";
+import {
+  ORG_PROFILE_RESPONSE_HEADERS,
+  TAX_ID_REVEAL_RESPONSE_HEADERS,
+  TAX_ID_RESPONSE_ALLOWLIST,
+  isTaxIdAllowedOnRoute,
+} from "../src/orgs";
 import { assertErrorEnvelope, assertNoSecretFields, assertResponseHeaders } from "./assertions.kit";
 import { INT_LANE_ENABLED, applyTestEnv, createTestApp, type TestApp } from "./app.kit";
 import { createSeedKit, type SeedKit } from "./f002-seed.kit";
@@ -540,6 +545,170 @@ d("F-002 org endpoints (E2E, DB)", () => {
         .set("X-Organization-Id", b.body.organization.id as string)
         .set("Authorization", `Bearer ${user.accessToken}`);
       assertErrorEnvelope(res, { status: 422, code: "ORG_MISMATCH" });
+    });
+  });
+
+  // ── tax profile + reveal (T-002-17 ★) ───────────────────────────────────
+  //
+  // The most privacy-sensitive surface in F-002. With `entityType="personal"`
+  // the stored number IS the shop owner's national ID, so the questions these
+  // cases answer are: who can write it, who can see it in full, does anything
+  // else ever emit it, and can we say afterwards who looked.
+
+  describe("PUT + POST /orgs/{orgId}/tax-profile — api-spec §3.5/§3.16", () => {
+    /** A valid Thai TIN (13 digits, checksum-correct). */
+    const TIN = "1101700207366";
+    const COMPLETE = {
+      entityType: "company",
+      taxId: TIN,
+      vatRegistered: true,
+      branchCode: "00000",
+    };
+
+    async function orgWithTaxProfile() {
+      const owner = await newUser();
+      const created = await createOrg(owner.accessToken, { name: "ร้านภาษี" });
+      const orgId = created.body.organization.id as string;
+      const put = await request(app.server())
+        .put(`/orgs/${orgId}/tax-profile`)
+        .set("Authorization", `Bearer ${owner.accessToken}`)
+        .set("Content-Type", "application/json")
+        .send(COMPLETE);
+      expect(put.status).toBe(200);
+      return { owner, orgId, put };
+    }
+
+    it("★ PUT stores the profile and the RESPONSE never echoes the full number", async () => {
+      const { put } = await orgWithTaxProfile();
+      expect(put.body).toMatchObject({ taxProfileComplete: true });
+      // Masked is the most any non-reveal response may carry.
+      expect(JSON.stringify(put.body)).not.toContain(TIN);
+      expect(put.body.taxProfile.taxIdMasked).toContain("7366");
+      assertNoSecretFields(put.body);
+    });
+
+    it("★ GET /orgs/{orgId} shows the MASKED id to the Owner — never the digits", async () => {
+      const { owner, orgId } = await orgWithTaxProfile();
+      const res = await request(app.server())
+        .get(`/orgs/${orgId}`)
+        .set("Authorization", `Bearer ${owner.accessToken}`);
+      expect(res.status).toBe(200);
+      expect(JSON.stringify(res.body)).not.toContain(TIN);
+      expect(res.body.taxProfile.taxIdMasked).toContain("7366");
+    });
+
+    it("★ Staff see vatRegistered ONLY — not even the last four digits (ux Q13)", async () => {
+      // Stricter than D-028 on purpose: with entityType="personal" those four
+      // digits belong to a person's national ID, and no staff task needs them.
+      const { owner, orgId } = await orgWithTaxProfile();
+      const staffRole = await prisma.role.findFirstOrThrow({
+        where: { organizationId: orgId, name: "Staff" },
+      });
+      const staff = await newUser();
+      await kit.addMember({ organizationId: orgId, userId: staff.id, roleId: staffRole.id });
+
+      const res = await request(app.server())
+        .get(`/orgs/${orgId}`)
+        .set("Authorization", `Bearer ${staff.accessToken}`);
+      expect(res.status).toBe(200);
+      expect(res.body.taxProfile).toEqual({ vatRegistered: true });
+      expect(JSON.stringify(res.body)).not.toContain("7366");
+      expect(JSON.stringify(res.body)).not.toContain(TIN);
+      void owner;
+    });
+
+    it("★ reveal returns the FULL number, with no-store + no-referrer headers", async () => {
+      const { owner, orgId } = await orgWithTaxProfile();
+      const res = await request(app.server())
+        .post(`/orgs/${orgId}/tax-profile/reveal`)
+        .set("Authorization", `Bearer ${owner.accessToken}`)
+        .set("Content-Type", "application/json")
+        .send({});
+      expect(res.status).toBe(200);
+      expect(res.body.taxId).toBe(TIN);
+      // The headers are the difference between "shown once" and "cached by a
+      // proxy and leaked through a Referer" — asserted from the exported
+      // policy, not from a copy typed here.
+      assertResponseHeaders(res, TAX_ID_REVEAL_RESPONSE_HEADERS);
+    });
+
+    it("★ reveal is the ONLY route allowed to emit a full TIN, and the list says so", async () => {
+      expect(TAX_ID_RESPONSE_ALLOWLIST).toHaveLength(1);
+      expect(isTaxIdAllowedOnRoute("POST", "/orgs/:orgId/tax-profile/reveal")).toBe(true);
+      // Everything else in the feature, by construction rather than by spot check.
+      for (const route of auditApp(app.app).routes) {
+        if (route.path.includes("tax-profile/reveal")) continue;
+        expect(
+          isTaxIdAllowedOnRoute(route.method, route.path),
+          `${route.method} ${route.path} must not be allowed to return a full TIN`,
+        ).toBe(false);
+      }
+    });
+
+    it("★ a Staff member cannot reveal — 403, and nothing is emitted", async () => {
+      const { orgId } = await orgWithTaxProfile();
+      const staffRole = await prisma.role.findFirstOrThrow({
+        where: { organizationId: orgId, name: "Staff" },
+      });
+      const staff = await newUser();
+      await kit.addMember({ organizationId: orgId, userId: staff.id, roleId: staffRole.id });
+
+      const events = collectSecurityEvents(app.events);
+      const res = await request(app.server())
+        .post(`/orgs/${orgId}/tax-profile/reveal`)
+        .set("Authorization", `Bearer ${staff.accessToken}`)
+        .set("Content-Type", "application/json")
+        .send({});
+      assertErrorEnvelope(res, { status: 403, code: "FORBIDDEN" });
+      expect(JSON.stringify(res.body)).not.toContain(TIN);
+      expect(events.ofType("org.tax_profile.revealed")).toEqual([]);
+      events.stop();
+    });
+
+    it("★ a successful reveal is ALWAYS recorded, and the record carries no digits", async () => {
+      // This event is the entire difference between "allowed to see it" and
+      // "seen with nobody knowing". It must exist, and it must not itself
+      // become a place the number is stored.
+      const { owner, orgId } = await orgWithTaxProfile();
+      const events = collectSecurityEvents(app.events);
+      await request(app.server())
+        .post(`/orgs/${orgId}/tax-profile/reveal`)
+        .set("Authorization", `Bearer ${owner.accessToken}`)
+        .set("Content-Type", "application/json")
+        .send({});
+
+      const revealed = events.ofType("org.tax_profile.revealed");
+      expect(revealed).toHaveLength(1);
+      expect(revealed[0]?.payload).toMatchObject({ actorUserId: owner.id, organizationId: orgId });
+      // PAYLOAD only, deliberately: the event envelope carries an epoch-millis
+      // `at`, and a 4-digit window of a 13-digit TIN collides with a 13-digit
+      // timestamp often enough to fail at random. The guarantee is about what
+      // we put in the payload.
+      const serialized = JSON.stringify(revealed.map((e) => e.payload));
+      expect(serialized).not.toContain(TIN);
+      // …and not even a fragment: a "last four for context" would defeat it.
+      for (let i = 0; i + 4 <= TIN.length; i++) {
+        expect(serialized).not.toContain(TIN.slice(i, i + 4));
+      }
+      events.stop();
+    });
+
+    it("★ setting the profile records taxIdPresent, never the number itself", async () => {
+      const owner = await newUser();
+      const created = await createOrg(owner.accessToken, { name: "ร้านบันทึกภาษี" });
+      const orgId = created.body.organization.id as string;
+      const events = collectSecurityEvents(app.events);
+      await request(app.server())
+        .put(`/orgs/${orgId}/tax-profile`)
+        .set("Authorization", `Bearer ${owner.accessToken}`)
+        .set("Content-Type", "application/json")
+        .send(COMPLETE);
+
+      const set = events.ofType("org.tax_profile.set");
+      expect(set).toHaveLength(1);
+      expect(set[0]?.payload).toMatchObject({ taxIdPresent: true });
+      expect(JSON.stringify(set.map((e) => e.payload))).not.toContain(TIN);
+      events.stop();
     });
   });
 
