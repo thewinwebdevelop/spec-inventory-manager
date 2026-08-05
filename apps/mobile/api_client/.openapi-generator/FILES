@@ -123,5 +123,3 @@ lib/src/model/update_organization_request.dart
 lib/src/model/warehouse_summary.dart
 lib/src/serializers.dart
 pubspec.yaml
-test/role_list_page_test.dart
-test/role_row_test.dart
