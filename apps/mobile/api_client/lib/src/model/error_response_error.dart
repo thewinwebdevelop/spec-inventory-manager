@@ -3,6 +3,8 @@
 //
 
 // ignore_for_file: unused_element
+import 'package:built_collection/built_collection.dart';
+import 'package:built_value/json_object.dart';
 import 'package:built_value/built_value.dart';
 import 'package:built_value/serializer.dart';
 
@@ -11,17 +13,32 @@ part 'error_response_error.g.dart';
 /// ErrorResponseError
 ///
 /// Properties:
-/// * [code] - Machine-readable error code (e.g. INVALID_CREDENTIALS, RATE_LIMITED)
-/// * [message] - User-facing Thai message
+/// * [code] - Machine-readable error code (e.g. INVALID_CREDENTIALS, ORG_ACCESS_DENIED, RATE_LIMITED). A shipped value never changes. 
+/// * [message] - User-facing Thai message. F-002 copy says \"ร้าน\" rather than \"องค์กร\" (D-029); identifiers and enum values stay English. 
+/// * [details] - Optional, code-specific context. Documented cases (F-002): `INVITATION_PENDING` → `{ invitationId, expiresAt, roleId, roleName }` (§3.11) · `ORG_LIMIT_REACHED` → `{ limit }` (§3.1) · `INVITATION_EMAIL_MISMATCH` → `{ emailMasked }` (§3.15) · `CONFLICT` → `{ reason: \"busy\" }` when the request lost the race for the shop's row lock (amend #4 / NEW-4 — retryable, never a 500). A client that does not recognise a key MUST still behave correctly. 
+/// * [fieldErrors] - Per-field Thai messages on a `422` (e.g. `{ \"taxId\": \"…\" }`). 
+/// * [traceId] - Opaque random UUID v4 issued by the SERVER for this request, echoed in `X-Request-Id`. Present on EVERY error response in practice; it stays optional in the schema so already-shipped clients are not broken (api-spec §1, NEW-7). Never derived from client input. 
 @BuiltValue()
 abstract class ErrorResponseError implements Built<ErrorResponseError, ErrorResponseErrorBuilder> {
-  /// Machine-readable error code (e.g. INVALID_CREDENTIALS, RATE_LIMITED)
+  /// Machine-readable error code (e.g. INVALID_CREDENTIALS, ORG_ACCESS_DENIED, RATE_LIMITED). A shipped value never changes. 
   @BuiltValueField(wireName: r'code')
   String get code;
 
-  /// User-facing Thai message
+  /// User-facing Thai message. F-002 copy says \"ร้าน\" rather than \"องค์กร\" (D-029); identifiers and enum values stay English. 
   @BuiltValueField(wireName: r'message')
   String get message;
+
+  /// Optional, code-specific context. Documented cases (F-002): `INVITATION_PENDING` → `{ invitationId, expiresAt, roleId, roleName }` (§3.11) · `ORG_LIMIT_REACHED` → `{ limit }` (§3.1) · `INVITATION_EMAIL_MISMATCH` → `{ emailMasked }` (§3.15) · `CONFLICT` → `{ reason: \"busy\" }` when the request lost the race for the shop's row lock (amend #4 / NEW-4 — retryable, never a 500). A client that does not recognise a key MUST still behave correctly. 
+  @BuiltValueField(wireName: r'details')
+  BuiltMap<String, JsonObject?>? get details;
+
+  /// Per-field Thai messages on a `422` (e.g. `{ \"taxId\": \"…\" }`). 
+  @BuiltValueField(wireName: r'fieldErrors')
+  BuiltMap<String, String>? get fieldErrors;
+
+  /// Opaque random UUID v4 issued by the SERVER for this request, echoed in `X-Request-Id`. Present on EVERY error response in practice; it stays optional in the schema so already-shipped clients are not broken (api-spec §1, NEW-7). Never derived from client input. 
+  @BuiltValueField(wireName: r'traceId')
+  String? get traceId;
 
   ErrorResponseError._();
 
@@ -56,6 +73,27 @@ class _$ErrorResponseErrorSerializer implements PrimitiveSerializer<ErrorRespons
       object.message,
       specifiedType: const FullType(String),
     );
+    if (object.details != null) {
+      yield r'details';
+      yield serializers.serialize(
+        object.details,
+        specifiedType: const FullType(BuiltMap, [FullType(String), FullType.nullable(JsonObject)]),
+      );
+    }
+    if (object.fieldErrors != null) {
+      yield r'fieldErrors';
+      yield serializers.serialize(
+        object.fieldErrors,
+        specifiedType: const FullType(BuiltMap, [FullType(String), FullType(String)]),
+      );
+    }
+    if (object.traceId != null) {
+      yield r'traceId';
+      yield serializers.serialize(
+        object.traceId,
+        specifiedType: const FullType(String),
+      );
+    }
   }
 
   @override
@@ -92,6 +130,27 @@ class _$ErrorResponseErrorSerializer implements PrimitiveSerializer<ErrorRespons
             specifiedType: const FullType(String),
           ) as String;
           result.message = valueDes;
+          break;
+        case r'details':
+          final valueDes = serializers.deserialize(
+            value,
+            specifiedType: const FullType(BuiltMap, [FullType(String), FullType.nullable(JsonObject)]),
+          ) as BuiltMap<String, JsonObject?>;
+          result.details.replace(valueDes);
+          break;
+        case r'fieldErrors':
+          final valueDes = serializers.deserialize(
+            value,
+            specifiedType: const FullType(BuiltMap, [FullType(String), FullType(String)]),
+          ) as BuiltMap<String, String>;
+          result.fieldErrors.replace(valueDes);
+          break;
+        case r'traceId':
+          final valueDes = serializers.deserialize(
+            value,
+            specifiedType: const FullType(String),
+          ) as String;
+          result.traceId = valueDes;
           break;
         default:
           unhandled.add(key);

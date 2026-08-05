@@ -1,0 +1,127 @@
+parameters:
+  - $ref: "../components/parameters.yaml#/OrgIdParam"
+  - $ref: "../components/parameters.yaml#/OrgIdHeader"
+
+get:
+  operationId: getOrganization
+  summary: Shop profile (org + plan + tax status + my membership)
+  description: >
+    F-002 api-spec §3.3. Any ACTIVE member may call it; the body is safe for
+    them because it goes through the PDPA mapper — no member list, no full tax
+    id, and `taxIdMasked` only for a caller holding `manage_org_settings`
+    (ux Q13, which is stricter than D-028).
+
+
+    `myMembership.capabilities` exists so the client can hide buttons it should
+    not offer. It is NOT enforcement — the server refuses the call regardless.
+
+
+    `Cache-Control: no-store` always: the body carries the shop's name and its
+    tax status.
+  tags:
+    - organizations
+  security:
+    - bearerAuth: []
+  responses:
+    "200":
+      description: The shop profile, field-filtered for this caller.
+      headers:
+        Cache-Control:
+          $ref: "../components/headers.yaml#/CacheControlNoStore"
+        Pragma:
+          $ref: "../components/headers.yaml#/PragmaNoCache"
+      content:
+        application/json:
+          schema:
+            $ref: "../components/orgs.yaml#/OrgProfile"
+    "401":
+      description: Missing/invalid access token (`UNAUTHENTICATED`)
+      content:
+        application/json:
+          schema:
+            $ref: "../components/common.yaml#/ErrorResponse"
+    "403":
+      description: >
+        `ORG_ACCESS_DENIED` — not an active member of this shop (covers "the
+        shop does not exist" and "you were removed"). ⚠️ Distinct from
+        `FORBIDDEN`: the client sends the user back to the shop picker and
+        refetches `GET /me/organizations`, rather than staying on the page with
+        a toast. Never merge the two codes.
+      content:
+        application/json:
+          schema:
+            $ref: "../components/common.yaml#/ErrorResponse"
+    "422":
+      description: >
+        `ORG_CONTEXT_REQUIRED` (no org in path or header) or `ORG_MISMATCH`
+        (both sent and they disagree — a client bug, deliberately NOT a 403 so
+        a valid member is not bounced out of the shop they are looking at).
+      content:
+        application/json:
+          schema:
+            $ref: "../components/common.yaml#/ErrorResponse"
+
+patch:
+  operationId: updateOrganization
+  summary: Update the shop's name / logo / timezone
+  description: >
+    F-002 api-spec §3.4. Requires `manage_org_settings`. Returns the SAME body
+    as `GET` — one mapper, so the field-level authorization cannot drift
+    between the two.
+
+
+    An absent key means "leave alone"; an empty patch is a valid no-op that
+    returns the current profile. `logo` accepts `null` and nothing else until
+    F-040 mints object keys (M-4).
+  tags:
+    - organizations
+  security:
+    - bearerAuth: []
+  requestBody:
+    required: true
+    content:
+      application/json:
+        schema:
+          $ref: "../components/orgs.yaml#/UpdateOrganizationRequest"
+  responses:
+    "200":
+      description: Updated — same shape as `GET /orgs/{orgId}`.
+      headers:
+        Cache-Control:
+          $ref: "../components/headers.yaml#/CacheControlNoStore"
+        Pragma:
+          $ref: "../components/headers.yaml#/PragmaNoCache"
+      content:
+        application/json:
+          schema:
+            $ref: "../components/orgs.yaml#/OrgProfile"
+    "401":
+      description: Missing/invalid access token (`UNAUTHENTICATED`)
+      content:
+        application/json:
+          schema:
+            $ref: "../components/common.yaml#/ErrorResponse"
+    "403":
+      description: >
+        `FORBIDDEN` — an active member without `manage_org_settings` (stay on
+        the page, show a toast) — or `ORG_ACCESS_DENIED` — not a member at all
+        (go back to the shop picker).
+      content:
+        application/json:
+          schema:
+            $ref: "../components/common.yaml#/ErrorResponse"
+    "415":
+      description: Non-JSON Content-Type (`UNSUPPORTED_MEDIA_TYPE`)
+      content:
+        application/json:
+          schema:
+            $ref: "../components/common.yaml#/ErrorResponse"
+    "422":
+      description: >
+        `VALIDATION_FAILED` with `fieldErrors` — every rejected field at once
+        (`name`, `logo`, `timezone`) — or `ORG_CONTEXT_REQUIRED` /
+        `ORG_MISMATCH`.
+      content:
+        application/json:
+          schema:
+            $ref: "../components/common.yaml#/ErrorResponse"

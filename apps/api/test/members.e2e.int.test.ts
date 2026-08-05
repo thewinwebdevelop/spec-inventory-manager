@@ -904,8 +904,9 @@ d("F-002 membership endpoints (E2E, DB)", () => {
       ]) {
         expect(pending).not.toContain(route);
       }
-      // …the invitation rows still are, which keeps this assertion honest.
-      expect(pending.length).toBeGreaterThan(0);
+      // The "…and something else still is" escape hatch that kept this honest
+      // while F-002 was half-built is now closed: nothing is pending at all.
+      expect(pending).toEqual([]);
     });
   });
 });

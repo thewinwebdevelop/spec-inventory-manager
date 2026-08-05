@@ -1,0 +1,34 @@
+post:
+  operationId: authLogout
+  summary: Revoke the current session (family)
+  description: >
+    US-4. Revokes the caller's current family (from the presented refresh
+    token; cookie or body) and clears the auth cookies. Optional body
+    `familyId` revokes a specific LISTED family that MUST belong to the
+    caller (M-3); a foreign/unknown familyId is a no-op. Always 204
+    (idempotent). CSRF-checked on the cookie path. Auth is via the refresh
+    token (cookie/body), so `security` is [].
+  tags:
+    - auth
+  security: []
+  requestBody:
+    required: false
+    content:
+      application/json:
+        schema:
+          $ref: "../components/auth.yaml#/LogoutRequest"
+  responses:
+    "204":
+      description: Logged out (idempotent — always 204)
+    "403":
+      description: CSRF check failed on the cookie path
+      content:
+        application/json:
+          schema:
+            $ref: "../components/common.yaml#/ErrorResponse"
+    "415":
+      description: Non-JSON Content-Type (L-2)
+      content:
+        application/json:
+          schema:
+            $ref: "../components/common.yaml#/ErrorResponse"

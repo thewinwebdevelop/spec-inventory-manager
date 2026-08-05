@@ -30,6 +30,8 @@ import { OrgProfileService } from "./org-profile.service";
 import { OrganizationsController } from "./organizations.controller";
 import { MembersController } from "./members.controller";
 import { InvitationsController } from "./invitations.controller";
+import { RolesController } from "./roles.controller";
+import { RolesService } from "./roles.service";
 import { InvitationRedemptionController } from "./invitation-redemption.controller";
 import { InvitationsService } from "./invitations.service";
 import { MembershipController } from "./membership.controller";
@@ -61,6 +63,7 @@ import { PlanProvisioningService } from "./system/plan-provisioning.service";
     // file rather than of an `if` (api-spec §3.17 / D-029).
     MembersController,
     InvitationsController,
+    RolesController,
     // T-002-20 — the redemption side, in its OWN controller. `InvitationsController`
     // is org-scoped and `manage_members` on every handler; these two routes are
     // `@Public()` and `@UserScoped()`. Two tiers one handler apart in the same
@@ -80,6 +83,7 @@ import { PlanProvisioningService } from "./system/plan-provisioning.service";
     // transaction shape, one place the Owner ≥ 1 invariant is evaluated.
     MembersService,
     InvitationsService,
+    RolesService,
     // `system/` providers are registered here, not exported: nothing outside
     // this module may reach an unfiltered read.
     OrgProvisioningService,

@@ -1,0 +1,117 @@
+# ─────────────────────────────────────────────────────────────────────────────
+# THE HAND-AUTHORED ENTRYPOINT. Edit this file and the files it references.
+#
+# `openapi/openapi.yaml` next to it is the BUNDLED ARTIFACT (`pnpm --filter
+# @omnistock/contracts bundle`) and is what every tool reads: `redocly lint`,
+# `openapi-typescript`, the Dart generator, `oasdiff`, and the router↔spec
+# parity gate in apps/api. Do not hand-edit the bundle; it is overwritten.
+#
+# T-002-21 split the single 723-line file because F-002 alone more than trebled
+# it (api-spec §5). One path item per file under `paths/`, schemas grouped by
+# feature under `components/`.
+# ─────────────────────────────────────────────────────────────────────────────
+openapi: 3.1.0
+info:
+  title: OmniStock API
+  description: >
+    OmniStock — Inventory + Marketplace Sync + Thai Cloud Accounting platform.
+    This spec is the single source of truth for the API contract shared by
+    apps/api (NestJS, implements it), apps/web (Next.js, consumes the
+    generated TS client), and apps/mobile (Flutter, consumes the generated
+    Dart client). See docs/02-architecture.md and
+    docs/features/F-000/architecture.md §4.
+
+
+    Conventions that hold for every F-002 endpoint (api-spec §1): bearer access
+    token; org context via `X-Organization-Id` OR the `{orgId}` path param, and
+    `422 ORG_MISMATCH` if both are sent and disagree; `application/json` only
+    (`415` otherwise); one error envelope `{ error: { code, message, details?,
+    fieldErrors?, traceId? } }` and the client switches on `code` ALONE, never
+    on `message`; money is a decimal STRING, stock is an integer; timestamps are
+    ISO-8601 UTC; lists are cursor-paginated `{ items, nextCursor, total? }`
+    sorted `createdAt desc, id desc`; `Retry-After` is always an integer ≥ 1.
+  version: 0.0.1
+servers:
+  - url: http://localhost:3000
+    description: Local development
+
+tags:
+  - name: system
+    description: Liveness/readiness.
+  - name: auth
+    description: F-001 — accounts, sessions, passwords.
+  - name: organizations
+    description: F-002 — shops, profile, plan, tax identity.
+  - name: members
+    description: F-002 — who is in a shop, and leaving one.
+  - name: invitations
+    description: F-002 — inviting people and redeeming links.
+
+paths:
+  /health:
+    $ref: "./paths/health.yaml"
+
+  # ─── F-001 Authentication (T-001-09) ────────────────────────────────────
+  /auth/signup:
+    $ref: "./paths/auth-signup.yaml"
+  /auth/login:
+    $ref: "./paths/auth-login.yaml"
+  /auth/refresh:
+    $ref: "./paths/auth-refresh.yaml"
+  /auth/logout:
+    $ref: "./paths/auth-logout.yaml"
+  /auth/logout-all:
+    $ref: "./paths/auth-logout-all.yaml"
+  /auth/sessions:
+    $ref: "./paths/auth-sessions.yaml"
+  /auth/change-password:
+    $ref: "./paths/auth-change-password.yaml"
+  /orgs/{orgId}/members/{userId}/reset-password:
+    $ref: "./paths/org-member-reset-password.yaml"
+
+  # ─── F-002 Organizations & members (T-002-21) ───────────────────────────
+  # 16 operations over 13 paths. `GET /orgs/{orgId}/roles` (api-spec §3.6) is
+  # NOT here: no controller serves it, and the parity gate refuses a spec that
+  # advertises a route the server does not answer. See the T-002-21 report.
+  /organizations:
+    $ref: "./paths/organizations.yaml"
+  /me/organizations:
+    $ref: "./paths/me-organizations.yaml"
+  /orgs/{orgId}:
+    $ref: "./paths/org.yaml"
+  /orgs/{orgId}/tax-profile:
+    $ref: "./paths/org-tax-profile.yaml"
+  /orgs/{orgId}/tax-profile/reveal:
+    $ref: "./paths/org-tax-profile-reveal.yaml"
+  /orgs/{orgId}/members:
+    $ref: "./paths/org-members.yaml"
+  /orgs/{orgId}/members/{userId}:
+    $ref: "./paths/org-member.yaml"
+  /orgs/{orgId}/roles:
+    $ref: "./paths/org-roles.yaml"
+  /orgs/{orgId}/membership:
+    $ref: "./paths/org-membership.yaml"
+  /orgs/{orgId}/invitations:
+    $ref: "./paths/org-invitations.yaml"
+  /orgs/{orgId}/invitations/{invitationId}:
+    $ref: "./paths/org-invitation.yaml"
+  /orgs/{orgId}/invitations/{invitationId}/link:
+    $ref: "./paths/org-invitation-link.yaml"
+  /invitations/preview:
+    $ref: "./paths/invitations-preview.yaml"
+  /invitations/accept:
+    $ref: "./paths/invitations-accept.yaml"
+
+components:
+  securitySchemes:
+    bearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+      description: >
+        Default auth scheme for OmniStock API endpoints. Individual public
+        endpoints (e.g. /health, /auth/signup, /auth/login,
+        /invitations/preview) opt out per operation via `security: []`.
+
+security:
+  - bearerAuth: []

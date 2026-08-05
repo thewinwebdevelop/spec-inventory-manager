@@ -231,12 +231,19 @@ d("route-registry audit against the live router", () => {
     expect(() => assertRouteRegistryClean(report)).toThrow(/problem\(s\)/);
   });
 
-  it("the table→router direction is reported as `pending` until the controllers land", () => {
-    // F-002's endpoints are not built yet, so every table row is pending. The
-    // wave that ships them flips `failOnPending` on and this list must empty.
+  it("★ the table→router direction is CLEAN — `failOnPending` is on for good now", () => {
+    // Written as "pending until the controllers land", with the author's own
+    // exit condition: "the wave that ships them flips `failOnPending` on and
+    // this list must empty." They have all landed, so it is flipped.
+    //
+    // Leaving it advisory any longer would have cost us: `GET /orgs/{orgId}/roles`
+    // sat in the table with no handler for five waves, visible only as a
+    // `pending` row nobody reads, while AC US-3 needed it for the invite
+    // dropdown. `failOnPending: true` is what turns "declared but unbuilt" from
+    // a note into a failure.
     const report = auditApp(testApp.app);
-    expect(report.pending.length).toBeGreaterThan(0);
-    expect(() => assertRouteRegistryClean(report, { failOnPending: true })).toThrow(/pending/);
+    expect(report.pending).toEqual([]);
+    expect(() => assertRouteRegistryClean(report, { failOnPending: true })).not.toThrow();
   });
 });
 

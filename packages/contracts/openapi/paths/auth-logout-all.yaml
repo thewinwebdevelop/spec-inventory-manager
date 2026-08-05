@@ -1,0 +1,25 @@
+post:
+  operationId: authLogoutAll
+  summary: Revoke ALL the user's sessions
+  description: >
+    US-4. Bearer-authed. Revokes every family for the authenticated user and
+    clears the caller's cookies. 204.
+  tags:
+    - auth
+  security:
+    - bearerAuth: []
+  responses:
+    "204":
+      description: All sessions revoked
+    "401":
+      description: Missing/invalid access token
+      content:
+        application/json:
+          schema:
+            $ref: "../components/common.yaml#/ErrorResponse"
+    "415":
+      description: Non-JSON Content-Type (L-2)
+      content:
+        application/json:
+          schema:
+            $ref: "../components/common.yaml#/ErrorResponse"

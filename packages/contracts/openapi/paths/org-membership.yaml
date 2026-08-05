@@ -1,0 +1,85 @@
+parameters:
+  - $ref: "../components/parameters.yaml#/OrgIdParam"
+  - $ref: "../components/parameters.yaml#/OrgIdHeader"
+
+delete:
+  operationId: leaveOrganization
+  summary: Leave this shop myself
+  description: >
+    F-002 US-5 / D-029 (api-spec §3.17). ANY active member may call it — NO
+    `manage_members` required.
+
+
+    ⚠️ WHY THIS IS A SEPARATE ROUTE rather than relaxing
+    `DELETE /orgs/{orgId}/members/{userId}` when the id happens to be your own:
+      1. Confused deputy closed BY SHAPE — there is no `userId` anywhere in this
+         route, so the target is `ctx.userId` always and no bug can point it at
+         another person. The alternative closes the same hole with an `if`, and
+         an `if` is exactly what finding C-1 was.
+      2. The route registry stays decidable — the capability guard reads
+         metadata only; "the capability depends on a value in the path" cannot
+         be expressed in metadata and would push the decision into a service,
+         where forgetting it is silent.
+      3. Different event: `org.member.left`, not `org.member.revoked`. Afterwards
+         "did they walk out or were they cleared out?" is answerable.
+
+
+    Behaviour is identical to §3.9 apart from the actor: soft revoke, own pending
+    invitations cancelled in the same transaction, the shop disappears from
+    `GET /me/organizations` immediately, other shops and the session untouched.
+
+
+    `200` with a body rather than `204`: the caller needs `cancelledInvitations`
+    and `revokedAt` for the confirmation copy.
+
+
+    ⛔ There is NO `403 FORBIDDEN` on this route — there is no capability to
+    lack, so a 403 here can only be `ORG_ACCESS_DENIED`.
+
+
+    ⚠️ The last Owner cannot leave (`409 LAST_OWNER`) and F-002 has no "delete
+    shop", so the way out is to appoint another Owner first. Accepted limitation.
+  tags:
+    - members
+  security:
+    - bearerAuth: []
+  responses:
+    "200":
+      description: You have left the shop.
+      headers:
+        Cache-Control:
+          $ref: "../components/headers.yaml#/CacheControlNoStore"
+        Pragma:
+          $ref: "../components/headers.yaml#/PragmaNoCache"
+      content:
+        application/json:
+          schema:
+            $ref: "../components/orgs.yaml#/LeaveOrgResult"
+    "401":
+      description: Missing/invalid access token (`UNAUTHENTICATED`)
+      content:
+        application/json:
+          schema:
+            $ref: "../components/common.yaml#/ErrorResponse"
+    "403":
+      description: >
+        `ORG_ACCESS_DENIED` — not an active member (which covers pressing the
+        button twice). Never `FORBIDDEN` here.
+      content:
+        application/json:
+          schema:
+            $ref: "../components/common.yaml#/ErrorResponse"
+    "409":
+      description: >
+        `LAST_OWNER` — you are the only active Owner; appoint another first · or
+        `CONFLICT` + `details.reason = "busy"` (lock contention, retry).
+      content:
+        application/json:
+          schema:
+            $ref: "../components/common.yaml#/ErrorResponse"
+    "422":
+      description: "`ORG_CONTEXT_REQUIRED` / `ORG_MISMATCH`"
+      content:
+        application/json:
+          schema:
+            $ref: "../components/common.yaml#/ErrorResponse"

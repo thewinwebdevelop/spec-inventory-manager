@@ -1,0 +1,181 @@
+parameters:
+  - $ref: "../components/parameters.yaml#/OrgIdParam"
+  - $ref: "../components/parameters.yaml#/UserIdParam"
+  - $ref: "../components/parameters.yaml#/OrgIdHeader"
+
+patch:
+  operationId: updateMemberRole
+  summary: Change a member's role
+  description: >
+    F-002 US-6 (api-spec §3.8). Requires `manage_members`, and additionally
+    `full_access` (Owner-only, D-028/C-1) when EITHER the new role holds
+    `full_access` (promoting somebody — including yourself — to Owner) OR the
+    target's CURRENT role holds it (editing an Owner). Otherwise `403 FORBIDDEN`.
+
+
+    Acting on yourself is allowed (an Owner stepping down after appointing a
+    successor), subject to the last-Owner rule.
+
+
+    Answers with the §3.7 member row, so the client never has to refetch the
+    list to render the new state — which is why this response carries an email
+    address and therefore the §3.7 `no-store` policy (api-spec §1 lists §3.7 but
+    not §3.8 by number; the classification follows the SHAPE, and
+    `RESPONSE_HEADER_POLICY` in apps/api encodes that).
+
+
+    The target's state is re-read INSIDE the transaction, after the shop's row
+    lock is taken — so a `PATCH` racing a `DELETE` answers `404`, never a 500 or
+    a resurrection.
+  tags:
+    - members
+  security:
+    - bearerAuth: []
+  requestBody:
+    required: true
+    content:
+      application/json:
+        schema:
+          $ref: "../components/orgs.yaml#/UpdateMemberRoleRequest"
+  responses:
+    "200":
+      description: The updated member row (same shape as a `GET /members` item).
+      headers:
+        Cache-Control:
+          $ref: "../components/headers.yaml#/CacheControlNoStore"
+        Pragma:
+          $ref: "../components/headers.yaml#/PragmaNoCache"
+      content:
+        application/json:
+          schema:
+            $ref: "../components/orgs.yaml#/MemberRow"
+    "401":
+      description: Missing/invalid access token (`UNAUTHENTICATED`)
+      content:
+        application/json:
+          schema:
+            $ref: "../components/common.yaml#/ErrorResponse"
+    "403":
+      description: >
+        `FORBIDDEN` — missing `manage_members`, or the Owner-only rule — or
+        `ORG_ACCESS_DENIED` (not a member of this shop).
+      content:
+        application/json:
+          schema:
+            $ref: "../components/common.yaml#/ErrorResponse"
+    "404":
+      description: >
+        `NOT_FOUND` — the target is not an ACTIVE member of this shop (including
+        "was removed by a request that raced this one").
+      content:
+        application/json:
+          schema:
+            $ref: "../components/common.yaml#/ErrorResponse"
+    "409":
+      description: >
+        `LAST_OWNER` — the change would leave the shop with zero active Owners,
+        which is unrecoverable in Phase 0 · or `CONFLICT` +
+        `details.reason = "busy"` — this request lost the race for the shop's
+        row lock (transient, retry; deliberately not a 500).
+      content:
+        application/json:
+          schema:
+            $ref: "../components/common.yaml#/ErrorResponse"
+    "415":
+      description: Non-JSON Content-Type (`UNSUPPORTED_MEDIA_TYPE`)
+      content:
+        application/json:
+          schema:
+            $ref: "../components/common.yaml#/ErrorResponse"
+    "422":
+      description: >
+        `ROLE_INVALID` — `roleId` is not a role of THIS shop (a foreign id and a
+        non-existent id are indistinguishable by construction) ·
+        `VALIDATION_FAILED` — `roleId` missing · `ORG_CONTEXT_REQUIRED` /
+        `ORG_MISMATCH`.
+      content:
+        application/json:
+          schema:
+            $ref: "../components/common.yaml#/ErrorResponse"
+
+delete:
+  operationId: revokeMember
+  summary: Remove another member from the shop
+  description: >
+    F-002 US-5 (api-spec §3.9). Requires `manage_members`, plus `full_access`
+    when the target is an Owner (D-028/C-1).
+
+
+    SOFT delete: `status → revoked` and `revokedAt` is stamped. The row stays,
+    because history references it and because `revokedAt` is a security input —
+    an invitation issued BEFORE it can no longer be accepted (I-1).
+
+
+    In the SAME transaction, any pending invitation for that person's email in
+    this shop is cancelled; `cancelledInvitations` reports how many, so the UI
+    can say so.
+
+
+    Effect is immediate: the removed member's next request to this shop is
+    `403 ORG_ACCESS_DENIED` and the shop is gone from their
+    `GET /me/organizations`. Their session is not destroyed and their other
+    shops are untouched.
+
+
+    Removing YOURSELF through this route works, but only if you already hold
+    `manage_members`. Everyone else uses `DELETE /orgs/{orgId}/membership` —
+    this route grants nobody a softer path (D-029).
+
+
+    Idempotency under a race: two concurrent revokes of the same person produce
+    one `200` and one `404`, and `revokedAt` is written once.
+  tags:
+    - members
+  security:
+    - bearerAuth: []
+  responses:
+    "200":
+      description: Removed (soft).
+      headers:
+        Cache-Control:
+          $ref: "../components/headers.yaml#/CacheControlNoStore"
+        Pragma:
+          $ref: "../components/headers.yaml#/PragmaNoCache"
+      content:
+        application/json:
+          schema:
+            $ref: "../components/orgs.yaml#/RevokeMemberResult"
+    "401":
+      description: Missing/invalid access token (`UNAUTHENTICATED`)
+      content:
+        application/json:
+          schema:
+            $ref: "../components/common.yaml#/ErrorResponse"
+    "403":
+      description: >
+        `FORBIDDEN` — missing `manage_members`, or removing an Owner without
+        `full_access` — or `ORG_ACCESS_DENIED`.
+      content:
+        application/json:
+          schema:
+            $ref: "../components/common.yaml#/ErrorResponse"
+    "404":
+      description: "`NOT_FOUND` — not an active member of this shop (any more)."
+      content:
+        application/json:
+          schema:
+            $ref: "../components/common.yaml#/ErrorResponse"
+    "409":
+      description: >
+        `LAST_OWNER` — the shop would be left with no active Owner · or
+        `CONFLICT` + `details.reason = "busy"` (lock contention, retry).
+      content:
+        application/json:
+          schema:
+            $ref: "../components/common.yaml#/ErrorResponse"
+    "422":
+      description: "`ORG_CONTEXT_REQUIRED` / `ORG_MISMATCH`"
+      content:
+        application/json:
+          schema:
+            $ref: "../components/common.yaml#/ErrorResponse"

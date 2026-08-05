@@ -1,0 +1,80 @@
+parameters:
+  - $ref: "../components/parameters.yaml#/OrgIdParam"
+  - $ref: "../components/parameters.yaml#/OrgIdHeader"
+
+get:
+  operationId: listMembers
+  summary: List the shop's members
+  description: >
+    F-002 US-5 (api-spec §3.7). ⚠️ THIS READ REQUIRES `manage_members`. Every
+    row carries somebody's email address, which is PII under PDPA (D-028/I-8) —
+    it is not a UX preference, and a Staff member calling it gets
+    `403 FORBIDDEN`. If a screen needs "who did this?", take the name/id off the
+    resource rather than pulling the whole directory.
+
+
+    `status` defaults to `all` here (unlike `GET /me/organizations`, whose
+    default is `active`): this is the audit view of who is and who WAS in the
+    shop, and hiding removed rows by default would make "why can this person no
+    longer sign in?" unanswerable from the UI. `invited` is not an accepted
+    value — memberships are only created at accept time (data-model §7), so the
+    filter could only ever return nothing. People invited but not yet joined live
+    in `GET /orgs/{orgId}/invitations`.
+
+
+    This is the ONLY list endpoint that supports `?withTotal=true` today.
+
+
+    `Cache-Control: no-store` — a list of email addresses must not sit in a
+    shared cache (M-11).
+  tags:
+    - members
+  security:
+    - bearerAuth: []
+  parameters:
+    - name: status
+      in: query
+      required: false
+      description: Default `all`. Any other value → `422`.
+      schema:
+        type: string
+        enum:
+          - active
+          - revoked
+          - all
+        default: all
+    - $ref: "../components/parameters.yaml#/CursorParam"
+    - $ref: "../components/parameters.yaml#/LimitParam"
+    - $ref: "../components/parameters.yaml#/WithTotalParam"
+  responses:
+    "200":
+      description: One page, sorted `createdAt desc, id desc`.
+      headers:
+        Cache-Control:
+          $ref: "../components/headers.yaml#/CacheControlNoStore"
+        Pragma:
+          $ref: "../components/headers.yaml#/PragmaNoCache"
+      content:
+        application/json:
+          schema:
+            $ref: "../components/orgs.yaml#/MemberListPage"
+    "401":
+      description: Missing/invalid access token (`UNAUTHENTICATED`)
+      content:
+        application/json:
+          schema:
+            $ref: "../components/common.yaml#/ErrorResponse"
+    "403":
+      description: "`FORBIDDEN` (no `manage_members`) or `ORG_ACCESS_DENIED` (not a member)"
+      content:
+        application/json:
+          schema:
+            $ref: "../components/common.yaml#/ErrorResponse"
+    "422":
+      description: >
+        `VALIDATION_FAILED` (`status` / `cursor` / `limit`) or
+        `ORG_CONTEXT_REQUIRED` / `ORG_MISMATCH`.
+      content:
+        application/json:
+          schema:
+            $ref: "../components/common.yaml#/ErrorResponse"

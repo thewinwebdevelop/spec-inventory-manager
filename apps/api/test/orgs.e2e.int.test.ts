@@ -813,12 +813,19 @@ d("F-002 org endpoints (E2E, DB)", () => {
       });
     });
 
-    it("the two rows T-002-16 ships are no longer `pending`", () => {
-      const pending = auditApp(app.app).pending.map((p) => p.route);
-      expect(pending).not.toContain("PATCH /orgs/{orgId}");
-      expect(pending).not.toContain("GET /orgs/{orgId}");
-      // …the rest of F-002 still is, which is what keeps this assertion honest.
-      expect(pending.length).toBeGreaterThan(0);
+    it("★ NOTHING is `pending` any more — every declared route has a live handler", () => {
+      // This started as "the two rows T-002-16 ships are no longer pending",
+      // with `pending.length > 0` to keep it honest while the rest of F-002 was
+      // unwritten. That escape hatch is now closed: every row in the capability
+      // tables has a controller behind it.
+      //
+      // `GET /orgs/{orgId}/roles` is why this matters. It sat in
+      // ANY_ACTIVE_MEMBER_ROUTES from T-002-05 with no handler and no task-board
+      // row, reported as `pending` — an advisory tier nobody reads — for five
+      // waves. AC US-3 makes choosing a role mandatory when inviting, so the
+      // invite screen had no way to populate its dropdown, and no gate said so.
+      // An empty `pending` list is the assertion that would have caught it.
+      expect(auditApp(app.app).pending.map((p) => p.route)).toEqual([]);
     });
   });
 });

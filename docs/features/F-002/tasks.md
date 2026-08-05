@@ -52,7 +52,7 @@
 | T-002-18 | ★ สมาชิก: `GET /members` (**ต้องมี `manage_members`** — PDPA) · `PATCH /members/{userId}` · `DELETE /members/{userId}` (soft revoke + **ยกเลิก pending invite ของ email นั้นใน tx เดียว**) · **`DELETE /orgs/{id}/membership`** (ออกเอง — ไม่ต้องมี `manage_members`) · ทุกเส้น **lock + re-check ใน tx** + `canAssignRole` | `api-spec.md §3.7–3.9` · `architecture.md §5` | T-002-03, T-002-08, T-002-15 | done | backend-api |
 | T-002-19 | ★ คำเชิญ (ฝั่ง org): `POST /invitations` (hash-at-rest · TTL **24 ชม.** สำหรับ role สูง / 7 วัน ที่เหลือ · `409 INVITATION_PENDING` พก `details.invitationId`) · `GET` · `POST .../link` (**rotate + อายุนับใหม่** D-027 · **ผ่าน `canAssignRole`** NEW-2 · **DB ต้องไม่ขยับถ้า 403**) · `DELETE` | `api-spec.md §3.10–3.13` · `architecture.md §7` | T-002-06, T-002-18 | done | product (agent โดน session limit ตั้งแต่ยังไม่เขียนอะไร — PM ทำเองทั้งใบ) |
 | T-002-20 | ★ รับคำเชิญ: **`POST /invitations/preview`** (public · token ใน **body** ไม่ใช่ query — I-6) · `POST /invitations/accept` (`409 ALREADY_MEMBER` ไม่ทับ role · `409 INVITATION_SUPERSEDED` ถ้าออกก่อนถูกถอด · ตรวจ role ยังเป็นของ org นั้น) | `api-spec.md §3.14–3.15` · `architecture.md §7.4` | T-002-19 | done | backend-api |
-| T-002-21 | ⚠️ OpenAPI: เพิ่ม 17 endpoint + schema · **แตกไฟล์เป็น `paths/*.yaml` + `components/*.yaml` → `redocly bundle`** · regen TS + Dart client | `api-spec.md §5` · `§15 แถว 11` → `packages/contracts/` | T-002-20 | todo | — |
+| T-002-21 | ⚠️ OpenAPI: เพิ่ม 17 endpoint + schema · **แตกไฟล์เป็น `paths/*.yaml` + `components/*.yaml` → `redocly bundle`** · regen TS + Dart client | `api-spec.md §5` · `§15 แถว 11` → `packages/contracts/` | T-002-20 | done | backend-api |
 | T-002-22 | test kit ที่ qa เป็นผู้ใช้: `f002-seed.kit.ts` + CLI (`--scenario` · ตั้ง/สลับ `Role.key`) · `org-leak.kit.ts` (**4 persona**) · route-registry helper · assertion กลาง (PII/header/traceId/schema) · **500-fixture ที่ compile เฉพาะโปรไฟล์ test** · **meta-test ว่า kit แดงได้จริง** | `architecture.md §12.2` · `test-plan.md §19.1` → `apps/api/test/` | T-002-05 | done | qa — 6 kit + meta-test แดงได้จริงทุกตัว · ~~ค้าง `hashInvitationToken`~~ **ปลดแล้ว** — `packages/db/src/invitation-token.ts` (D-018) · 3 scenario ของ invite รันจริงแล้ว และเทสต์ที่ pin ไว้ถูกพลิกเป็นสถานะ "wired" |
 
 ## devops
@@ -205,3 +205,21 @@ peak `pg_stat_activity` = 27/100
 > **บทเรียนเรื่องวิธีแก้:** ระหว่างทางผมลอง cap `maxForks` ตามที่ agent เสนอ — ที่ 4 ยังแดง 1 ใน 4, ที่ 3 ยังแดง 1 ใน 7
 > **แล้วพอแก้ root cause จริง ก็ถอด cap ออกได้ทั้งหมด** · ถ้าหยุดที่ cap เราจะได้ suite ที่ช้าลง **และยังแดงอยู่**
 > โดยเข้าใจผิดว่าแก้แล้ว · ปุ่มที่กดแล้วอาการเบาลงไม่ใช่หลักฐานว่าเจอสาเหตุ
+
+## T-002-16b — endpoint ที่ PM แตกงานตกเอง (2026-08-06)
+
+**`GET /orgs/{orgId}/roles` (api-spec §3.6) ไม่เคยมีแถวใน tasks.md** ทั้งที่:
+- อยู่ใน api-spec §2 ตารางที่เซ็นแล้ว (endpoint ที่ 6 จาก 17)
+- ถูกประกาศใน `ANY_ACTIVE_MEMBER_ROUTES.read` ตั้งแต่ T-002-05
+- **AC US-3 บังคับให้เลือก role ตอนเชิญ** ⇒ ไม่มี endpoint นี้ = จอเชิญไม่มีข้อมูลใส่ dropdown = AC ทำไม่ได้เลย
+
+**ทำไมถึงรอดมา 5 wave:** `route-registry.kit` รายงานมันเป็น `pending` — tier ที่เป็น "ข้อสังเกต" ไม่ใช่ failure ·
+ไม่มีใครอ่าน · **สิ่งที่จับได้จริงคือ route-parity gate ของ T-002-21** ที่เทียบ router กับ spec แล้วเจอว่า
+api-spec สัญญา 17 เส้น แต่ ship 16
+
+**แก้แล้ว:** implement + ใส่ spec + **ปิด escape hatch ของ `pending` ทั้ง 3 จุด** (`expect(pending).toEqual([])`
+และ `failOnPending: true`) ⇒ นับจากนี้ "ประกาศไว้แต่ยังไม่สร้าง" เป็น **failure ไม่ใช่ note**
+
+> **บทเรียน:** นี่เป็นครั้งที่ 4 ที่ agent ผู้ลงมือจับได้ว่า PM แตกงานตก (ก่อนหน้า: pure fn 7 ไฟล์นับเป็น 5 ·
+> event 15 ค่านับเป็น 14 · `Organization` ไม่มีแถวใน §2.2) · ทุกครั้งมีชั้นที่ "รายงานแบบ advisory" อยู่แล้ว
+> แต่ไม่มีใครอ่าน — **ชั้นที่ไม่ทำให้ CI แดง ไม่ใช่ชั้นที่ป้องกันอะไรได้**

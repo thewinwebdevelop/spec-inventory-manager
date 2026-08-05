@@ -23,13 +23,13 @@
       "outputs": ["coverage/**"]
     },
     "gen:contracts": {
-      "inputs": ["openapi/openapi.yaml"],
-      "outputs": ["src/generated/ts/**", "../../apps/mobile/api_client/**"],
+      "inputs": ["openapi/**"],
+      "outputs": ["openapi/openapi.yaml", "src/generated/ts/**", "../../apps/mobile/api_client/**"],
       "cache": true
     },
     "validate": {
-      "inputs": ["openapi/openapi.yaml"],
-      "outputs": []
+      "inputs": ["openapi/**"],
+      "outputs": ["openapi/openapi.yaml"]
     },
     "depcruise": {
       "dependsOn": ["^build"],

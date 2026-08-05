@@ -6,8 +6,9 @@
   "types": "src/index.ts",
   "scripts": {
     "build": "echo ok",
-    "validate": "redocly lint openapi/openapi.yaml",
-    "gen:contracts": "pnpm run gen:contracts:ts && pnpm run gen:contracts:dart",
+    "bundle": "redocly bundle openapi/root.yaml -o openapi/openapi.yaml --ext yaml",
+    "validate": "pnpm run bundle && redocly lint openapi/openapi.yaml",
+    "gen:contracts": "pnpm run bundle && pnpm run gen:contracts:ts && pnpm run gen:contracts:dart",
     "gen:contracts:ts": "openapi-typescript openapi/openapi.yaml -o src/generated/ts/schema.d.ts --redocly redocly.codegen.yaml",
     "gen:contracts:dart": "bash scripts/gen-dart-client.sh",
     "lint": "eslint \"src/**/*.{ts,tsx}\" --ignore-pattern \"src/generated/**\"",

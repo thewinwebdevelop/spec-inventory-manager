@@ -1,0 +1,51 @@
+post:
+  operationId: authSignup
+  summary: Create a user account (email + password)
+  description: >
+    US-1. Public (IP-throttled). Creates a user with verified=false and
+    returns NO tokens (MVP: client then calls /auth/login). All /auth/*
+    POSTs require Content-Type: application/json (415 otherwise, login-CSRF
+    defense, L-2).
+  tags:
+    - auth
+  security: []
+  requestBody:
+    required: true
+    content:
+      application/json:
+        schema:
+          $ref: "../components/auth.yaml#/SignupRequest"
+  responses:
+    "201":
+      description: Account created (no tokens issued)
+      content:
+        application/json:
+          schema:
+            $ref: "../components/auth.yaml#/SignupResponse"
+    "409":
+      description: Email already taken (the one necessary enumeration leak, Gate 1 §4)
+      content:
+        application/json:
+          schema:
+            $ref: "../components/common.yaml#/ErrorResponse"
+    "415":
+      description: Non-JSON Content-Type (L-2)
+      content:
+        application/json:
+          schema:
+            $ref: "../components/common.yaml#/ErrorResponse"
+    "422":
+      description: Password policy or email validation failure
+      content:
+        application/json:
+          schema:
+            $ref: "../components/common.yaml#/ErrorResponse"
+    "429":
+      description: IP rate limit tripped (Retry-After seconds)
+      headers:
+        Retry-After:
+          $ref: "../components/headers.yaml#/RetryAfter"
+      content:
+        application/json:
+          schema:
+            $ref: "../components/common.yaml#/ErrorResponse"

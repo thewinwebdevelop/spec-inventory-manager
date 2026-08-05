@@ -1,0 +1,59 @@
+post:
+  operationId: authLogin
+  summary: Authenticate and receive tokens
+  description: >
+    US-2. Public (IP + account throttle). The client declares its transport
+    via `tokenTransport` (default "body"). With "cookie" (web) the refresh
+    token is set as an httpOnly Secure SameSite=Strict cookie `omni_rt`
+    (Path=/auth) plus a readable `omni_csrf` cookie, and the body
+    `refreshToken` is null (H-1). With "body" (mobile/default) the plaintext
+    refresh token is returned in the body and no cookies are set. Wrong
+    password and unknown email both return the identical 401
+    INVALID_CREDENTIALS (enumeration-safe). Throttle is ALWAYS its own 429 +
+    Retry-After (M-1), never folded into the 401.
+  tags:
+    - auth
+  security: []
+  requestBody:
+    required: true
+    content:
+      application/json:
+        schema:
+          $ref: "../components/auth.yaml#/LoginRequest"
+  responses:
+    "200":
+      description: Authenticated — token pair issued
+      headers:
+        Set-Cookie:
+          $ref: "../components/headers.yaml#/SetAuthCookies"
+      content:
+        application/json:
+          schema:
+            $ref: "../components/auth.yaml#/TokenResponse"
+    "401":
+      description: Invalid credentials (generic — wrong password or unknown email)
+      content:
+        application/json:
+          schema:
+            $ref: "../components/common.yaml#/ErrorResponse"
+    "415":
+      description: Non-JSON Content-Type (L-2)
+      content:
+        application/json:
+          schema:
+            $ref: "../components/common.yaml#/ErrorResponse"
+    "422":
+      description: Malformed request (e.g. invalid deviceId / email shape)
+      content:
+        application/json:
+          schema:
+            $ref: "../components/common.yaml#/ErrorResponse"
+    "429":
+      description: IP or account backoff tripped (Retry-After seconds)
+      headers:
+        Retry-After:
+          $ref: "../components/headers.yaml#/RetryAfter"
+      content:
+        application/json:
+          schema:
+            $ref: "../components/common.yaml#/ErrorResponse"
