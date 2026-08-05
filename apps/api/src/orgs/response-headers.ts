@@ -103,6 +103,15 @@ export const RESPONSE_HEADER_POLICY: readonly ResponseHeaderPolicyRow[] = Object
   // §3.7 / §3.10–§3.13 — member and invitation lists carry other people's
   // email addresses; the two POSTs additionally carry a one-time token (D-018).
   policyRow("GET", "/orgs/{orgId}/members", ORG_PROFILE_RESPONSE_HEADERS, ["email"]),
+  // T-002-18 — api-spec §1 lists §3.7 (the member ROW shape) but not §3.8/§3.9
+  // by number. §3.8 answers with that same row, email included, so the `email`
+  // classification follows the SHAPE rather than the section number; leaving it
+  // out would let a response carrying every bit of §3.7's PII be cached because
+  // it arrived through a different verb. §3.9 carries no email, and is listed
+  // for the same reason §3.17 is: "when was this person removed from which
+  // shop" is still a fact about a person.
+  policyRow("PATCH", "/orgs/{orgId}/members/{userId}", ORG_PROFILE_RESPONSE_HEADERS, ["email"]),
+  policyRow("DELETE", "/orgs/{orgId}/members/{userId}", ORG_PROFILE_RESPONSE_HEADERS, ["membership"]),
   policyRow("GET", "/orgs/{orgId}/invitations", INVITATION_RESPONSE_HEADERS, ["email"]),
   policyRow("POST", "/orgs/{orgId}/invitations", INVITATION_RESPONSE_HEADERS, ["token", "email"]),
   policyRow(

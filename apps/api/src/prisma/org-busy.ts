@@ -12,7 +12,7 @@
 // So the knowledge stays here, next to the database layer, and what crosses the
 // boundary is a plain description with no Prisma types in it. `packages/db`
 // already decided the status/code/details (§5.2); this only carries the verdict.
-import { toOrgBusyError } from "@omnistock/db";
+import { OrgBusyError, toOrgBusyError } from "@omnistock/db";
 
 /** A contention verdict, in terms the wire layer can render on its own. */
 export interface OrgBusyDescription {
@@ -38,9 +38,19 @@ export interface OrgBusyDescription {
  * Prisma's `P2028` / pool timeout are the database telling us to back off. Left
  * unclassified they surface as 500s: on-call paged for ordinary contention, and
  * — on admin-reset — a status that stands out against an otherwise uniform 404.
+ *
+ * ⚠️ TWO INPUT SHAPES, AND THE SECOND ONE IS THE COMMON ONE (T-002-18).
+ * `toOrgBusyError` classifies a RAW driver error. But every §5 write goes
+ * through `runInOrgLockTransaction`, which classifies the error ITSELF and
+ * rethrows a ready-made `OrgBusyError` — an object that carries no `code` and no
+ * `meta`, so re-classifying it returns `null`. Handling only the raw shape meant
+ * every real contention on a membership/invitation write reached the filter's
+ * fallback and was rendered `500 INTERNAL`: exactly the outcome architecture
+ * §5.2 and @qa's I-C-10 forbid, and invisible until an endpoint that actually
+ * takes the lock existed to prove it.
  */
 export function describeOrgBusy(error: unknown): OrgBusyDescription | null {
-  const busy = toOrgBusyError(error);
+  const busy = asOrgBusyError(error) ?? toOrgBusyError(error);
   if (!busy) return null;
   return {
     status: busy.httpStatus,
@@ -50,4 +60,27 @@ export function describeOrgBusy(error: unknown): OrgBusyDescription | null {
     diagnostic: busy.diagnostic,
     summary: `${busy.name}: ${busy.message}`,
   };
+}
+
+/**
+ * An error that IS already an `OrgBusyError`, or `null`.
+ *
+ * `instanceof` first (the normal case: one `@omnistock/db` instance in the
+ * process), then a structural check — the fields it needs are exactly the ones
+ * the class exposes, and if `packages/db` is ever loaded twice (two resolutions,
+ * a bundled worker) a failed `instanceof` would silently turn every contention
+ * back into a 500. Falling back on shape keeps the wire answer right in a
+ * situation nobody would think to test.
+ */
+function asOrgBusyError(error: unknown): OrgBusyError | null {
+  if (error instanceof OrgBusyError) return error;
+  if (typeof error !== "object" || error === null) return null;
+  const candidate = error as Partial<OrgBusyError>;
+  const looksRight =
+    candidate.name === "OrgBusyError" &&
+    typeof candidate.httpStatus === "number" &&
+    typeof candidate.errorCode === "string" &&
+    typeof candidate.details === "object" &&
+    candidate.details !== null;
+  return looksRight ? (error as OrgBusyError) : null;
 }

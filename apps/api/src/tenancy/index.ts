@@ -15,4 +15,7 @@ export {
   type SystemPrismaClient,
 } from "./prisma-tokens";
 export { TenancyModule } from "./tenancy.module";
+// T-002-18 ★ — the org lock + the frozen `User` projection, reachable from a
+// feature module without importing `@omnistock/db` (see org-lock.ts).
+export { runInOrgLockTransaction, USER_SELECT, type OrgLockTx } from "./org-lock";
 export type { OrgAuthOutcome, OrgAuthState, OrgAuthRequest } from "./org-auth";

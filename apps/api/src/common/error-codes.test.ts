@@ -68,6 +68,24 @@ describe("ERROR_CODES registry", () => {
     expect(ERROR_CODES.ORG_PROVISIONING_UNAVAILABLE.status).toBe(503);
   });
 
+  // T-002-18 ★ — the two codes the membership endpoints introduce (api-spec §4).
+  it("pins the membership codes → status (api-spec §4)", () => {
+    // 409: the caller may be allowed to do it; the resulting STATE is illegal.
+    // Same code for `DELETE …/members/{userId}` and `DELETE …/membership`
+    // (D-029) — leaving is a revoke whose target is the actor, not a second rule.
+    expect(ERROR_CODES.LAST_OWNER.status).toBe(409);
+    // 422 (validation), not 403/404: the body named a role this shop does not
+    // have. It must NOT distinguish "no such role" from "another org's role" —
+    // that difference would be a cross-tenant existence oracle (I-8).
+    expect(ERROR_CODES.ROLE_INVALID.status).toBe(422);
+    // D-029 wording — both messages are what the user sees if the client does
+    // not override the copy.
+    for (const def of [ERROR_CODES.LAST_OWNER, ERROR_CODES.ROLE_INVALID]) {
+      expect(def.message).toContain("ร้าน");
+      expect(def.message).not.toContain("องค์กร");
+    }
+  });
+
   it("uses the D-029 wording ('ร้าน', not 'องค์กร') in the org-context messages", () => {
     for (const def of [
       ERROR_CODES.ORG_CONTEXT_REQUIRED,

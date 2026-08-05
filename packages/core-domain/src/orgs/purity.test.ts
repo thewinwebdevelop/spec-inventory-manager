@@ -24,6 +24,8 @@ const SOURCE_FILES = [
   // T-002-17 — the tax profile write rule + the single reveal mapper. `now` is
   // a parameter there too, which is what makes `revealedAt` pinnable.
   "tax-profile.ts",
+  // T-002-18 — the membership row mapper (isOwner from `full_access`).
+  "member-view.ts",
   "index.ts",
 ] as const;
 

@@ -45,6 +45,26 @@ export class UpdateOrganizationDto {
 }
 
 /**
+ * `PATCH /orgs/{orgId}/members/{userId}` (api-spec §3.8).
+ *
+ * `roleId` arrives as `unknown` for the reason at the top of this file, plus one
+ * that is specific to it: whether the id is acceptable is not a STRING question
+ * but a TENANCY one — "is this a role of THIS shop?" — and only a query through
+ * `ORG_PRISMA` can answer it (`422 ROLE_INVALID`). A class-validator constraint
+ * here could only ever check the shape, and having half the rule in a decorator
+ * is how the other half stops being read.
+ */
+export class UpdateMemberRoleDto {
+  @Allow()
+  roleId?: unknown;
+
+  // ⛔ Deliberately NO `status` field. "Remove this member" is
+  // `DELETE …/members/{userId}`, an endpoint with its own capability row, its
+  // own Owner-only rule and its own event. A `status: "revoked"` accepted here
+  // would be a second, undeclared revoke path.
+}
+
+/**
  * `PUT /orgs/{orgId}/tax-profile` (api-spec §3.5).
  *
  * All four values arrive as `unknown` for the reason at the top of this file,

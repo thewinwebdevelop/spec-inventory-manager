@@ -28,6 +28,9 @@ import { MyOrganizationsController } from "./my-organizations.controller";
 import { OrgProfileController } from "./org-profile.controller";
 import { OrgProfileService } from "./org-profile.service";
 import { OrganizationsController } from "./organizations.controller";
+import { MembersController } from "./members.controller";
+import { MembershipController } from "./membership.controller";
+import { MembersService } from "./members.service";
 import { TaxProfileController } from "./tax-profile.controller";
 import { TaxProfileService } from "./tax-profile.service";
 import { MyOrganizationsService } from "./system/my-organizations.service";
@@ -46,6 +49,14 @@ import { PlanProvisioningService } from "./system/plan-provisioning.service";
     // own file is what makes "which code can emit that number" a question a
     // reviewer answers by opening one file.
     TaxProfileController,
+    // T-002-18 — TWO controllers for the membership surface, on purpose.
+    // `MembersController` acts on OTHER people (`:userId` in the path,
+    // `manage_members` on every verb); `MembershipController` acts only on the
+    // caller (no `:userId` at all, `@AnyActiveMember()`). Keeping them apart is
+    // what makes "this route can never target somebody else" a property of the
+    // file rather than of an `if` (api-spec §3.17 / D-029).
+    MembersController,
+    MembershipController,
   ],
   providers: [
     // env → DI, once at boot (never `loadEnv()` on a request path).
@@ -54,6 +65,9 @@ import { PlanProvisioningService } from "./system/plan-provisioning.service";
     // Injects `OrgProfileService` (to answer §3.5 with the §3.3 body) and
     // `SecurityEventsService` (from the imported `AuthModule`).
     TaxProfileService,
+    // T-002-18 — serves both membership controllers: one service, one
+    // transaction shape, one place the Owner ≥ 1 invariant is evaluated.
+    MembersService,
     // `system/` providers are registered here, not exported: nothing outside
     // this module may reach an unfiltered read.
     OrgProvisioningService,

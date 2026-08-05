@@ -21,6 +21,15 @@ export {
   type ResponseSensitivity,
 } from "./response-headers";
 export type { CreatedOrganization } from "./system/org-provisioning.service";
+// T-002-18 — the wire shapes of api-spec §3.7–§3.9/§3.17. The SERVICE is not
+// exported: a second call site for a membership write is a design conversation
+// (it would have to re-derive the whole §5 transaction shape), not an import.
+export type {
+  MemberListPage,
+  MemberListStatusFilter,
+  RevokeMemberResult,
+  LeaveOrgResult,
+} from "./members.service";
 export type {
   MyOrganizationsPage,
   MyOrganizationsStatusFilter,

@@ -92,6 +92,19 @@ export const ERROR_CODES = {
     status: HttpStatus.UNPROCESSABLE_ENTITY,
     message: "เลขผู้เสียภาษีไม่ถูกต้อง",
   },
+  // F-002 · T-002-18 — api-spec §4 / §3.8: the `roleId` in the body is not a
+  // role of THIS shop (it does not exist, or it belongs to another tenant).
+  //
+  // ⚠️ 422, and the message says nothing about which of the two it was. The
+  // lookup runs through `ORG_PRISMA`, so a role id from another org and a role
+  // id that never existed are indistinguishable here BY CONSTRUCTION — which is
+  // the point: a distinguishable answer would turn this endpoint into an oracle
+  // for "does this role id exist somewhere in the platform?" (I-8).
+  ROLE_INVALID: {
+    code: "ROLE_INVALID",
+    status: HttpStatus.UNPROCESSABLE_ENTITY,
+    message: "บทบาทนี้ไม่ใช่บทบาทของร้านนี้",
+  },
 
   // ── 409 conflict ──────────────────────────────────────────────────────────
   EMAIL_TAKEN: {
@@ -113,6 +126,20 @@ export const ERROR_CODES = {
     code: "ORG_LIMIT_REACHED",
     status: HttpStatus.CONFLICT,
     message: "คุณมีร้านครบจำนวนสูงสุดแล้ว",
+  },
+  // F-002 · T-002-18 ★ — api-spec §4 / architecture §5. The change would leave
+  // the shop with ZERO active Owners, which is unrecoverable in Phase 0 (there
+  // is no back-office until F-085 and no "delete shop"), so it is refused rather
+  // than warned about. Raised by `assertOwnerRemains` INSIDE the org-locked
+  // transaction — the answer is only true if it was computed under the lock.
+  //
+  // 409, not 403: the caller may well have the right to do this; it is the
+  // resulting STATE that is illegal, and they can fix it (promote someone first).
+  // Covers leaving voluntarily too (§3.17 / D-029) — same rule, same code.
+  LAST_OWNER: {
+    code: "LAST_OWNER",
+    status: HttpStatus.CONFLICT,
+    message: "ร้านต้องมีเจ้าของอย่างน้อย 1 คน",
   },
 
   // ── 401 unauthenticated / credential / refresh ───────────────────────────

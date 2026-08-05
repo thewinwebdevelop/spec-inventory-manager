@@ -18,6 +18,18 @@ export {
 
 export { canAssignRole, isOwnerRole, type CanAssignRoleInput } from "./member-authz";
 
+// T-002-18 ★ — the membership row of api-spec §3.7/§3.8. `isOwner` is computed
+// from `full_access` here so the UI's "may I show the remove button?" and the
+// server's `canAssignRole` refusal can never disagree.
+export {
+  toMemberRow,
+  type MemberRow,
+  type MemberRowSource,
+  type MemberRowMembership,
+  type MemberRowRole,
+  type MemberRowUser,
+} from "./member-view";
+
 export {
   isValidThaiTaxId,
   isValidBranchCode,
