@@ -169,3 +169,21 @@ verdict: **ready-with-recommendations · ไม่มี Critical** · reviewer 
 | B | **`findMany` บน org-scoped client (`$extends`) type เป็น `any` และ `OrgLockTxOf<OrgScopedPrismaClient>` ยุบเหลือ `unknown`** ⇒ T-002-18 ต้องประกาศ row shape เองทีละที่ · workaround อยู่ที่ `apps/api/src/tenancy/org-lock.ts` · **ทุก endpoint ถัดไปจะเจอเหมือนกัน** | backend-api (`packages/db`) |
 | C | api-spec §1 ลงรายการ §3.7 แต่ไม่ลง §3.8 ทั้งที่ §3.8 ตอบด้วย body ของ §3.7 (มี email) ⇒ ช่องว่างระดับเอกสาร · `RESPONSE_HEADER_POLICY` ครอบให้แล้วโดยรูป | backend-api · ปิดที่ **T-002-21** |
 | D | **flake ค้าง 2 อาการ ยังไม่มี root cause** — (1) `orgs.e2e` `socket hang up` 1 ครั้ง (2) `auth.e2e` **I5.5 + อีกใบ แดง 1 ครั้งใน 5 รอบเต็ม** (รอบถัดมา 4 รอบเขียวติด ไม่ได้ข้อความ assertion ไว้) · ทั้งคู่เกิดตอน int suite รันขนานกัน 6 ไฟล์บน Postgres/Redis ตัวเดียว · **ต้องจับ trace ให้ได้ก่อนเดา** — อย่าไล่แก้แบบเดา | qa |
+
+## ช่องว่างเชิงโครงสร้างที่เจอตอนสำรวจ T-002-21 (2026-08-05)
+
+**ไม่มี gate ไหนเทียบ "route ที่ router มีจริง" กับ "path ที่ OpenAPI ประกาศ"**
+
+หลักฐาน ณ วันนี้: F-002 มี endpoint ที่ทำงานได้จริงแล้ว **14 เส้น** (organizations · me/organizations · orgs/{id} ·
+tax-profile ×2 · members ×3 · membership · invitations ×4) — และ **ไม่มีสักเส้นเดียวอยู่ใน `openapi.yaml`**
+(ยังเป็น 9 path ของ F-000/F-001 เท่านั้น) · ทุก gate เขียวหมด
+
+- `contracts-drift` ตรวจว่า **client ที่ generate ตรงกับ spec** — ไม่ได้ตรวจว่า **spec ตรงกับ server**
+- `oasdiff` เทียบ spec↔spec ⇒ endpoint ที่ไม่เคยอยู่ใน spec **ไม่มีอะไรให้ diff**
+- `route-registry.kit` เทียบ router กับ `ROUTE_CAPABILITIES` (เรื่องสิทธิ์) ไม่ใช่กับ spec
+
+⇒ **ship endpoint ที่ client ไม่มีทางรู้จักได้แบบเงียบสนิท** และรู้ตัวอีกทีตอน frontend เขียนโค้ดแล้วหา type ไม่เจอ
+
+**ข้อเสนอ (ปิดที่ T-002-21):** เพิ่มเทสต์ที่เดิน `enumerateRoutes(app)` แล้วยืนยันว่าทุก route ที่ไม่ใช่ fixture
+ปรากฏใน `openapi.yaml` (และกลับกัน) — รูปเดียวกับ `route-registry.kit` ที่ทำกับตาราง capability อยู่แล้ว
+ถ้าไม่มีชั้นนี้ การ "แตกไฟล์ paths/*.yaml" ของ T-002-21 จะเป็นแค่การจัดระเบียบ ไม่ได้ทำให้ spec เชื่อถือได้ขึ้น
