@@ -1,15 +1,15 @@
 "use client";
 
 import { useState } from "react";
-import { PasswordField } from "../ui/PasswordField";
-import { Button } from "../ui/Button";
-import { ErrorBanner } from "../ui/ErrorBanner";
-import { ThrottleBanner } from "../ui/ThrottleBanner";
-import { authTh } from "../../i18n/auth";
-import { ApiError, changePassword, isSessionExpired } from "../../lib/auth-client";
-import { changePasswordErrorMessage } from "../../lib/error-messages";
-import { useThrottleCountdown } from "../../hooks/use-throttle-countdown";
-import { redirectToLoginSessionExpired } from "../../lib/session-expired-redirect";
+import { PasswordField } from "../../../components/ui/PasswordField";
+import { Button } from "../../../components/ui/Button";
+import { ErrorBanner } from "../../../components/ui/ErrorBanner";
+import { ThrottleBanner } from "../../../components/ui/ThrottleBanner";
+import { authTh } from "../i18n";
+import { ApiError, changePassword, isSessionExpired } from "../../../lib/auth-client";
+import { changePasswordErrorMessage } from "../../../lib/error-messages";
+import { useThrottleCountdown } from "../../../hooks/use-throttle-countdown";
+import { redirectToLoginSessionExpired } from "../../../lib/session-expired-redirect";
 
 /**
  * Change-password section (ux-wireframe §9, ui.md §2.1.1) — reuse-only, no

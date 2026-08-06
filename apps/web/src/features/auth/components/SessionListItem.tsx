@@ -1,8 +1,8 @@
 "use client";
 
-import { authTh } from "../../i18n/auth";
-import { formatRelativeTimeTh } from "../../lib/relative-time";
-import { Button } from "../ui/Button";
+import { authTh } from "../i18n";
+import { formatRelativeTimeTh } from "../../../lib/relative-time";
+import { Button } from "../../../components/ui/Button";
 import type { components } from "@omnistock/contracts";
 
 type Session = components["schemas"]["Session"];

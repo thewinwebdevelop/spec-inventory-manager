@@ -40,6 +40,21 @@ const nextConfig = {
   // lockfile in the user's home directory that Next.js's root inference
   // otherwise picks up, producing a spurious "multiple lockfiles" warning.
   outputFileTracingRoot: path.join(__dirname, "../.."),
+  // `@omnistock/contracts` ships TypeScript source (`main: src/index.ts`) and
+  // writes ESM-correct relative specifiers (`export … from "./client.js"`).
+  // TypeScript resolves `./client.js` to `./client.ts`; webpack does not, so
+  // the moment web imported the client for real (rather than type-only, as
+  // the T-000-09 placeholder did) the build failed with "Can't resolve
+  // './client.js'". This teaches webpack the same mapping instead of
+  // stripping the extension in the shared package, which would leave its
+  // specifiers wrong for any future ESM consumer.
+  webpack(config) {
+    config.resolve.extensionAlias = {
+      ...config.resolve.extensionAlias,
+      ".js": [".ts", ".tsx", ".js"],
+    };
+    return config;
+  },
   async rewrites() {
     // Dev-only same-origin proxy: the browser calls these paths on the web
     // origin; Next.js forwards them server-side to the real API origin. This

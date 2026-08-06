@@ -1,5 +1,6 @@
 import type { ReactNode } from "react";
 import "../styles/globals.css";
+import { AppProviders } from "../components/providers/AppProviders";
 
 export const metadata = {
   title: "OmniStock",
@@ -9,7 +10,9 @@ export const metadata = {
 export default function RootLayout({ children }: { children: ReactNode }) {
   return (
     <html lang="th">
-      <body>{children}</body>
+      <body>
+        <AppProviders>{children}</AppProviders>
+      </body>
     </html>
   );
 }

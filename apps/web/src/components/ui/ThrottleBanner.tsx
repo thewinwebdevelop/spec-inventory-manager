@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useRef } from "react";
-import { authTh } from "../../i18n/auth";
+import { authTh } from "../../features/auth/i18n";
 import { formatThrottleMessage } from "../../lib/throttle-countdown";
 
 /**

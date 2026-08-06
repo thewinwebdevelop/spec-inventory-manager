@@ -4,10 +4,10 @@ import { useRouter, useSearchParams } from "next/navigation";
 import { Suspense, useEffect, useState } from "react";
 import Link from "next/link";
 import { AuthCard } from "../../components/ui/AuthCard";
-import { AuthForm } from "../../components/auth/AuthForm";
+import { AuthForm } from "../../features/auth/components/AuthForm";
 import { Toast, type ToastData } from "../../components/ui/Toast";
 import { useThrottleCountdown } from "../../hooks/use-throttle-countdown";
-import { authTh } from "../../i18n/auth";
+import { authTh } from "../../features/auth/i18n";
 import { ApiError, login } from "../../lib/auth-client";
 import { loginErrorMessage } from "../../lib/error-messages";
 

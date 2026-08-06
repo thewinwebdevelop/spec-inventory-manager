@@ -1,7 +1,7 @@
 "use client";
 
 import { useId, useState } from "react";
-import { authTh } from "../../i18n/auth";
+import { authTh } from "../../features/auth/i18n";
 import { cn } from "./utils";
 
 export interface PasswordFieldProps {

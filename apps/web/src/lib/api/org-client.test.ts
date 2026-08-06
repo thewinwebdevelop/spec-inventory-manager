@@ -3,7 +3,14 @@
 // possible. What we care about is what goes on the wire when a feature makes
 // an ordinary typed call, so that is what these tests assert on.
 import { describe, it, expect, vi } from "vitest";
-import { createOrgApiClient, createOrgFetch, isValidOrgId, ORG_HEADER, unwrap } from "./org-client";
+import {
+  createOrgApiClient,
+  createOrgFetch,
+  isValidOrgId,
+  ORG_HEADER,
+  resolveApiBase,
+  unwrap,
+} from "./org-client";
 import { ApiRequestError, toApiFailure } from "./error";
 import { SessionExpiredError } from "../auth-client";
 import { API_BASE, AUTH_BASE } from "../api-base";
@@ -215,30 +222,39 @@ describe("unwrap — the envelope survives to the failure taxonomy", () => {
 });
 
 describe("createOrgApiClient — through the generated client", () => {
-  it("★ a real typed call carries the org header", async () => {
-    // `baseUrl` is a test seam: jsdom's `Request` rejects the relative `/api`
-    // that a browser resolves fine. The base is still API_BASE-shaped, and
-    // the default is pinned by the next test.
+  it("★ a real typed call carries the org header and lands on /api", async () => {
     const { fetchImpl, seen } = recordingFetch(jsonResponse(200, { status: "ok" }));
-    const client = createOrgApiClient(ORG, {
-      getToken: () => "tok",
-      fetchImpl,
-      baseUrl: "http://api.test/api",
-    });
+    const client = createOrgApiClient(ORG, { getToken: () => "tok", fetchImpl });
 
     await client.GET("/health");
 
     expect(seen).toHaveLength(1);
     expect(seen[0].headers.get(ORG_HEADER)).toBe(ORG);
+    // `/api`, never `/auth` — `omni_rt` is scoped `Path=/auth` (F-001
+    // client-security review, C-1) and must not be dragged onto org traffic.
     expect(new URL(seen[0].url).pathname).toBe("/api/health");
+    expect(new URL(seen[0].url).pathname.startsWith(AUTH_BASE)).toBe(false);
   });
 
-  it("★ org traffic is based at /api, never /auth", () => {
-    // `omni_rt` is scoped `Path=/auth` (F-001 client-security review, C-1).
-    // Basing org calls under `/auth` would make the browser attach the
-    // refresh cookie to every org request — the exact thing that scope
-    // exists to prevent.
+  it("★ the base is the PAGE's origin — never a configured cross-origin one", () => {
+    // A cross-origin API base would defeat the dev proxy and force
+    // `SameSite=None` on `omni_rt` (api-base.ts). Resolving against
+    // `window.location.origin` cannot produce one.
     expect(API_BASE).toBe("/api");
-    expect(API_BASE.startsWith(AUTH_BASE)).toBe(false);
+    expect(resolveApiBase()).toBe(`${window.location.origin}/api`);
+    expect(new URL(resolveApiBase()).origin).toBe(window.location.origin);
+  });
+
+  it("leaves the path relative when there is no window (SSR/prerender)", () => {
+    // Nothing under /o/[orgId] renders on the server, but the module is
+    // imported during the build, so this must not throw.
+    const original = globalThis.window;
+    // @ts-expect-error — deleting the global is the only way to simulate it
+    delete globalThis.window;
+    try {
+      expect(resolveApiBase()).toBe("/api");
+    } finally {
+      globalThis.window = original;
+    }
   });
 });

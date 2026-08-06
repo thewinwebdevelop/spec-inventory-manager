@@ -1,10 +1,10 @@
 "use client";
 
 import { useRef, useState } from "react";
-import { ChangePasswordForm } from "../../../components/auth/ChangePasswordForm";
-import { SessionList } from "../../../components/auth/SessionList";
+import { ChangePasswordForm } from "../../../features/auth/components/ChangePasswordForm";
+import { SessionList } from "../../../features/auth/components/SessionList";
 import { Toast, type ToastData } from "../../../components/ui/Toast";
-import { authTh } from "../../../i18n/auth";
+import { authTh } from "../../../features/auth/i18n";
 
 /**
  * `/settings/security` — ux-wireframe §9.1/§11.5: change-password section on

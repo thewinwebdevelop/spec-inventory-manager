@@ -78,8 +78,8 @@
 
 | ID | งาน | ref → target | deps | status | updated_by |
 |----|-----|--------------|------|--------|------------|
-| T-002-W1 | ★ โครง org context: `lib/org` + `lib/session` + `app/o/[orgId]/layout` + org-scoped query client + ย้าย `components/auth/*` → `features/auth/` (R6) | `docs/architecture/web.md §3.2` · forward-commitments แถว F-002/F-003 | T-002-21, T-002-X1 | todo | — |
-| T-002-W2 | ★ `ApiFailure` web: **`ORG_ACCESS_DENIED` ≠ `FORBIDDEN` ห้ามรวม handler** (พากลับหน้าเลือกร้าน+refetch vs อยู่หน้าเดิม+toast) · `409` ที่มี `details.reason='busy'` = ลองใหม่ได้ · client ที่ไม่รู้จัก `reason` ต้องยังทำงานถูก | `web.md §3.4` · `api-spec.md §4` · `ux-wireframe.md §12` | T-002-W1 | todo | — |
+| T-002-W1 | ★ โครง org context: `lib/org` + `lib/session` + `app/o/[orgId]/layout` + org-scoped query client + ย้าย `components/auth/*` → `features/auth/` (R6) | `docs/architecture/web.md §3.2` · forward-commitments แถว F-002/F-003 | T-002-21, T-002-X1 | done | frontend (+ restart point: TanStack Query, `lib/api/query-client.ts`) |
+| T-002-W2 | ★ `ApiFailure` web: **`ORG_ACCESS_DENIED` ≠ `FORBIDDEN` ห้ามรวม handler** (พากลับหน้าเลือกร้าน+refetch vs อยู่หน้าเดิม+toast) · `409` ที่มี `details.reason='busy'` = ลองใหม่ได้ · client ที่ไม่รู้จัก `reason` ต้องยังทำงานถูก | `web.md §3.4` · `api-spec.md §4` · `ux-wireframe.md §12` | T-002-W1 | done | frontend (`org-access-denied` + `busy` เป็น kind แยก — ดูหมายเหตุท้ายไฟล์) |
 | T-002-W3 | จอ: เลือกร้าน (S1) · สร้างร้าน (S2) · AppShell+ตัวสลับร้าน (S3) | `ux-wireframe.md §2–4` · `ui.md §3` | T-002-W2 | todo | — |
 | T-002-W4 | จอ: ข้อมูลร้าน (S4) + ฟอร์มผู้เสียภาษี (S5) — **TIN เต็มมาจาก reveal เท่านั้น เก็บใน memory ห้าม persist** · Staff ไม่เห็นตัวเลขเลย | `ux-wireframe.md §5–6` | T-002-W3 | todo | — |
 | T-002-W5 | ★ จอ: สมาชิก (S6) + เชิญ (S7) + **แผ่นลิงก์แสดงครั้งเดียว (S8)** — ปุ่ม **"ออกลิงก์ใหม่"** + เตือนก่อนกด · **ห้าม hardcode "7 วัน"** ใช้ `expiresAt` · token เก็บใน memory เท่านั้น | `ux-wireframe.md §7–9` · D-027 | T-002-W3 | todo | — |
@@ -223,3 +223,40 @@ api-spec สัญญา 17 เส้น แต่ ship 16
 > **บทเรียน:** นี่เป็นครั้งที่ 4 ที่ agent ผู้ลงมือจับได้ว่า PM แตกงานตก (ก่อนหน้า: pure fn 7 ไฟล์นับเป็น 5 ·
 > event 15 ค่านับเป็น 14 · `Organization` ไม่มีแถวใน §2.2) · ทุกครั้งมีชั้นที่ "รายงานแบบ advisory" อยู่แล้ว
 > แต่ไม่มีใครอ่าน — **ชั้นที่ไม่ทำให้ CI แดง ไม่ใช่ชั้นที่ป้องกันอะไรได้**
+
+---
+
+## T-002-W1/W2 — สิ่งที่ตัดสินต่างจาก `web.md` และหนี้ที่เปิดใหม่ (2026-08-06)
+
+### เบี่ยงจาก arch doc 2 จุด (ตั้งใจ — ทั้งคู่แปลง "กฎ" ให้เป็น "type")
+
+1. **`org-access-denied` เป็น kind ของตัวเอง** ไม่ใช่ `{kind:"forbidden", code}` ตามภาพร่าง web.md §3.4
+   — api-spec §4 + ux-wireframe §12 สั่งให้สอง 403 นี้ทำ**ตรงข้ามกัน** (ทิ้ง org context ไปหน้าเลือกร้าน
+   vs อยู่หน้าเดิม+toast) ถ้าใช้ kind เดียวแล้วอ่าน `code` เอา คนที่ลืมอ่านจะได้พฤติกรรมผิด **และฝั่งที่ผิดคือฝั่งทำลาย**
+   (เตะสมาชิกออกจากร้านที่เขายังอยู่) · แยก kind = ลืมแล้วคอมไพล์ไม่ผ่าน
+2. **`busy` เป็น kind ของตัวเอง** ไม่ใช่ flag บน `conflict` — ux-wireframe §1.4 บังคับให้เช็ค
+   `reason === "busy"` **ก่อน** copy 409 ของจอนั้นเสมอ · แยก kind ทำให้ลำดับนี้เป็นโครงสร้าง
+   **wire ไม่เปลี่ยน**: 409 ยังเป็น 409 ⇒ คำสัญญาใน api-spec §1 ที่ว่า client ที่ไม่รู้จัก `reason` ยังทำงานถูก ยังจริง
+
+> ทั้งสองข้อพิสูจน์ด้วยการ revert: รวมสอง 403 = แดง 2 เทสต์ (+1 ที่ระดับ OrgGuard) · ตัดเช็ค busy = แดง 2
+
+### เบี่ยงข้อที่ 3 — `SessionState.authed` ไม่ถือ org list
+
+web.md §3.1 ร่างไว้ว่า `{status:"authed", orgs: OrgSummary[]}` — **ไม่ทำ** เพราะ org list เป็น TanStack query
+(`/me/organizations`) ถ้าก๊อปไว้ใน session state ด้วยจะมี **source of truth 2 ที่** สำหรับคำถาม "ฉันอยู่ร้านไหนบ้าง"
+ซึ่งเป็นคำถามเดียวกับที่ §12.1 บังคับให้ refetch หลัง `403 ORG_ACCESS_DENIED` ⇒ refetch อัปเดตที่หนึ่ง
+แต่ switcher ยังโชว์ร้านที่เพิ่งโดนถอดจากอีกที่
+
+### หนี้ที่เปิดใหม่
+
+| # | เรื่อง | ทำไมยังไม่ปิด | ควรปิดตอน |
+|---|---|---|---|
+| W-1 | `/select-org` เป็น **placeholder** — มีแค่แถบเตือนกับหัวข้อ ไม่มีรายการร้าน/ปุ่มสร้างร้าน | เป็นจอ S1 ของ W3 · แต่ `OrgGuard` navigate มาที่นี่ตอน `ORG_ACCESS_DENIED` ⇒ ถ้าไม่มี route เลยจะ 404 ซึ่งแย่กว่าปัญหาที่กำลังจัดการ | T-002-W3 (สัญญาที่ต้องคงไว้: query param `?removed=` + แถบ**เหลือง** ไม่ใช่แดง) |
+| W-2 | `/o/[orgId]/page.tsx` เป็น **placeholder** — โชว์แค่ชื่อร้าน + ชื่อสิทธิ์ เพื่อพิสูจน์ว่า context ต่อติด | ถ้าไม่มี page เลย Next จะไม่สร้าง route ⇒ layout+guard เป็นโค้ดที่ render ไม่ได้ และคำว่า "org shell ใช้ได้" จะไม่มีอะไรพิสูจน์ | T-002-W3 (AppShell/S3) |
+| W-3 | `errorsTh` มี 5 บรรทัดที่ **ux ยังไม่เคยเขียน** (mark `‡new` ในไฟล์): network / server / validation / notFound / conflict ทั่วไป | ux-wireframe ระบุ copy เฉพาะ busy · 403 สองแบบ · client-bug — ที่เหลือเป็น fallback ที่จอจะ override เองอยู่แล้ว ผมไม่แต่งคำแทน ux แบบเงียบ ๆ | ux ยืนยัน (ไม่บล็อก W3) |
+| W-4 | `useOrgProfile` อยู่ใน `lib/org/` ไม่ใช่ `features/org/api/` | `ActiveOrgProvider` ต้องใช้ และ `lib/` import `features/` ไม่ได้ (web.md §2.3) — มันเป็น infra จริง ๆ (ทุกจอใต้ `/o/` รอมัน) | — (ตั้งใจ) |
+| W-5 | **ยังไม่มี boundary gate ของ web** (`tool/check-boundaries.mjs`, web.md §5.2) — กติกา "feature ห้าม import `openapi-fetch` ตรง" / "`lib/` ห้าม import `features/`" ยังเป็นวินัย | เป็นชิ้นของ "จุด restart" ที่ยังไม่ได้ทำ · ตอนนี้มี 1 feature (auth) จึงยังไม่มีอะไรให้ละเมิด | ก่อน W3 จบ (มี `features/org/` เมื่อไหร่ กติกาเริ่มมีของให้คุม) |
+| W-6 | `next.config.mjs` ต้องใส่ `extensionAlias` เพราะ `packages/contracts` เขียน specifier แบบ ESM (`./client.js`) ที่ webpack resolve ไม่ได้ | เดิมไม่พังเพราะ web import contracts แบบ **type-only** เท่านั้น (T-000-09) — พอ import ของจริงถึงโผล่ · `pnpm test`/`tsc` **ทั้งคู่เขียว** มีแต่ `next build` ที่จับได้ | — (ปิดแล้ว · บันทึกไว้เพราะ mobile/back-office จะเจอแบบเดียวกัน) |
+
+> **บทเรียนซ้ำของฟีเจอร์นี้:** `vitest` + `tsc` เขียวไม่ได้แปลว่า build ผ่าน — รอบนี้ `next build` จับได้ 2 อย่าง
+> ที่อีกสองด่านมองไม่เห็นเลย (Suspense ของ `useSearchParams`, และ W-6) ⇒ **web task ทุกใบต้องรัน `build` ด้วย ไม่ใช่แค่ test+typecheck**

@@ -67,17 +67,26 @@ export interface OrgTransportDeps {
   /** Seam for tests only — production always uses F-001's single-flight
    * `silentRefresh`, so there is exactly one refresh policy in the app. */
   readonly refresh?: () => Promise<boolean>;
-  /**
-   * Seam for tests only. Production always uses `API_BASE`; nothing passes
-   * this. It exists because jsdom's `Request` refuses a relative URL that a
-   * real browser resolves against the document, so a test cannot otherwise
-   * drive a call through the generated client at all.
-   *
-   * It must never be used to point at `/auth` — see the note on
-   * `createOrgApiClient` — which is why the default is not overridable
-   * anywhere outside a test file.
-   */
-  readonly baseUrl?: string;
+}
+
+/**
+ * Absolutises `API_BASE` against the PAGE's own origin.
+ *
+ * A browser resolves `new Request("/api/x")` against the document; undici
+ * (what jsdom and Node give us) refuses it outright. Rather than let the test
+ * environment dictate a weaker test, the base is resolved here — and resolved
+ * from `window.location.origin`, never from configuration.
+ *
+ * That distinction matters: api-base.ts's whole argument is that there is no
+ * `NEXT_PUBLIC_API_ORIGIN`-style cross-origin base, because a cross-origin
+ * API would defeat the dev proxy and force `SameSite=None` on `omni_rt`.
+ * Taking the page's own origin cannot introduce one — the result is the same
+ * request the relative path produced, spelled out.
+ */
+export function resolveApiBase(base: string = API_BASE): string {
+  if (/^https?:\/\//.test(base)) return base;
+  const origin = typeof window === "undefined" ? undefined : window.location?.origin;
+  return origin ? `${origin}${base}` : base;
 }
 
 export function createOrgFetch(
@@ -117,7 +126,7 @@ export function createOrgFetch(
  * have no business seeing it.
  */
 export function createOrgApiClient(orgId: string, deps: OrgTransportDeps = {}) {
-  return createContractsClient(deps.baseUrl ?? API_BASE, { fetch: createOrgFetch(orgId, deps) });
+  return createContractsClient(resolveApiBase(), { fetch: createOrgFetch(orgId, deps) });
 }
 
 export type OrgApiClient = ReturnType<typeof createOrgApiClient>;

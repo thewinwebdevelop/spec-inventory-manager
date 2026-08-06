@@ -1,11 +1,11 @@
 "use client";
 
 import type { FormEvent, ReactNode } from "react";
-import { PasswordField } from "../ui/PasswordField";
-import { TextField } from "../ui/TextField";
-import { Button } from "../ui/Button";
-import { ErrorBanner } from "../ui/ErrorBanner";
-import { ThrottleBanner } from "../ui/ThrottleBanner";
+import { PasswordField } from "../../../components/ui/PasswordField";
+import { TextField } from "../../../components/ui/TextField";
+import { Button } from "../../../components/ui/Button";
+import { ErrorBanner } from "../../../components/ui/ErrorBanner";
+import { ThrottleBanner } from "../../../components/ui/ThrottleBanner";
 
 export interface AuthFormProps {
   title: string;

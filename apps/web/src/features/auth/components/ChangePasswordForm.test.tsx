@@ -2,12 +2,12 @@ import { describe, expect, it, vi, beforeEach } from "vitest";
 import { render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { ChangePasswordForm } from "./ChangePasswordForm";
-import * as authClient from "../../lib/auth-client";
-import { ApiError, SessionExpiredError } from "../../lib/auth-client";
+import * as authClient from "../../../lib/auth-client";
+import { ApiError, SessionExpiredError } from "../../../lib/auth-client";
 
-vi.mock("../../lib/auth-client", async () => {
-  const actual = await vi.importActual<typeof import("../../lib/auth-client")>(
-    "../../lib/auth-client",
+vi.mock("../../../lib/auth-client", async () => {
+  const actual = await vi.importActual<typeof import("../../../lib/auth-client")>(
+    "../../../lib/auth-client",
   );
   return {
     ...actual,
