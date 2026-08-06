@@ -27,14 +27,9 @@
 import { describe, it, expect } from "vitest";
 import { readdirSync, readFileSync } from "node:fs";
 import { join } from "node:path";
+import { parseControllers, type ControllerDecl } from "./controller-tier-marks.parse";
 
 const SRC = join(__dirname, "..", "src");
-
-interface ControllerDecl {
-  readonly file: string;
-  readonly path: string;
-  readonly classMarks: readonly string[];
-}
 
 function sourceFiles(dir: string, acc: string[] = []): string[] {
   for (const entry of readdirSync(dir, { withFileTypes: true })) {
@@ -45,26 +40,75 @@ function sourceFiles(dir: string, acc: string[] = []): string[] {
   return acc;
 }
 
-/**
- * Every `@Controller(...)` in production source, with the tier decorators
- * attached to the CLASS (the ones immediately above it, before the decorator).
- */
+/** Every `@Controller(...)` in production source, with its class-level tier marks. */
 function declaredControllers(): ControllerDecl[] {
-  const found: ControllerDecl[] = [];
-  for (const file of sourceFiles(SRC)) {
-    const source = readFileSync(file, "utf8");
-    const match = source.match(
-      /((?:@(?:Public|UserScoped|SystemScoped)\(\)\s*\n\s*)*)@Controller\(\s*("([^"]*)")?/,
-    );
-    if (!match) continue;
-    found.push({
-      file: file.slice(SRC.length + 1),
-      path: match[3] ?? "/",
-      classMarks: match[1]?.match(/@\w+\(\)/g) ?? [],
-    });
-  }
-  return found;
+  return sourceFiles(SRC).flatMap((file) =>
+    parseControllers(file.slice(SRC.length + 1), readFileSync(file, "utf8")),
+  );
 }
+
+// ── The parser, tested on the shapes that fooled its predecessor ───────────
+// The previous version of this gate was a regex requiring the tier decorator
+// to sit immediately above `@Controller`. Security review A-3 defeated it
+// with ONE line, and the gate reported clean. That failure was invisible to
+// every test here, because a parser that finds no marks makes every
+// assertion below trivially true — the same vacuity the count assertion was
+// added to prevent, one level deeper.
+describe("parseControllers", () => {
+  it("★ sees a tier mark separated from @Controller by another decorator", () => {
+    const source = [
+      "@UserScoped()",
+      "@Injectable()",
+      '@Controller("orgs/:orgId/roles")',
+      "export class RolesController {}",
+    ].join("\n");
+
+    expect(parseControllers("x.ts", source)).toEqual([
+      { file: "x.ts", path: "orgs/:orgId/roles", classMarks: ["@UserScoped()"] },
+    ]);
+  });
+
+  it("sees marks through comments, blank lines and multi-line decorators", () => {
+    const source = [
+      "@Public()",
+      "",
+      "// why this is public",
+      "@ApiTags(",
+      '  "auth",',
+      ")",
+      '@Controller("auth")',
+      "export class AuthController {}",
+    ].join("\n");
+
+    expect(parseControllers("x.ts", source)[0].classMarks).toEqual(["@Public()"]);
+  });
+
+  it("does not reach past the decorator block into an unrelated class above", () => {
+    const source = [
+      "@UserScoped()",
+      "@Controller()",
+      "export class Other {}",
+      "",
+      '@Controller("orgs/:orgId/members")',
+      "export class MembersController {}",
+    ].join("\n");
+
+    const parsed = parseControllers("x.ts", source);
+    expect(parsed).toHaveLength(2);
+    // The second controller is unmarked; the first one's mark must not leak.
+    expect(parsed[1].classMarks).toEqual([]);
+  });
+
+  it("finds every controller in a file, not just the first", () => {
+    const source = ['@Controller("a")', "class A {}", '@Controller("b")', "class B {}"].join("\n");
+    expect(parseControllers("x.ts", source).map((c) => c.path)).toEqual(["a", "b"]);
+  });
+
+  it("handles @Controller() with no prefix and single quotes", () => {
+    expect(parseControllers("x.ts", "@Controller()\nclass A {}")[0].path).toBe("/");
+    expect(parseControllers("x.ts", "@Controller('health')\nclass A {}")[0].path).toBe("health");
+  });
+});
 
 describe("route-tier marks are placed where a new sibling cannot inherit them", () => {
   const controllers = declaredControllers();

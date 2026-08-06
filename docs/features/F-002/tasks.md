@@ -336,3 +336,58 @@ web.md §3.1 ร่างไว้ว่า `{status:"authed", orgs: OrgSummary[
 | W-14 | S5 confirm "บันทึกทับ" ทำเป็น 2-step ในปุ่มเดิม ยังไม่ใช่ `ConfirmDialog` ตาม design-system | W6 (มี `ConfirmDialog` อยู่แล้ว) |
 | W-15 | `?invite=1&role=owner` (D-030 ชวนเจ้าของร้านสำรอง) ยังไม่มีใครอ่าน | W5 |
 | W-16 | ยังไม่ได้ทำ `RouteGuard`/`ForbiddenPanel` — เข้า URL ตรงไปหน้าที่ไม่มีสิทธิ์ยังไม่มีจอรองรับ (§12.2) | W6 · F-003 (`RouteGuard` เต็มเป็นของ F-003/F-007 ตาม web.md §3.3) |
+
+---
+
+## ★ Security review รอบ build — ผลและสถานะ (2026-08-06)
+
+รายงานเต็ม: [security-review-build-A.md](security-review-build-A.md) (credential/secret) ·
+[security-review-build-B.md](security-review-build-B.md) (tenancy/authz/lock/contract + delta)
+scope `f66451f..625f746` · reviewer 2 ใบแยกกัน (opus แทน fable ตามที่ user สั่ง) · **Part B ตาย session limit
+หลังเขียนรายงานเสร็จแล้ว** — ค้างเฉพาะ HTTP probe เพิ่มเติมของคำถาม coordinator
+
+| ระดับ | A (credential) | B (tenancy) |
+|---|---|---|
+| 🔴 Critical | 1 (A-1) | 0 |
+| 🟠 Important | 3 | 2 |
+| 🟡 Medium | 3 | 3 |
+| 🔵 Minor | 5 | 4 |
+
+### ที่ผม verify เองแล้ว (ไม่รับ finding โดยไม่ทดสอบซ้ำ)
+
+- **A-1 (🔴) — `SYSTEM_PRISMA` jail มีทางออกที่ไม่มีใครเฝ้า · ยืนยัน** ผมวางไฟล์ใน `src/orgs/` ที่
+  `@Inject(PrismaService)` แล้ว `prisma.client.membership.findMany({})` (client ที่ไม่ผ่าน `withOrgScope`)
+  ⇒ **allowlist test ผ่าน 5/5 · `pnpm depcruise` รายงาน "0 boundary violations"** · ยังไม่มี leak จริงวันนี้
+  แต่รั้วของกฎทองข้อ 3 ไม่ทำงาน และท่านี้คือท่าที่ `auth/`/`health/` ใช้อยู่ให้ลอกได้ทันที **→ ยังไม่แก้**
+- **A-3 = B-4 (reviewer 2 ใบเจอตรงกัน) — gate ของผมเองถูกหลบ · ยืนยันแล้ว + แก้แล้ว** ดูหัวข้อถัดไป
+
+### A-3/B-4 — ครั้งที่ 4 ที่ชั้นป้องกันของฟีเจอร์นี้ "เขียวโดยไม่ทำงาน" (และครั้งที่ 2 ที่เป็นของผมเอง)
+
+`controller-tier-marks.test.ts` ที่ผมเขียนแทน guard เดิมของ High-1 ใช้ regex ที่บังคับให้ tier decorator
+ติดกับ `@Controller` **decorator คั่นหนึ่งบรรทัดก็หลบได้:**
+
+```ts
+@UserScoped()
+@Injectable()          // ← บรรทัดเดียวนี้ทำให้ทั้ง gate ตาบอด
+@Controller("orgs/:orgId/roles")
+```
+
+ผมทำซ้ำเองแล้ว: ใส่ shape นี้ที่ `roles.controller.ts` จริง → **4 passed** · ลำดับ decorator ใน TypeScript อิสระ
+และนี่คือ shape ที่เกิดจาก **การแก้ไขธรรมดา** (เติม `@Injectable()`/`@ApiTags()` ทับของเดิม) ไม่ใช่ท่าแปลก
+
+**แก้:** แยก parser ออกเป็น `controller-tier-marks.parse.ts` แล้ว**เทสต์ตัว parser เอง** — เดิม regex อยู่ในไฟล์เทสต์
+และสิ่งเดียวที่ออกกำลังมันคือ assertion ที่มันทำให้ vacuous ⇒ ไม่มีทางจับได้เลยตามโครงสร้าง ·
+parser ใหม่เดินย้อนขึ้นทั้ง decorator block · พิสูจน์แดง: ใส่ shape เดิม → **แดง 3 เทสต์ ระบุชื่อไฟล์**
+
+> **บทเรียนที่ควรจำมากกว่าตัวบั๊ก:** ผมเขียน guard นี้ *เพราะ* guard ก่อนหน้าเป็น illusory —
+> แล้วเขียน guard ที่ illusory คนละแบบ · **ชั้นป้องกันที่ไม่มีเทสต์ของตัวเอง = ชั้นป้องกันที่ยังไม่ถูกตรวจ**
+
+### ยังไม่แก้ — ต้องตัดสินก่อน merge
+
+| # | เรื่อง | เจ้าของ |
+|---|---|---|
+| A-1 🔴 | `SYSTEM_PRISMA` jail escape ผ่าน `@Inject(PrismaService)` (`PrismaModule` เป็น `@Global()`) | backend-api |
+| A-2 🟠 | อีเมลผิดรูป → 500 **แต่ invitation ถูก commit แล้ว** ⇒ ล็อกอีเมลนั้นถาวร (409 `INVITATION_PENDING`) + กิน cap 100 ⇒ ผู้ถือ `manage_members` ทำให้ทั้งร้านเชิญใครไม่ได้ใน ~4 ชม. | backend-api |
+| A-4 🟠 | `GET …/invitations` ไม่ derive สถานะ: หมดอายุแล้วยังรายงาน `pending` · `?status=expired` คืน `[]` เสมอ | backend-api |
+| B-1 🟠 | `Membership.roleId` ชี้ Role ของ org อื่นได้ (ไม่มี composite FK · `withOrgScope` ไม่ตรวจ FK ใน `data`) ⇒ `full_access` ข้าม tenant · **วันนี้ยังไม่ถูก exploit** เพราะทุก write path resolve role ใน tx ที่ scope แล้ว | backend-api (+ `prisma-migration`) |
+| B-2 🟠 | `RESPONSE_HEADER_POLICY` มีแถวซ้ำ 4 คู่ → `responseHeaderPolicyFor()` คืนแถวที่**อ่อนกว่า** | backend-api |
