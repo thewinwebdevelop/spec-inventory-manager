@@ -221,3 +221,26 @@ F-000 final whole-branch review (2026-07-05): AC3 (api `/health`+web 200+flutter
 | **ทบทวนว่า self-reset ที่ถูกปฏิเสธ (`caller_is_target`) ควรมี security event ไหม** — ตอนนี้เงียบ เหมือน refusal อื่นที่ไม่ใช่ policy · แต่ "มีคนใช้ token ที่ขโมยมาตั้งรหัสใหม่" เป็นสัญญาณที่อยากเห็น | backend-api + product | **F-005 Gate 1** (พร้อมข้อบน) — ตอนนี้ไม่เพิ่มเพราะ §9 pin จำนวน event ไว้ 15 ค่า การเพิ่มที่ 16 ต้องแก้เอกสารที่เซ็นแล้ว | ถ้าเพิ่ม ต้องผ่าน §9 + เทสต์ที่ pin จำนวน |
 | **`hashInvitationToken` ยังไม่มีใน `packages/**`** (architecture §12.2 item 2ก) ⇒ 3 invite scenario ของ test kit ยัง throw `MissingProductionDependencyError` | backend-api | **T-002-19** (คำเชิญฝั่ง org) — kit มีเทสต์ที่จะเขียวเองวันที่ export ลง | qa จงใจไม่คำนวณ hash เอง (ไม่งั้น I-14 พิสูจน์แค่ว่า kit เห็นด้วยกับ kit) |
 | **export `RESPONSE_HEADER_POLICY` / `TOKEN_RESPONSE_ALLOWLIST` / `TAX_ID_RESPONSE_ALLOWLIST`** (architecture §12.2 items 4, 7) ⇒ header assertion ของ qa ยังตรวจไม่ได้ | backend-api | **T-002-17** (tax profile) | `assertResponseHeaders` รับ policy เป็น argument อยู่แล้ว ไม่มีสำเนาที่สอง |
+
+## F-003 · ช่องบน last-Owner invariant ที่ยังไม่มีวันนี้ แต่จะมีวันที่ F-003 เปิดให้แก้ role (พบตอน delta review 2026-08-06)
+
+`assertOwnerRemains` ตัดสิน "ใครเป็น Owner" จาก **capabilities** ถูกต้องแล้ว (`isOwnerRole(membership.capabilities)`
+ไม่ใช่ `role.name`/`role.key`) — และ `OwnerChange` มีแค่ **2 รูป**:
+
+```ts
+| { kind: "role_change"; userId; newRoleCapabilities }   // ย้าย membership ไป role อื่น
+| { kind: "revoke";      userId }                        // ถอด membership
+```
+
+**ทั้งสองรูปอธิบายการเปลี่ยนที่ `Membership` — ไม่มีรูปไหนอธิบาย "capabilities ของ `Role` เองเปลี่ยน"**
+
+⇒ วันที่ F-003 เปิดให้แก้ capabilities ของ role: ถอด `full_access` ออกจาก role "Owner" ของร้านที่มี Owner คนเดียว
+จะทำให้ร้าน**เหลือ Owner ศูนย์คน** โดยที่ **ไม่มี membership ใบไหนถูกแตะเลย** ⇒ ไม่มีเส้นทางไหนเรียก
+`assertOwnerRemains` และ invariant ที่ทั้ง F-002 สร้างชั้นล็อกมาปกป้อง ก็ถูกข้ามทั้งดุ้น
+
+**ใน F-002 ยังไม่เกิด** — ไม่มี endpoint ไหนเขียน `Role.capabilities` เลย (ยืนยันด้วย grep: ไม่มี `role.update` ใน `apps/api/src`)
+role ถูกสร้างครั้งเดียวตอน `POST /organizations` แล้วไม่ถูกแก้อีก
+
+| งานเปิดค้าง | เจ้าของ | **TRIGGER** | binding |
+| --- | --- | --- | --- |
+| **ขยาย `OwnerChange` ให้มีรูปที่สาม** (เช่น `{ kind: "role_capabilities_change"; roleId; newCapabilities }`) แล้วบังคับให้ทุกเส้นทางที่แก้ capabilities ของ role เรียก `assertOwnerRemains` ใน tx เดียวกับการเขียน | backend-api | **เมื่อ F-003 เข้า Gate 2** — ต้องเป็นหัวข้อใน architecture ของ F-003 ไม่ใช่ข้อสังเกตตอน build | ผลถ้าไม่ทำ: ร้านเหลือ Owner 0 คน ซึ่งใน Phase 0 **กู้ไม่ได้** (ไม่มี back-office F-085, ไม่มี "ลบร้าน") — เหตุผลเดียวกับที่ §5 ทั้งหัวข้อมีอยู่ |
