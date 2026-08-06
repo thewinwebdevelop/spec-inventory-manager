@@ -386,8 +386,41 @@ parser ใหม่เดินย้อนขึ้นทั้ง decorator bl
 
 | # | เรื่อง | เจ้าของ |
 |---|---|---|
-| A-1 🔴 | `SYSTEM_PRISMA` jail escape ผ่าน `@Inject(PrismaService)` (`PrismaModule` เป็น `@Global()`) | backend-api |
 | A-2 🟠 | อีเมลผิดรูป → 500 **แต่ invitation ถูก commit แล้ว** ⇒ ล็อกอีเมลนั้นถาวร (409 `INVITATION_PENDING`) + กิน cap 100 ⇒ ผู้ถือ `manage_members` ทำให้ทั้งร้านเชิญใครไม่ได้ใน ~4 ชม. | backend-api |
 | A-4 🟠 | `GET …/invitations` ไม่ derive สถานะ: หมดอายุแล้วยังรายงาน `pending` · `?status=expired` คืน `[]` เสมอ | backend-api |
 | B-1 🟠 | `Membership.roleId` ชี้ Role ของ org อื่นได้ (ไม่มี composite FK · `withOrgScope` ไม่ตรวจ FK ใน `data`) ⇒ `full_access` ข้าม tenant · **วันนี้ยังไม่ถูก exploit** เพราะทุก write path resolve role ใน tx ที่ scope แล้ว | backend-api (+ `prisma-migration`) |
 | B-2 🟠 | `RESPONSE_HEADER_POLICY` มีแถวซ้ำ 4 คู่ → `responseHeaderPolicyFor()` คืนแถวที่**อ่อนกว่า** | backend-api |
+
+### A-1 🔴 ปิดแล้ว (2026-08-06) — สองด่าน และวัดว่าแต่ละด่านพลาดตรงไหน
+
+**รากของปัญหาไม่ใช่ regex ผิด แต่คือ gate ตรวจ "ตัวอย่างของกฎ" แทน "ตัวกฎ"**
+กฎจริงคือ *"unfiltered client ถูกขังไว้ใน allowlist §2.1"* แต่ gate ไปแมตช์ชื่อ token `SYSTEM_PRISMA`
+ซึ่งเป็นแค่**หนึ่งในสองประตู** · ประตูที่สองคือ `PrismaService` เอง — `PrismaModule` เป็น `@Global()`
+⇒ feature module ไหนก็ inject ได้โดยไม่ต้อง import module และ `.client` บนนั้นคือ client ที่ไม่ผ่าน `withOrgScope`
+
+| ด่าน | ปิดยังไง | จับอะไรที่อีกด่านไม่จับ |
+|---|---|---|
+| textual — `system-prisma-allowlist.test.ts` | สแกนหา **ทั้งสองชื่อ** (`SYSTEM_PRISMA` + `PrismaService`) นอก allowlist | จุด inject ที่ depcruise ไม่เห็น direct edge |
+| import graph — depcruise rule ใหม่ `api-prisma-service-allowlisted` | ห้าม `prisma/prisma.service`/`prisma.module` จากนอก allowlist | import ที่ **เปลี่ยนชื่อ binding** ตอน import |
+
+**ที่แก้เพิ่มเพราะเจอระหว่างทาง:**
+- `run-api-boundaries.mjs` เดิมเช็คแค่ *"fixture โดนจับไหม"* → เปลี่ยนเป็น **"fixture โดนจับโดยกฎของตัวเองไหม"**
+  (ไม่งั้นกฎใหม่ ship ตายได้ — fixture ไปโดนกฎเก่าจับแทน แล้ว run ก็ยังเขียว)
+- `app.module.ts` ถูก clean scan จับ (import `PrismaModule` = งานของ composition root) → ยกเว้นเฉพาะ **module**
+  ไม่ยกเว้น service · ปลอดภัยเพราะถ้าไฟล์นั้นเอ่ยชื่อ `PrismaService` เมื่อไหร่ textual gate จับทันที (src root ไม่ใช่ allowed prefix)
+- fixture ใหม่ทำให้ textual gate แดงเอง (มันตั้งใจละเมิด) → exclude `__boundary_fixtures__/` แบบเดียวกับที่ depcruise ทำ
+
+**⚠️ ความเสี่ยงที่เหลือ — วัดแล้ว ไม่ใช่เดา:** ทั้งสองด่าน **ไม่จับ** การ launder ผ่าน re-export ที่เปลี่ยนชื่อ
+```ts
+// ในไฟล์ที่อยู่ใน allowlist เช่น tenancy/index.ts
+export { PrismaService as Db } from "../prisma/prisma.service";
+// ในไฟล์ feature
+import { Db } from "../tenancy";
+```
+ผมลองจริงแล้ว **เขียวทั้งคู่** (textual ไม่เห็นชื่อ · depcruise เห็น edge เป็น `orgs→tenancy` ไม่ใช่ `orgs→prisma.service`) ·
+กฎแบบ `reachable` จะจับได้แต่จะจับ path ที่ถูกต้องผ่าน ORG_PRISMA provider ไปด้วยทั้งหมด ⇒ ไม่คุ้ม ·
+**ยอมรับความเสี่ยงนี้อย่างเปิดเผย** เพราะการ launder ต้อง **แก้ไฟล์ใน allowlist** ซึ่งเป็นการกระทำที่ตั้งใจและอยู่ในไดเรกทอรีที่ถูกรีวิว
+— ต่างจากรูเดิมที่ต้องการแค่ "ไฟล์ใหม่ในโฟลเดอร์ feature" เท่านั้น
+
+> เขียนไว้ใน `__boundary_fixtures__/prisma-service-leak.ts` ด้วย — **comment ที่อ้างการป้องกันเกินจริง อันตรายกว่าไม่มี comment**
+> (ฉบับแรกที่ผมเขียนอ้างว่า import graph จับ laundering ได้ · ทดสอบแล้วไม่จริง · แก้ก่อน commit)

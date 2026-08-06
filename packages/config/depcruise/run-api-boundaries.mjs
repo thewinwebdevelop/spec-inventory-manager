@@ -4,8 +4,10 @@
 // Same self-proving shape as the core-domain purity gate:
 //   1. clean check    — real apps/api src (minus the fixture dir) has ZERO
 //                       boundary violations.
-//   2. negative fixture — __boundary_fixtures__/db-leak.ts MUST be flagged; if
-//                       the gate stops catching it, the gate itself is broken.
+//   2. negative fixtures — each __boundary_fixtures__ file MUST be flagged BY
+//                       THE RULE IT EXISTS FOR. Checking only "something fired"
+//                       would let a new rule ship dead: its fixture would be
+//                       caught by an older rule and the run would still pass.
 // Invoked from repo root so paths match the config's `^apps/api/src` anchors.
 
 import { spawnSync } from "node:child_process";
@@ -27,12 +29,32 @@ const DEPCRUISE_BIN =
 
 const CONFIG = "packages/config/depcruise/.dependency-cruiser.api.cjs";
 const SRC = "apps/api/src";
-const FIXTURE = "apps/api/src/__boundary_fixtures__/db-leak.ts";
 const FIXTURE_DIR_EXCLUDE = "^apps/api/src/__boundary_fixtures__/";
+
+/**
+ * Each negative fixture, and the rule it exists to prove is alive.
+ *
+ * Pinning the RULE matters: `prisma-service-leak.ts` would also trip
+ * `api-db-client-allowlisted` on a transitive edge, so a run that only asked
+ * "did anything fire?" would report the new rule healthy even if it had a typo
+ * in its path pattern and never matched anything.
+ */
+const FIXTURES = [
+  {
+    file: "apps/api/src/__boundary_fixtures__/db-leak.ts",
+    rule: "api-db-client-allowlisted",
+  },
+  {
+    file: "apps/api/src/__boundary_fixtures__/prisma-service-leak.ts",
+    rule: "api-prisma-service-allowlisted",
+  },
+];
+
 const RULE_NAMES = new Set([
   "api-leafward-only",
   "api-connectors-scoped",
   "api-db-client-allowlisted",
+  "api-prisma-service-allowlisted",
 ]);
 
 function fail(msg) {
@@ -74,19 +96,21 @@ function runDepcruise(target, extraArgs = []) {
   ok("real apps/api src has 0 boundary violations");
 }
 
-// ---- Check 2: negative fixture MUST be caught -------------------------------
-{
-  const violations = runDepcruise(FIXTURE);
-  if (violations.length === 0) {
+// ---- Check 2: every negative fixture MUST be caught BY ITS OWN RULE ---------
+for (const { file, rule } of FIXTURES) {
+  if (!existsSync(join(REPO_ROOT, file))) {
+    fail(`negative fixture ${file} is missing — the gate for \`${rule}\` proves nothing.`);
+  }
+  const violations = runDepcruise(file);
+  const byRule = violations.filter((v) => v.rule?.name === rule);
+  if (byRule.length === 0) {
     fail(
-      `negative fixture ${FIXTURE} was NOT flagged. The boundary gate is broken ` +
-        `— a raw Prisma-client import outside the allowlist could slip through.`,
+      `negative fixture ${file} was NOT flagged by \`${rule}\` ` +
+        `(other rules fired: ${[...new Set(violations.map((v) => v.rule?.name))].join(", ") || "none"}). ` +
+        `That rule is dead — an unfiltered Prisma client could reach a feature module.`,
     );
   }
-  ok(
-    `negative fixture is caught by \`${violations[0].rule.name}\` ` +
-      `(${violations.length} violation) — this gate exits non-zero on it, CI goes red`,
-  );
+  ok(`\`${rule}\` fires on ${file} (${byRule.length} violation) — CI goes red on it`);
 }
 
 console.log("\n[api-boundaries] PASS — boundaries clean on real code, fires on fixture.\n");
