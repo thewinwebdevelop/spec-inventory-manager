@@ -177,6 +177,83 @@ d("F-002 invitations, org side (E2E, DB)", () => {
     void owner;
   });
 
+  it("★ A-2: a malformed email is refused BEFORE anything is written", async () => {
+    // Security review A-2. `maskEmail` runs POST-COMMIT (it feeds the audit
+    // event), and it throws on an address with no `@`. So the sequence used to
+    // be: commit the invitation → throw → 500 INTERNAL, with a `pending` row
+    // left behind holding a token nobody ever received.
+    //
+    // The row is not cosmetic damage. It makes that address permanently
+    // un-invitable (`409 INVITATION_PENDING` on every retry) for the full TTL,
+    // and it consumes one of the shop's 100 pending slots. At 30 creates/hour
+    // a `manage_members` holder could exhaust the cap in about four hours,
+    // and every single request would look like a server bug rather than an
+    // attack.
+    const { owner, orgId } = await newOrg();
+    const staff = await roleNamed(orgId, "Staff");
+
+    const res = await invite(orgId, owner.accessToken, {
+      email: "not-an-email",
+      roleId: staff.id,
+    });
+
+    // A rejected input is the caller's problem (422), never ours (500).
+    expect(res.status).toBe(422);
+    expect(res.body.error.fieldErrors?.email).toBeTruthy();
+
+    // The assertion that actually matters: no row escaped.
+    const rows = await prisma.invitation.findMany({ where: { organizationId: orgId } });
+    expect(rows).toEqual([]);
+  });
+
+  it("★ A-2: a rejected attempt does not LOCK the address", async () => {
+    // The consequence, stated as behaviour rather than as a row count. With
+    // the leftover row, the second attempt came back `409 INVITATION_PENDING`
+    // — the shop is now told an invitation is outstanding for an address it
+    // was never able to invite, and the only way out is cancelling an
+    // invitation the UI has no reason to show anyone.
+    //
+    // Note the input: it must be one `maskEmail` actually rejects. An address
+    // like `a@@b.com` masks fine (`lastIndexOf("@")` finds the last one), so
+    // it would make this test pass without ever reaching the bug.
+    const { owner, orgId } = await newOrg();
+    const staff = await roleNamed(orgId, "Staff");
+
+    const first = await invite(orgId, owner.accessToken, {
+      email: "not-an-email",
+      roleId: staff.id,
+    });
+    const second = await invite(orgId, owner.accessToken, {
+      email: "not-an-email",
+      roleId: staff.id,
+    });
+
+    expect(first.status).toBe(422);
+    expect(second.status).toBe(422);
+    expect(second.body.error.code).not.toBe("INVITATION_PENDING");
+  });
+
+  it("★ A-2: an address signup would refuse cannot be invited either", async () => {
+    // `maskEmail` tolerates more than `isValidEmailShape` does — `a@b` splits
+    // into a local part and a domain quite happily. Gating on what the MASK
+    // accepts would let through an address that can never become an account,
+    // producing an invitation nobody is able to redeem while it holds one of
+    // the shop's 100 pending slots for its whole TTL.
+    //
+    // One definition of "an address" across signup and invite, or the two
+    // disagree about who is allowed to exist.
+    const { owner, orgId } = await newOrg();
+    const staff = await roleNamed(orgId, "Staff");
+
+    for (const email of ["a@b", "two@@at.com", "has space@shop.com"]) {
+      const res = await invite(orgId, owner.accessToken, { email, roleId: staff.id });
+      expect(res.status, email).toBe(422);
+      expect(res.body.error.fieldErrors?.email, email).toBeTruthy();
+    }
+
+    expect(await prisma.invitation.findMany({ where: { organizationId: orgId } })).toEqual([]);
+  });
+
   it("409 INVITATION_PENDING carries the id, so the UI has a next step (D-027)", async () => {
     const { owner, orgId } = await newOrg();
     const staff = await roleNamed(orgId, "Staff");

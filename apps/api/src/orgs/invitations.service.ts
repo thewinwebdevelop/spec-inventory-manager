@@ -31,6 +31,7 @@ import {
   invitationTtlHours,
   invitationExpiryFrom,
   isOwnerRole,
+  isValidEmailShape,
   maskEmail,
   normalizeEmail,
   resolveInvitationStatus,
@@ -73,6 +74,13 @@ export interface ReissuedLink {
   readonly tokenIssuedAt: string;
   readonly rotated: true;
 }
+
+/**
+ * Field message for an address that is not an address (★ A-2). Thai, and
+ * deliberately says nothing about the value itself — this string reaches an
+ * error envelope, and the value is the PII the mask exists to protect.
+ */
+const EMAIL_INVALID_MESSAGE = "รูปแบบอีเมลไม่ถูกต้อง";
 
 /** Role columns every decision here needs. */
 const ROLE_SELECT = { id: true, name: true, key: true, capabilities: true } as const;
@@ -272,6 +280,39 @@ export class InvitationsService {
     // value before it ever sees them.
     const email = normalizeEmail(input.email);
 
+    // ★ A-2 — masked BEFORE the transaction, not after it.
+    //
+    // The audit event (post-commit, below) needs a masked address, and
+    // `maskEmail` throws on anything it cannot split into a local part and a
+    // domain. Computing it there meant an address like `not-an-email` COMMITTED
+    // a pending invitation and only then threw, surfacing as `500 INTERNAL`
+    // with a live row left behind: that address became permanently
+    // un-invitable (`409 INVITATION_PENDING` on every retry, for the whole
+    // TTL) and it consumed one of the shop's 100 pending slots. At 30
+    // creates/hour, a `manage_members` holder could exhaust the cap in about
+    // four hours while every response looked like a server fault.
+    //
+    // Ordering is the fix, not the validation. A guard alone would leave the
+    // same landmine armed for the next address `maskEmail` refuses; deriving
+    // the value first makes "committed but unmaskable" unreachable, because
+    // nothing is committed until the value exists.
+    //
+    // The guard is `isValidEmailShape` — the SAME check signup applies
+    // (auth.service.ts) rather than "whatever `maskEmail` happens to tolerate".
+    // `maskEmail` accepts `a@b`, which signup rejects, so an address that can
+    // never become an account could be invited: an invitation nobody is able
+    // to redeem, holding one of the 100 pending slots until it expires. One
+    // definition of "an address" across both paths, or the two disagree about
+    // who can exist.
+    if (!isValidEmailShape(email)) {
+      // The caller's input, so 422 — never 500. `fieldErrors.email` puts the
+      // message on the field the invite form can focus (api-spec §4).
+      throw domainError("VALIDATION_FAILED", {
+        fieldErrors: { email: EMAIL_INVALID_MESSAGE },
+      });
+    }
+    const emailMasked = maskEmail(email);
+
     const created = await runInOrgLockTransaction(
       this.prisma,
       async (tx) => {
@@ -317,11 +358,13 @@ export class InvitationsService {
 
     // POST-COMMIT. The email is MASKED (architecture §9): an audit trail that
     // records who was invited should not itself become a directory of the
-    // addresses a shop holds.
+    // addresses a shop holds. The mask was computed BEFORE the transaction —
+    // see the note there; nothing that can throw belongs on this side of the
+    // commit.
     this.events.emit("org.invitation.created", {
       actorUserId,
       organizationId,
-      emailMasked: maskEmail(email),
+      emailMasked,
       roleId: created.row.roleId,
       invitationId: created.row.id,
     });

@@ -386,7 +386,6 @@ parser ใหม่เดินย้อนขึ้นทั้ง decorator bl
 
 | # | เรื่อง | เจ้าของ |
 |---|---|---|
-| A-2 🟠 | อีเมลผิดรูป → 500 **แต่ invitation ถูก commit แล้ว** ⇒ ล็อกอีเมลนั้นถาวร (409 `INVITATION_PENDING`) + กิน cap 100 ⇒ ผู้ถือ `manage_members` ทำให้ทั้งร้านเชิญใครไม่ได้ใน ~4 ชม. | backend-api |
 | A-4 🟠 | `GET …/invitations` ไม่ derive สถานะ: หมดอายุแล้วยังรายงาน `pending` · `?status=expired` คืน `[]` เสมอ | backend-api |
 | B-1 🟠 | `Membership.roleId` ชี้ Role ของ org อื่นได้ (ไม่มี composite FK · `withOrgScope` ไม่ตรวจ FK ใน `data`) ⇒ `full_access` ข้าม tenant · **วันนี้ยังไม่ถูก exploit** เพราะทุก write path resolve role ใน tx ที่ scope แล้ว | backend-api (+ `prisma-migration`) |
 | B-2 🟠 | `RESPONSE_HEADER_POLICY` มีแถวซ้ำ 4 คู่ → `responseHeaderPolicyFor()` คืนแถวที่**อ่อนกว่า** | backend-api |
@@ -424,3 +423,26 @@ import { Db } from "../tenancy";
 
 > เขียนไว้ใน `__boundary_fixtures__/prisma-service-leak.ts` ด้วย — **comment ที่อ้างการป้องกันเกินจริง อันตรายกว่าไม่มี comment**
 > (ฉบับแรกที่ผมเขียนอ้างว่า import graph จับ laundering ได้ · ทดสอบแล้วไม่จริง · แก้ก่อน commit)
+
+### A-2 🟠 ปิดแล้ว (2026-08-06) — แก้ที่**ลำดับ** ไม่ใช่แค่เพิ่ม validation
+
+`maskEmail(email)` ถูกเรียก **post-commit** (ใช้ป้อน audit event) และมันโยนเมื่อแยก local/domain ไม่ได้
+⇒ ลำดับเดิมคือ **commit invitation → throw → `500 INTERNAL`** โดยทิ้งแถว `pending` ที่ถือ token ซึ่งไม่มีใครเคยได้รับ
+
+แถวนั้นไม่ใช่ความเสียหายเชิงความสวยงาม: ที่อยู่นั้น**เชิญไม่ได้อีกเลย** (`409 INVITATION_PENDING` ทุกครั้งที่ลองใหม่)
+ตลอด TTL และกิน 1 ใน 100 slot ของร้าน · ที่ 30 create/ชม. ผู้ถือ `manage_members` ทำให้ cap เต็มได้ใน ~4 ชม.
+โดย**ทุก response ดูเหมือนบั๊กของเซิร์ฟเวอร์ ไม่ใช่การโจมตี**
+
+**แก้:** ย้ายการคำนวณ mask มา**ก่อน** transaction ⇒ สถานะ "commit แล้วแต่ mask ไม่ได้" **ไปถึงไม่ได้เชิงโครงสร้าง**
+เพราะไม่มีอะไรถูก commit จนกว่าค่าจะมีอยู่จริง · การเพิ่ม guard เฉย ๆ จะทิ้งกับระเบิดเดิมไว้ให้ที่อยู่ตัวถัดไปที่ `maskEmail` ไม่รับ
+
+**+ ใช้ `isValidEmailShape` เป็น guard ไม่ใช่ "อะไรก็ได้ที่ `maskEmail` ทน"** — `maskEmail` ยอมรับ `a@b`
+ซึ่ง **signup ปฏิเสธ** ⇒ เชิญที่อยู่ที่ไม่มีวันสมัครบัญชีได้ = คำเชิญที่ไม่มีใครรับได้ แต่กิน slot ไปจนหมดอายุ ·
+นิยามของคำว่า "อีเมล" ต้องเป็นอันเดียวกันทั้ง signup และ invite ไม่งั้นสองเส้นจะเถียงกันว่าใครมีตัวตนได้
+
+**พิสูจน์:** RED ก่อน (`expected 500 to be 422` + `MaskEmailError` ใน log) → GREEN → ย้าย `maskEmail` กลับไปหลัง commit ⇒ **แดง 3 เทสต์**
+· int lane 17/17 · เทสต์ยิงผ่าน stack จริงและ assert ว่า **ไม่มีแถวหลุดออกมา** ไม่ใช่แค่เช็ค status code
+
+> **ระวังตอนเขียนเทสต์:** ฉบับแรกของผมใช้ `somchai@@shop.com` เป็นตัวอย่าง "อีเมลพัง" — **ผ่านทันที**
+> เพราะ `lastIndexOf("@")` ทำให้ mask ได้ (local = `somchai@`) ⇒ เทสต์เขียวโดยไม่เคยแตะบั๊กเลย ·
+> แก้เป็น `not-an-email` แล้วถึงแดงจริง — **ตัวอย่างที่ "ดูพัง" กับตัวอย่างที่ "พังจริงตามโค้ด" ไม่ใช่สิ่งเดียวกัน**
