@@ -116,13 +116,61 @@ interface InvitationSelected {
   role: { name: string; key: string | null };
 }
 
-function toRow(row: InvitationSelected): InvitationRow {
+/**
+ * ★ A-4 — `?status=` → a Prisma predicate, in the SAME terms
+ * `resolveInvitationStatus` decides in.
+ *
+ * `expired` is never written to the column, so filtering on it directly asked
+ * for a value no row can hold: `?status=expired` returned an empty page
+ * forever, and `?status=pending` returned dead links as live ones. The two
+ * halves have to be translations of one rule:
+ *
+ *   pending   → stored `pending` AND not yet past `expiresAt`
+ *   expired   → stored `pending` AND at or past `expiresAt`  (`<=`, the safe side)
+ *   accepted  → stored `accepted`   (terminal — the clock cannot un-happen it)
+ *   cancelled → stored `cancelled`  (terminal, likewise)
+ *
+ * An unrecognised value falls through to no filter rather than to an empty
+ * page: the enum is validated at the controller, and answering "nothing here"
+ * to a question we did not understand is exactly how A-4 read to a shop owner.
+ */
+function invitationStatusFilter(status: string | undefined, now: Date): Record<string, unknown> {
+  switch (status) {
+    case "pending":
+      return { status: "pending", expiresAt: { gt: now } };
+    case "expired":
+      return { status: "pending", expiresAt: { lte: now } };
+    case "accepted":
+    case "cancelled":
+      return { status };
+    default:
+      return {};
+  }
+}
+
+/**
+ * ★ A-4 — `now` is required, because `status` on the wire is DERIVED.
+ *
+ * `expired` is computed at read time and has no write path
+ * (core-domain/orgs/invitation-status.ts). This used to cast the stored column
+ * straight onto the resolved type, so a `pending` row whose `expiresAt` had
+ * passed reported itself as live — on the one screen where an Owner sees which
+ * membership credentials are still outstanding.
+ *
+ * `now` is a parameter rather than `new Date()` inside, so the boundary
+ * (`expiresAt <= now` is already expired) stays testable to the millisecond,
+ * and so one listing cannot resolve two rows against two different clocks.
+ */
+function toRow(row: InvitationSelected, now: Date): InvitationRow {
   return toInvitationRow(
     {
       id: row.id,
       email: row.email,
       roleId: row.roleId,
-      status: row.status as InvitationRow["status"],
+      status: resolveInvitationStatus(
+        { status: row.status as StoredInvitationStatus, expiresAt: row.expiresAt },
+        now,
+      ),
       expiresAt: row.expiresAt,
       tokenIssuedAt: row.tokenIssuedAt,
       invitedByUserId: row.invitedByUserId ?? "",
@@ -238,9 +286,12 @@ export class InvitationsService {
     readonly cursor?: KeysetCursor;
     readonly limit: number;
   }): Promise<{ items: readonly InvitationRow[]; nextCursor: string | null }> {
-    const statusFilter = !input.status || input.status === "all" ? {} : { status: input.status };
+    // ONE clock for the whole page: the filter and the rendered `status` must
+    // agree, and reading `new Date()` twice could put a row on the boundary in
+    // one and not the other.
+    const now = new Date();
     const where = {
-      ...statusFilter,
+      ...invitationStatusFilter(input.status, now),
       // Keyset predicate for the fixed `createdAt desc, id desc` sort (§1).
       // Offset pagination would skip and repeat rows as invitations are created
       // and cancelled under the reader.
@@ -266,7 +317,7 @@ export class InvitationsService {
       createdAt: row.createdAt.toISOString(),
       id: row.id,
     }));
-    return { items: page.items.map(toRow), nextCursor: page.nextCursor };
+    return { items: page.items.map((row) => toRow(row, now)), nextCursor: page.nextCursor };
   }
 
   // ── §3.11 create ─────────────────────────────────────────────────────────
@@ -370,7 +421,7 @@ export class InvitationsService {
     });
 
     return {
-      invitation: toRow(created.row),
+      invitation: toRow(created.row, input.now),
       token: created.token,
       inviteUrl: this.inviteUrl(created.token),
     };

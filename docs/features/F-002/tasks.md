@@ -386,7 +386,6 @@ parser ใหม่เดินย้อนขึ้นทั้ง decorator bl
 
 | # | เรื่อง | เจ้าของ |
 |---|---|---|
-| A-4 🟠 | `GET …/invitations` ไม่ derive สถานะ: หมดอายุแล้วยังรายงาน `pending` · `?status=expired` คืน `[]` เสมอ | backend-api |
 | B-1 🟠 | `Membership.roleId` ชี้ Role ของ org อื่นได้ (ไม่มี composite FK · `withOrgScope` ไม่ตรวจ FK ใน `data`) ⇒ `full_access` ข้าม tenant · **วันนี้ยังไม่ถูก exploit** เพราะทุก write path resolve role ใน tx ที่ scope แล้ว | backend-api (+ `prisma-migration`) |
 | B-2 🟠 | `RESPONSE_HEADER_POLICY` มีแถวซ้ำ 4 คู่ → `responseHeaderPolicyFor()` คืนแถวที่**อ่อนกว่า** | backend-api |
 
@@ -446,3 +445,33 @@ import { Db } from "../tenancy";
 > **ระวังตอนเขียนเทสต์:** ฉบับแรกของผมใช้ `somchai@@shop.com` เป็นตัวอย่าง "อีเมลพัง" — **ผ่านทันที**
 > เพราะ `lastIndexOf("@")` ทำให้ mask ได้ (local = `somchai@`) ⇒ เทสต์เขียวโดยไม่เคยแตะบั๊กเลย ·
 > แก้เป็น `not-an-email` แล้วถึงแดงจริง — **ตัวอย่างที่ "ดูพัง" กับตัวอย่างที่ "พังจริงตามโค้ด" ไม่ใช่สิ่งเดียวกัน**
+
+### A-4 🟠 ปิดแล้ว (2026-08-06) — สองครึ่งของกฎเดียวกัน ต้องแปลจากต้นฉบับเดียวกัน
+
+`expired` เป็นค่าที่ **compute ตอนอ่าน ไม่เคยถูกเขียน** (บรรทัดแรกของ `core-domain/orgs/invitation-status.ts`
+เขียนไว้ตรง ๆ) แต่ list ทำสองอย่างที่ขัดกับข้อนั้น:
+
+| ครึ่ง | เดิม | ผล |
+|---|---|---|
+| render | `status: row.status as InvitationRow["status"]` — cast ค่า **stored** เป็นชนิด **resolved** | คำเชิญที่หมดอายุรายงานว่า `pending` |
+| filter | `{ status: input.status }` — ยิงตรงเข้าคอลัมน์ | `?status=expired` คืน `[]` **ตลอดกาล** |
+
+**ทำไมเป็นเรื่องความปลอดภัย ไม่ใช่แค่ UX:** จอนี้คือ **ที่เดียว**ที่เจ้าของร้านเห็นว่ามี credential ค้างกี่ใบ
+(F-005 ยังไม่มี · event เป็น log อย่างเดียว) ⇒ มันบอกเกินจริงว่าลิงก์ไหน "ยังมีชีวิต" และคนที่อยากตามล้างของเก่า
+**หาไม่เจอ** เพราะตัวกรองบอกว่าไม่มีอะไรต้องล้าง
+
+**แก้:** `toRow(row, now)` เรียก `resolveInvitationStatus` · `invitationStatusFilter(status, now)` แปล
+`pending → {status:'pending', expiresAt:{gt:now}}` และ `expired → {status:'pending', expiresAt:{lte:now}}` ·
+`accepted`/`cancelled` เป็น terminal — นาฬิกาไม่มีสิทธิ์ลบล้างสิ่งที่เกิดไปแล้ว
+
+**นาฬิกาเดียวต่อหนึ่งหน้า** — `const now = new Date()` ครั้งเดียวใน `list()` แล้วส่งเข้าไปทั้งสองครึ่ง ·
+ถ้าอ่าน `new Date()` สองครั้ง แถวที่อยู่พอดีเส้นแบ่งจะผ่าน filter แต่ render ออกมาเป็นอีกสถานะหนึ่ง
+
+**พิสูจน์:** RED (`expected 'pending' to be 'expired'`) → GREEN → **revert ทีละครึ่ง** ⇒ แดงทั้งสองครั้ง
+(เทสต์เดียวจับได้ทั้งสองด้าน เพราะมัน assert ว่าสองครึ่ง**เห็นตรงกัน** ไม่ใช่ assert แต่ละครึ่งแยกกัน) ·
++ เทสต์ terminal-state (cancelled ที่เลย expiry แล้ว ต้องยังเป็น `cancelled` และไม่โผล่ใน `?status=expired`) ·
+int lane เต็ม **182/182**
+
+> **หมายเหตุจาก reviewer ที่ยังไม่ได้ปิด:** A-9 บอกว่า reissue คำเชิญที่หมดอายุแล้วได้ `200` ⇒ ใบ Owner ที่ผู้ใช้
+> คิดว่า "ตายแล้ว" ยังเป็นประตูที่กดปุ่มเดียวเปิดใหม่ได้ · ตอนนี้อย่างน้อย**มองเห็นมันแล้ว** (`?status=expired` ใช้ได้จริง)
+> แต่ยังต้องตัดสินว่าจะห้าม reissue ใบที่หมดอายุไหม — ยังเปิดอยู่

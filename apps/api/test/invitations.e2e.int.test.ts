@@ -254,6 +254,79 @@ d("F-002 invitations, org side (E2E, DB)", () => {
     expect(await prisma.invitation.findMany({ where: { organizationId: orgId } })).toEqual([]);
   });
 
+  it("★ A-4: an expired invitation reads as `expired`, and the filters agree", async () => {
+    // Security review A-4. `expired` is COMPUTED at read time and never stored
+    // (core-domain/orgs/invitation-status.ts says so in its first line) — but
+    // the list cast the STORED column straight onto the resolved type and
+    // filtered on that column, so `?status=expired` queried a value no write
+    // path ever produces.
+    //
+    // This is the only screen where an Owner sees which membership credentials
+    // are outstanding (F-005 does not exist; the events are log-only). It
+    // overstated what was live, and anyone trying to clear out dead links was
+    // told there was nothing to clear.
+    const { owner, orgId } = await newOrg();
+    const staff = await roleNamed(orgId, "Staff");
+
+    const created = await invite(orgId, owner.accessToken, {
+      email: "expired@example.com",
+      roleId: staff.id,
+    });
+    expect(created.status).toBe(201);
+    const invitationId = created.body.invitation.id as string;
+
+    // Push it into the past directly: expiry is wall-clock, and no fake timer
+    // reaches Postgres.
+    await prisma.invitation.update({
+      where: { id: invitationId },
+      data: { expiresAt: new Date(Date.now() - 60_000) },
+    });
+
+    const list = (status?: string) =>
+      request(app.server())
+        .get(`/orgs/${orgId}/invitations${status ? `?status=${status}` : ""}`)
+        .set("Authorization", `Bearer ${owner.accessToken}`);
+
+    const all = await list("all");
+    expect(all.status).toBe(200);
+    // The row still says `pending` in the column; the WIRE must not.
+    expect(all.body.items.find((i: { id: string }) => i.id === invitationId).status).toBe("expired");
+
+    const expired = await list("expired");
+    expect(expired.body.items.map((i: { id: string }) => i.id)).toContain(invitationId);
+
+    const pending = await list("pending");
+    expect(pending.body.items.map((i: { id: string }) => i.id)).not.toContain(invitationId);
+  });
+
+  it("★ A-4: a cancelled invitation stays cancelled after its expiry passes", async () => {
+    const { owner, orgId } = await newOrg();
+    const staff = await roleNamed(orgId, "Staff");
+    const created = await invite(orgId, owner.accessToken, {
+      email: "cancelled@example.com",
+      roleId: staff.id,
+    });
+    const invitationId = created.body.invitation.id as string;
+
+    await request(app.server())
+      .delete(`/orgs/${orgId}/invitations/${invitationId}`)
+      .set("Authorization", `Bearer ${owner.accessToken}`);
+    await prisma.invitation.update({
+      where: { id: invitationId },
+      data: { expiresAt: new Date(Date.now() - 60_000) },
+    });
+
+    const all = await request(app.server())
+      .get(`/orgs/${orgId}/invitations?status=all`)
+      .set("Authorization", `Bearer ${owner.accessToken}`);
+    expect(all.body.items.find((i: { id: string }) => i.id === invitationId).status).toBe("cancelled");
+
+    const expired = await request(app.server())
+      .get(`/orgs/${orgId}/invitations?status=expired`)
+      .set("Authorization", `Bearer ${owner.accessToken}`);
+    expect(expired.body.items.map((i: { id: string }) => i.id)).not.toContain(invitationId);
+  });
+
   it("409 INVITATION_PENDING carries the id, so the UI has a next step (D-027)", async () => {
     const { owner, orgId } = await newOrg();
     const staff = await roleNamed(orgId, "Staff");
