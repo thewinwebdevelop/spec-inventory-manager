@@ -1,16 +1,23 @@
 /**
- * T-002-W1 ★ — the org-scoped transport. Web's counterpart to mobile's
- * `orgDioProvider` (web.md §3.2): the ONLY way a feature talks to an
- * org-scoped endpoint.
+ * T-002-W1 ★ — the two API transports. Web's counterpart to mobile's
+ * `orgDioProvider` (web.md §3.2).
  *
- * The point of the shape is that `X-Organization-Id` is not something a
- * feature remembers to attach — it is baked into the client a feature has to
- * ask for, and the only way to get one is `useOrgApiClient()`, which derives
- * the id from the URL segment via `useActiveOrg()`. A feature CANNOT
- * accidentally call an org endpoint without the header, and cannot call it
- * with a different org's id than the one in the address bar.
+ * There are exactly TWO, matching the api-spec's two route tiers, and which
+ * one a call uses is not a detail:
  *
- * Auth is not reimplemented here. Every request goes through F-001's
+ *  - `createOrgApiClient(orgId)` — org-scoped endpoints. `X-Organization-Id`
+ *    is baked into the client rather than attached per call, and the only way
+ *    to get one is `useOrgApiClient()`, which derives the id from the URL via
+ *    `useActiveOrg()`. A feature cannot call an org endpoint without the
+ *    header, or with an org other than the one in the address bar.
+ *  - `createUserApiClient()` — user-scoped endpoints (`/me/organizations`,
+ *    `POST /organizations`). It sends NO org header, deliberately: those
+ *    routes span every shop, and the API builds an org context out of the
+ *    header even on a user-scoped route (security review I-3, the
+ *    confused-deputy finding). Sending an org id there is handing the server
+ *    an input it should never have received for that call.
+ *
+ * Auth is not reimplemented in either. Every request goes through F-001's
  * `requestWithRefresh` — the ★ security-reviewed silent-refresh-then-
  * retry-ONCE orchestration (never loop, single-flight refresh). A second
  * refresh/retry policy living next to the first is exactly how the two drift.
@@ -52,15 +59,6 @@ function parseRetryAfter(res: Response): number | undefined {
   return Number.isFinite(seconds) ? seconds : undefined;
 }
 
-/**
- * The `fetch` openapi-fetch will call. Attaches the org header + Bearer, then
- * hands the send function to `requestWithRefresh` so a 401 gets exactly one
- * silent refresh and one retry.
- *
- * Headers are (re)built inside `send`, not once outside it: the retry must
- * carry the token that the refresh just produced, not the dead one that
- * caused the 401.
- */
 export interface OrgTransportDeps {
   readonly getToken?: () => string | null;
   readonly fetchImpl?: typeof globalThis.fetch;
@@ -89,15 +87,29 @@ export function resolveApiBase(base: string = API_BASE): string {
   return origin ? `${origin}${base}` : base;
 }
 
-export function createOrgFetch(
-  orgId: string,
+/**
+ * The `fetch` openapi-fetch will call. Attaches Bearer (and the org header
+ * when `orgId` is non-null), then hands the send function to
+ * `requestWithRefresh` so a 401 gets exactly one silent refresh and one
+ * retry.
+ *
+ * Headers are (re)built inside `send`, not once outside it: the retry must
+ * carry the token that the refresh just produced, not the dead one that
+ * caused the 401.
+ *
+ * `orgId: null` is the user-scoped tier and is spelled explicitly rather than
+ * defaulted, so "no org header" is a decision somebody made at the call site
+ * rather than an argument they forgot.
+ */
+function createAuthedFetch(
+  orgId: string | null,
   deps: OrgTransportDeps = {},
 ): (input: Request) => Promise<Response> {
   const getToken = deps.getToken ?? getAccessToken;
   const doFetch = deps.fetchImpl ?? globalThis.fetch.bind(globalThis);
   const refresh = deps.refresh ?? silentRefresh;
 
-  if (!isValidOrgId(orgId)) {
+  if (orgId !== null && !isValidOrgId(orgId)) {
     throw new Error(`createOrgFetch: invalid organization id ${JSON.stringify(orgId)}`);
   }
 
@@ -107,7 +119,11 @@ export function createOrgFetch(
       // retry needs its own copy.
       const attempt = input.clone();
       const headers = new Headers(attempt.headers);
-      headers.set(ORG_HEADER, orgId);
+      // Strip any caller-supplied org header unconditionally, THEN set ours
+      // if this is an org-scoped client. On the user-scoped tier that leaves
+      // the request with none — which is the point (see the header note).
+      headers.delete(ORG_HEADER);
+      if (orgId !== null) headers.set(ORG_HEADER, orgId);
       const token = getToken();
       if (token) headers.set("Authorization", `Bearer ${token}`);
       else headers.delete("Authorization");
@@ -115,6 +131,19 @@ export function createOrgFetch(
     };
     return requestWithRefresh(send, refresh);
   };
+}
+
+export function createOrgFetch(
+  orgId: string,
+  deps: OrgTransportDeps = {},
+): (input: Request) => Promise<Response> {
+  return createAuthedFetch(orgId, deps);
+}
+
+export function createUserFetch(
+  deps: OrgTransportDeps = {},
+): (input: Request) => Promise<Response> {
+  return createAuthedFetch(null, deps);
 }
 
 /**
@@ -130,6 +159,21 @@ export function createOrgApiClient(orgId: string, deps: OrgTransportDeps = {}) {
 }
 
 export type OrgApiClient = ReturnType<typeof createOrgApiClient>;
+
+/**
+ * Typed client for the USER-scoped tier: `GET /me/organizations` and
+ * `POST /organizations`, the two calls that exist precisely because the
+ * caller is not inside a shop yet.
+ *
+ * It sends no `X-Organization-Id`. That is the whole difference, and it is
+ * load-bearing — see the header note at the top of this file (security
+ * review I-3).
+ */
+export function createUserApiClient(deps: OrgTransportDeps = {}) {
+  return createContractsClient(resolveApiBase(), { fetch: createUserFetch(deps) });
+}
+
+export type UserApiClient = ReturnType<typeof createUserApiClient>;
 
 /** What openapi-fetch resolves to: never a throw, always this triple. */
 interface FetchResult<T> {

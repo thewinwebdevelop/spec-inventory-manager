@@ -14,7 +14,7 @@
  */
 import { useMemo } from "react";
 import { useQuery, type UseQueryResult } from "@tanstack/react-query";
-import { createOrgApiClient, unwrap } from "../api/org-client";
+import { createOrgApiClient, unwrap } from "../api/clients";
 import { orgKey } from "./org-keys";
 import type { OrgProfile } from "./org-context";
 

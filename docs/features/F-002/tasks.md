@@ -80,7 +80,7 @@
 |----|-----|--------------|------|--------|------------|
 | T-002-W1 | ★ โครง org context: `lib/org` + `lib/session` + `app/o/[orgId]/layout` + org-scoped query client + ย้าย `components/auth/*` → `features/auth/` (R6) | `docs/architecture/web.md §3.2` · forward-commitments แถว F-002/F-003 | T-002-21, T-002-X1 | done | frontend (+ restart point: TanStack Query, `lib/api/query-client.ts`) |
 | T-002-W2 | ★ `ApiFailure` web: **`ORG_ACCESS_DENIED` ≠ `FORBIDDEN` ห้ามรวม handler** (พากลับหน้าเลือกร้าน+refetch vs อยู่หน้าเดิม+toast) · `409` ที่มี `details.reason='busy'` = ลองใหม่ได้ · client ที่ไม่รู้จัก `reason` ต้องยังทำงานถูก | `web.md §3.4` · `api-spec.md §4` · `ux-wireframe.md §12` | T-002-W1 | done | frontend (`org-access-denied` + `busy` เป็น kind แยก — ดูหมายเหตุท้ายไฟล์) |
-| T-002-W3 | จอ: เลือกร้าน (S1) · สร้างร้าน (S2) · AppShell+ตัวสลับร้าน (S3) | `ux-wireframe.md §2–4` · `ui.md §3` | T-002-W2 | todo | — |
+| T-002-W3 | จอ: เลือกร้าน (S1) · สร้างร้าน (S2) · AppShell+ตัวสลับร้าน (S3) | `ux-wireframe.md §2–4` · `ui.md §3` | T-002-W2 | done | frontend (+ `createUserApiClient` — tier ที่ W1 มองข้าม · ดูหมายเหตุท้ายไฟล์) |
 | T-002-W4 | จอ: ข้อมูลร้าน (S4) + ฟอร์มผู้เสียภาษี (S5) — **TIN เต็มมาจาก reveal เท่านั้น เก็บใน memory ห้าม persist** · Staff ไม่เห็นตัวเลขเลย | `ux-wireframe.md §5–6` | T-002-W3 | todo | — |
 | T-002-W5 | ★ จอ: สมาชิก (S6) + เชิญ (S7) + **แผ่นลิงก์แสดงครั้งเดียว (S8)** — ปุ่ม **"ออกลิงก์ใหม่"** + เตือนก่อนกด · **ห้าม hardcode "7 วัน"** ใช้ `expiresAt` · token เก็บใน memory เท่านั้น | `ux-wireframe.md §7–9` · D-027 | T-002-W3 | todo | — |
 | T-002-W6 | จอ: เปลี่ยนสิทธิ์ (S9) · ถอด/ออกจากร้าน (S10) · **`/invite` (S11) — ต้องดีบนเบราว์เซอร์มือถือ ~390px** · 403 สองแบบ (S12) · **ถอด token ออกจาก URL ด้วย `history.replaceState` ทันที** (I-6) | `ux-wireframe.md §10–12` | T-002-W5 | todo | — |
@@ -260,3 +260,40 @@ web.md §3.1 ร่างไว้ว่า `{status:"authed", orgs: OrgSummary[
 
 > **บทเรียนซ้ำของฟีเจอร์นี้:** `vitest` + `tsc` เขียวไม่ได้แปลว่า build ผ่าน — รอบนี้ `next build` จับได้ 2 อย่าง
 > ที่อีกสองด่านมองไม่เห็นเลย (Suspense ของ `useSearchParams`, และ W-6) ⇒ **web task ทุกใบต้องรัน `build` ด้วย ไม่ใช่แค่ test+typecheck**
+
+---
+
+## T-002-W3 — ช่องที่ W1 มองข้าม + คำถามที่ต้องส่งกลับ ux (2026-08-06)
+
+### ช่องที่เจอตอนทำ W3: **มี route tier 2 แบบ แต่ W1 สร้าง client แค่แบบเดียว**
+
+`GET /me/organizations` และ `POST /organizations` เป็น **user-scoped** — ครอบทุกร้าน ไม่ได้อยู่ในร้านไหน
+แต่ `createOrgApiClient` ของ W1 แนบ `X-Organization-Id` **เสมอ** ⇒ ถ้าใช้ตัวเดิมยิงสองเส้นนี้
+เราจะส่ง org id ไปให้ server บน route ที่ไม่ควรได้รับ ซึ่งเป็น input ของ **I-3 (confused deputy)** ตรง ๆ
+— `OrgContextMiddleware` สร้าง org context จาก header **แม้บน route user-scoped**
+
+⇒ เพิ่ม **`createUserApiClient`** (ไม่ส่ง org header เลย + ลบ header ที่ caller ใส่มาเองทิ้ง) ·
+`org-client.ts` → `clients.ts` เพราะตอนนี้มีสอง tier จริง ๆ · เทสต์ ★ 2 ใบคุมว่า user-scoped ต้องไม่มี header
+
+> **บทเรียน:** W1 พิสูจน์ว่า "org endpoint ลืมแนบ header ไม่ได้" แต่ไม่ได้ถามคำถามกลับด้าน —
+> "endpoint ที่**ไม่ควรมี** header จะแนบไปโดยไม่ตั้งใจได้ไหม" · ด้านที่ไม่ได้ถาม คือด้านที่ไม่มีอะไรคุม
+
+### คำถามที่ส่งกลับ ux (ไม่บล็อก — ผมเลือกทางที่ปลอดภัยกว่าไว้ก่อนแล้ว)
+
+**หน้า "ความปลอดภัย" อยู่ที่ `/settings/security` (root) ไม่ใช่ `/o/{orgId}/settings/security`**
+— ต่างจากที่ web.md §2.2 ร่างไว้ว่าให้ย้ายเข้าใต้ org ตอน F-002
+
+เหตุผล: **F-002 สร้างสถานะ "ล็อกอินแล้วแต่ไม่ได้อยู่ร้านไหนเลย" ขึ้นมาเอง** (empty state ของ S1) ·
+ถ้าย้ายหน้านี้เข้าใต้ org shell คนกลุ่มนั้นจะ **เปลี่ยนรหัสผ่าน/ดู session ตัวเองไม่ได้เลย** — โดนล็อกออกจาก
+การตั้งค่าบัญชีตัวเองเพราะการจัด IA · และหน้านี้ยิง `/auth/*` ซึ่งไม่มี org อยู่แล้ว
+⇒ **ต้องการคำตัดสินจาก ux** ว่าจะแก้ web.md §2.2 หรือจะให้มีทางเข้าที่สองสำหรับคนไม่มีร้าน
+
+### หนี้ที่เปิดใหม่
+
+| # | เรื่อง | ปิดตอน |
+|---|---|---|
+| W-7 | เมนู "ข้อมูลร้าน" → `/o/{orgId}/settings/org` และ "สมาชิก" → `/o/{orgId}/settings/members` **ยัง 404** | W4 · W5 (ต่างจาก W-1: อันนั้นเป็น error path ที่ระบบพาไปเอง อันนี้ผู้ใช้กดเอง = สถานะปกติของ feature ที่ทำครึ่งทาง) |
+| W-8 | ปุ่ม "โหลดเพิ่ม" ของ S1 แสดงเป็น**ข้อความ** ยังกดไม่ได้ (มี `nextCursor` แต่ยังไม่ต่อ) | F-010 (`DataTable`/paging pattern) — cap 50 ร้าน/คน ทำให้เกิดยากมาก |
+| W-9 | S2 สำเร็จแล้วส่ง toast ผ่าน query param `?created=` แต่ **ยังไม่มีใครอ่าน** (จอปลายทางคือ S4 ของ W4) | W4 |
+| W-10 | ยังไม่ได้ seed cache ของ org profile จาก 201 ของ `POST /organizations` (ux Q5 บอกว่าทำได้) — เลือก invalidate แทน | — (ตั้งใจ: `NewOrganization` คนละ shape กับ `OrgProfile` — ไม่มี `myMembership`/`counts` ⇒ ยัดลง key เดียวกันจะได้ object ผิดรูปตรงที่ `OrgGuard` อ่าน `myMembership.capabilities`) |
+| W-11 | `OrgSwitcher` ใช้ `<details>` ยังไม่ใช่ dropdown ตาม design-system §9 | เมื่อ component library มี `DropdownMenu` จริง (D-031 §9) |

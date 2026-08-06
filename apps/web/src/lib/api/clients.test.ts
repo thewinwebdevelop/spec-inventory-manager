@@ -7,10 +7,12 @@ import {
   createOrgApiClient,
   createOrgFetch,
   isValidOrgId,
+  createUserApiClient,
+  createUserFetch,
   ORG_HEADER,
   resolveApiBase,
   unwrap,
-} from "./org-client";
+} from "./clients";
 import { ApiRequestError, toApiFailure } from "./error";
 import { SessionExpiredError } from "../auth-client";
 import { API_BASE, AUTH_BASE } from "../api-base";
@@ -218,6 +220,45 @@ describe("unwrap — the envelope survives to the failure taxonomy", () => {
     ).catch((e: unknown) => e);
 
     expect(toApiFailure(err)).toEqual({ kind: "throttled", retryAfterSeconds: 30 });
+  });
+});
+
+describe("createUserApiClient — the user-scoped tier", () => {
+  it("★ sends NO X-Organization-Id", async () => {
+    // `/me/organizations` and `POST /organizations` span every shop. The API
+    // builds an org context out of this header even on a user-scoped route
+    // (security review I-3, confused deputy) — sending one here hands the
+    // server an input that call should never carry.
+    const { fetchImpl, seen } = recordingFetch(jsonResponse(200, { items: [], nextCursor: null }));
+    const client = createUserApiClient({ getToken: () => "tok", fetchImpl });
+
+    await client.GET("/me/organizations");
+
+    expect(seen).toHaveLength(1);
+    expect(seen[0].headers.has(ORG_HEADER)).toBe(false);
+    expect(seen[0].headers.get("Authorization")).toBe("Bearer tok");
+  });
+
+  it("★ strips a caller-supplied org header too", async () => {
+    const { fetchImpl, seen } = recordingFetch(jsonResponse(200, {}));
+    await createUserFetch({ getToken: () => "tok", fetchImpl })(
+      new Request("http://localhost/api/me/organizations", {
+        headers: { [ORG_HEADER]: "org_smuggled" },
+      }),
+    );
+    expect(seen[0].headers.has(ORG_HEADER)).toBe(false);
+  });
+
+  it("still refreshes once on a 401, like the org client", async () => {
+    const { fetchImpl, seen } = recordingFetch(jsonResponse(401, {}), jsonResponse(200, {}));
+    const res = await createUserFetch({
+      getToken: () => "tok",
+      fetchImpl,
+      refresh: async () => true,
+    })(new Request("http://localhost/api/me/organizations"));
+
+    expect(res.status).toBe(200);
+    expect(seen).toHaveLength(2);
   });
 });
 

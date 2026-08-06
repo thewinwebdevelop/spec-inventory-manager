@@ -11,7 +11,7 @@
  */
 import { useMemo } from "react";
 import { useActiveOrg } from "../org/org-context";
-import { createOrgApiClient, type OrgApiClient } from "./org-client";
+import { createOrgApiClient, type OrgApiClient } from "./clients";
 
 export function useOrgApiClient(): OrgApiClient {
   const { orgId } = useActiveOrg();
