@@ -444,6 +444,81 @@ d("F-002 invitations, org side (E2E, DB)", () => {
 
   // ── §3.13 cancel ─────────────────────────────────────────────────────────
 
+  it("★ A-9: an EXPIRED invitation cannot be reissued, and the stored token does not move", async () => {
+    // Security review A-9. Reissue used to accept an expired invitation and
+    // hand back a fresh 24h token, which meant an Owner link issued at any
+    // point in the past stayed a permanent option for anyone holding
+    // `full_access` — a `pending` row that could never die. `canAssignRole`
+    // stops an Admin doing it, but not an Owner, and until A-4 the row was
+    // invisible in every filter.
+    //
+    // Decided (2026-08-06): expired means expired. The way back is cancel +
+    // invite again, which the next test proves is actually available.
+    const { owner, orgId } = await newOrg();
+    const ownerRole = await roleNamed(orgId, "Owner");
+    const created = await invite(orgId, owner.accessToken, {
+      email: "stale-owner@example.com",
+      roleId: ownerRole.id,
+    });
+    const invitationId = created.body.invitation.id as string;
+    const before = await prisma.invitation.findUniqueOrThrow({ where: { id: invitationId } });
+
+    await prisma.invitation.update({
+      where: { id: invitationId },
+      data: { expiresAt: new Date(Date.now() - 60_000) },
+    });
+
+    const res = await request(app.server())
+      .post(`/orgs/${orgId}/invitations/${invitationId}/link`)
+      .set("Authorization", `Bearer ${owner.accessToken}`)
+      .set("Content-Type", "application/json")
+      .send({});
+
+    expect(res.status).toBe(409);
+    assertErrorEnvelope(res, { code: "INVITATION_EXPIRED", status: 409 });
+
+    // A refusal must leave the row exactly as it was — the same discipline the
+    // FORBIDDEN branch already follows. A 409 that had rotated the token would
+    // do the damage while saying no.
+    const after = await prisma.invitation.findUniqueOrThrow({ where: { id: invitationId } });
+    expect(after.tokenHash).toBe(before.tokenHash);
+    expect(after.tokenIssuedAt.getTime()).toBe(before.tokenIssuedAt.getTime());
+  });
+
+  it("★ A-9: the way back is cancel + invite again — not a dead end", async () => {
+    // The comment that justified allowing reissue said the alternative was "a
+    // dead end on screen". It is not, and this is the proof: an expired
+    // invitation is still stored as `pending`, so `cancel` accepts it, and
+    // cancelling frees the partial unique slot on (organizationId, email) so
+    // the same person can be invited again.
+    const { owner, orgId } = await newOrg();
+    const staff = await roleNamed(orgId, "Staff");
+    const email = "second-chance@example.com";
+
+    const first = await invite(orgId, owner.accessToken, { email, roleId: staff.id });
+    const invitationId = first.body.invitation.id as string;
+    await prisma.invitation.update({
+      where: { id: invitationId },
+      data: { expiresAt: new Date(Date.now() - 60_000) },
+    });
+
+    // Inviting again while the expired row still holds the slot is refused —
+    // and the error carries `expiresAt`, so the UI can tell "expired" from
+    // "genuinely outstanding" and offer the right next step.
+    const blocked = await invite(orgId, owner.accessToken, { email, roleId: staff.id });
+    expect(blocked.status).toBe(409);
+    expect(blocked.body.error.code).toBe("INVITATION_PENDING");
+    expect(new Date(blocked.body.error.details.expiresAt).getTime()).toBeLessThan(Date.now());
+
+    const cancelled = await request(app.server())
+      .delete(`/orgs/${orgId}/invitations/${invitationId}`)
+      .set("Authorization", `Bearer ${owner.accessToken}`);
+    expect(cancelled.status).toBe(200);
+
+    const again = await invite(orgId, owner.accessToken, { email, roleId: staff.id });
+    expect(again.status).toBe(201);
+  });
+
   it("cancel kills the link, and cancelling twice is 409 rather than a silent no-op", async () => {
     const { owner, orgId } = await newOrg();
     const staff = await roleNamed(orgId, "Staff");

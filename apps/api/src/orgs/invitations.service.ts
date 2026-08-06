@@ -438,14 +438,47 @@ export class InvitationsService {
       async (tx) => {
         const invitation = (await tx.invitation.findUnique({
           where: { id: input.invitationId },
-          select: { id: true, status: true, roleId: true, role: { select: ROLE_SELECT } },
-        })) as { id: string; status: string; roleId: string; role: { capabilities: string[] } } | null;
+          select: {
+            id: true,
+            status: true,
+            roleId: true,
+            expiresAt: true,
+            role: { select: ROLE_SELECT },
+          },
+        })) as {
+          id: string;
+          status: string;
+          roleId: string;
+          expiresAt: Date;
+          role: { capabilities: string[] };
+        } | null;
         if (!invitation) throw domainError("NOT_FOUND");
-        // An expired invitation is still stored as `pending` and may be
-        // reissued on purpose (architecture §3.2): the alternative is a dead end
-        // on screen, and with the Owner-only check below, allowing it buys the
-        // attacker nothing.
         if (invitation.status !== "pending") throw domainError("CONFLICT");
+
+        // ★ A-9 — expired means expired. Decided 2026-08-06, reversing the
+        // earlier "reissue it, the alternative is a dead end on screen".
+        //
+        // An expired invitation is still STORED as `pending` (there is no write
+        // path for `expired`), so reissue used to accept it and hand back a
+        // fresh token. The consequence was a row that could never die: an Owner
+        // link issued at any point in the past stayed a permanent option for
+        // anyone holding `full_access`, uncounted by the pending cap (which
+        // only counts `expiresAt > now`) and — until A-4 — invisible in every
+        // status filter. "The link you thought was dead is one button away
+        // from being alive" is not a property a membership credential should
+        // have.
+        //
+        // The dead end the old comment feared does not exist: the row is still
+        // cancellable (cancel reads the same stored column), and cancelling
+        // frees the partial unique slot on (organizationId, email), so the
+        // person can simply be invited again. Two deliberate steps instead of
+        // one silent resurrection.
+        //
+        // The status must be RESOLVED here rather than compared to the column,
+        // for the same reason as A-4 — the column cannot answer this question.
+        if (resolveInvitationStatus({ status: "pending", expiresAt: invitation.expiresAt }, input.now) === "expired") {
+          throw domainError("INVITATION_EXPIRED");
+        }
 
         const actorCapabilities = await this.readActorCapabilities(tx, actorUserId);
         // NEW-2 — the whole reason this route is not just a token generator.

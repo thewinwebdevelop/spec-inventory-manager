@@ -2711,7 +2711,7 @@ export interface operations {
                     "application/json": components["schemas"]["ErrorResponse"];
                 };
             };
-            /** @description `CONFLICT` — the invitation is not in a reissuable state (already accepted or cancelled) · or `CONFLICT` + `details.reason = "busy"` (lock contention, retry). */
+            /** @description `CONFLICT` — the invitation is not in a reissuable state (already accepted or cancelled) · `INVITATION_EXPIRED` — it is past `expiresAt`; an expired link is NOT resurrected, because a `pending` row that can be revived at any time is a permanent standing option rather than an invitation (security review A-9). The way forward is `DELETE /orgs/{orgId}/invitations/{invitationId}` followed by a fresh `POST /orgs/{orgId}/invitations` · or `CONFLICT` + `details.reason = "busy"` (lock contention, retry). */
             409: {
                 headers: {
                     [name: string]: unknown;
