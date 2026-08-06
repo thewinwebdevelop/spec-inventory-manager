@@ -97,3 +97,107 @@ export function roleLabel(roleKey: string | null | undefined, roleName: string |
       return roleName ?? "";
   }
 }
+
+/**
+ * S4/S5 copy (ux-wireframe §5–§6). Same rule: verbatim from `ux`.
+ *
+ * The privacy lines are not decoration — §5 requires the user to be told
+ * BEFORE pressing that a reveal is recorded ("บอกก่อนกด ไม่ใช่แอบเก็บ"), and
+ * §6 requires the personal-ID warning to be visible while typing one.
+ */
+export const orgProfileTh = {
+  title: "ข้อมูลร้าน",
+  onboarding: {
+    title: "เริ่มต้นใช้งาน",
+    inviteTeam: { text: "ชวนทีมงานเข้าร้าน", cta: "เชิญสมาชิก" },
+    declareTax: { text: "ประกาศข้อมูลผู้เสียภาษี เพื่อออกใบกำกับภาษีได้", cta: "กรอกข้อมูล" },
+    backupOwner: {
+      text: "ตั้งเจ้าของร้านสำรองไว้อีก 1 คน เผื่อวันหนึ่งคุณเข้าระบบไม่ได้",
+      cta: "เชิญเจ้าของร้าน",
+    },
+  },
+  fields: {
+    name: "ชื่อร้าน",
+    localeLabel: "เวลา/สกุลเงิน",
+    localeValue: "เวลาไทย · บาท (฿)",
+    team: "ทีมงาน",
+    teamValue: (members: number, pending: number) =>
+      pending > 0 ? `สมาชิก ${members} คน · คำเชิญค้าง ${pending} ใบ` : `สมาชิก ${members} คน`,
+    edit: "แก้ไข",
+  },
+  rename: {
+    title: "แก้ไขชื่อร้าน",
+    save: "บันทึก",
+    cancel: "ยกเลิก",
+    successToast: "บันทึกชื่อร้านแล้ว",
+    invalid: "กรอกชื่อร้าน (ไม่เกิน 120 ตัวอักษร)",
+  },
+  tax: {
+    title: "ข้อมูลผู้เสียภาษี",
+    entityTypeLabel: "ประเภท",
+    entity: { personal: "บุคคลธรรมดา", company: "นิติบุคคล" },
+    taxIdLabel: "เลขผู้เสียภาษี",
+    vatLabel: "VAT",
+    vatYes: "จดทะเบียน VAT",
+    vatNo: "ไม่ได้จดทะเบียน VAT",
+    branchLabel: "รหัสสาขา",
+    branchHeadOffice: "00000 (สำนักงานใหญ่)",
+    reveal: "แสดงเลขเต็ม",
+    hide: "ซ่อนเลข",
+    revealLoading: "กำลังขอเลข...",
+    /** §5 — shown BEFORE the press, because the press is audited. */
+    revealNotice: "การกดดูเลขเต็มถูกบันทึกไว้เพื่อความปลอดภัยของร้าน",
+    undeclaredCanEdit: "ยังไม่ได้ประกาศข้อมูลผู้เสียภาษี — ตอนนี้ร้านนี้ยังออกใบกำกับภาษีไม่ได้",
+    undeclaredCta: "กรอกข้อมูลผู้เสียภาษี",
+    undeclaredReadOnly: "ร้านนี้ยังไม่ได้ประกาศข้อมูลผู้เสียภาษี",
+    declaredReadOnly: (vat: boolean | null) =>
+      vat === null
+        ? "ร้านนี้ประกาศข้อมูลผู้เสียภาษีแล้ว"
+        : `ร้านนี้ประกาศข้อมูลผู้เสียภาษีแล้ว · ${vat ? "จดทะเบียน VAT" : "ไม่ได้จดทะเบียน VAT"}`,
+    declaredReadOnlyHint: "รายละเอียดเปิดให้เฉพาะผู้ที่ดูแลข้อมูลร้าน",
+    revealError: {
+      throttledHint: "ระหว่างนี้ยังแก้ไขข้อมูลอื่นของร้านได้ตามปกติ",
+      notFoundToast: "ร้านนี้ยังไม่ได้ประกาศข้อมูลผู้เสียภาษี",
+      generic: "ขอดูเลขเต็มไม่สำเร็จ กรุณาลองใหม่อีกครั้ง",
+    },
+  },
+  leaveOrg: "ออกจากร้านนี้",
+  error: "เปิดข้อมูลร้านไม่สำเร็จ",
+} as const;
+
+/** S5 — the tax form (ux-wireframe §6). */
+export const taxFormTh = {
+  title: "ข้อมูลผู้เสียภาษี",
+  entityLabel: "ประเภทผู้เสียภาษี",
+  personal: "บุคคลธรรมดา",
+  company: "นิติบุคคล",
+  /** §6 — visible while a national ID is being typed. */
+  personalHelper:
+    "สำหรับบุคคลธรรมดา เลข 13 หลักนี้คือเลขบัตรประชาชนของเจ้าของกิจการ — ระบบเปิดให้เห็นเฉพาะผู้ที่ดูแลข้อมูลร้าน",
+  taxIdLabel: "เลขประจำตัวผู้เสียภาษี (13 หลัก)",
+  vatLabel: "จดทะเบียน VAT",
+  vatYes: "จดทะเบียน VAT",
+  vatNo: "ไม่ได้จดทะเบียน",
+  branchLabel: "รหัสสาขา (ถ้ามี)",
+  branchHelper: "เว้นว่าง = สำนักงานใหญ่ (00000)",
+  privacyNote: "ข้อมูลนี้เปิดให้เห็นเฉพาะผู้ที่ดูแลข้อมูลร้าน",
+  save: "บันทึก",
+  saveLoading: "กำลังบันทึก...",
+  cancel: "ยกเลิก",
+  successToast: "บันทึกข้อมูลผู้เสียภาษีแล้ว — ร้านนี้ออกใบกำกับภาษีได้แล้ว",
+  /** §6 — the form must stay usable when the old number cannot be fetched. */
+  revealUnavailable:
+    "ตอนนี้ระบบยังไม่ให้ดูเลขเดิม — ถ้าต้องการบันทึกข้อมูลชุดนี้ ให้พิมพ์เลขผู้เสียภาษี 13 หลักใหม่อีกครั้ง",
+  overwriteConfirm: {
+    title: "เปลี่ยนข้อมูลผู้เสียภาษีของร้านนี้?",
+    body: "ร้าน 1 ร้านมีข้อมูลผู้เสียภาษีได้ชุดเดียว ข้อมูลใหม่จะแทนที่ของเดิม",
+    confirm: "บันทึกทับ",
+    cancel: "ยกเลิก",
+  },
+  error: {
+    taxId: "เลขผู้เสียภาษีไม่ถูกต้อง — ต้องเป็นตัวเลข 13 หลัก และตรวจสอบเลขหลักสุดท้ายอีกครั้ง",
+    branchCode: "รหัสสาขาต้องเป็นตัวเลข 5 หลัก",
+    forbidden: "คุณไม่มีสิทธิ์แก้ไขข้อมูลร้าน ติดต่อเจ้าของร้านให้เปิดสิทธิ์ให้",
+    generic: "บันทึกไม่สำเร็จ กรุณาลองใหม่อีกครั้ง",
+  },
+} as const;

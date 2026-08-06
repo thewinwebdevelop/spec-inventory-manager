@@ -1,23 +1,13 @@
-"use client";
-
 /**
- * ⚠️ PLACEHOLDER — the shop home screen belongs to T-002-W3 (S3 AppShell) and
- * ultimately to F-030's dashboard.
+ * `/o/{orgId}` — the shop's home page.
  *
- * It exists so `/o/[orgId]` is a real, reachable route: without a page, the
- * layout and its guard are code nothing can render, and "the org shell works"
- * would be an untested claim. It renders only what proves the context is
- * wired — the shop's own name and the caller's role, both from
- * `useActiveOrg()`.
+ * ux-wireframe §5: Phase 0 has no dashboard (that is F-030), so S4
+ * "ข้อมูลร้าน" stands in as the landing screen. Same component as
+ * `/o/{orgId}/settings/org`, deliberately — two routes, one screen, rather
+ * than a redirect that would make the back button behave oddly.
  */
-import { useActiveOrg } from "../../../lib/org/org-context";
+import { OrgProfileScreen } from "../../../features/org/components/OrgProfileScreen";
 
 export default function OrgHomePage() {
-  const org = useActiveOrg();
-  return (
-    <main className="p-6">
-      <h1 className="text-heading-md">{org.name}</h1>
-      <p className="text-body-sm">{org.roleName}</p>
-    </main>
-  );
+  return <OrgProfileScreen />;
 }

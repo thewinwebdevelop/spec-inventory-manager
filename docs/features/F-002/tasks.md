@@ -81,7 +81,7 @@
 | T-002-W1 | ★ โครง org context: `lib/org` + `lib/session` + `app/o/[orgId]/layout` + org-scoped query client + ย้าย `components/auth/*` → `features/auth/` (R6) | `docs/architecture/web.md §3.2` · forward-commitments แถว F-002/F-003 | T-002-21, T-002-X1 | done | frontend (+ restart point: TanStack Query, `lib/api/query-client.ts`) |
 | T-002-W2 | ★ `ApiFailure` web: **`ORG_ACCESS_DENIED` ≠ `FORBIDDEN` ห้ามรวม handler** (พากลับหน้าเลือกร้าน+refetch vs อยู่หน้าเดิม+toast) · `409` ที่มี `details.reason='busy'` = ลองใหม่ได้ · client ที่ไม่รู้จัก `reason` ต้องยังทำงานถูก | `web.md §3.4` · `api-spec.md §4` · `ux-wireframe.md §12` | T-002-W1 | done | frontend (`org-access-denied` + `busy` เป็น kind แยก — ดูหมายเหตุท้ายไฟล์) |
 | T-002-W3 | จอ: เลือกร้าน (S1) · สร้างร้าน (S2) · AppShell+ตัวสลับร้าน (S3) | `ux-wireframe.md §2–4` · `ui.md §3` | T-002-W2 | done | frontend (+ `createUserApiClient` — tier ที่ W1 มองข้าม · ดูหมายเหตุท้ายไฟล์) |
-| T-002-W4 | จอ: ข้อมูลร้าน (S4) + ฟอร์มผู้เสียภาษี (S5) — **TIN เต็มมาจาก reveal เท่านั้น เก็บใน memory ห้าม persist** · Staff ไม่เห็นตัวเลขเลย | `ux-wireframe.md §5–6` | T-002-W3 | todo | — |
+| T-002-W4 | จอ: ข้อมูลร้าน (S4) + ฟอร์มผู้เสียภาษี (S5) — **TIN เต็มมาจาก reveal เท่านั้น เก็บใน memory ห้าม persist** · Staff ไม่เห็นตัวเลขเลย | `ux-wireframe.md §5–6` | T-002-W3 | done | frontend (reveal = mutation ไม่ใช่ query · ดูหมายเหตุท้ายไฟล์) |
 | T-002-W5 | ★ จอ: สมาชิก (S6) + เชิญ (S7) + **แผ่นลิงก์แสดงครั้งเดียว (S8)** — ปุ่ม **"ออกลิงก์ใหม่"** + เตือนก่อนกด · **ห้าม hardcode "7 วัน"** ใช้ `expiresAt` · token เก็บใน memory เท่านั้น | `ux-wireframe.md §7–9` · D-027 | T-002-W3 | todo | — |
 | T-002-W6 | จอ: เปลี่ยนสิทธิ์ (S9) · ถอด/ออกจากร้าน (S10) · **`/invite` (S11) — ต้องดีบนเบราว์เซอร์มือถือ ~390px** · 403 สองแบบ (S12) · **ถอด token ออกจาก URL ด้วย `history.replaceState` ทันที** (I-6) | `ux-wireframe.md §10–12` | T-002-W5 | todo | — |
 
@@ -297,3 +297,42 @@ web.md §3.1 ร่างไว้ว่า `{status:"authed", orgs: OrgSummary[
 | W-9 | S2 สำเร็จแล้วส่ง toast ผ่าน query param `?created=` แต่ **ยังไม่มีใครอ่าน** (จอปลายทางคือ S4 ของ W4) | W4 |
 | W-10 | ยังไม่ได้ seed cache ของ org profile จาก 201 ของ `POST /organizations` (ux Q5 บอกว่าทำได้) — เลือก invalidate แทน | — (ตั้งใจ: `NewOrganization` คนละ shape กับ `OrgProfile` — ไม่มี `myMembership`/`counts` ⇒ ยัดลง key เดียวกันจะได้ object ผิดรูปตรงที่ `OrgGuard` อ่าน `myMembership.capabilities`) |
 | W-11 | `OrgSwitcher` ใช้ `<details>` ยังไม่ใช่ dropdown ตาม design-system §9 | เมื่อ component library มี `DropdownMenu` จริง (D-031 §9) |
+
+---
+
+## T-002-W4 — TIN reveal: เหตุผลของรูปทรง + หนี้ (2026-08-06)
+
+### ทำไม reveal เป็น `useMutation` ไม่ใช่ `useQuery`
+
+`POST /orgs/{orgId}/tax-profile/reveal` เป็น response **เดียวในระบบ**ที่มีเลขเต็ม และเมื่อ
+`entityType = personal` เลขนั้น**คือเลขบัตรประชาชน** · ใช้ `useQuery` ผิด 3 ทาง ซึ่งแต่ละทาง
+ทำลายสิ่งที่ฝั่ง server ตั้งใจทำ:
+
+1. **query cache เก็บผลลัพธ์** ⇒ เลขอยู่ยาวกว่าจอ และโผล่ใน devtools cache inspector — นับเป็น "persist" แล้ว แม้ไม่แตะ storage
+2. **`refetchOnWindowFocus`** (default ของเรา) ⇒ สลับแท็บกลับมา = reveal ใหม่เงียบ ๆ **กิน 20 ครั้ง/ชม.** + emit `org.tax_profile.revealed` ที่ไม่มีใครสั่ง
+3. query เป็น declarative — รันเพราะ component render · แต่ ux-wireframe §5 บอกชัดว่านี่คือ **"การกระทำที่ตั้งใจ"**
+
+⇒ mutation + `gcTime: 0` + ค่าอยู่ใน `useState` ของจอเท่านั้น · **ไม่มี `onSuccess` เขียน cache ที่ไหนเลย**
+
+### รูปของ state ที่เป็นตัวกันเอง (`tax-reveal.ts`)
+
+`{ status: "hidden" }` **ไม่มี field ให้เก็บเลข** — ต่างจาก `{ visible: false, taxId: "…" }` ซึ่งจะผ่านเทสต์ระดับ render
+ได้สบาย ๆ ทั้งที่เลขยังอยู่ใน memory + React DevTools ตลอดอายุจอ · เทสต์จึง assert ว่า **เข้าถึงไม่ได้** ไม่ใช่แค่ **ไม่ถูก render**
+
+พิสูจน์แดงแล้ว 2 regression: ถอด tier gate ของการ์ดภาษี + ทำให้ "ซ่อน" ไม่ทิ้งค่า ⇒ **แดง 6 เทสต์** (ทั้งชั้น pure และชั้น render)
+
+### บั๊กที่ผมทำเองแล้วจับได้ก่อน commit
+
+ลิงก์ **"ออกจากร้านนี้"** ผมชี้ไป `/o/{orgId}/settings/members?leave=1` — ซึ่ง**พนักงานเปิดไม่ได้**
+ทั้งที่ D-029 + §5 ให้ลิงก์นี้อยู่บนจอนี้ **เพราะพนักงานต้องหาเจอ** ⇒ ส่งพนักงานไปเจอ 403 สำหรับสิ่งที่เขามีสิทธิ์ทำ
+· แก้เป็น `?leave=1` บน route เดิม (W6 จะ render confirm §10.3 ตรงนั้น)
+
+### หนี้ที่เปิดใหม่
+
+| # | เรื่อง | ปิดตอน |
+|---|---|---|
+| W-12 | `?leave=1` ยังไม่มีใครอ่าน — confirm §10.3 ยังไม่ได้ทำ | W6 |
+| W-13 | `?created=` จาก S2 และ toast "บันทึกชื่อร้านแล้ว" / "บันทึกข้อมูลผู้เสียภาษีแล้ว" **ยังไม่มี Toast host** — dialog ปิดเงียบ ๆ เมื่อสำเร็จ | W6 (มี `components/ui/Toast.tsx` อยู่แล้วแต่ยังไม่มีที่แขวนระดับแอป) |
+| W-14 | S5 confirm "บันทึกทับ" ทำเป็น 2-step ในปุ่มเดิม ยังไม่ใช่ `ConfirmDialog` ตาม design-system | W6 (มี `ConfirmDialog` อยู่แล้ว) |
+| W-15 | `?invite=1&role=owner` (D-030 ชวนเจ้าของร้านสำรอง) ยังไม่มีใครอ่าน | W5 |
+| W-16 | ยังไม่ได้ทำ `RouteGuard`/`ForbiddenPanel` — เข้า URL ตรงไปหน้าที่ไม่มีสิทธิ์ยังไม่มีจอรองรับ (§12.2) | W6 · F-003 (`RouteGuard` เต็มเป็นของ F-003/F-007 ตาม web.md §3.3) |
