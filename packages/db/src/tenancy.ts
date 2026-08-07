@@ -396,6 +396,30 @@ function scopedCreateData(
  * already located by a scoped `where`), but moving a row to another tenant is
  * refused.
  */
+/**
+ * Prisma verbs that only ever appear inside a NESTED RELATION write.
+ *
+ * `set` is deliberately absent: a scalar list uses it too (`capabilities:
+ * { set: [...] }` on Role), and refusing that would break legitimate writes to
+ * catch a shape that is not valid for a to-one relation anyway.
+ */
+const RELATION_WRITE_VERBS = [
+  "connect",
+  "connectOrCreate",
+  "disconnect",
+  "create",
+  "createMany",
+  "update",
+  "updateMany",
+  "upsert",
+  "delete",
+  "deleteMany",
+] as const;
+
+function isRelationWrite(value: unknown): boolean {
+  return isPlainObject(value) && RELATION_WRITE_VERBS.some((verb) => hasKey(value, verb));
+}
+
 function guardWriteData(
   model: string,
   operation: string,
@@ -404,6 +428,37 @@ function guardWriteData(
   column: string,
 ): unknown {
   if (!isPlainObject(data)) return data;
+
+  // ★ B-1 (second half) — a nested relation write can move the org column
+  // WITHOUT ever naming it, so the check below would never see it.
+  //
+  // Concretely, once `Membership.role` references `Role(organizationId, id)`,
+  // `data: { role: { connect: { id: <other org's role> } } }` makes Prisma set
+  // BOTH columns from the connected row — the membership lands in the other
+  // organization entirely, and `data.organizationId` was never present for
+  // `assertMatchesContext` to reject. The composite foreign key cannot help:
+  // the resulting pair is perfectly valid, it just belongs to somebody else.
+  //
+  // Refused rather than interpreted. Verifying a nested write means knowing,
+  // per model and per relation, which of them carry the org column and what
+  // each verb does to it — a table that has to be right forever. "Probably
+  // fine" is not a tenancy guarantee (the rule this seam already states about
+  // filters), and nothing in the app writes this way: there are zero nested
+  // relation writes in apps/api. A future caller that needs one states its
+  // own scoped intent instead of asking the seam to guess.
+  for (const key of Object.keys(data)) {
+    if (key === column) continue;
+    if (!isRelationWrite(data[key])) continue;
+    throw new OrgScopeViolationError(
+      model,
+      operation,
+      `\`data.${key}\` is a nested relation write, which this seam cannot verify — ` +
+        `a relation that carries \`${column}\` (a composite foreign key) would move the row ` +
+        `to another tenant without ever naming the column. Write the scalar foreign key ` +
+        `instead, after resolving it through a scoped read.`,
+    );
+  }
+
   if (!hasKey(data, column)) return data;
   assertMatchesContext(model, operation, `data.${column}`, data[column], organizationId, "write");
   return { ...data, [column]: organizationId };

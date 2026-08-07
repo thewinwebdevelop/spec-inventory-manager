@@ -556,25 +556,43 @@ d("F-002 redeeming an invitation (E2E, DB)", () => {
     expect(memberships[0]).toMatchObject({ status: "active", revokedAt: null, revokedByUserId: null });
   });
 
-  it("★ 409 INVITATION_ROLE_UNAVAILABLE when the role is not this shop's any more (M-6)", async () => {
-    // `Role.id` is a single-column foreign key, so the database would happily
-    // accept a membership pointing at another tenant's role. This check is the
-    // only thing that does not.
+  it("★ B-1 · a cross-org invitation can no longer EXIST — the state M-6 guarded against is unrepresentable", async () => {
+    // This test used to seed an invitation pointing at another shop's role and
+    // then prove the service refused it with `INVITATION_ROLE_UNAVAILABLE`.
+    // Its comment said: "`Role.id` is a single-column foreign key, so the
+    // database would happily accept a membership pointing at another tenant's
+    // role. This check is the only thing that does not."
+    //
+    // That is no longer true, and the change is the point. Security review B-1
+    // added a composite foreign key `(organizationId, roleId)` →
+    // `Role(organizationId, id)`, so the row cannot be written at all — by the
+    // service, by a seed, or by anything else holding a connection.
+    //
+    // A guard whose precondition has become unreachable should say so rather
+    // than keep testing a state nobody can produce. So this now asserts the
+    // unreachability, which is the stronger property.
     const { orgId } = await newOrg("ร้านที่ถูกเชิญ");
     const elsewhere = await newOrg("ร้านอื่น");
     const foreignRole = await roleNamed(elsewhere.orgId, "Staff");
     const invitee = await newUser();
-    const seeded = await kit.createInvitation({
-      organizationId: orgId,
-      email: invitee.email,
-      roleId: foreignRole.id,
-    });
 
-    const res = await acceptReq({ token: seeded.rawToken }, invitee.accessToken);
-    assertErrorEnvelope(res, { status: 409, code: "INVITATION_ROLE_UNAVAILABLE" });
+    await expect(
+      kit.createInvitation({
+        organizationId: orgId,
+        email: invitee.email,
+        roleId: foreignRole.id,
+      }),
+    ).rejects.toThrow();
+
     expect(
-      await prisma.membership.count({ where: { organizationId: orgId, userId: invitee.id } }),
+      await prisma.invitation.count({ where: { organizationId: orgId, email: invitee.email } }),
     ).toBe(0);
+
+    // The service's `INVITATION_ROLE_UNAVAILABLE` branch is NOT dead code: it
+    // still answers "the role this invitation names no longer exists", which
+    // F-003 makes reachable the day roles can be deleted. It simply no longer
+    // has to be the only thing standing between a shop and another tenant's
+    // capabilities.
   });
 
   it("★ the wrong account gets 403 + a MASKED address, never the address", async () => {

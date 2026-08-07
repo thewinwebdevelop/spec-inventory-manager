@@ -74,6 +74,10 @@ d("withOrgScope against a real database (M-9 — row by row)", () => {
   afterAll(async () => {
     if (!TEST_DB || !base) return;
     await base.membership.deleteMany({ where: { organizationId: { in: [orgA, orgB] } } });
+    // Invitations reference Role, so they must go first or `role.deleteMany`
+    // fails on the FK and leaves this suite's rows behind — which is how a
+    // cross-org row from the B-1 case survived a run and turned up in a scan.
+    await base.invitation.deleteMany({ where: { organizationId: { in: [orgA, orgB] } } });
     await base.role.deleteMany({ where: { organizationId: { in: [orgA, orgB] } } });
     await base.user.deleteMany({ where: { email: { startsWith: TAG } } });
     await base.organization.deleteMany({ where: { id: { in: [orgA, orgB] } } });
@@ -280,6 +284,108 @@ d("withOrgScope against a real database (M-9 — row by row)", () => {
     ]);
     expect(rows.every((r) => r.organizationId === orgA)).toBe(true);
     expect(foreign).toBeNull();
+  });
+
+  // ── B-1: a FOREIGN KEY is what stops a cross-org role, not a service `if`
+
+  it("★ B-1 · the database refuses a Role from ANOTHER org on a scoped update", async () => {
+    // Security review B-1. `withOrgScope` guards the `organizationId` COLUMN,
+    // so it correctly pins `where.organizationId` — but it never looks at
+    // `data.roleId`. Writing another org's role onto a membership therefore
+    // succeeded, and since roles carry `capabilities`, the role written could
+    // be one holding `full_access`: an Owner of shop A, minted from shop B's
+    // role row.
+    //
+    // Every F-002 write path happens to resolve the role through a scoped
+    // `tx` first, so this was not exploitable over HTTP. That is a property of
+    // four call sites agreeing, not a property of the data — and the comment
+    // in members.service.ts claiming it was "impossible by construction"
+    // described an `if`, which is precisely the kind of guard that the fifth
+    // call site forgets.
+    //
+    // The fix is a composite foreign key `(organizationId, roleId)` →
+    // `Role(organizationId, id)`. Postgres then refuses the pair outright, and
+    // no service has to remember anything.
+    const membership = await base.membership.create({
+      data: { organizationId: orgA, userId: await newUser(), roleId: roleA, status: "active" },
+    });
+
+    await expect(
+      scoped.membership.update({ where: { id: membership.id }, data: { roleId: roleB } }),
+    ).rejects.toThrow();
+
+    // …and the row did not move. A rejection that had already written would be
+    // the same bug wearing an error message.
+    const after = await base.membership.findUniqueOrThrow({
+      where: { id: membership.id },
+      select: { roleId: true },
+    });
+    expect(after.roleId).toBe(roleA);
+  });
+
+  it("★ B-1 · the same guard covers Invitation, and still allows the SAME org's role", async () => {
+    // Invitation carries a `roleId` for exactly the same reason and had exactly
+    // the same hole. The second half matters as much as the first: a
+    // constraint that also refuses legitimate writes is not a fix.
+    const own = await scoped.invitation.create({
+      data: {
+        organizationId: orgA,
+        email: `${TAG}-fk@t.co`,
+        roleId: roleA,
+        tokenHash: `${TAG}-hash-ok`,
+        tokenIssuedAt: new Date(),
+        expiresAt: new Date(Date.now() + 3_600_000),
+      },
+    });
+    expect(own.roleId).toBe(roleA);
+
+    await expect(
+      scoped.invitation.update({ where: { id: own.id }, data: { roleId: roleB } }),
+    ).rejects.toThrow();
+  });
+
+  it("★ B-1 · a nested `connect` is refused by the SEAM — the FK cannot catch it", async () => {
+    // This one is worse than the scalar case, and the composite FK does not
+    // close it — it CHANGES it. With `Membership.role` referencing
+    // `Role(organizationId, id)`, `connect: { id: <org B's role> }` makes
+    // Prisma set BOTH columns from the connected row: the membership moves to
+    // org B entirely. The resulting pair is a valid foreign key; it just
+    // belongs to somebody else. And `data.organizationId` was never written,
+    // so the seam's column check never saw it.
+    //
+    // Measured, not assumed: with the FK in place and this guard removed, the
+    // row came back with `organizationId` = org B.
+    const membership = await base.membership.create({
+      data: { organizationId: orgA, userId: await newUser(), roleId: roleA, status: "active" },
+    });
+
+    await expect(
+      scoped.membership.update({
+        where: { id: membership.id },
+        data: { role: { connect: { id: roleB } } },
+      }),
+    ).rejects.toBeInstanceOf(OrgScopeViolationError);
+
+    const after = await base.membership.findUniqueOrThrow({
+      where: { id: membership.id },
+      select: { organizationId: true, roleId: true },
+    });
+    expect(after.organizationId).toBe(orgA);
+    expect(after.roleId).toBe(roleA);
+  });
+
+  it("★ B-1 · the nested-write refusal does not break a scalar-list write", async () => {
+    // `set` is excluded from the refused verbs on purpose: `capabilities` is a
+    // scalar list and uses the same word. A guard that blocked it would be
+    // trading one broken write for another.
+    const role = await scoped.role.create({
+      data: { organizationId: orgA, name: `${TAG}-scalarlist`, capabilities: ["view_products"] },
+    });
+    const updated = await scoped.role.update({
+      where: { id: role.id },
+      data: { capabilities: { set: ["view_products", "manage_members"] } },
+    });
+    expect(updated.capabilities).toEqual(["view_products", "manage_members"]);
   });
 
   // ── C-3 / NEW-8: the nested-read gap is real (that is why USER_SELECT exists)

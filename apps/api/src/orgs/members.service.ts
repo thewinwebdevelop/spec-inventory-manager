@@ -280,8 +280,20 @@ export class MembersService {
         const actorCapabilities = await this.readActorCapabilities(tx, actorUserId);
 
         // Scoped by `ORG_PRISMA`: a role id belonging to ANOTHER organization
-        // simply does not exist for this query, so cross-tenant role assignment
-        // is impossible by construction rather than by an `if`.
+        // does not exist for this query, so this read cannot return one — and
+        // the `if` below is what turns that into a refusal.
+        //
+        // The previous wording here claimed cross-tenant role assignment was
+        // "impossible by construction rather than by an `if`". Security review
+        // B-1 showed that was false: the seam guards the `organizationId`
+        // COLUMN and never looked at `data.roleId`, so a scoped write could
+        // still attach another org's role — this read was simply the only
+        // caller that happened not to. It is now true, but for a different
+        // reason: `Membership.role` references `Role(organizationId, id)`, so
+        // Postgres refuses the pair whatever any service forgets.
+        //
+        // A comment that overstates a guarantee is worse than none, because the
+        // next reader stops checking.
         const newRole = await tx.role.findFirst({
           where: { id: input.roleId },
           select: { id: true, name: true, key: true, capabilities: true },

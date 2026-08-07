@@ -386,7 +386,6 @@ parser ใหม่เดินย้อนขึ้นทั้ง decorator bl
 
 | # | เรื่อง | เจ้าของ |
 |---|---|---|
-| B-1 🟠 | `Membership.roleId` ชี้ Role ของ org อื่นได้ (ไม่มี composite FK · `withOrgScope` ไม่ตรวจ FK ใน `data`) ⇒ `full_access` ข้าม tenant · **วันนี้ยังไม่ถูก exploit** เพราะทุก write path resolve role ใน tx ที่ scope แล้ว | backend-api (+ `prisma-migration`) |
 | B-2 🟠 | `RESPONSE_HEADER_POLICY` มีแถวซ้ำ 4 คู่ → `responseHeaderPolicyFor()` คืนแถวที่**อ่อนกว่า** | backend-api |
 
 ### A-1 🔴 ปิดแล้ว (2026-08-06) — สองด่าน และวัดว่าแต่ละด่านพลาดตรงไหน
@@ -506,3 +505,44 @@ int lane เต็ม **182/182**
 **พิสูจน์:** RED (`expected 200 to be 409`) → GREEN → ถอด guard ⇒ แดงอีก · เทสต์ assert เพิ่มว่า
 **การปฏิเสธต้องไม่ขยับ `tokenHash`/`tokenIssuedAt`** (วินัยเดียวกับ branch FORBIDDEN — 409 ที่ rotate token ไปแล้ว
 คือการทำความเสียหายพร้อมกับบอกว่า "ไม่") · int lane เต็ม **184/184**
+
+### B-1 🟠 ปิดแล้ว (2026-08-07) — และระหว่างปิดเจอรูที่**ใหญ่กว่าที่รายงาน**
+
+ยืนยันเองก่อน: client ที่ scope ไป org A เขียน `roleId` ของ org B (`full_access`) ลง membership **สำเร็จ**
+
+**แต่พอใส่ composite FK แล้วเทสต์ `nested connect` ยังเขียว** — ไล่ดูถึงรู้ว่ามันไม่ใช่ "FK ยังไม่ครอบ"
+แต่เป็นรูคนละใบ และ **FK ของผมเปลี่ยนรูปมันให้แย่ลง**:
+
+```
+data: { role: { connect: { id: <role ของ org B> } } }
+```
+พอ `Membership.role` อ้าง `Role(organizationId, id)` แล้ว Prisma ตั้ง **ทั้งสองคอลัมน์** จากแถวที่ connect
+⇒ **membership ย้ายไป org B ทั้งแถว** · FK ช่วยไม่ได้เพราะคู่ที่ได้ถูกต้องตามข้อจำกัดทุกประการ มันแค่เป็นของคนอื่น ·
+และ `data.organizationId` ไม่เคยถูกเขียน ⇒ `assertMatchesContext` ไม่มีโอกาสเห็นเลย
+
+⇒ **ต้องปิดสองชั้น** และแต่ละชั้นจับคนละทาง (พิสูจน์ด้วยการถอดทีละอัน ⇒ แดงคนละเทสต์):
+
+| ชั้น | ปิดอะไร |
+|---|---|
+| composite FK `(organizationId, roleId) → Role(organizationId, id)` | scalar `roleId` ข้าม org (Membership + Invitation) |
+| `guardWriteData` ปฏิเสธ **nested relation write** ทุกชนิดบน model ที่ scope | `connect`/`create`/`upsert`/… ที่ย้าย org column โดยไม่เอ่ยชื่อมัน |
+
+**ทำไมปฏิเสธแทนที่จะตีความ:** การ verify nested write ต้องรู้ว่า model ไหน relation ไหนพก org column
+และแต่ละ verb ทำอะไรกับมัน — เป็นตารางที่ต้องถูกตลอดไป · production ใช้ nested write **ศูนย์จุด** ⇒ fail-closed ได้ฟรี
+· `set` **ไม่**อยู่ในรายการที่ห้าม เพราะ scalar list (`capabilities: { set: [...] }`) ใช้คำเดียวกัน — มีเทสต์คุมไว้
+
+**migration** `20260807000000_f002_role_org_composite_fk` · reversible เต็ม (เขียน rollback SQL ไว้ในไฟล์) ·
+มี **pre-flight** ที่ `RAISE EXCEPTION` พร้อมคำสั่ง SELECT ให้ไปดูแถวที่ละเมิด — **ไม่ลบอะไรทั้งสิ้น**
+เพราะ membership ที่ชี้ role ข้าม org คือเหตุการณ์ความปลอดภัยที่ต้องมีคนดู ไม่ใช่ขยะให้กวาด (skill `prisma-migration`)
+· scan ก่อน migrate: 0 Membership / 1 Invitation — และแถวนั้นเป็น **เศษจาก RED test ของผมเอง**
+(`afterAll` ลบ invitation ไม่ครบ ⇒ `role.deleteMany` พังเงียบ) แก้ cleanup แล้ว
+
+**เทสต์เก่าที่ต้องเขียนใหม่:** `INVITATION_ROLE_UNAVAILABLE (M-6)` เดิม **seed สถานะข้าม org โดยตรง**
+เพื่อพิสูจน์ว่า service เช็ค — ตอนนี้ seed นั้น**ทำไม่ได้แล้ว** · comment ของมันที่ว่า "DB ยอมรับ, check นี้คือสิ่งเดียวที่ไม่ยอม"
+กลายเป็นเท็จ ⇒ เปลี่ยนเป็น assert ว่า**สถานะนั้นสร้างไม่ได้** ซึ่งเป็นคุณสมบัติที่แข็งกว่า ·
+branch `INVITATION_ROLE_UNAVAILABLE` **ไม่ใช่ dead code** — ยังตอบเคส "role ถูกลบ" ที่ F-003 จะทำให้ไปถึงได้
+
+**comment ที่ reviewer บอกว่าโกหก** (`members.service.ts` — "impossible by construction rather than by an `if`")
+แก้แล้ว · ตอนนี้ประโยคนั้นจริง แต่**ด้วยเหตุผลคนละอัน** และเขียนกำกับไว้ว่าเหตุผลคืออะไร
+
+`packages/db 185` · `api 631 unit` · **int lane 184/184** · typecheck ✓ lint ✓ depcruise PASS

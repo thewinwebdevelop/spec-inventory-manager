@@ -156,7 +156,12 @@ model Membership {
 
   organization Organization @relation(fields: [organizationId], references: [id])
   user         User         @relation(fields: [userId], references: [id])
-  role         Role         @relation(fields: [roleId], references: [id])
+  // ★ B-1 — COMPOSITE on purpose. `withOrgScope` pins the `organizationId`
+  // COLUMN but never inspects `data.roleId`, so a scoped client could write
+  // another org's role here — and roles carry `capabilities`, so the role
+  // written could be one holding `full_access`. Referencing the PAIR makes
+  // Postgres refuse it, in both the scalar and the nested-`connect` form.
+  role         Role         @relation(fields: [organizationId, roleId], references: [organizationId, id])
 
   @@unique([organizationId, userId])
   @@index([organizationId])
@@ -194,6 +199,12 @@ model Role {
   // NEW — one `key` per org. Postgres treats each NULL as distinct, so any
   // number of custom (key = null) roles coexist under this unique index.
   @@unique([organizationId, key])
+  // ★ B-1 — looks redundant next to `@id`, and is not: it is the TARGET a
+  // composite foreign key needs. `Membership`/`Invitation` reference
+  // `(organizationId, id)` so Postgres itself refuses a role belonging to
+  // another org. Without it the pair is unreferenceable and the rule has to
+  // live in application code, where it was one `if` away from being forgotten.
+  @@unique([organizationId, id])
   @@index([organizationId])
 }
 
@@ -262,7 +273,10 @@ model Invitation {
   updatedAt DateTime @updatedAt // NEW
 
   organization Organization @relation(fields: [organizationId], references: [id])
-  role         Role         @relation(fields: [roleId], references: [id])
+  // ★ B-1 — same composite FK as `Membership`, for the same reason: an
+  // invitation names the role the invitee will get, so a cross-org role here
+  // grants that org's capabilities on accept.
+  role         Role         @relation(fields: [organizationId, roleId], references: [organizationId, id])
   // ALSO (raw SQL in migration `f002_expand` — Prisma's DSL has no partial
   // unique index): UNIQUE ("organizationId", email) WHERE status = 'pending'
   //   → "one pending invitation per (org, email)" enforced by the DB, not by an
