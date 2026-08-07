@@ -167,6 +167,66 @@ describe("response headers (api-spec §1 · I-05)", () => {
     expect(row!.headers["Cache-Control"]).toBe("no-store");
   });
 
+  it("★ B-2 · no route appears TWICE in the table — the resolver takes the first", () => {
+    // Security review B-2. `responseHeaderPolicyFor` is a `.find()`, so a
+    // second row for the same route is unreachable code that still READS like
+    // enforcement. Four invitation routes were listed twice: the earlier rows
+    // carried the weaker header set and `carries: ["tin"]`, the later ones the
+    // correct `no-referrer` set and `["token","email"]` — and the earlier ones
+    // won every lookup.
+    //
+    // The file's own header claims the table is checked in both directions.
+    // Neither direction can see this: a duplicate key is not a missing route
+    // and not an unclassified body.
+    const seen = new Map<string, number>();
+    for (const row of RESPONSE_HEADER_POLICY) {
+      const key = `${row.method} ${row.path}`;
+      seen.set(key, (seen.get(key) ?? 0) + 1);
+    }
+    const duplicated = [...seen.entries()].filter(([, n]) => n > 1).map(([key]) => key);
+    expect(
+      duplicated,
+      "a second row for the same route can never be reached — merge them, " +
+        "taking the STRICTER headers and the union of `carries`",
+    ).toEqual([]);
+  });
+
+  it("★ B-2 · every invitation route resolves to the no-referrer policy (I-6)", () => {
+    // The consequence, asserted on the resolver rather than on the table, so
+    // it stays true however the rows are arranged. `Referrer-Policy:
+    // no-referrer` is not decoration here: these bodies carry a bearer
+    // credential for membership, and a Referer header would hand it to
+    // whatever the invite page links to next.
+    for (const [method, path] of [
+      ["GET", "/orgs/{orgId}/invitations"],
+      ["POST", "/orgs/{orgId}/invitations"],
+      ["POST", "/orgs/{orgId}/invitations/{invitationId}/link"],
+      ["DELETE", "/orgs/{orgId}/invitations/{invitationId}"],
+    ] as const) {
+      const row = responseHeaderPolicyFor(method, path);
+      expect(row, `${method} ${path} is missing from RESPONSE_HEADER_POLICY`).toBeDefined();
+      expect(row!.headers["Referrer-Policy"], `${method} ${path}`).toBe("no-referrer");
+      expect(row!.headers["Cache-Control"], `${method} ${path}`).toBe("no-store");
+    }
+  });
+
+  it("★ B-2 · invitation routes are classified by what they actually carry", () => {
+    // All four were `["tin"]`, which none of them carries. An assertion
+    // written against the truth (`toContain("email")`) would have gone red for
+    // a reason nobody could explain — and the likely repair is to weaken the
+    // assertion rather than fix the table.
+    expect(responseHeaderPolicyFor("POST", "/orgs/{orgId}/invitations")!.carries).toEqual(
+      expect.arrayContaining(["token", "email"]),
+    );
+    expect(
+      responseHeaderPolicyFor("POST", "/orgs/{orgId}/invitations/{invitationId}/link")!.carries,
+    ).toEqual(expect.arrayContaining(["token", "email"]));
+    expect(responseHeaderPolicyFor("GET", "/orgs/{orgId}/invitations")!.carries).toContain("email");
+    expect(
+      responseHeaderPolicyFor("DELETE", "/orgs/{orgId}/invitations/{invitationId}")!.carries,
+    ).toContain("email");
+  });
+
   it("★ the two routes that carry an email are classified as carrying one", () => {
     // The §3.7 row includes `email`, and `PATCH` answers with that same row —
     // the classification follows the SHAPE, not the section number.

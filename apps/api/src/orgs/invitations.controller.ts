@@ -45,7 +45,6 @@ import {
 } from "./invitations.service";
 import {
   INVITATION_RESPONSE_HEADERS,
-  ORG_PROFILE_RESPONSE_HEADERS,
   applyResponseHeaders,
 } from "./response-headers";
 
@@ -72,8 +71,14 @@ export class InvitationsController {
     if (!STATUS_FILTERS.includes(filter as (typeof STATUS_FILTERS)[number])) {
       throw domainError("VALIDATION_FAILED", { fieldErrors: { status: STATUS_INVALID_MESSAGE } });
     }
-    // The body is a list of email addresses — never a shared cache (M-11).
-    applyResponseHeaders(res, ORG_PROFILE_RESPONSE_HEADERS);
+    // The body is a list of email addresses — never a shared cache (M-11) —
+    // and it is an INVITATION surface, so it takes the stricter set: ★ B-2
+    // found this handler and the policy table agreeing on the weaker one,
+    // which is worse than disagreeing, because agreement looked like proof.
+    // `Referrer-Policy: no-referrer` matters on every invitation route, not
+    // only the ones returning a token: the invite screens link onwards, and a
+    // Referer carrying `/orgs/{orgId}/invitations` is itself a disclosure.
+    applyResponseHeaders(res, INVITATION_RESPONSE_HEADERS);
     return this.invitations.list({
       status: filter,
       limit: resolveLimit(limit),
@@ -146,7 +151,8 @@ export class InvitationsController {
     @Param("invitationId") invitationId: string,
     @Res({ passthrough: true }) res: Response,
   ): Promise<{ id: string; status: "cancelled" }> {
-    applyResponseHeaders(res, ORG_PROFILE_RESPONSE_HEADERS);
+    // ★ B-2 — the stricter set, same reason as the list above.
+    applyResponseHeaders(res, INVITATION_RESPONSE_HEADERS);
     return this.invitations.cancel({ invitationId, now: new Date() });
   }
 }
