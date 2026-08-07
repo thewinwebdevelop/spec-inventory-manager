@@ -20,7 +20,7 @@ const PLAN = { planDefinitionId: "pd_1", planKey: "comp_full", tierLabel: "Full 
 type CallLog = string[];
 
 interface FakeOptions {
-  readonly activeOrgCount?: number;
+  readonly createdOrgCount?: number;
   readonly countThrows?: Error;
   readonly failAt?: string;
   /** Let every statement succeed, then fail the COMMIT itself. */
@@ -81,11 +81,14 @@ function createFakePrisma(log: CallLog, options: FakeOptions = {}) {
   };
 
   const prisma = {
-    membership: {
+    // ★ A-6 — the cap counts ORGANIZATIONS this user created, not memberships
+    // they hold. The fake follows the production query so "the cap is checked
+    // before the transaction opens" keeps testing the real call.
+    organization: {
       count: vi.fn(async (_args?: unknown) => {
-        log.push("membership.count");
+        log.push("organization.count");
         if (options.countThrows) throw options.countThrows;
-        return options.activeOrgCount ?? 0;
+        return options.createdOrgCount ?? 0;
       }),
     },
     $transaction: vi.fn(
@@ -160,7 +163,7 @@ describe("★ architecture §6.1 — one transaction, in this exact order", () =
     await service.create(input);
 
     const txIndex = log.findIndex((entry) => entry.startsWith("$transaction"));
-    expect(log.indexOf("membership.count")).toBeLessThan(txIndex);
+    expect(log.indexOf("organization.count")).toBeLessThan(txIndex);
     expect(log.indexOf("plans.resolveForNewOrg")).toBeLessThan(txIndex);
     // Not a style point: a transaction held open across an env lookup and a
     // catalog read pins a pooled connection for no isolation benefit (§5.2).
@@ -295,11 +298,11 @@ describe("★ architecture §6.1 — one transaction, in this exact order", () =
 describe("★ architecture §6.3 / I-10 — the per-user cap, fail-closed", () => {
   it("allows the 50th shop and refuses the 51st with 409 ORG_LIMIT_REACHED", async () => {
     const okLog: CallLog = [];
-    await createService(okLog, { activeOrgCount: 49 }).service.create(input);
+    await createService(okLog, { createdOrgCount: 49 }).service.create(input);
     expect(okLog).toContain("tx.organization.create");
 
     const log: CallLog = [];
-    const { service } = createService(log, { activeOrgCount: 50 });
+    const { service } = createService(log, { createdOrgCount: 50 });
     await expect(service.create(input)).rejects.toBeInstanceOf(DomainException);
     // …and NOTHING was written, nor was a plan even looked up.
     expect(log.some((entry) => entry.startsWith("tx."))).toBe(false);
@@ -307,7 +310,7 @@ describe("★ architecture §6.3 / I-10 — the per-user cap, fail-closed", () =
   });
 
   it("the 409 carries `details.limit` so the UI shows the real number", async () => {
-    const { service } = createService([], { activeOrgCount: 50 });
+    const { service } = createService([], { createdOrgCount: 50 });
     const error = await service.create(input).catch((e: unknown) => e);
     expect(error).toBeInstanceOf(DomainException);
     const ex = error as DomainException;
@@ -317,17 +320,28 @@ describe("★ architecture §6.3 / I-10 — the per-user cap, fail-closed", () =
   });
 
   it("honours the injected limit (env-tunable — dogfood raises it without a deploy)", async () => {
-    const { service } = createService([], { activeOrgCount: 2, limit: 2 });
+    const { service } = createService([], { createdOrgCount: 2, limit: 2 });
     const error = (await service.create(input).catch((e: unknown) => e)) as DomainException;
     expect(error.details).toEqual({ limit: 2 });
   });
 
-  it("★ counts ONLY active memberships (leaving gives the quota back)", async () => {
+  it("★ A-6 · counts shops this user CREATED — not memberships they hold", async () => {
+    // This used to assert `membership.count({ userId, status: "active" })`,
+    // and that query was wrong in both directions:
+    //
+    //   - somebody else's invitation spent your quota, so a bookkeeper
+    //     invited into enough shops could never create their own;
+    //   - losing a membership handed the quota back, so create up to the cap,
+    //     have an accomplice you invited as Owner revoke you (the last-Owner
+    //     guard permits it — one Owner remains), and repeat. Unbounded
+    //     creation with one accomplice, which is the exhaustion I-10 is about.
+    //
+    // The query is the rule, so the query is what this pins.
     const log: CallLog = [];
-    const { service, prisma } = createService(log, { activeOrgCount: 0 });
+    const { service, prisma } = createService(log, { createdOrgCount: 0 });
     await service.create(input);
-    expect(prisma.membership.count).toHaveBeenCalledWith({
-      where: { userId: USER_ID, status: "active" },
+    expect(prisma.organization.count).toHaveBeenCalledWith({
+      where: { createdByUserId: USER_ID },
     });
   });
 

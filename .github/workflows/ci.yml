@@ -392,7 +392,7 @@ jobs:
             --lane "integration-api · apps/api *.int.test.ts" \
             --require "src/auth/auth.e2e.int.test.ts=21" \
             --require "src/auth/refresh-token.service.int.test.ts=8" \
-            --require "test/orgs.e2e.int.test.ts=36" \
+            --require "test/orgs.e2e.int.test.ts=37" \
             --require "test/members.e2e.int.test.ts=34" \
             --require "test/invitations.e2e.int.test.ts=21" \
             --require "test/invitations-redeem.e2e.int.test.ts=16" \
@@ -401,7 +401,7 @@ jobs:
             --require "test/org-rate-limit.e2e.int.test.ts=6" \
             --require "test/openapi-parity.int.test.ts=5" \
             --require "test/response-header-policy.int.test.ts=4" \
-            --min-passed 184
+            --min-passed 185
       - name: dump api log on failure
         if: failure()
         run: cat /tmp/api.log || true

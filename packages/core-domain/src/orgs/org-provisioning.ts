@@ -112,19 +112,28 @@ export function ownerRoleBlueprint(
 // ── the per-user org cap (architecture §6.3 · I-10) ────────────────────────
 
 /**
- * Has this user run out of shops? `activeOrgCount` counts memberships with
- * status `active` only, so leaving or being removed gives the quota back
- * immediately (§6.3).
+ * Has this user run out of shops they may CREATE?
+ *
+ * ★ A-6 — `createdOrgCount` counts `Organization` rows this user created, not
+ * memberships they hold. Counting memberships meant another shop's invitation
+ * spent this user's quota, and that losing a membership handed it back —
+ * which turned the cap into a loop rather than a bound (create up to the cap,
+ * get revoked by an accomplice you invited as Owner, repeat, while every shop
+ * persists).
+ *
+ * Being INVITED into shops is deliberately uncapped: creation is unilateral,
+ * whereas accepting requires a different shop\'s `manage_members` holder to
+ * act first. I-10\'s threat lives on the create path alone.
  *
  * FAIL-CLOSED on nonsense input: a `NaN`/negative count means the caller could
  * not count, and "could not count" must never read as "has room" — that is the
  * exact difference between this check and the rate limiter it replaced (I-10:
  * the limiter fails OPEN, which is why it cannot hold a bound).
  */
-export function isOrgCapReached(activeOrgCount: number, limit: number): boolean {
-  if (!Number.isFinite(activeOrgCount) || activeOrgCount < 0) return true;
+export function isOrgCapReached(createdOrgCount: number, limit: number): boolean {
+  if (!Number.isFinite(createdOrgCount) || createdOrgCount < 0) return true;
   if (!Number.isInteger(limit) || limit < 0) return true;
-  return activeOrgCount >= limit;
+  return createdOrgCount >= limit;
 }
 
 // ── input validation (api-spec §3.1) ───────────────────────────────────────

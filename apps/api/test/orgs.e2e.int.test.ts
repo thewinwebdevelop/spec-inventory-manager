@@ -221,14 +221,78 @@ d("F-002 org endpoints (E2E, DB)", () => {
         // Nothing was written for the refused attempt.
         expect(await prisma.organization.count({ where: { name: "ร้านที่ 2" } })).toBe(0);
 
-        // …and the quota comes back when the membership stops being active.
+        // ★ A-6 — losing the MEMBERSHIP does NOT return the quota, because the
+        // quota counts shops this user CREATED and that shop still exists.
+        //
+        // This assertion used to say the opposite, and the opposite was a
+        // reset loop: create up to the cap, have an accomplice you invited as
+        // Owner revoke you (the last-Owner guard permits it — one Owner
+        // remains), and your count is zero again while every shop persists.
+        // One accomplice, unbounded creation — which is the exhaustion I-10
+        // exists to stop.
         await prisma.membership.updateMany({
           where: { userId: user.id },
           data: { status: "revoked", revokedAt: new Date() },
         });
         const third = await post("ร้านที่ 3");
-        expect(third.status).toBe(201);
-        cappedOrgIds.push(third.body.organization.id as string);
+        assertErrorEnvelope(third, { status: 409, code: "ORG_LIMIT_REACHED" });
+      } finally {
+        await cleanupCreatedOrgs(cappedOrgIds);
+        await capped.close();
+        if (previous === undefined) delete process.env.MAX_ORGS_PER_USER;
+        else process.env.MAX_ORGS_PER_USER = previous;
+      }
+    });
+
+    it("★ A-6 · being INVITED into shops does not consume the create quota", async () => {
+      // The cap counts what this user CREATED, not what other people invited
+      // them into. Counting memberships meant somebody else's action spent
+      // your quota: a bookkeeper serving Thai SMEs — a plausible OmniStock
+      // persona — gets invited into enough shops and can then never create
+      // their own, with nothing to explain why.
+      //
+      // The threat I-10 names is one user spamming `POST /organizations` while
+      // Redis is down. Creation is unilateral; being invited needs a different
+      // shop's `manage_members` holder to act and this user to accept. It is
+      // not a lever one attacker pulls.
+      const previous = process.env.MAX_ORGS_PER_USER;
+      process.env.MAX_ORGS_PER_USER = "1";
+      applyTestEnv();
+      const capped = await createTestApp();
+      const cappedOrgIds: string[] = [];
+      try {
+        const user = await kit.createUser();
+        const accessToken = capped.app.get(AccessTokenService, { strict: false }).sign(user.id);
+
+        // Two shops somebody ELSE created, with this user as an active member.
+        for (let i = 0; i < 2; i += 1) {
+          const org = await kit.createOrg({ name: `เชิญเข้า-${i}-${Date.now()}` });
+          cappedOrgIds.push(org.id);
+          const staff = await prisma.role.findFirstOrThrow({
+            where: { organizationId: org.id, name: "Staff" },
+          });
+          await kit.addMember({ organizationId: org.id, userId: user.id, roleId: staff.id });
+        }
+        expect(
+          await prisma.membership.count({ where: { userId: user.id, status: "active" } }),
+        ).toBe(2);
+
+        // Cap is 1, and they have created nothing — so this must succeed.
+        const created = await request(capped.server())
+          .post("/organizations")
+          .set("Authorization", `Bearer ${accessToken}`)
+          .set("Content-Type", "application/json")
+          .send({ name: "ร้านของฉันเอง" });
+        expect(created.status).toBe(201);
+        cappedOrgIds.push(created.body.organization.id as string);
+
+        // …and now they HAVE created one, so the next is refused.
+        const second = await request(capped.server())
+          .post("/organizations")
+          .set("Authorization", `Bearer ${accessToken}`)
+          .set("Content-Type", "application/json")
+          .send({ name: "ร้านที่สอง" });
+        assertErrorEnvelope(second, { status: 409, code: "ORG_LIMIT_REACHED" });
       } finally {
         await cleanupCreatedOrgs(cappedOrgIds);
         await capped.close();

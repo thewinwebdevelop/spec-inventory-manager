@@ -37,7 +37,7 @@ signoff: approved   # user 2026-07-28
 7. **Owner-only (D-028/C-1 + D-030/NEW-1):** เฉพาะผู้มี `full_access` เท่านั้นที่ (ก) มอบ/เชิญด้วย role `Owner` (ข) แก้/ถอด membership ที่ปัจจุบันเป็น Owner (ค) **ออกลิงก์ใหม่ของคำเชิญที่เป็น role Owner** (ง) **รีเซ็ตรหัสของสมาชิกที่เป็น Owner** — บังคับด้วย pure fn `canAssignRole()` (§3.2/§3.3)
 8. **Owner ≥ 1 + ทุก mutation ที่แตะ membership/invitation** ต้องเปิด tx ด้วย `SELECT … FOR UPDATE` บนแถว `Organization` **และตรวจเงื่อนไขซ้ำใน tx** (§5) · `countActiveOwners` อ่านผ่าน `tx` เท่านั้น (M-2) · **tx กลุ่มนี้มี `lock_timeout`/`timeout` ที่กำหนดชัด และ timeout/deadlock → `409 CONFLICT` ไม่ใช่ 500** (§5.2 — NEW-4)
 9. **สร้าง org = 1 transaction** (Organization + system Roles + Membership(Owner) + OrgEntitlement + default Warehouse) · plan มาจาก **server เท่านั้น**, ไม่มี plan = ไม่สร้าง (fail closed)
-10. **cap 50 org/user แบบ fail-closed ที่ service** → `409 ORG_LIMIT_REACHED` (ไม่พึ่ง rate limit ที่ fail-open — I-10)
+10. **cap 50 org ที่ *สร้าง* ต่อ user แบบ fail-closed ที่ service** → `409 ORG_LIMIT_REACHED` (ไม่พึ่ง rate limit ที่ fail-open — I-10 · ขอบเขตแก้ตาม A-6: นับ `createdByUserId` ไม่ใช่ membership · accept ไม่ถูก cap)
 11. **invite = copy link (D-012) + hash-at-rest (D-018)** ⇒ ปุ่ม **"ออกลิงก์ใหม่" (rotate token)** และ **อายุนับใหม่จากเวลาที่ออกลิงก์** (D-027 — เดิมร่างว่าคงอายุเดิม)
 12. **TTL คำเชิญขึ้นกับ role:** role ที่มี `full_access`/`manage_members` = **24 ชม.** · ที่เหลือ 7 วัน (D-028/I-7)
 13. **invitation hardening:** ถอดสมาชิก → ยกเลิก pending invite ของ email นั้น **ใน tx เดียวกัน** · accept ที่คำเชิญออก**ก่อน**ถูกถอด → ปฏิเสธ · accept ที่เจอ membership `active` → `409 ALREADY_MEMBER` (ไม่ทับ role — I-9)
@@ -778,16 +778,28 @@ commit → emit security event org.created (post-commit)
 10/ชม. = 240/วัน (ไม่ใช่ cap) และ §8 ประกาศ rate limit เป็น **fail-open** เมื่อ Redis ล่ม ⇒ ตอน Redis ล่มไม่มีอะไรคุมเลย
 ประกอบกับยังไม่มี `Idempotency-Key` (F-011) และ **ไม่มี endpoint ลบ org** ⇒ org ขยะที่เกิดขึ้นล้างไม่ได้
 
-- **กติกา:** `POST /organizations` นับ `membership.count({ where: { userId, status: 'active' } })` **ก่อนเข้า tx**
+- **กติกา (แก้ 2026-08-08 · security review A-6):** `POST /organizations` นับ
+  `organization.count({ where: { createdByUserId: userId } })` **ก่อนเข้า tx**
   (`SYSTEM_PRISMA`, §2.4) — `>= MAX_ORGS_PER_USER` → **`409 ORG_LIMIT_REACHED`**
-- `MAX_ORGS_PER_USER` = **50** — ✅ **ยืนยันโดย D-029 (3)** (ค่าเดียวกับ bound ที่ §10 ประกาศ) — เป็น constant ในโค้ด
+- ⚠️ **นี่คือ quota ของการ *สร้าง* ไม่ใช่ bound ของจำนวน membership** — ถ้อยคำเดิมของหัวข้อนี้บอกว่า
+  "ผู้ใช้หนึ่งคนถือ active membership ได้ไม่เกิน 50" ซึ่ง**ไม่เคยจริง**: `POST /invitations/accept` สร้าง membership
+  โดยไม่นับ และจะไม่นับต่อไปโดยเจตนา
+- **ทำไม accept ไม่ถูก cap:** ภัยที่ I-10 พูดถึงคือ *"user คนเดียวยิง `POST /organizations` รัว ๆ ตอน Redis ล่ม"*
+  — การสร้างเป็น**ฝ่ายเดียว** (คนเดียว request เดียว ไม่ต้องขอใคร) · การ accept ต้องมีผู้ถือ `manage_members`
+  ของ**ร้านอื่น**ออกคำเชิญก่อน ⇒ ไม่ใช่คันโยกที่ผู้โจมตีคนเดียวดึงได้ · การ cap มันจะบล็อกผู้รับทำบัญชีที่ดูแล SME
+  หลายสิบรายจริง ๆ โดยไม่ปิดช่องอะไรเลย
+- **ทำไมเลิกนับ membership:** การนับแบบเดิมผิดสองทาง — (ก) คำเชิญของคนอื่นกิน quota ของเรา
+  (ข) นับเฉพาะ `active` ⇒ **เสีย membership แล้วได้ quota คืน** ⇒ สร้างจนเต็ม cap → ให้ผู้สมรู้ร่วมคิดที่เราเชิญเป็น Owner
+  ถอดเราออก (last-Owner guard ยอม เพราะยังเหลือ Owner 1 คน) → ทำซ้ำ · **ผู้สมรู้ร่วมคิด 1 คน = สร้างได้ไม่จำกัด**
+  ในขณะที่ org ทุกใบยังอยู่ ซึ่งคือภัยเดียวกับที่ I-10 ต้องการกันพอดี
+- `MAX_ORGS_PER_USER` = **50** — ✅ **ยืนยันโดย D-029 (3)** — เป็น constant ในโค้ด
   + override ได้ผ่าน env `MAX_ORGS_PER_USER` (optional, default 50) เพื่อให้ dogfood ปรับได้โดยไม่ต้อง deploy ใหม่
-- **การนับ cap นับเฉพาะ membership `active`** ⇒ ผู้ใช้ที่ **ออกจากร้านเอง (§3.17/D-029)** หรือถูกถอด จะได้โควตาคืนทันที
 - **fail-closed จริง:** ถ้า count query ล้ม = ไม่สร้าง org (ไม่ใช่ "ปล่อยผ่านเพราะนับไม่ได้") — ต่างจาก rate limit โดยเจตนา
 - ยังมีช่องเล็ก ๆ ที่ยอมรับ: กด 2 request พร้อมกันตอนอยู่ที่ 49 อาจได้ 51 (ไม่มี lock) — **ยอมรับ** เพราะสิ่งที่ cap นี้
   กันคือ "หลายพันใบ" ไม่ใช่ "เกินหนึ่งใบ" · ถ้าวันหนึ่งต้องแม่นระดับใบ ให้ใช้ advisory lock ต่อ user (บันทึกไว้เฉย ๆ)
 - rate limit 10/ชม. **ยังอยู่** ในฐานะ abuse control ชั้นหน้า และยัง fail-open ได้ตามนโยบายเดิม เพราะไม่ใช่ชั้นที่บังคับ invariant อีกต่อไป
-- int test: user ที่มี 50 org active → สร้างใบที่ 51 = 409 · user ที่มี 50 org แต่ 10 ใบ `revoked` → สร้างได้
+- int test: user ที่**สร้าง** 50 org → ใบที่ 51 = 409 · user ที่ถูก**เชิญ**เข้า 50 ร้านแต่ยังไม่เคยสร้าง → สร้างได้
+  · user ที่สร้างแล้วถูกถอดออกจากร้านนั้น → **ไม่ได้ quota คืน** (ปิดลูปข้างบน)
 
 ### 6.4 env ใหม่ต้องเข้า zod schema ของ `packages/config` (M-5)
 

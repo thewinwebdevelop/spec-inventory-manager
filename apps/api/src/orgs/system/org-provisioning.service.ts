@@ -94,13 +94,28 @@ export class OrgProvisioningService {
     // propagates and no shop is created — "we could not count" must never read
     // as "there is room".
     //
-    // ⚠️ `status: "active"` only: leaving or being removed returns the quota
-    // immediately. And yes, two simultaneous requests at 49 can both pass —
-    // accepted in §6.3, because what this stops is thousands, not the 51st.
-    const activeOrgCount = await this.prisma.membership.count({
-      where: { userId, status: "active" },
+    // ★ A-6 — it counts shops this user CREATED, not memberships they hold.
+    //
+    // Counting memberships was wrong in both directions. It let somebody
+    // else's action spend your quota: a bookkeeper invited into enough shops
+    // could never create their own, with nothing to explain why. And because
+    // it only counted `active` ones, losing a membership handed the quota
+    // back — create up to the cap, have an accomplice you invited as Owner
+    // revoke you (the last-Owner guard allows it, one Owner remains), repeat.
+    // One accomplice, unbounded creation, while every shop persists. That is
+    // exactly the exhaustion I-10 is about.
+    //
+    // The threat I-10 names lives entirely on this path: creation is
+    // unilateral — one person, one request, nobody's consent. Accepting an
+    // invitation needs a DIFFERENT shop's `manage_members` holder to act
+    // first, so it is not a lever one attacker pulls, and it is not capped.
+    //
+    // Two simultaneous requests at 49 can still both pass — accepted in §6.3,
+    // because what this stops is thousands, not the 51st.
+    const createdOrgCount = await this.prisma.organization.count({
+      where: { createdByUserId: userId },
     });
-    if (isOrgCapReached(activeOrgCount, limit)) {
+    if (isOrgCapReached(createdOrgCount, limit)) {
       throw domainError("ORG_LIMIT_REACHED", { details: { limit } });
     }
 
