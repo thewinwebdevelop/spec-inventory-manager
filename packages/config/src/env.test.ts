@@ -4,6 +4,7 @@ import {
   ORG_TX_TIMEOUTS,
   envSchema,
   loadEnv,
+  resolveInvitationTokenSecret,
   resolveOrgRateLimits,
   resolveOrgTxTimeouts,
 } from "./env";
@@ -455,3 +456,61 @@ describe("loadEnv() fail-closed at boot", () => {
     exit.mockRestore();
   });
 });
+
+// ── ★ A-8 · key separation, in the resolver and not only at boot ──────────
+
+  describe("resolveInvitationTokenSecret", () => {
+    const LONG = "a".repeat(32);
+
+    it("returns a present, long-enough secret", () => {
+      expect(resolveInvitationTokenSecret({ INVITATION_TOKEN_SECRET: LONG } as NodeJS.ProcessEnv)).toBe(LONG);
+    });
+
+    it("★ refuses a secret that is ALSO a JWT secret (§7.3 key separation)", () => {
+      // Security review A-8. The separation rule lived only in `loadEnv`'s
+      // whole-env `superRefine`, so any process that does not boot through it
+      // — a seed script, a future worker, a test harness setting env by hand —
+      // would hash invitation tokens with the JWT key and behave perfectly.
+      // The day a JWT secret leaks, it would also mint invitation tokens,
+      // which is precisely what §7.3 separates them to prevent.
+      //
+      // `packages/db` calls this resolver on every hash, so this is the check
+      // that runs where the key is actually used.
+      expect(() =>
+        resolveInvitationTokenSecret({
+          INVITATION_TOKEN_SECRET: LONG,
+          JWT_ACCESS_SECRET: LONG,
+        } as NodeJS.ProcessEnv),
+      ).toThrow(/separate|JWT/i);
+
+      expect(() =>
+        resolveInvitationTokenSecret({
+          INVITATION_TOKEN_SECRET: LONG,
+          JWT_REFRESH_SECRET: LONG,
+        } as NodeJS.ProcessEnv),
+      ).toThrow(/separate|JWT/i);
+    });
+
+    it("says nothing about the values themselves when it refuses", () => {
+      // The message reaches logs. Naming either secret would put both in them.
+      try {
+        resolveInvitationTokenSecret({
+          INVITATION_TOKEN_SECRET: LONG,
+          JWT_ACCESS_SECRET: LONG,
+        } as NodeJS.ProcessEnv);
+        throw new Error("expected a throw");
+      } catch (err) {
+        expect(String((err as Error).message)).not.toContain(LONG);
+      }
+    });
+
+    it("is fine when the JWT secrets are absent or different", () => {
+      expect(
+        resolveInvitationTokenSecret({
+          INVITATION_TOKEN_SECRET: LONG,
+          JWT_ACCESS_SECRET: "b".repeat(32),
+          JWT_REFRESH_SECRET: "c".repeat(32),
+        } as NodeJS.ProcessEnv),
+      ).toBe(LONG);
+    });
+  });

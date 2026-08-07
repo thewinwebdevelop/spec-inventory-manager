@@ -569,3 +569,28 @@ block หลัง (T-002-18) ถูกต้อง — แต่แพ้ทุ
 **พิสูจน์:** RED ทั้งสามใบตรงตามรายงาน → GREEN → ใส่แถวซ้ำกลับ ⇒ แดงทั้งสาม
 
 `api 634 unit` (+3) · **int lane 184/184** · typecheck ✓ lint ✓
+
+### A-8 / A-10 / A-11 ปิดแล้ว (2026-08-08) — สามข้อที่แพงตอนพลาด แต่ถูกมากตอนแก้
+
+**A-8 🔵 — key separation อยู่แค่ตอน boot** · `resolveInvitationTokenSecret` รับประกันแค่ "มีและยาวพอ"
+ส่วนกฎ §7.3 (`INVITATION_TOKEN_SECRET` ต้องต่างจาก JWT secret) อยู่ใน `superRefine` ของ `loadEnv` ⇒
+**process ที่ไม่ได้บูตผ่าน `loadEnv`** (seed script, worker ในอนาคต, test harness ที่ตั้ง env เอง)
+แฮช invite token ด้วยคีย์เดียวกับ JWT ได้ แล้วทำงานปกติทุกอย่าง — วันที่ JWT secret หลุด มันจะปลอม invite token ได้ด้วย
+· `packages/db` เรียก resolver นี้**ทุกครั้งที่แฮช** ⇒ ย้ายการเช็คมาไว้ตรงที่คีย์ถูกใช้จริง ไม่ใช่ตรงที่ process บังเอิญเริ่ม
+· ข้อความ error ระบุ**ชื่อตัวแปร ไม่ใช่ค่า** (มันลง log — ระบุค่าคือเอา secret ทั้งสองตัวไปไว้ใน log)
+
+**A-10 🟡 — event ตระกูล invitation ไม่อยู่ใน strict payload filter** · มันพึ่งสองอย่างที่ไม่ใช่การบังคับ:
+(ก) ทุก call site จำได้ว่าต้องเรียก `maskEmail` (ข) `REDACTED_PAYLOAD_KEYS` ตัด key ที่ชื่อ `email` เป๊ะ ·
+แต่มัน **ไม่ตัด `emailMasked`** (ถูกแล้ว — นั่นคือ key ที่ตั้งใจส่ง) ⇒ call site ที่ยัด**อีเมลเต็ม**ใส่ `emailMasked` ผ่านทุกด่าน
+· `org.tax_profile.*` อยู่ใน strict list ด้วยเหตุผลนี้เป๊ะ · เพิ่ม `org.invitation.*` + `org.member.reactivated`
+
+> **ผลข้างเคียงที่ต้องตามแก้:** เทสต์เดิม "no over-filtering" ใช้ `org.invitation.accepted` เป็นตัวอย่าง event ที่ **ไม่** strict
+> — พอมันกลายเป็น strict เทสต์นั้นจะ assert ตรงข้ามกับกฎ · ย้ายไปใช้ `org.member.role_changed` (ยัง non-strict จริง)
+> แล้วเพิ่มเทสต์อีกใบว่า strict event **ไม่เสีย field ที่ประกาศไว้** (`userCreatedAfterTokenIssued` มีคำว่า "Token" —
+> ถ้า match แบบ substring มันจะหายทันทีที่ event นี้เป็น strict)
+
+**A-11 🔵 — `org-scope.guard` ประกอบ log จาก `originalUrl` ดิบ** (มี query string) ขณะที่ `capability.guard` ผ่าน `normalizePath`
+· วันนี้ยังไปไม่ถึง (เส้น invitation รับ token ทาง body เท่านั้น — I-6) แต่ **สอง guard ที่ต่างกันแปลว่าวันหนึ่งตัวหนึ่งจะ log สิ่งที่อีกตัวไม่ log**
+· ทำให้เหมือนกันจบ
+
+`api 636` (+2) · `config 57` (+4) · `packages/db 185` · **int lane 184/184** · typecheck ✓ lint ✓

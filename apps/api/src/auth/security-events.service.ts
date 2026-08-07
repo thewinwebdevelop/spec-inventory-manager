@@ -168,6 +168,18 @@ export const STRICT_PAYLOAD_EVENT_TYPES: readonly SecurityEventType[] = Object.f
   "org.tax_profile.revealed",
   "auth.password.admin_reset_blocked_multi_org",
   "auth.password.admin_reset_blocked_owner_target",
+  // ★ A-10 — the invitation/membership families handle EMAIL ADDRESSES, and
+  // they were relying on two things that are not enforcement: every call site
+  // remembering `maskEmail`, and `REDACTED_PAYLOAD_KEYS` stripping a key
+  // literally named `email`. The second does not strip `emailMasked` — rightly,
+  // that is the key we mean to send — so a call site that put a FULL address
+  // under `emailMasked` would pass every check. `org.tax_profile.*` is on this
+  // list for exactly that shape of risk; these have it too.
+  "org.invitation.created",
+  "org.invitation.accepted",
+  "org.invitation.link_reissued",
+  "org.invitation.cancelled",
+  "org.member.reactivated",
 ]);
 
 /**

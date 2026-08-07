@@ -33,6 +33,7 @@ import {
 } from "../common/authz";
 import type { OrgAuthRequest, OrgAuthState } from "./org-auth";
 import { ROUTE_SCOPE_KEY, type RouteScope } from "./route-scope.decorator";
+import { normalizePath } from "./route-scope.registry";
 
 /** The tier as the DECORATORS declare it — the authority. */
 type EffectiveTier = RouteScope | "org";
@@ -87,7 +88,12 @@ export class OrgScopeGuard implements CanActivate {
     }
 
     const req = context.switchToHttp().getRequest<OrgAuthRequest>();
-    const route = `${req.method} ${req.originalUrl ?? req.url}`;
+    // ★ A-11 — `normalizePath` strips the query string, exactly as
+    // `capability.guard.ts` already does. Today no invitation route accepts its
+    // token in the query (they are body-only, I-6), so nothing sensitive is in
+    // there — but this string is logged, and the two guards differing meant one
+    // of them would eventually log something the other would not.
+    const route = `${req.method} ${normalizePath(req.originalUrl ?? req.url)}`;
     const auth = req.orgAuth;
     if (!auth) {
       // OrgContextMiddleware did not run for this request — every guarantee

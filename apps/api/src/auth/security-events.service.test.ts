@@ -309,8 +309,31 @@ describe("payload safety — invitation events carry emailMasked, never the addr
   });
 
   it("leaves non-secret keys of non-strict events alone (no over-filtering)", () => {
-    // `userCreatedAfterTokenIssued` contains "Token" — key matching must be by
-    // exact name, never substring, or I-7's forensic field would vanish.
+    // Uses `org.member.role_changed`, which is deliberately NOT strict: this
+    // case is about substring matching, and it needs an event where an extra
+    // key survives. It used to use `org.invitation.accepted`, which ★ A-10
+    // moved onto the strict list — so the extra key is now dropped there, by
+    // design, and the test would have been asserting the opposite of the rule.
+    const svc = new SecurityEventsService();
+    const sink = collectSecurityEvents(svc);
+    svc.emit("org.member.role_changed", {
+      actorUserId: "u1",
+      organizationId: "o1",
+      targetUserId: "u2",
+      fromRoleId: "r1",
+      toRoleId: "r2",
+      correlationId: "c1", // undocumented but harmless → kept (non-strict event)
+    });
+    const [event] = sink.ofType("org.member.role_changed");
+    expect(event.payload.correlationId).toBe("c1");
+    sink.stop();
+  });
+
+  it("★ A-10 · a strict invitation event keeps its documented keys and drops the rest", () => {
+    // The other half of A-10: being on the strict list must not cost a
+    // documented field. `userCreatedAfterTokenIssued` contains "Token" — key
+    // matching is by exact name, never substring, or I-7's forensic field
+    // would vanish the moment this event became strict.
     const svc = new SecurityEventsService();
     const sink = collectSecurityEvents(svc);
     svc.emit("org.invitation.accepted", {
@@ -321,18 +344,52 @@ describe("payload safety — invitation events carry emailMasked, never the addr
       acceptedByUserId: "u1",
       userCreatedAt: "2026-07-31T00:00:00.000Z",
       userCreatedAfterTokenIssued: true,
-      correlationId: "c1", // undocumented but harmless → kept (non-strict event)
+      emailMasked: "s***@shop.com", // a full address hidden here is the risk
+      correlationId: "c1",
     });
     const [event] = sink.ofType("org.invitation.accepted");
     expect(event.payload.userCreatedAfterTokenIssued).toBe(true);
-    expect(event.payload.correlationId).toBe("c1");
+    // Undocumented keys are gone — the point of the strict list.
+    expect(event.payload.correlationId).toBeUndefined();
+    // …and so is `emailMasked`, because `org.invitation.accepted` does not
+    // declare it (only `org.invitation.created` does). A call site that put a
+    // real address here would now lose it rather than log it.
+    expect(event.payload.emailMasked).toBeUndefined();
     sink.stop();
   });
 
-  it("STRICT_PAYLOAD_EVENT_TYPES covers exactly the two sensitive families", () => {
+  it("★ A-10 · every event family that handles an address is on the strict list", () => {
+    // Security review A-10. The invitation family relies on (a) each call site
+    // remembering to call `maskEmail`, and (b) `REDACTED_PAYLOAD_KEYS`
+    // stripping a key literally named `email`. It does NOT strip `emailMasked`
+    // — correctly, that is the key we mean to send — so a call site that put a
+    // FULL address under `emailMasked` would sail straight through.
+    //
+    // `org.tax_profile.*` is on the strict list for exactly this reason. The
+    // invitation family has the same shape of risk and was not.
+    for (const type of [
+      "org.invitation.created",
+      "org.invitation.accepted",
+      "org.invitation.link_reissued",
+      "org.invitation.cancelled",
+      "org.member.reactivated",
+    ] as const) {
+      expect(STRICT_PAYLOAD_EVENT_TYPES, type).toContain(type);
+    }
+  });
+
+  it("STRICT_PAYLOAD_EVENT_TYPES covers exactly the families that handle a secret or an address", () => {
+    // An exact list, not a `toContain`: adding a family here changes what is
+    // dropped from real audit payloads, so it must be a deliberate edit rather
+    // than something that drifts in.
     expect([...STRICT_PAYLOAD_EVENT_TYPES].sort()).toEqual([
       "auth.password.admin_reset_blocked_multi_org",
       "auth.password.admin_reset_blocked_owner_target",
+      "org.invitation.accepted",
+      "org.invitation.cancelled",
+      "org.invitation.created",
+      "org.invitation.link_reissued",
+      "org.member.reactivated",
       "org.tax_profile.revealed",
       "org.tax_profile.set",
     ]);

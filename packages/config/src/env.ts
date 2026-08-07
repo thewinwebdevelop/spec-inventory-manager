@@ -342,18 +342,36 @@ export function resolveOrgRateLimits(source: NodeJS.ProcessEnv = process.env): O
  * A library must be able to fail with an exception its caller can see, not take
  * the process down.
  *
- * What it does NOT re-check is the key-separation rule (§7.3: this secret must
- * differ from both JWT secrets). That lives in `loadEnv`'s whole-env
- * `superRefine` and is enforced at boot, where the comparison is possible. This
- * resolver therefore guarantees "present and long enough", not "separate" —
- * stated plainly because the difference matters if anything ever calls it in a
- * process that never booted through `loadEnv`.
+ * ★ A-8 — it also enforces the §7.3 KEY SEPARATION rule, not only "present and
+ * long enough". That rule used to live exclusively in `loadEnv`'s whole-env
+ * `superRefine`, i.e. only at boot. Anything that does not boot through
+ * `loadEnv` — a seed script, a future worker, a test harness that sets env by
+ * hand — would then hash invitation tokens with a JWT key and work perfectly,
+ * and the day a JWT secret leaked it would mint invitation tokens too. That is
+ * the exact outcome §7.3 separates them to prevent.
+ *
+ * `packages/db` calls this on every hash, so this is the check that runs where
+ * the key is actually used, rather than where the process happened to start.
  */
 export function resolveInvitationTokenSecret(source: NodeJS.ProcessEnv = process.env): string {
-  return z
+  const secret = z
     .string({ required_error: "INVITATION_TOKEN_SECRET is required" })
     .min(32, "INVITATION_TOKEN_SECRET must be at least 32 chars (256-bit random) — F-002 §7.3")
     .parse(source.INVITATION_TOKEN_SECRET);
+
+  // Compared only against JWT secrets that are actually present: a process
+  // that has no JWT config is not thereby suspicious.
+  for (const name of ["JWT_ACCESS_SECRET", "JWT_REFRESH_SECRET"] as const) {
+    if (source[name] !== undefined && source[name] === secret) {
+      // The message names the VARIABLES, never the value — it reaches logs,
+      // and naming it would put both secrets in them.
+      throw new Error(
+        `INVITATION_TOKEN_SECRET must be separate from ${name} (F-002 §7.3): ` +
+          "one leaked key must not also forge invitation tokens.",
+      );
+    }
+  }
+  return secret;
 }
 
 /**
