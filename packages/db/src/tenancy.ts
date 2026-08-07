@@ -177,8 +177,17 @@ export const ORG_SCOPE_OPERATION_STRATEGY = Object.freeze({
   // policy is explicit ("rejected until implemented"); U-DB-07 goes red the day
   // an upgrade adds it, forcing a decision instead of a silent pass-through.
   updateManyAndReturn: "reject",
-  // MongoDB-only. Unreachable on Postgres, and raw shapes cannot be scoped by
-  // this seam anyway ($queryRaw/$executeRaw are handled by the grep gate).
+  // MongoDB-only. Unreachable on Postgres.
+  //
+  // ★ B-7 — this used to add "$queryRaw/$executeRaw are handled by the grep
+  // gate". There was no grep gate. Raw SQL genuinely cannot be scoped by this
+  // seam (it carries no model and no `where` to extend), so a `$queryRaw`
+  // through an org-scoped client runs UNSCOPED and does not throw — verified
+  // against Postgres. The confident sentence was the danger: it invited the
+  // next person wanting a fast aggregate to write raw SQL and assume something
+  // was watching. The gate now exists —
+  // `apps/api/src/orgs/system/raw-sql-allowlist.test.ts` — and it is a textual
+  // allowlist with a self-check, not this comment.
   findRaw: "reject",
   aggregateRaw: "reject",
 } as const);

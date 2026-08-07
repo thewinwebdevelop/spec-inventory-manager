@@ -627,3 +627,36 @@ trigger เปลี่ยนจาก "เดาจาก body" เป็น **
 (สิ่งที่ต้องไม่ถูก cache คือ **200** — 401 body ไม่มีข้อเท็จจริงของใคร)
 
 `api 636` · **int lane 188/188** (+4) · typecheck ✓ lint ✓ depcruise PASS
+
+### B-5 / B-6 / B-7 / B-8 ปิดแล้ว (2026-08-08) — สามในสี่ข้อคือ **comment ที่อ้างว่ามีด่าน ทั้งที่ไม่มี**
+
+**B-7 🔵 — "grep gate" ที่ไม่มีอยู่จริง** · `packages/db/src/tenancy.ts` เขียนว่า
+*"$queryRaw/$executeRaw are handled by the grep gate"* — reviewer ค้น `ci.yml`, `tool/`, eslint config,
+depcruise config **ไม่เจอ gate ไหนเลยที่ดู raw SQL** · และ seam **คุมไม่ได้จริง**: raw query ไม่มี model ไม่มี `where`
+ให้ต่อ ⇒ `$queryRaw` ผ่าน ORG_PRISMA **วิ่งแบบไม่มี tenant filter และไม่ throw** (พิสูจน์กับ Postgres จริง)
+· วันนี้ยังไม่มีผลเพราะ 4 caller ที่มีอยู่เป็น SYSTEM/tx client ทั้งหมด · **อันตรายคือประโยคนั้น** —
+คนถัดไปที่อยาก aggregate เร็ว ๆ จะเขียน raw แล้วเชื่อว่ามีคนเฝ้า
+⇒ ทำ gate จริง `orgs/system/raw-sql-allowlist.test.ts` (allowlist + self-check + เช็คว่า allowlist ไม่มีรายการค้าง)
+· พิสูจน์: วางไฟล์ที่เรียก `$queryRawUnsafe` ใน `orgs/` ⇒ แดงระบุชื่อไฟล์
+
+**B-5 🟡 — ลิสต์ที่ pin ตัวเอง 100% และ pin โค้ด 0%** · `ORG_LOCK_REQUIRED_OPERATIONS` เขียนว่า
+*"write ใหม่ที่ลืม anchor = เทสต์แดง"* · reviewer grep แล้วเจอ 4 ที่: ตัวมันเอง, re-export, เทสต์ที่ assert ว่า
+ลิสต์เท่ากับสำเนาของตัวเอง, และ comment — **ไม่มีอะไรเดินจากลิสต์ไป call site เลย**
+⇒ เขียน `org-lock-callsites.test.ts` ที่เดิน **จากลิสต์ไปหา source**: ทุก `serviceMethod` ต้องมีอยู่จริง
++ service ที่อยู่ในลิสต์ห้ามเปิด `$transaction` เปล่า (รูปที่เขียนโดยไม่มี lock — ซึ่งคือสิ่งที่ reviewer เห็นใน working tree รอบนั้น)
+· พิสูจน์สองเคส: เปลี่ยนเป็น `$transaction` เปล่า ⇒ แดง · เปลี่ยนชื่อ method ⇒ แดง
+· **และแก้ comment ให้บอกความจริง** ว่าอะไรบังคับจริง อะไรยังเป็น forward commitment
+(`SET LOCAL lock_timeout` เป็น statement แรกบน wire — ยังไม่มีใครคุม ต้องมี driver spy)
+
+**B-8 🔵 — `assertOwnerRemainsInTx` นับ Owner จาก nested filter ที่ไม่ถูก org-scope** · `withOrgScope` ฉีด
+`organizationId` ที่ top level ของ `Membership` แต่เงื่อนไข `role: {…}` เดินเข้า `Role` โดยไม่มี org filter ⇒
+ถ้ามี membership ที่ roleId ข้าม org (สถานะที่ B-1 พิสูจน์ว่า DB เคยยอม) คนนั้นจะถูกนับเป็น Owner ของร้านนี้
+· **B-1 ปิดไปแล้วทำให้สถานะนั้นสร้างไม่ได้** — แต่ผมใส่ `organizationId` ที่ role filter ด้วย เพราะ invariant
+ไม่ควรต้องพึ่ง constraint ใน package อื่นเพื่อให้**อ่านแล้วดูถูก** และเพราะความหมายของ query คือ "นับ Owner ของร้านนี้"
+
+**B-6 🔵 — floor ของ int lane ครอบแค่ auth** · `--min-passed 29` ถูกเติมเต็มด้วย auth 2 ไฟล์พอดี ⇒
+สวีต F-002 **ทั้ง 8 ไฟล์ (~160 เคส) ไม่มี floor เลย** — ถ้ามันหยุดรันเงียบ ๆ lane ก็ยังเขียว ซึ่งคือสิ่งที่ I-37 มีไว้จับพอดี
+· `--require` เป็น **floor (>= N)** ⇒ เพิ่มเทสต์ได้ฟรี เสียเทสต์ถึงแดง · ใส่ครบ 11 ไฟล์ + `--min-passed 183`
+(เลขจริงจาก JSON report ของ lane เอง ไม่ได้เดา)
+
+`api 645` (+9) · `packages/db 185` · **int lane 188/188** · typecheck ✓ lint ✓ depcruise PASS

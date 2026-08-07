@@ -556,8 +556,22 @@ export class MembersService {
    * caller that pre-filtered wrongly would hide the last Owner).
    */
   private async assertOwnerRemainsInTx(tx: OrgLockTx, change: OwnerChange): Promise<void> {
+    // ★ B-8 — the `organizationId` filter on the ROLE is explicit.
+    //
+    // `withOrgScope` injects `organizationId` at the top level of `Membership`
+    // (correct), but a nested `role: { … }` condition walks into `Role` with no
+    // org filter of its own. Before B-1's composite foreign key, a membership
+    // could point at another shop's role — and this query would then have
+    // counted that person as an Owner OF THIS SHOP, computing the
+    // "at least one Owner" invariant from a row belonging to somebody else.
+    //
+    // B-1 makes that state unrepresentable, so this line is not what makes the
+    // count correct today. It is here because the invariant should not depend
+    // on a constraint in another package to be readable as correct — and
+    // because `count owners of THIS org` is what the query means.
+    const organizationId = this.requireOrganizationId();
     const owners: readonly OwnerCandidateRow[] = await tx.membership.findMany({
-      where: { role: { capabilities: { has: "full_access" } } },
+      where: { role: { organizationId, capabilities: { has: "full_access" } } },
       select: { userId: true, status: true, role: { select: { capabilities: true } } },
     });
     const input: readonly OwnerMembership[] = owners.map((row) => ({

@@ -47,9 +47,22 @@ export interface OrgLockRequiredOperation {
 
 /**
  * architecture §5 + §12.2 row 6 — the SINGLE source of "which operations grab
- * the org lock". qa's U-API-09 enumerates this instead of re-declaring the list,
- * so a new membership/invitation write that forgets the anchor is a red test,
- * not an undetected concurrency hole.
+ * the org lock".
+ *
+ * ★ B-5 — this used to claim that "a new membership/invitation write that
+ * forgets the anchor is a red test". It was not. The only thing enumerating
+ * this list was a test asserting the list equals a literal copy of itself: it
+ * pinned itself perfectly and pinned no code at all.
+ *
+ * What actually holds today, stated precisely so nobody relies on more:
+ *   - `orgs/system/org-lock-callsites.test.ts` walks FROM this list TO the
+ *     source: every `serviceMethod` must exist, and no listed service may open
+ *     a bare `$transaction` (the shape that writes with no lock).
+ *   - per-method tests cover the seven operations below individually.
+ *
+ * What is still NOT enforced: that `SET LOCAL lock_timeout` is the first
+ * statement on the wire. That needs the running app and a driver spy — a
+ * forward commitment, not a guarantee.
  *
  * It lives in `packages/db` (not apps/api) because the mechanism does: the list
  * and `lockCurrentOrganization` must never drift apart, and `packages/db` is the

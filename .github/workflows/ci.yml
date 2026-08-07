@@ -378,12 +378,30 @@ jobs:
         run: pnpm --filter api run test:integration --reporter=default --reporter=json --outputFile.json=/tmp/api-int-tests.json
       - name: I-37 lane-enabled guard — skipped/absent int suites are RED, not green
         run: |
+          # ★ B-6 — the floors used to be the two AUTH files and `--min-passed 29`,
+          # which those two files fill exactly. Every F-002 suite (8 files, ~160
+          # cases) therefore had NO floor at all: if all of them had silently
+          # stopped running, this lane would still have gone green — which is
+          # precisely the failure I-37 exists to catch.
+          #
+          # `--require` is a FLOOR (>= N), so adding cases is free; only losing
+          # them is red. Counts are the real ones at the time of writing, taken
+          # from the lane's own JSON report rather than guessed.
           node tool/ci/assert-tests-ran.mjs \
             --report /tmp/api-int-tests.json \
             --lane "integration-api · apps/api *.int.test.ts" \
             --require "src/auth/auth.e2e.int.test.ts=21" \
             --require "src/auth/refresh-token.service.int.test.ts=8" \
-            --min-passed 29
+            --require "test/orgs.e2e.int.test.ts=36" \
+            --require "test/members.e2e.int.test.ts=34" \
+            --require "test/invitations.e2e.int.test.ts=21" \
+            --require "test/invitations-redeem.e2e.int.test.ts=16" \
+            --require "test/org-leak.kit.int.test.ts=19" \
+            --require "test/f002-seed.kit.int.test.ts=13" \
+            --require "test/org-rate-limit.e2e.int.test.ts=6" \
+            --require "test/openapi-parity.int.test.ts=5" \
+            --require "test/response-header-policy.int.test.ts=4" \
+            --min-passed 183
       - name: dump api log on failure
         if: failure()
         run: cat /tmp/api.log || true
