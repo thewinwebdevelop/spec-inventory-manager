@@ -15,6 +15,7 @@ import {
   UseGuards,
 } from "@nestjs/common";
 import type { Response } from "express";
+import { ORG_PROFILE_RESPONSE_HEADERS, applyResponseHeaders } from "../orgs/response-headers";
 import { AuthService } from "./auth.service";
 import { ThrottleService } from "./throttle.service";
 import { JsonOnlyGuard } from "./json-only.guard";
@@ -65,6 +66,10 @@ export class MembersController {
     @Req() req: AuthedRequest,
     @Res({ passthrough: true }) res: Response,
   ) {
+    // ★ B-3 — the body is `{ ok: true }`, but the exchange records that a
+    // named person's password was reset in a named shop. A shared cache
+    // holding the confirmation is a disclosure of its own.
+    applyResponseHeaders(res, ORG_PROFILE_RESPONSE_HEADERS);
     const callerUserId = req.user!.userId;
     // Own throttle, keyed on the caller (api-spec §2.8), its own 429.
     const acctKey = `${callerUserId}:reset-password`;

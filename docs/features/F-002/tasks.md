@@ -594,3 +594,36 @@ block หลัง (T-002-18) ถูกต้อง — แต่แพ้ทุ
 · ทำให้เหมือนกันจบ
 
 `api 636` (+2) · `config 57` (+4) · `packages/db 185` · **int lane 184/184** · typecheck ✓ lint ✓
+
+### B-3 🟡 ปิดแล้ว (2026-08-08) — และทิศ "wire → policy" ที่เอกสารอ้างมาตลอด **ไม่เคยมีอยู่จริง**
+
+header ของ `response-headers.ts` ประกาศว่าตารางถูกตรวจสองทิศ · ทิศแรกมีจริง ·
+ทิศที่สอง (**route ที่คืน PII แต่ไม่มีในตาราง = แดง**) เป็น **prose ล้วน** — `carries` ถูกเขียนทุกแถวแต่ไม่มีอะไรอ่านมัน
+ยกเว้น spot check 2 บรรทัดที่เขียนมือ
+
+⇒ `GET /me/organizations` ship ออกไปโดย**ไม่มีแถวและไม่มี `Cache-Control` เลย**
+
+**ทำไมหลุด — และมันเป็นรูปเดียวกับที่เจอมาทั้งฟีเจอร์:** prose เขียน trigger ไว้ว่า "token, email หรือ TIN"
+· `/me/organizations` ไม่คืนสามอย่างนั้น มันคืน **membership** ซึ่งเป็นคลาสที่ `ResponseSensitivity` **ประกาศไว้แล้ว**
+และตารางก็**ใช้มันเป็นเหตุผลใส่ route อยู่แล้ว** (`DELETE …/membership` อยู่ในตารางด้วยเหตุผลนี้เป๊ะ) ·
+taxonomy รู้ แต่ไม่มีใครไปถามมัน
+
+**แก้:** เขียน gate จริงที่ **เดิน router จริง** (`test/response-header-policy.int.test.ts`) แทนลิสต์ที่ต้องมีคนดูแล ·
+trigger เปลี่ยนจาก "เดาจาก body" เป็น **route prefix** (`/orgs /organizations /me /invitations`) ·
+เลือกเป็น **prefix list ไม่ใช่ exemption list**: ลืมเพิ่ม prefix ใหม่ = เห็นตอน review · ลืม**ถอด**ออกจาก exemption list = ไม่มีใครเห็นตลอดกาล
+
+**gate เจอ 4 route ไม่ใช่ 1** — รวม `GET /orgs/{orgId}/roles` ที่**ผมเขียนเอง**ใน T-002-16b:
+มัน set header ถูกอยู่แล้ว แต่ไม่มีแถวในตาราง ⇒ ทิศแรกก็จับไม่ได้เพราะมันไม่ได้อยู่ในตารางตั้งแต่แรก
+
+| route | ทำไมต้องมี |
+|---|---|
+| `GET /me/organizations` | คนนี้อยู่ร้านไหน ตำแหน่งอะไร แพลนอะไร |
+| `POST /organizations` | 201 body มีร้าน + membership + plan |
+| `GET /orgs/{orgId}/roles` | (ของผมเอง — set header แล้ว แต่ไม่มีแถว) |
+| `POST …/members/{userId}/reset-password` | body เป็น `{ok:true}` แต่ **การมีอยู่ของ response นี้**บอกว่ารหัสผ่านของคนชื่อนี้ในร้านนี้ถูกรีเซ็ต |
+
+**ข้อจำกัดที่บันทึกไว้ตรง ๆ:** `applyResponseHeaders` อยู่ใน handler ⇒ **401 ที่ guard ปฏิเสธก่อน ไม่มี header**
+· เทสต์ฉบับแรกของผม assert แบบไม่ต้อง auth แล้วแดง — สมมติฐานผมผิดเอง · เปลี่ยนเป็นยิงแบบมี token จริง
+(สิ่งที่ต้องไม่ถูก cache คือ **200** — 401 body ไม่มีข้อเท็จจริงของใคร)
+
+`api 636` · **int lane 188/188** (+4) · typecheck ✓ lint ✓ depcruise PASS

@@ -22,6 +22,16 @@ import type { TaxProfileService } from "./tax-profile.service";
 import type { MyOrganizationsService } from "./system/my-organizations.service";
 import type { OrgProvisioningService } from "./system/org-provisioning.service";
 
+/**
+ * A `@Res({ passthrough: true })` stand-in. These handlers only ever call
+ * `setHeader` on it (★ B-3 put `applyResponseHeaders` on both), so a stub with
+ * that one method is the whole contract — a real Response here would be
+ * testing express, not the controller.
+ */
+function res() {
+  return { setHeader: vi.fn() } as unknown as import("express").Response;
+}
+
 const USER_ID = "usr_me";
 const authed = { orgAuth: { userId: USER_ID, tokenValid: true } } as never;
 
@@ -44,7 +54,7 @@ describe("OrganizationsController.create", () => {
 
   it("passes the VALIDATED, normalized body to the service", async () => {
     const { controller, create } = subject();
-    await controller.create({ name: "  ร้าน ก  " }, authed);
+    await controller.create({ name: "  ร้าน ก  " }, authed, res());
     expect(create).toHaveBeenCalledWith({
       userId: USER_ID,
       organization: { name: "ร้าน ก", timezone: "Asia/Bangkok" },
@@ -55,8 +65,7 @@ describe("OrganizationsController.create", () => {
     // api-spec §3.1 asks for `fieldErrors` per field. The global pipe would put
     // a constraint MESSAGE in `error.code`, which the client switches on.
     const { controller, create } = subject();
-    const error = (await controller
-      .create({ name: "", timezone: "Mars/Olympus" }, authed)
+    const error = (await controller.create({ name: "", timezone: "Mars/Olympus" }, authed, res())
       .catch((e: unknown) => e)) as DomainException;
     expect(error).toBeInstanceOf(DomainException);
     expect(error.getStatus()).toBe(422);
@@ -72,14 +81,14 @@ describe("OrganizationsController.create", () => {
     await controller.create({ name: "ร้าน" }, {
       user: { userId: "usr_someone_else" },
       orgAuth: { userId: USER_ID, tokenValid: true },
-    } as never);
+    } as never, res());
     expect(create.mock.calls[0][0]).toMatchObject({ userId: USER_ID });
   });
 
   it("★ 500 rather than creating an owner-less shop when the chain is mis-wired", async () => {
     const { controller, create } = subject();
     const error = (await controller
-      .create({ name: "ร้าน" }, { orgAuth: { tokenValid: true } } as never)
+      .create({ name: "ร้าน" }, { orgAuth: { tokenValid: true } } as never, res())
       .catch((e: unknown) => e)) as DomainException;
     expect(error.getStatus()).toBe(500);
     expect(create).not.toHaveBeenCalled();
@@ -90,6 +99,7 @@ describe("OrganizationsController.create", () => {
     await controller.create(
       { name: "ร้าน", planKey: "comp_full", currency: "USD" } as never,
       authed,
+      res(),
     );
     expect(create.mock.calls[0][0]).toEqual({
       userId: USER_ID,
@@ -109,7 +119,7 @@ describe("MyOrganizationsController.list", () => {
 
   it("defaults to `status=active`, limit 25, no cursor", async () => {
     const { controller, list } = subject();
-    await controller.list(authed);
+    await controller.list(authed, res());
     expect(list).toHaveBeenCalledWith({
       userId: USER_ID,
       status: "active",
@@ -120,7 +130,7 @@ describe("MyOrganizationsController.list", () => {
 
   it("accepts `status=all`", async () => {
     const { controller, list } = subject();
-    await controller.list(authed, "all");
+    await controller.list(authed, res(), "all");
     expect(list.mock.calls[0][0]).toMatchObject({ status: "all" });
   });
 
@@ -128,7 +138,7 @@ describe("MyOrganizationsController.list", () => {
     // Coercing `?status=revoked` to `active` would answer a different question
     // than the one asked, and look like a server bug to the client.
     const { controller, list } = subject();
-    const error = (await controller.list(authed, "revoked").catch((e: unknown) => e)) as DomainException;
+    const error = (await controller.list(authed, res(), "revoked").catch((e: unknown) => e)) as DomainException;
     expect(error.getStatus()).toBe(422);
     expect(error.fieldErrors).toHaveProperty("status");
     expect(list).not.toHaveBeenCalled();
@@ -137,7 +147,7 @@ describe("MyOrganizationsController.list", () => {
   it("decodes a cursor it issued", async () => {
     const { controller, list } = subject();
     const cursor = encodeCursor({ createdAt: "2026-07-28T09:00:00.000Z", id: "mem_1" });
-    await controller.list(authed, undefined, cursor);
+    await controller.list(authed, res(), undefined, cursor);
     expect(list.mock.calls[0][0]).toMatchObject({
       cursor: { createdAt: "2026-07-28T09:00:00.000Z", id: "mem_1" },
     });
@@ -145,21 +155,21 @@ describe("MyOrganizationsController.list", () => {
 
   it("★ 422 for a garbage cursor — never a silent restart at page 1", async () => {
     const { controller } = subject();
-    const error = (await controller.list(authed, undefined, "!!!").catch((e: unknown) => e)) as DomainException;
+    const error = (await controller.list(authed, res(), undefined, "!!!").catch((e: unknown) => e)) as DomainException;
     expect(error.getStatus()).toBe(422);
     expect(error.fieldErrors).toEqual({ cursor: CURSOR_INVALID_MESSAGE });
   });
 
   it("clamps an absurd limit", async () => {
     const { controller, list } = subject();
-    await controller.list(authed, undefined, undefined, "100000");
+    await controller.list(authed, res(), undefined, undefined, "100000");
     expect(list.mock.calls[0][0]).toMatchObject({ limit: 100 });
   });
 
   it("★ 500 rather than listing everyone's shops when the identity is missing", async () => {
     const { controller, list } = subject();
     const error = (await controller
-      .list({ orgAuth: { tokenValid: true } } as never)
+      .list({ orgAuth: { tokenValid: true } } as never, res())
       .catch((e: unknown) => e)) as DomainException;
     expect(error.getStatus()).toBe(500);
     expect(list).not.toHaveBeenCalled();

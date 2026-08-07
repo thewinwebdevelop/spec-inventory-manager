@@ -15,16 +15,9 @@
 // filled from the verified bearer token — NOT from `req.user`, which is set by
 // the controller-level `JwtAuthGuard` and therefore exists only where that guard
 // is applied (I-4). One source of "who is calling", set before any guard runs.
-import {
-  Body,
-  Controller,
-  HttpCode,
-  HttpStatus,
-  Inject,
-  Post,
-  Req,
-  UseGuards,
-} from "@nestjs/common";
+import { Body, Controller, HttpCode, HttpStatus, Inject, Post, Req, Res, UseGuards } from "@nestjs/common";
+import type { Response } from "express";
+import { ORG_PROFILE_RESPONSE_HEADERS, applyResponseHeaders } from "./response-headers";
 import { validateNewOrganization } from "@omnistock/core-domain";
 import { domainError } from "../common";
 import { OrgRateLimit } from "../common/org-rate-limit.decorator";
@@ -62,7 +55,12 @@ export class OrganizationsController {
   async create(
     @Body() dto: CreateOrganizationDto,
     @Req() req: OrgAuthRequest,
+    @Res({ passthrough: true }) res: Response,
   ): Promise<CreatedOrganization> {
+    // ★ B-3 — the 201 body names the shop, the caller's membership and the
+    // plan bound to it. That is a fact about a person, whatever the status
+    // code says.
+    applyResponseHeaders(res, ORG_PROFILE_RESPONSE_HEADERS);
     const userId = req.orgAuth?.userId;
     if (!userId) {
       // Unreachable: `@UserScoped()` + `OrgScopeGuard` already answered 401 for

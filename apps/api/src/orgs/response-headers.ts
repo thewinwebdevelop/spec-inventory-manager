@@ -8,12 +8,19 @@
 //
 // TWO DIRECTIONS, WHICH IS WHY THIS IS A TABLE AND NOT TWO CONSTANTS (I-05):
 //   policy → wire   a route listed here that does not set its headers = red.
-//   wire → policy   a route that returns a token, an email or a TIN and is
-//                   ABSENT from this table = red. That is the direction that
-//                   catches "we shipped a new endpoint and forgot the policy",
-//                   and it only works if each row also says WHY it is here
-//                   (`carries`), which is what `RESPONSE_HEADER_POLICY` adds
-//                   over a bare header map.
+//   wire → policy   a route under a PII prefix that is ABSENT from this table
+//                   = red. That is the direction that catches "we shipped a
+//                   new endpoint and forgot the policy", and it only works if
+//                   each row also says WHY it is here (`carries`), which is
+//                   what `RESPONSE_HEADER_POLICY` adds over a bare header map.
+//
+// ★ B-3 — the second direction used to be this comment and nothing else, and
+// it described the trigger as "returns a token, an email or a TIN". Four
+// routes returned none of those, returned MEMBERSHIP instead, and were absent
+// from the table with no `Cache-Control` at all. The trigger is now the ROUTE
+// PREFIX, not a guess about the body, and it is enforced by walking the live
+// router (`test/response-header-policy.int.test.ts`) rather than by this
+// paragraph.
 //
 // Rows exist for endpoints that T-002-19 has not built yet. That is deliberate
 // and matches `ROUTE_CAPABILITIES`: the table is the contract with api-spec §1,
@@ -136,6 +143,28 @@ export const RESPONSE_HEADER_POLICY: readonly ResponseHeaderPolicyRow[] = Object
   // a token that must not reach a `Referer` header (I-6).
   policyRow("POST", "/invitations/preview", INVITATION_RESPONSE_HEADERS, ["email"]),
   policyRow("POST", "/invitations/accept", INVITATION_RESPONSE_HEADERS, ["email"]),
+  // ★ B-3 — four routes the "wire → policy" direction was supposed to catch
+  // and could not, because that direction was prose. It is a live gate now
+  // (`test/response-header-policy.int.test.ts` walks the router), and these
+  // are what it found on its first run.
+  //
+  // None of them returns a token, an email or a TIN — which is exactly why
+  // they were missed. They return MEMBERSHIP: who is in which shop, in what
+  // role, on what plan. The taxonomy already had a name for that class and
+  // already used it as a reason to list a route (`DELETE …/membership`
+  // below); nothing consulted it.
+  policyRow("GET", "/me/organizations", ORG_PROFILE_RESPONSE_HEADERS, ["membership"]),
+  policyRow("POST", "/organizations", ORG_PROFILE_RESPONSE_HEADERS, ["membership"]),
+  policyRow("GET", "/orgs/{orgId}/roles", ORG_PROFILE_RESPONSE_HEADERS, ["membership"]),
+  // F-001's admin reset. The body is `{ ok: true }`, but the REQUEST is an act
+  // performed on a named person in a named shop, and the response confirms it
+  // happened — a shared cache holding that is a disclosure of its own.
+  policyRow(
+    "POST",
+    "/orgs/{orgId}/members/{userId}/reset-password",
+    ORG_PROFILE_RESPONSE_HEADERS,
+    ["membership"],
+  ),
   // §3.17 — no email, no token, no TIN; listed because api-spec §1 puts
   // §3.10–§3.17 under `no-store` and because "when did this person leave which
   // shop" is still a fact about a person that must not sit in a shared cache.

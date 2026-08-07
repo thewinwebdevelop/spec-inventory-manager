@@ -9,10 +9,12 @@
 // filter on every request (no cache, no TTL). A client that gets
 // `403 ORG_ACCESS_DENIED` refetches this endpoint and the shop it was removed
 // from is already gone.
-import { Controller, Get, Inject, Query, Req } from "@nestjs/common";
+import { Controller, Get, Inject, Query, Req, Res } from "@nestjs/common";
+import type { Response } from "express";
 import { domainError } from "../common";
 import { requireCursor, resolveLimit } from "../common/cursor";
 import { UserScoped, type OrgAuthRequest } from "../tenancy";
+import { ORG_PROFILE_RESPONSE_HEADERS, applyResponseHeaders } from "./response-headers";
 import {
   MyOrganizationsService,
   type MyOrganizationsPage,
@@ -39,10 +41,15 @@ export class MyOrganizationsController {
   @Get()
   async list(
     @Req() req: OrgAuthRequest,
+    @Res({ passthrough: true }) res: Response,
     @Query("status") status?: string,
     @Query("cursor") cursor?: string,
     @Query("limit") limit?: string,
   ): Promise<MyOrganizationsPage> {
+    // ★ B-3 — "which shops is this person in, in what role, on what plan" is
+    // a fact about a person. It shipped with no `Cache-Control` at all, which
+    // on a shared or shop-floor machine means a browser disk cache holding it.
+    applyResponseHeaders(res, ORG_PROFILE_RESPONSE_HEADERS);
     const userId = req.orgAuth?.userId;
     // Unreachable behind `OrgScopeGuard` (401 for an invalid token on this
     // tier). A missing id here would mean listing "everyone's" shops, so it is
