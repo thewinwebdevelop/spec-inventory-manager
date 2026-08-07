@@ -660,3 +660,41 @@ depcruise config **ไม่เจอ gate ไหนเลยที่ดู raw
 (เลขจริงจาก JSON report ของ lane เอง ไม่ได้เดา)
 
 `api 645` (+9) · `packages/db 185` · **int lane 188/188** · typecheck ✓ lint ✓ depcruise PASS
+
+### A-5 🟡 ปิดแล้ว (2026-08-08) — เทสต์ที่ชื่อว่า "reveal เป็นเส้นเดียวที่ปล่อย TIN ได้" ไม่เคยดู body สักใบ
+
+`TAX_ID_RESPONSE_ALLOWLIST` มีแถวเดียวและ CI pin ความยาวไว้ · แต่เทสต์ที่ชื่อ
+*"★ reveal is the ONLY route allowed to emit a full TIN"* พิสูจน์แค่ว่า **ตาราง**มี 1 แถว และ route อื่นใน router
+ไม่อยู่ในตาราง — **มันไม่เคยดู response body สักใบ** ⇒ ถ้าวันหนึ่ง mapper ของ `GET /orgs/{orgId}` ใส่ `taxId` เต็มลงไป
+ไม่มี gate ไหนแดง เหลือแค่ spot check ที่เขียนมือ 2-3 จุด
+
+**แก้:** เพิ่มกฎ `tin-on-disallowed-route` เข้า `auditSweep` ของ leak kit ·
+seed **TIN คนละค่าให้ org A และ B** (ไม่งั้นกฎจะผ่านเพราะไม่เจออะไร ซึ่งคือ vacuity ที่ kit นี้สร้างมาเพื่อปฏิเสธ) ·
+และ **sweep route จริง** `GET /orgs/{orgId}` × 5 persona × 3 target — ไม่ใช่แค่ probe route
+
+> **จับคู่กับค่าที่ seed เอง ไม่ใช่ regex 13 หลัก** — regex แมตช์ epoch millis ด้วย ซึ่งเป็น flake ที่สวีตนี้เคยเจอมาแล้ว
+> (เลข 4 หลักที่โผล่ในกลาง trace id)
+
+**control ในเทสต์เดียวกัน:** Owner ต้องได้ 200 จริง และ body ต้องมี `taxProfile` + `taxIdMasked` จริง —
+ไม่งั้น "ไม่เจอ TIN" จะแปลว่า "ไม่เจออะไรเลย"
+
+**พิสูจน์:** ทำให้ `toTaxProfileView` คืน `taxId` เต็ม ⇒ **แดงทันที** ระบุ persona/route
+
+`api 645` · **int lane 189/189** · CI floor ของ `org-leak.kit` ปรับเป็น 20 · typecheck ✓ lint ✓
+
+---
+
+## ค้างส่งกลับ product — A-6 (ผมไม่ตัดสินเอง)
+
+**`MAX_ORGS_PER_USER` บังคับที่ `POST /organizations` เส้นเดียว** · `POST /invitations/accept` สร้าง membership
+โดยไม่นับ ⇒ ค่านี้**ไม่ใช่ invariant** มันเป็น **quota ของปุ่มสร้างร้าน**
+
+แต่ architecture §6.3 / D-029 / I-10 เขียนว่า "ผู้ใช้หนึ่งคนถือ active membership ได้ไม่เกิน 50"
+และปิด finding I-10 ด้วยคำว่า "fail-closed ที่ service" — **จริงครึ่งเดียว**
+
+ผลจริง (จำกัดแต่มี): คนที่ถูกเชิญเข้าเกิน 50 ร้าน จะ**สร้างร้านของตัวเองไม่ได้อีก** (`409 ORG_LIMIT_REACHED`)
+โดยไม่มีอะไรอธิบาย · ไม่ใช่ช่องที่ผู้โจมตีบังคับได้ (เหยื่อต้องกดรับเอง)
+
+**ต้องเลือกก่อนถึงจะแก้ได้ — เป็นคำถามเชิง product ไม่ใช่บั๊ก:**
+- ถ้าเจตนาคือ **invariant** → ต้องนับใน tx ของ accept ด้วย (raw count ผ่าน `lookup` เพราะ `ORG_PRISMA` ตอบข้าม org ไม่ได้) + คืน 409 ที่มีความหมาย
+- ถ้าเจตนาคือ **quota ของการสร้างร้านเท่านั้น** → แก้ถ้อยคำใน architecture §6.3 อย่าปล่อยให้เอกสารสอนว่ามันเป็น bound ของ membership

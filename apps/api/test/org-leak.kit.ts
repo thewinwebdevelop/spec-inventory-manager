@@ -45,6 +45,7 @@ import {
   traceIdOf,
   type HttpResponseLike,
 } from "./assertions.kit";
+import { isTaxIdAllowedOnRoute } from "../src/common/authz";
 import { createSeedKit, type SeedKit, type SeedPrismaClient, type SeededOrg } from "./f002-seed.kit";
 
 /** The org an outcome was addressed to. */
@@ -86,6 +87,7 @@ export interface SweepOutcome {
 export interface LeakFinding {
   readonly kind:
     | "leaked-to-outsider"
+    | "tin-on-disallowed-route"
     | "wrong-denial-code"
     | "member-denied"
     | "existence-oracle"
@@ -115,7 +117,22 @@ function codeOf(body: unknown): string | undefined {
  */
 export function auditSweep(
   outcomes: readonly SweepOutcome[],
-  options: { readonly foreignValues?: readonly string[] } = {},
+  options: {
+    readonly foreignValues?: readonly string[];
+    /**
+     * ★ A-5 — the SEEDED tax ids of the orgs under sweep.
+     *
+     * `TAX_ID_RESPONSE_ALLOWLIST` claims exactly one route may put a full TIN
+     * on the wire, and the test named after that claim only ever compared the
+     * TABLE with the ROUTER — it never looked at a response body. So a mapper
+     * that started emitting `taxId` would have satisfied every gate.
+     *
+     * Compared against the seeded VALUES rather than a 13-digit regex: a regex
+     * matches epoch millis, which is exactly the flakiness this suite already
+     * hit once (a `traceId` containing a 4-digit window).
+     */
+    readonly taxIds?: readonly string[];
+  } = {},
 ): LeakFinding[] {
   const findings: LeakFinding[] = [];
   const push = (kind: LeakFinding["kind"], message: string): void => {
@@ -184,6 +201,30 @@ export function auditSweep(
         push("foreign-email", `${where}: ${(err as Error).message}`);
       }
     }
+
+    // ★ A-5 — a full TIN may appear on exactly one route (§3.16). Everywhere
+    // else it is a leak, whoever the caller is: with `entityType: "personal"`
+    // those thirteen digits are somebody's national ID.
+    // `route` is `"GET /orgs/{orgId}"` — split rather than adding two more
+    // fields to every outcome for one check.
+    const [routeMethod, ...routeRest] = o.route.split(" ");
+    if (
+      options.taxIds &&
+      options.taxIds.length > 0 &&
+      !isTaxIdAllowedOnRoute(routeMethod, routeRest.join(" "))
+    ) {
+      const serialized = JSON.stringify(o.body ?? null);
+      for (const taxId of options.taxIds) {
+        if (serialized.includes(taxId)) {
+          push(
+            "tin-on-disallowed-route",
+            `${where}: the body contains a FULL tax id, and this route is not in ` +
+              `TAX_ID_RESPONSE_ALLOWLIST. The only route allowed to emit one is ` +
+              `POST /orgs/{orgId}/tax-profile/reveal (api-spec §3.16).`,
+          );
+        }
+      }
+    }
   }
 
   // I-8 — "not your org" and "no such org" must be indistinguishable.
@@ -224,7 +265,10 @@ export function auditSweep(
 /** Throw one readable error listing every finding, or return silently. */
 export function assertNoCrossOrgLeak(
   outcomes: readonly SweepOutcome[],
-  options: { readonly foreignValues?: readonly string[] } = {},
+  options: {
+    readonly foreignValues?: readonly string[];
+    readonly taxIds?: readonly string[];
+  } = {},
 ): void {
   const findings = auditSweep(outcomes, options);
   if (findings.length === 0) return;
@@ -252,6 +296,8 @@ export interface OrgLeakKit {
   persona(key: LeakPersonaKey): LeakPersona;
   /** Every persona's email except `except`'s — the "somebody else's PII" set. */
   foreignEmails(except: LeakPersonaKey): string[];
+  /** ★ A-5 — the seeded tax ids, for the TIN rule in `auditSweep`. */
+  readonly taxIds: readonly string[];
   sweep(req: SweepRequest): Promise<SweepOutcome[]>;
   cleanup(): Promise<void>;
 }
@@ -286,6 +332,27 @@ export async function createOrgLeakKit(
 
   const orgA = await kit.createOrg({ name: `leak-A-${Date.now().toString(36)}` });
   const orgB = await kit.createOrg({ name: `leak-B-${Date.now().toString(36)}` });
+
+  // ★ A-5 — both orgs DECLARE a tax id, so the sweep has something to look for.
+  // Without this the TIN rule below would pass by finding nothing on every
+  // route, which is the vacuity this whole kit is built to refuse.
+  //
+  // Distinct per run and per org: a shared constant would make "org A's TIN
+  // appeared in org B's response" indistinguishable from "the value is the
+  // same everywhere".
+  const stamp = Date.now().toString().slice(-6);
+  const taxIds = Object.freeze({
+    A: `1${stamp}00001`.padEnd(13, "0").slice(0, 13),
+    B: `2${stamp}00002`.padEnd(13, "0").slice(0, 13),
+  });
+  await prisma.organization.update({
+    where: { id: orgA.id },
+    data: { taxId: taxIds.A, vatRegistered: true },
+  });
+  await prisma.organization.update({
+    where: { id: orgB.id },
+    data: { taxId: taxIds.B, vatRegistered: false },
+  });
 
   const personas: LeakPersona[] = [];
 
@@ -400,6 +467,7 @@ export async function createOrgLeakKit(
       return found;
     },
     foreignEmails: (except) => personas.filter((p) => p.key !== except).map((p) => p.email),
+    taxIds: [taxIds.A, taxIds.B],
     sweep,
     cleanup: () => kit.cleanup(),
   };

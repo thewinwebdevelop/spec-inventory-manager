@@ -396,12 +396,12 @@ jobs:
             --require "test/members.e2e.int.test.ts=34" \
             --require "test/invitations.e2e.int.test.ts=21" \
             --require "test/invitations-redeem.e2e.int.test.ts=16" \
-            --require "test/org-leak.kit.int.test.ts=19" \
+            --require "test/org-leak.kit.int.test.ts=20" \
             --require "test/f002-seed.kit.int.test.ts=13" \
             --require "test/org-rate-limit.e2e.int.test.ts=6" \
             --require "test/openapi-parity.int.test.ts=5" \
             --require "test/response-header-policy.int.test.ts=4" \
-            --min-passed 183
+            --min-passed 184
       - name: dump api log on failure
         if: failure()
         run: cat /tmp/api.log || true

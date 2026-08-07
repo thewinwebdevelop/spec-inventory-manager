@@ -77,12 +77,42 @@ d("org-leak kit against the live guard chain", () => {
     for (const p of kit.personas) expect(p.accessToken.split(".")).toHaveLength(3);
   });
 
+  it("★ A-5 · no REAL route outside the allowlist puts a full TIN on the wire", async () => {
+    // Security review A-5. `TAX_ID_RESPONSE_ALLOWLIST` claims exactly one route
+    // may emit a full tax id, and the test named after that claim compared the
+    // TABLE with the ROUTER — it never looked at a response body. A mapper that
+    // started returning `taxId` would have satisfied every gate we had.
+    //
+    // This sweeps the REAL profile route, which is the one most likely to
+    // regress: it already returns `taxProfile`, and the difference between
+    // `taxIdMasked` and `taxId` is one word in a mapper.
+    //
+    // Matched against the SEEDED values, not a 13-digit regex — a regex also
+    // matches epoch millis, which is the exact flakiness this suite hit once
+    // before (a numeric window inside a trace id).
+    const outcomes = await kit.sweep({ method: "get", path: "/orgs/{orgId}" });
+    expect(outcomes).toHaveLength(15);
+    assertNoCrossOrgLeak(outcomes, { taxIds: kit.taxIds });
+
+    // The control: an Owner really was served, and the body really does carry
+    // the tax profile — otherwise "no TIN found" would mean "nothing found".
+    const served = outcomes.find((o) => o.persona === "activeInAOnly" && o.target === "A");
+    expect(served?.status).toBe(200);
+    expect(JSON.stringify(served?.body)).toContain("taxProfile");
+    // …masked, and only masked.
+    expect(JSON.stringify(served?.body)).toContain("taxIdMasked");
+    expect(JSON.stringify(served?.body)).not.toContain(kit.taxIds[0]);
+  });
+
   it("★ sweeps an @AnyActiveMember() route with no leak in any direction", async () => {
     const outcomes = await kit.sweep({ method: "get", path: "/__test__/probe/{orgId}" });
     // 5 personas × 3 targets — the shape of the evidence matters as much as the
     // verdict: a sweep that quietly fired 3 requests would still "pass".
     expect(outcomes).toHaveLength(15);
-    assertNoCrossOrgLeak(outcomes, { foreignValues: kit.foreignEmails("activeInAOnly") });
+    assertNoCrossOrgLeak(outcomes, {
+      foreignValues: kit.foreignEmails("activeInAOnly"),
+      taxIds: kit.taxIds,
+    });
 
     // And the control that makes the verdict mean something: the member DID get
     // served, and got THEIR org back — not the one they asked about.
