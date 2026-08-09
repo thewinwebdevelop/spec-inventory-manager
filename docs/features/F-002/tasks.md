@@ -82,7 +82,7 @@
 | T-002-W2 | ★ `ApiFailure` web: **`ORG_ACCESS_DENIED` ≠ `FORBIDDEN` ห้ามรวม handler** (พากลับหน้าเลือกร้าน+refetch vs อยู่หน้าเดิม+toast) · `409` ที่มี `details.reason='busy'` = ลองใหม่ได้ · client ที่ไม่รู้จัก `reason` ต้องยังทำงานถูก | `web.md §3.4` · `api-spec.md §4` · `ux-wireframe.md §12` | T-002-W1 | done | frontend (`org-access-denied` + `busy` เป็น kind แยก — ดูหมายเหตุท้ายไฟล์) |
 | T-002-W3 | จอ: เลือกร้าน (S1) · สร้างร้าน (S2) · AppShell+ตัวสลับร้าน (S3) | `ux-wireframe.md §2–4` · `ui.md §3` | T-002-W2 | done | frontend (+ `createUserApiClient` — tier ที่ W1 มองข้าม · ดูหมายเหตุท้ายไฟล์) |
 | T-002-W4 | จอ: ข้อมูลร้าน (S4) + ฟอร์มผู้เสียภาษี (S5) — **TIN เต็มมาจาก reveal เท่านั้น เก็บใน memory ห้าม persist** · Staff ไม่เห็นตัวเลขเลย | `ux-wireframe.md §5–6` | T-002-W3 | done | frontend (reveal = mutation ไม่ใช่ query · ดูหมายเหตุท้ายไฟล์) |
-| T-002-W5 | ★ จอ: สมาชิก (S6) + เชิญ (S7) + **แผ่นลิงก์แสดงครั้งเดียว (S8)** — ปุ่ม **"ออกลิงก์ใหม่"** + เตือนก่อนกด · **ห้าม hardcode "7 วัน"** ใช้ `expiresAt` · token เก็บใน memory เท่านั้น | `ux-wireframe.md §7–9` · D-027 | T-002-W3 | todo | — |
+| T-002-W5 | ★ จอ: สมาชิก (S6) + เชิญ (S7) + **แผ่นลิงก์แสดงครั้งเดียว (S8)** — ปุ่ม **"ออกลิงก์ใหม่"** + เตือนก่อนกด · **ห้าม hardcode "7 วัน"** ใช้ `expiresAt` · token เก็บใน memory เท่านั้น | `ux-wireframe.md §7–9` · D-027 | T-002-W3 | done | frontend (+ ปิดหนี้ W-13 Toast host · ดูหมายเหตุท้ายไฟล์) |
 | T-002-W6 | จอ: เปลี่ยนสิทธิ์ (S9) · ถอด/ออกจากร้าน (S10) · **`/invite` (S11) — ต้องดีบนเบราว์เซอร์มือถือ ~390px** · 403 สองแบบ (S12) · **ถอด token ออกจาก URL ด้วย `history.replaceState` ทันที** (I-6) | `ux-wireframe.md §10–12` | T-002-W5 | todo | — |
 
 ## frontend — mobile (Flutter)
@@ -720,3 +720,38 @@ count(Membership where userId = you, status=active)  ← เดิม
 
 **พิสูจน์:** RED (`expected 409 to be 201`) → GREEN → กลับไปนับ membership ⇒ **แดงทั้งชั้น int และ unit**
 · `api 645` · **int lane 190/190** · core-domain 384 · CI floor ปรับแล้ว
+
+## T-002-W5 — S6/S7/S8 + Toast host (2026-08-08)
+
+### ★ ลิงก์คำเชิญ = credential — รูป state คือตัวกันเอง (แบบเดียวกับ TIN reveal)
+
+token ที่อยู่บนแผ่นนี้คือ **bearer credential ของการเป็นสมาชิกร้าน** · server เก็บแค่ hash (D-018)
+⇒ **แผ่นนี้คือที่เดียวที่ token ดิบเคยมีอยู่** · `closed` **ไม่มี field ให้เก็บ token** — ปิดแล้วหายจริง ไม่ใช่แค่ไม่ถูก render
+
+**ด่านของ §9.1 คือ "น้ำหนักปุ่ม" ไม่ใช่ dialog** · user เคาะแล้วว่าไม่เอา confirm ตอนจะปิด (2 ชั้นถือว่ามากไป)
+สิ่งที่มาแทนคือ **ปุ่ม "เสร็จแล้ว" เป็น `secondary` จนกว่าจะกดคัดลอก แล้วจึงเป็น `primary`** —
+ทางออกจะเด่นก็ต่อเมื่อปลอดภัยแล้ว · เทสต์จึง assert **ตำแหน่ง DOM** ของแถบเตือนว่าอยู่**เหนือ**ปุ่มปิด
+(พิสูจน์แดง: ย้ายลงใต้ปุ่ม ⇒ แดงทันที) เพราะนั่นคือเหตุผลเดียวที่ตัด dialog ออกได้
+
+**clipboard ถูกปฏิเสธได้** (insecure origin / permission) ⇒ ลิงก์ยังอยู่บนจอและ select ได้ + helper บอกตรง ๆ —
+ล้มเหลวเงียบจะทำให้คนเชื่อว่าถือลิงก์อยู่ทั้งที่ไม่มี
+
+### สิ่งที่ contract สอนผมระหว่างทาง
+
+ผมออกแบบ `memberActionsFor` ให้รับ `targetCapabilities` — แต่ `MemberRow` จริงมี **`isMe` / `isOwner`
+ที่ server คำนวณให้แล้ว** และ comment ในสัญญาเขียนว่า *"Computed from CAPABILITIES, never from the role's name or key"*
+
+⇒ list **ไม่ publish `capabilities` ของเพื่อนร่วมงาน** โดยตั้งใจ (เหตุผลเดียวกับ `GET …/roles`) —
+การส่ง capability set ของทุกคนให้ทุกคนไปคำนวณเอง **คือ client-side authorization ที่ server เลี่ยงด้วยการตอบคำถามให้เอง**
+· ผมเปลี่ยน pure fn ให้รับ boolean ตามสัญญาแทนที่จะดึงข้อมูลที่ client ไม่ควรมี
+
+### หนี้ที่ปิด / เปิดใหม่
+
+| # | เรื่อง | สถานะ |
+|---|---|---|
+| W-13 | Toast host ระดับแอป | **ปิดแล้ว** — `ToastProvider` ใน `AppProviders` · `useToast()` คืน no-op นอก provider (ตรงข้ามกับ `useActiveOrg` ที่ throw — org หายคือบั๊ก routing ที่ต้องดัง แต่ toast host หายต้องไม่ทำให้การบันทึกล้ม) |
+| W-15 | `?invite=1&role=owner` (D-030) | ยังไม่อ่าน — `InviteDialog` รับ `defaultRoleId` แล้ว เหลือต่อ query param ที่ W6 |
+| W-17 | เมนู `⋯` ยัง render เป็น**ข้อความ** ไม่ใช่ dropdown/bottom-sheet · การกระทำ (เปลี่ยนสิทธิ์ S9 / ถอด S10 / ออกจากร้าน S10.3) ยังไม่มี dialog | W6 — mutation hook เขียนครบแล้วทั้ง 5 ตัว |
+| W-18 | "ดูคำเชิญที่หมดอายุ/ยกเลิกแล้ว" สลับ `?status=all` ได้ แต่ยังไม่มีปุ่ม "เชิญใหม่อีกครั้ง" ที่เติมอีเมล/สิทธิ์เดิม | W6 |
+
+`web 257 tests` (+21) · typecheck ✓ lint ✓ build ✓

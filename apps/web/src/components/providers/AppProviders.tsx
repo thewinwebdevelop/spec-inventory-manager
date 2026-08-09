@@ -13,12 +13,17 @@ import { useState, type ReactNode } from "react";
 import { QueryClientProvider } from "@tanstack/react-query";
 import { createAppQueryClient } from "../../lib/api/query-client";
 import { SessionProvider } from "../../lib/session/session-context";
+import { ToastProvider } from "./ToastProvider";
 
 export function AppProviders({ children }: { children: ReactNode }) {
   const [queryClient] = useState(createAppQueryClient);
   return (
     <QueryClientProvider client={queryClient}>
-      <SessionProvider>{children}</SessionProvider>
+      <SessionProvider>
+        {/* Outside every screen, so a confirmation survives the dialog that
+            raised it (debt W-13). */}
+        <ToastProvider>{children}</ToastProvider>
+      </SessionProvider>
     </QueryClientProvider>
   );
 }

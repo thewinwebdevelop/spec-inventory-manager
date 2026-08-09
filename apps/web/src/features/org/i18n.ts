@@ -201,3 +201,67 @@ export const taxFormTh = {
     generic: "บันทึกไม่สำเร็จ กรุณาลองใหม่อีกครั้ง",
   },
 } as const;
+
+/** S6/S7/S8 copy (ux-wireframe §7–§9). Same rule: verbatim from `ux`. */
+export const membersTh = {
+  title: "สมาชิก",
+  invite: "เชิญสมาชิก",
+  pendingSection: (n: number) => `คำเชิญที่รอตอบรับ (${n})`,
+  membersSection: (n: number) => `สมาชิกในร้าน (${n})`,
+  showHistoricInvitations: "ดูคำเชิญที่หมดอายุ/ยกเลิกแล้ว",
+  showRevokedMembers: "แสดงสมาชิกที่ถูกถอดออกแล้ว",
+  you: "(คุณ)",
+  statusActive: "ใช้งานอยู่",
+  statusRevoked: "ถูกถอดแล้ว",
+  reissue: "ออกลิงก์ใหม่",
+  cancelInvitation: "ยกเลิกคำเชิญ",
+  inviteAgain: "เชิญใหม่อีกครั้ง",
+  changeRole: "เปลี่ยนสิทธิ์",
+  removeFromOrg: "ถอดออกจากร้าน",
+  leaveOrg: "ออกจากร้านนี้",
+  linkValidUntil: (when: string) => `ลิงก์ใช้ได้ถึง ${when}`,
+  /** §7 — C-1 explained rather than a disabled item. */
+  ownerOnlyNotice: "เฉพาะเจ้าของร้านเท่านั้นที่แก้สิทธิ์ของเจ้าของร้านคนอื่นได้",
+  /** §7 (D-028/I-7) — a soft flag, never an accusation. */
+  acceptedAfterInviteFlag:
+    "บัญชีที่กดรับถูกสร้างขึ้นหลังจากออกลิงก์ ตรวจสอบว่าเป็นคนที่คุณตั้งใจเชิญ",
+  empty: {
+    members: "ยังไม่มีสมาชิกคนอื่นในร้านนี้",
+  },
+  error: "โหลดรายชื่อสมาชิกไม่สำเร็จ",
+} as const;
+
+/** S7 — the invite dialog. */
+export const inviteFormTh = {
+  title: "เชิญสมาชิก",
+  emailLabel: "อีเมลของคนที่จะเชิญ",
+  emailPlaceholder: "เช่น malee@shop.com",
+  roleLabel: "สิทธิ์ในร้านนี้",
+  submit: "สร้างลิงก์คำเชิญ",
+  submitLoading: "กำลังสร้างลิงก์...",
+  cancel: "ยกเลิก",
+  error: {
+    email: "รูปแบบอีเมลไม่ถูกต้อง",
+    role: "เลือกสิทธิ์ที่จะให้",
+    alreadyMember: "คนนี้เป็นสมาชิกของร้านอยู่แล้ว",
+    /** D-027 — the error that must offer a next step, not a dead end. */
+    pending: "มีคำเชิญของอีเมลนี้ค้างอยู่แล้ว — ออกลิงก์ใหม่หรือยกเลิกคำเชิญเดิมก่อน",
+    limitReached: "คำเชิญที่รอตอบรับเต็มแล้ว ยกเลิกใบที่ไม่ใช้ก่อนแล้วลองใหม่",
+    generic: "สร้างคำเชิญไม่สำเร็จ กรุณาลองใหม่อีกครั้ง",
+  },
+} as const;
+
+/** S8 — the one-time link panel (§9.1, D-027). */
+export const copyLinkTh = {
+  title: "ลิงก์คำเชิญพร้อมแล้ว",
+  description: (email: string) =>
+    `ส่งลิงก์นี้ให้ ${email} ทางแชต (เช่น LINE) — ระบบไม่ได้ส่งอีเมลให้อัตโนมัติ`,
+  copy: "คัดลอกลิงก์",
+  copied: "คัดลอกแล้ว",
+  copiedToast: "คัดลอกลิงก์แล้ว",
+  /** §9.1 — the ONE guard rail, in warning tone, above the close button. */
+  onceOnly:
+    "ลิงก์นี้แสดงครั้งเดียว — ปิดหน้านี้แล้วเปิดดูซ้ำไม่ได้ ถ้าทำลิงก์หาย กด \"ออกลิงก์ใหม่\" ที่รายการคำเชิญ",
+  close: "เสร็จแล้ว",
+  copyFailed: "คัดลอกอัตโนมัติไม่สำเร็จ — กดค้างที่ลิงก์เพื่อคัดลอกเอง",
+} as const;
