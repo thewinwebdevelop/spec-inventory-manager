@@ -9,6 +9,7 @@
  * fetching it again.
  */
 import { useState } from "react";
+import { useSearchParams } from "next/navigation";
 import { useQueryClient } from "@tanstack/react-query";
 import Link from "next/link";
 import { useActiveOrg } from "../../../lib/org/org-context";
@@ -18,6 +19,7 @@ import { orgProfileTh } from "../i18n";
 import { TaxProfileCard } from "./TaxProfileCard";
 import { TaxProfileDialog } from "./TaxProfileDialog";
 import { RenameOrgDialog } from "./RenameOrgDialog";
+import { LeaveOrgDialog } from "./LeaveOrgDialog";
 import { CAPABILITY_MANAGE_MEMBERS } from "./AppShell";
 
 export function OrgProfileScreen() {
@@ -25,6 +27,9 @@ export function OrgProfileScreen() {
   const queryClient = useQueryClient();
   const [editingTax, setEditingTax] = useState(false);
   const [renaming, setRenaming] = useState(false);
+  // W-12 closed: S4's "ออกจากร้านนี้" link lands back on this route with
+  // `?leave=1`, and the confirm opens here — where Staff can reach it (D-029).
+  const [leaving, setLeaving] = useState(useSearchParams().get("leave") === "1");
 
   const canEditSettings = org.capabilities.has(CAPABILITY_MANAGE_ORG_SETTINGS);
   const canManageMembers = org.capabilities.has(CAPABILITY_MANAGE_MEMBERS);
@@ -117,12 +122,13 @@ export function OrgProfileScreen() {
           open the members screen. That is precisely why the affordance lives
           here and not there, so the link must stay on THIS route: pointing it
           at the members screen would send a Staff member to a 403 for an
-          action they are entitled to take. W6 renders the confirm dialog
-          (§10.3) off this `?leave=1`. */}
-      <Link href={`/o/${org.orgId}/settings/org?leave=1`} className="text-body-sm">
+          action they are entitled to take. The confirm (§10.3) opens right
+          here; `?leave=1` still works as a deep link into it. */}
+      <button type="button" className="text-body-sm underline" onClick={() => setLeaving(true)}>
         {orgProfileTh.leaveOrg}
-      </Link>
+      </button>
 
+      {leaving && <LeaveOrgDialog onClose={() => setLeaving(false)} />}
       {renaming && <RenameOrgDialog currentName={org.name} onClose={() => setRenaming(false)} />}
       {editingTax && (
         <TaxProfileDialog profile={org.profile} onClose={() => setEditingTax(false)} />

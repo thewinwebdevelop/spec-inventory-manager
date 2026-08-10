@@ -83,7 +83,7 @@
 | T-002-W3 | จอ: เลือกร้าน (S1) · สร้างร้าน (S2) · AppShell+ตัวสลับร้าน (S3) | `ux-wireframe.md §2–4` · `ui.md §3` | T-002-W2 | done | frontend (+ `createUserApiClient` — tier ที่ W1 มองข้าม · ดูหมายเหตุท้ายไฟล์) |
 | T-002-W4 | จอ: ข้อมูลร้าน (S4) + ฟอร์มผู้เสียภาษี (S5) — **TIN เต็มมาจาก reveal เท่านั้น เก็บใน memory ห้าม persist** · Staff ไม่เห็นตัวเลขเลย | `ux-wireframe.md §5–6` | T-002-W3 | done | frontend (reveal = mutation ไม่ใช่ query · ดูหมายเหตุท้ายไฟล์) |
 | T-002-W5 | ★ จอ: สมาชิก (S6) + เชิญ (S7) + **แผ่นลิงก์แสดงครั้งเดียว (S8)** — ปุ่ม **"ออกลิงก์ใหม่"** + เตือนก่อนกด · **ห้าม hardcode "7 วัน"** ใช้ `expiresAt` · token เก็บใน memory เท่านั้น | `ux-wireframe.md §7–9` · D-027 | T-002-W3 | done | frontend (+ ปิดหนี้ W-13 Toast host · ดูหมายเหตุท้ายไฟล์) |
-| T-002-W6 | จอ: เปลี่ยนสิทธิ์ (S9) · ถอด/ออกจากร้าน (S10) · **`/invite` (S11) — ต้องดีบนเบราว์เซอร์มือถือ ~390px** · 403 สองแบบ (S12) · **ถอด token ออกจาก URL ด้วย `history.replaceState` ทันที** (I-6) | `ux-wireframe.md §10–12` | T-002-W5 | todo | — |
+| T-002-W6 | จอ: เปลี่ยนสิทธิ์ (S9) · ถอด/ออกจากร้าน (S10) · **`/invite` (S11) — ต้องดีบนเบราว์เซอร์มือถือ ~390px** · 403 สองแบบ (S12) · **ถอด token ออกจาก URL ด้วย `history.replaceState` ทันที** (I-6) | `ux-wireframe.md §10–12` | T-002-W5 | done | frontend (★ I-6 token-stripping · ดูหมายเหตุท้ายไฟล์) |
 
 ## frontend — mobile (Flutter)
 
@@ -755,3 +755,51 @@ token ที่อยู่บนแผ่นนี้คือ **bearer credent
 | W-18 | "ดูคำเชิญที่หมดอายุ/ยกเลิกแล้ว" สลับ `?status=all` ได้ แต่ยังไม่มีปุ่ม "เชิญใหม่อีกครั้ง" ที่เติมอีเมล/สิทธิ์เดิม | W6 |
 
 `web 257 tests` (+21) · typecheck ✓ lint ✓ build ✓
+
+## T-002-W6 — `/invite` ★ + S9/S10/S12 (2026-08-08)
+
+### ★ token ออกจาก URL **ก่อน paint** ไม่ใช่หลัง
+
+`useLayoutEffect` ไม่ใช่ `useEffect` · `useEffect` รันหลัง paint ⇒ token จะอยู่บน address bar อย่างน้อยหนึ่งเฟรมที่ render จริง
+— นานพอสำหรับ screenshot, screenshare, และ error reporter ที่เก็บ `location.href` ตอน mount
+
+**`replaceState` ไม่ใช่ `pushState`** — push จะทิ้ง entry ที่มี token ไว้ใน history ห่างจากปุ่ม Back แค่ครั้งเดียว ซึ่งตรงข้ามกับจุดประสงค์
+
+**ทำไม URL เป็นที่ที่แย่ที่สุดสำหรับ credential** (เหตุผลจริงทั้งหมด ไม่ใช่ทฤษฎี): `Referer` ของทุกลิงก์/resource ที่หน้านี้โหลด ·
+history ที่ sync ข้ามเครื่องโดย default · address bar ตอน screenshare · access log ถ้าวันหนึ่ง server-render ·
+analytics/error reporter ที่เก็บ `location.href` เป็นนิสัย
+
+⇒ endpoint ทั้งสองเป็น **POST** เพื่อให้ token เดินทางใน body (สัญญาเขียนเหตุผลนี้ไว้เอง) · เทสต์ assert ว่า
+**request URL ไม่มี token แต่ body มี**
+
+**preview เป็น mutation ไม่ใช่ query** — เหตุผลเดียวกับ TIN reveal: query cache จะเก็บ token ไว้ และ
+`refetchOnWindowFocus` จะยิงซ้ำทุกครั้งที่สลับแท็บ กิน rate limit ฟรี ๆ
+
+**ไม่ auto-accept แม้ล็อกอินอยู่** (§11.1) — คนต้อง**เห็น**ว่ากำลังเข้าร้านอะไร ในสิทธิ์อะไร ·
+ลิงก์ที่พาเข้าองค์กรทันทีที่เปิด คือลิงก์ที่ส่งให้คนที่ไม่เคยอยากเข้าได้
+
+### ตารางที่แยกเป็น pure function เพราะ "ผิดแล้วมองไม่เห็น"
+
+**`toInviteError` (§11.4)** — 10 แถว 9 แถวต่างกันแค่ error code · **สอง 409 ที่พาไปคนละที่**:
+`ALREADY_MEMBER` → เข้าร้านเลย · `INVITATION_SUPERSEDED` → กลับไปขอลิงก์ใหม่ · status เดียวกันแยกไม่ได้
+· ทุกแถว**มีทางไปต่อ** เพราะคนอ่านไม่ได้ทำอะไรผิด เขาแค่กดลิงก์ที่มีคนส่งให้
+
+**`toLeaveOrgOutcome` (§10.3)** — 4 ผลลัพธ์ 3 พฤติกรรม:
+`LAST_OWNER`/`busy` = กล่องไม่ปิด (มีอะไรให้ทำ) · `403` = **ปิดกล่อง** เพราะแปลว่าออกไปแล้ว ไม่ใช่ error ให้แก้ ·
+ที่เหลือ = retry ในกล่อง · **busy เช็คก่อน LAST_OWNER** ตาม §1.4 — lock contention ที่รายงานว่า
+"คุณเป็นเจ้าของคนเดียว" จะส่งคนไปตามหาเจ้าของร่วมที่เขามีอยู่แล้ว
+· ลิงก์ "ไปหน้าสมาชิก" โผล่เฉพาะคนที่มี `manage_members` — ส่งพนักงานไปเจอ 403 แย่กว่าไม่ให้ลิงก์
+
+### หนี้ที่ปิด
+
+| # | เรื่อง |
+|---|---|
+| W-12 | `?leave=1` — ปิดแล้ว · confirm §10.3 เปิดบน S4 ตรงที่พนักงานเข้าถึงได้ (D-029) |
+| W-16 (บางส่วน) | `ForbiddenPanel` (S12ข) มีแล้ว — เต็มพื้นที่เนื้อหา nav/switcher ยังอยู่ · `RouteGuard` เต็มยังเป็นของ F-003 |
+
+### ยังค้าง (บันทึกตามจริง)
+
+W-15 (`?invite=1&role=owner` ยังไม่อ่าน) · W-17 (เมนู `⋯` ยังเป็นข้อความ ยังไม่มี dialog S9/S10 ของการเปลี่ยนสิทธิ์/ถอด) ·
+W-18 ("เชิญใหม่อีกครั้ง") — mutation hook พร้อมครบแล้วทั้ง 5 ตัว เหลือแต่ชั้น dialog
+
+`web 284 tests` (+27) · typecheck ✓ lint ✓ build ✓
