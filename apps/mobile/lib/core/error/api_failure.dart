@@ -19,6 +19,12 @@ import '../l10n/l10n.dart';
 /// `switch` over this sealed class is compiler-exhaustive — see
 /// [failureMessage] — a new failure case can't be silently unhandled
 /// anywhere it's switched over.
+/// api-spec §4 — the one 403 code that means "not a member of this shop".
+const String orgAccessDeniedCode = 'ORG_ACCESS_DENIED';
+
+/// api-spec §1 — `details.reason` marking a 409 as temporary lock contention.
+const String busyReason = 'busy';
+
 sealed class ApiFailure implements Exception {
   const ApiFailure();
 }
@@ -52,6 +58,44 @@ class AuthExpiredFailure extends ApiFailure {
 class ForbiddenFailure extends ApiFailure {
   const ForbiddenFailure({this.code});
   final String? code;
+}
+
+/// ★ T-002-M2 — `403 ORG_ACCESS_DENIED`: not an active member of THIS shop
+/// (removed, never was, or the shop does not exist — api-spec §4).
+///
+/// Its OWN case, not `ForbiddenFailure(code: 'ORG_ACCESS_DENIED')`, because
+/// the two demand opposite behaviour: this one drops the active shop and
+/// sends the person to the picker; [ForbiddenFailure] keeps them where they
+/// are and shows a message. A reader who forgets to check the code gets one
+/// of them at random, and the wrong pick is the destructive direction —
+/// throwing somebody out of a shop they are still a member of.
+///
+/// Separate cases make the omission a compile error instead, because
+/// [failureMessage]'s `switch` is exhaustive. Same decision as the web
+/// client's `ApiFailure` union: "ลืมแล้วพัง ไม่ใช่ลืมแล้วรั่ว".
+///
+/// ⛔ Never sign the person out here. A session is not tied to a shop
+/// (D-027) — `SessionController.orgAccessDenied()` drops the org and keeps
+/// the session.
+class OrgAccessDeniedFailure extends ApiFailure {
+  const OrgAccessDeniedFailure();
+}
+
+/// ★ T-002-M2 — `409 CONFLICT` + `details.reason == "busy"`: the shop is
+/// mid-write on another request and this one lost the row lock
+/// (api-spec §1 "Lock contention", architecture §5.2).
+///
+/// Its own case rather than a flag on [ConflictFailure] because
+/// ux-wireframe §1.4 requires it to be checked BEFORE any screen's own 409
+/// copy — a cancel-invitation screen must not report "คำเชิญนี้ไม่ได้รออยู่แล้ว"
+/// for what is actually a temporary collision. A separate case makes that
+/// ordering structural.
+///
+/// The wire is unchanged: it is still a plain 409, so api-spec §1's promise
+/// that a client which does not recognise `reason` still behaves correctly
+/// holds. Only our taxonomy names the case.
+class BusyFailure extends ApiFailure {
+  const BusyFailure();
 }
 
 /// 403 — tier/entitlement (not RBAC). `feature` carries the entitlement
@@ -109,7 +153,14 @@ class ForceUpdateFailure extends ApiFailure {
 /// today stays [ForbiddenFailure], the safer of the two UX treatments
 /// (hide/disable) rather than [EntitlementFailure]'s "show + upsell" for a
 /// code that might not actually mean "wrong tier".
-ApiFailure mapStatusToApiFailure(int? status, {String? code, int? retryAfterSeconds}) {
+ApiFailure mapStatusToApiFailure(
+  int? status, {
+  String? code,
+  int? retryAfterSeconds,
+  /// `error.details.reason` — today only `"busy"` (api-spec §1). Passed in
+  /// rather than sniffed here so this file stays pure Dart.
+  String? reason,
+}) {
   if (status == null) return const NetworkFailure();
   switch (status) {
     case 429:
@@ -117,14 +168,23 @@ ApiFailure mapStatusToApiFailure(int? status, {String? code, int? retryAfterSeco
     case 401:
       return AuthExpiredFailure(code: code);
     case 403:
+      // ★ Checked FIRST, and by exact code: this is the one 403 that means
+      // "you are not in this shop" rather than "you may not do this".
+      if (code == orgAccessDeniedCode) return const OrgAccessDeniedFailure();
       if (code != null && (code.startsWith('ENTITLEMENT') || code.startsWith('TIER'))) {
         return EntitlementFailure(feature: code);
       }
+      // An unlabelled 403 stays Forbidden — the NON-destructive reading.
+      // Guessing OrgAccessDenied would evict a member on any 403 this build
+      // has not seen before.
       return ForbiddenFailure(code: code);
     case 400:
     case 422:
       return ValidationFailure(code: code);
     case 409:
+      // ★ Before the generic conflict, per ux-wireframe §1.4's explicit
+      // ordering rule.
+      if (reason == busyReason) return const BusyFailure();
       return ConflictFailure(code: code);
     case 404:
       return const NotFoundFailure();
@@ -152,9 +212,11 @@ String failureMessage(AppLocalizations t, ApiFailure f) => switch (f) {
       NetworkFailure() => t.errorNetwork,
       ThrottledFailure() => t.errorThrottled,
       AuthExpiredFailure() => t.authSessionExpiredToast,
+      OrgAccessDeniedFailure() => t.errorOrgAccessDenied,
       ForbiddenFailure() => t.errorForbidden,
       EntitlementFailure() => t.errorEntitlement,
       ValidationFailure() => t.errorValidation,
+      BusyFailure() => t.errorBusy,
       ConflictFailure() => t.errorConflict,
       NotFoundFailure() => t.errorNotFound,
       ServerFailure() => t.errorServer,

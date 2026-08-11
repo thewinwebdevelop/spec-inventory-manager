@@ -90,7 +90,7 @@
 | ID | งาน | ref → target | deps | status | updated_by |
 |----|-----|--------------|------|--------|------------|
 | T-002-M1 | ★ `core/session` + `orgDioProvider` + **`X-Organization-Id` เข้า interceptor chain** (seam comment วางไว้แล้ว) | `docs/architecture/mobile.md §3.2` · forward-commitments แถว F-002/F-003 | T-002-21, T-002-X1 | done | frontend (ดูหมายเหตุท้ายไฟล์) |
-| T-002-M2 | ★ `ApiFailure` mobile: แยก `ORG_ACCESS_DENIED` / `FORBIDDEN` + `409 busy` (กติกาเดียวกับ web) | `mobile.md §3.4` · `api-spec.md §4` | T-002-M1 | todo | — |
+| T-002-M2 | ★ `ApiFailure` mobile: แยก `ORG_ACCESS_DENIED` / `FORBIDDEN` + `409 busy` (กติกาเดียวกับ web) | `mobile.md §3.4` · `api-spec.md §4` | T-002-M1 | done | frontend (+ `SessionFailureListener` — ดูหมายเหตุ) |
 | T-002-M3 | จอมือถือ: เลือกร้าน · สร้างร้าน · ตัวสลับร้านใน AppBar · สมาชิก (อ่าน+เชิญพื้นฐาน) · `/invite` deep link | `ux-wireframe.md §13` (ความต่าง web↔mobile) | T-002-M2 | todo | — |
 
 ## qa
@@ -848,3 +848,33 @@ invitation preview/accept — **สี่เส้นนี้มีอยู่
 **refresh policy สองชุดในแอปเดียว** — ซึ่งคือวิธีที่มันจะ drift
 
 `mobile 240 tests` (+11) · `flutter analyze` ✓ · boundary gate ✓ (58 ไฟล์)
+
+## T-002-M2 — `ApiFailure` mobile: สอง 403 และสอง 409 (2026-08-11)
+
+ตัดสินใจเหมือน web ทุกข้อ เพราะเป็นกฎเดียวกัน — แต่ mobile มี sealed class อยู่แล้ว
+⇒ **เพิ่ม case ใหม่ทำให้ `switch` ที่ exhaustive ทุกที่ต้องตอบคำถามใหม่ทันที** (คอมไพเลอร์เป็นคนถาม ไม่ใช่ review)
+
+| เพิ่ม | แทนที่จะเป็น | เพราะ |
+|---|---|---|
+| `OrgAccessDeniedFailure` | `ForbiddenFailure(code: 'ORG_ACCESS_DENIED')` | สองอันนี้ทำ**ตรงข้ามกัน** — อันหนึ่งทิ้ง active org ไปหน้าเลือกร้าน อีกอันอยู่ที่เดิม · คนที่ลืมอ่าน `code` ได้พฤติกรรมสุ่ม และฝั่งที่ผิดคือฝั่งเตะสมาชิกออกจากร้านที่เขายังอยู่ |
+| `BusyFailure` | flag บน `ConflictFailure` | §1.4 บังคับให้เช็คก่อน copy 409 ของจอนั้นเสมอ · แยก type = ลำดับเป็นโครงสร้าง · **wire ไม่เปลี่ยน** (409 ยังเป็น 409) |
+
+**403 ที่ไม่รู้จัก → `ForbiddenFailure`** เสมอ (การอ่านแบบไม่ทำลาย) — เดาเป็น OrgAccessDenied จะเตะคนออกจากร้าน
+ทุกครั้งที่เจอ 403 ที่ build นี้ไม่เคยเห็น
+
+### สิ่งที่ต้องทำเพิ่ม ไม่งั้น type ใหม่ไม่มีความหมาย
+
+mapper เดิม**ไม่เคยอ่าน `details` เลย** ⇒ เพิ่ม `extractErrorReason` · ถ้าไม่ทำ `BusyFailure` จะเป็น type ที่ไม่มีวันถูกสร้าง
+
+และ **`SessionFailureListener`** — ถ้าไม่มี `OrgAccessDeniedFailure` จะเป็น type ที่ไม่มีใครตอบสนอง
+คือรายการใน taxonomy ที่อ่านแล้วเหมือนการบังคับใช้แต่ไม่เปลี่ยนอะไรเลย (รูปแบบเดียวกับที่เจอ 6 ครั้งใน security review)
+· มัน list **ทุก case แบบไม่มี `default`** ⇒ failure ชนิดใหม่ต้องถูกถามว่า "ย้าย session ไหม" ด้วย
+
+> **การขยายรายการนี้คือวิธีที่ "แอปเด้งออกเฉย ๆ" เกิดขึ้น** — `ForbiddenFailure` ที่หลุดเข้ามาจะทำให้คนถูก logout
+> เพราะเปิดหน้าที่ขาด capability เดียว · มีเทสต์ ★ คุมว่า failure ธรรมดา 8 ชนิดไม่แตะ session เลย
+
+**พิสูจน์:** ยุบ `OrgAccessDenied` กลับเข้า `Forbidden` ⇒ แดง 2 · ตัดเช็ค `busy` ⇒ แดง 2 ·
+เทสต์ยิงจาก **wire envelope จริง** ผ่าน `mapDioExceptionToApiFailure` ไม่ใช่เรียก pure mapper ด้วยอาร์กิวเมนต์ที่ปั้นเอง
+(บทเรียนจาก `describeOrgBusy` ที่รอดเทสต์ตัวเองมาได้เพราะเทสต์สร้าง input ของ classifier แทนที่จะสร้าง response ที่มันต้องแปล)
+
+`mobile 257 tests` (+17) · analyze ✓ · boundary gate ✓ (59 ไฟล์)

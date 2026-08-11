@@ -22,6 +22,7 @@ ApiFailure mapDioExceptionToApiFailure(DioException e) {
     response.statusCode,
     code: extractErrorCode(response.data),
     retryAfterSeconds: extractRetryAfterSeconds(response.headers.map),
+    reason: extractErrorReason(response.data),
   );
 }
 
@@ -32,6 +33,31 @@ int? extractRetryAfterSeconds(Map<String, List<String>> headers) {
   final values = headers['retry-after'] ?? headers['Retry-After'];
   if (values == null || values.isEmpty) return null;
   return int.tryParse(values.first);
+}
+
+/// ★ T-002-M2 — `error.details.reason` from the wire envelope.
+///
+/// Today the only value is `"busy"` (api-spec §1's lock-contention row), and
+/// it arrives inside `details` — a field this mapper previously ignored
+/// entirely, which is why a 409 that was really "the shop is mid-write" was
+/// indistinguishable from "the invitation is not pending".
+///
+/// Same defensive shape as [extractErrorCode]: a malformed or absent body
+/// (a proxy error page, a CDN interstitial) returns null rather than
+/// throwing, so an unreadable response degrades to the generic conflict
+/// rather than to a crash.
+String? extractErrorReason(Object? data) {
+  if (data is Map) {
+    final error = data['error'];
+    if (error is Map) {
+      final details = error['details'];
+      if (details is Map) {
+        final reason = details['reason'];
+        if (reason is String) return reason;
+      }
+    }
+  }
+  return null;
 }
 
 /// Machine-readable `error.code` from the wire envelope

@@ -1,7 +1,6 @@
 {
   "@@locale": "th",
   "@@last_modified": "2026-07-11",
-
   "authSignupTitle": "สมัครใช้งาน OmniStock",
   "authSignupSubtitle": "เริ่มต้นจัดการสต๊อกและบัญชีร้านค้าของคุณ",
   "authSignupEmailLabel": "อีเมล",
@@ -19,7 +18,6 @@
   "authSignupErrorEmailTaken": "อีเมลนี้มีผู้ใช้งานแล้ว",
   "authSignupErrorEmailTakenLoginLink": "เข้าสู่ระบบ",
   "authSignupErrorGeneric": "เกิดข้อผิดพลาด กรุณาลองใหม่อีกครั้ง",
-
   "authLoginTitle": "เข้าสู่ระบบ",
   "authLoginEmailLabel": "อีเมล",
   "authLoginPasswordLabel": "รหัสผ่าน",
@@ -29,34 +27,39 @@
   "authLoginLinkToSignup": "ยังไม่มีบัญชี? สมัครใช้งาน",
   "authLoginErrorInvalidCredentials": "อีเมลหรือรหัสผ่านไม่ถูกต้อง",
   "authLoginErrorGeneric": "เกิดข้อผิดพลาด กรุณาลองใหม่อีกครั้ง",
-
   "authThrottleBannerLong": "ลองเข้าสู่ระบบถี่เกินไป กรุณารอสักครู่แล้วลองใหม่ · เหลือ {mm}:{ss} นาที",
   "@authThrottleBannerLong": {
     "placeholders": {
-      "mm": { "type": "String" },
-      "ss": { "type": "String" }
+      "mm": {
+        "type": "String"
+      },
+      "ss": {
+        "type": "String"
+      }
     }
   },
   "authThrottleBannerShort": "รอสักครู่แล้วลองใหม่ · เหลือ {n} วินาที",
   "@authThrottleBannerShort": {
     "placeholders": {
-      "n": { "type": "int" }
+      "n": {
+        "type": "int"
+      }
     }
   },
   "authThrottleHelper": "เพื่อความปลอดภัยของบัญชีคุณ ระบบจะให้ลองใหม่ได้เองเมื่อครบเวลา",
-
   "authHelpTitle": "ลืมรหัสผ่าน?",
   "authHelpBody": "ตอนนี้ระบบยังไม่รองรับการขอรีเซ็ตรหัสผ่านด้วยตัวเอง กรุณาติดต่อเจ้าของร้าน/ผู้ดูแลระบบ (Owner/Admin) ในทีมของคุณ เพื่อให้ตั้งรหัสผ่านใหม่ให้",
   "authHelpBodySoloOwner": "หากคุณเป็นเจ้าของร้านเพียงคนเดียวและลืมรหัสผ่าน กรุณารอสักครู่แล้วลองพิมพ์รหัสผ่านที่คิดว่าถูกต้องอีกครั้ง (ระบบจะไม่ล็อกบัญชีคุณถาวร)",
   "authHelpBackToLogin": "กลับไปเข้าสู่ระบบ",
-
   "authSessionsTitle": "อุปกรณ์ที่เข้าสู่ระบบ",
   "authSessionsSubtitle": "รายการอุปกรณ์ที่กำลังเข้าใช้งานบัญชีของคุณอยู่",
   "authSessionsBadgeCurrent": "อุปกรณ์นี้",
   "authSessionsLastActive": "ใช้งานล่าสุด: {relativeTime}",
   "@authSessionsLastActive": {
     "placeholders": {
-      "relativeTime": { "type": "String" }
+      "relativeTime": {
+        "type": "String"
+      }
     }
   },
   "authSessionsDeviceUnknown": "อุปกรณ์ไม่ทราบชื่อ",
@@ -68,7 +71,6 @@
   "authSessionsToastDeviceLogoutFailed": "ออกจากอุปกรณ์ไม่สำเร็จ กรุณาลองใหม่",
   "authSessionsErrorLogoutAllFailed": "ออกจากระบบทุกอุปกรณ์ไม่สำเร็จ ลองใหม่อีกครั้ง",
   "authSessionsMobileCannotIdentifyCurrent": "อุปกรณ์นี้ไม่สามารถระบุตัวเองในรายการด้านล่างได้ — หากไม่แน่ใจว่าแถวไหนคืออุปกรณ์ที่ถืออยู่ กรุณาระวังก่อนกด \"ออกจากอุปกรณ์นี้\"",
-
   "authConfirmLogoutDeviceTitle": "ออกจากอุปกรณ์นี้?",
   "authConfirmLogoutDeviceBody": "อุปกรณ์นี้จะต้องเข้าสู่ระบบใหม่อีกครั้ง",
   "authConfirmLogoutDeviceCancel": "ยกเลิก",
@@ -78,9 +80,7 @@
   "authConfirmLogoutAllCancel": "ยกเลิก",
   "authConfirmLogoutAllConfirm": "ออกจากระบบทุกอุปกรณ์",
   "authConfirmLogoutAllToast": "ออกจากระบบทุกอุปกรณ์แล้ว",
-
   "authSessionExpiredToast": "เซสชันหมดอายุ กรุณาเข้าสู่ระบบอีกครั้ง",
-
   "authChangePasswordSectionTitle": "เปลี่ยนรหัสผ่าน",
   "authChangePasswordCurrentLabel": "รหัสผ่านปัจจุบัน",
   "authChangePasswordNewLabel": "รหัสผ่านใหม่",
@@ -93,18 +93,15 @@
   "authChangePasswordErrorPasswordBreached": "รหัสผ่านนี้ถูกใช้งานทั่วไปมาก ไม่ปลอดภัย ลองตั้งรหัสผ่านที่คาดเดายากขึ้น",
   "authChangePasswordErrorGeneric": "เกิดข้อผิดพลาด กรุณาลองใหม่อีกครั้ง",
   "authChangePasswordSuccessToast": "เปลี่ยนรหัสผ่านแล้ว · อุปกรณ์อื่นถูกออกจากระบบเพื่อความปลอดภัย",
-
   "commonPasswordShow": "แสดงรหัสผ่าน",
   "commonPasswordHide": "ซ่อนรหัสผ่าน",
   "commonRetry": "ลองใหม่",
   "commonCancel": "ยกเลิก",
-
   "authBootstrapLoading": "กำลังตรวจสอบสถานะการเข้าสู่ระบบ...",
   "authBootstrapOfflineTitle": "เชื่อมต่อไม่สำเร็จ",
   "authBootstrapOfflineBody": "ตรวจสอบอินเทอร์เน็ตแล้วลองใหม่อีกครั้ง บัญชีของคุณยังเข้าสู่ระบบอยู่",
   "authBootstrapOfflineRetry": "ลองใหม่",
   "authBootstrapOfflineUseLoginInstead": "เข้าสู่ระบบด้วยรหัสผ่าน",
-
   "errorNetwork": "เชื่อมต่อไม่ได้ กรุณาลองใหม่",
   "errorThrottled": "คำขอถี่เกินไป กรุณารอสักครู่แล้วลองใหม่อีกครั้ง",
   "errorForbidden": "คุณไม่มีสิทธิ์ทำรายการนี้",
@@ -113,5 +110,13 @@
   "errorConflict": "ข้อมูลมีการเปลี่ยนแปลงแล้ว กรุณาลองใหม่อีกครั้ง",
   "errorNotFound": "ไม่พบข้อมูลที่ต้องการ",
   "errorServer": "ระบบขัดข้องชั่วคราว",
-  "errorForceUpdate": "กรุณาอัปเดตแอปเป็นเวอร์ชันล่าสุดเพื่อใช้งานต่อ"
+  "errorForceUpdate": "กรุณาอัปเดตแอปเป็นเวอร์ชันล่าสุดเพื่อใช้งานต่อ",
+  "errorOrgAccessDenied": "คุณไม่ได้เป็นสมาชิกของร้านนี้แล้ว — เลือกร้านอื่น หรือติดต่อเจ้าของร้านถ้าคิดว่าไม่ถูกต้อง",
+  "@errorOrgAccessDenied": {
+    "description": "403 ORG_ACCESS_DENIED (ux-wireframe §12.1). Warning tone, never danger: the user did nothing wrong and can keep using the app."
+  },
+  "errorBusy": "ระบบกำลังทำรายการอื่นของร้านนี้อยู่ กรุณารอสักครู่แล้วลองใหม่อีกครั้ง",
+  "@errorBusy": {
+    "description": "409 + details.reason=busy (ux-wireframe §1.4). Never show the words busy/CONFLICT/reason/traceId, and never word it as an outage — this is temporary."
+  }
 }
