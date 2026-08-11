@@ -118,5 +118,23 @@
   "errorBusy": "ระบบกำลังทำรายการอื่นของร้านนี้อยู่ กรุณารอสักครู่แล้วลองใหม่อีกครั้ง",
   "@errorBusy": {
     "description": "409 + details.reason=busy (ux-wireframe §1.4). Never show the words busy/CONFLICT/reason/traceId, and never word it as an outage — this is temporary."
+  },
+  "orgPickerTitle": "เลือกร้านที่จะเข้าใช้งาน",
+  "orgPickerSubtitle": "คุณเป็นสมาชิกอยู่ {count} ร้าน",
+  "orgPickerEmptyTitle": "คุณยังไม่ได้อยู่ในร้านไหน",
+  "orgPickerEmptyBody": "สร้างร้านของคุณเอง หรือถ้ามีคนชวนคุณเข้าร้าน ให้ขอลิงก์คำเชิญจากเจ้าของร้าน",
+  "orgPickerError": "โหลดรายการร้านไม่สำเร็จ",
+  "orgCreateCta": "สร้างร้านใหม่",
+  "orgSwitcherTitle": "สลับร้าน",
+  "orgSwitcherCurrent": "ร้านที่ใช้อยู่",
+  "roleOwner": "เจ้าของร้าน",
+  "roleAdmin": "ผู้ดูแล",
+  "roleStaff": "พนักงาน",
+  "@orgPickerSubtitle": {
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
   }
 }

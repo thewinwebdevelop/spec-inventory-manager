@@ -878,3 +878,49 @@ mapper เดิม**ไม่เคยอ่าน `details` เลย** ⇒ �
 (บทเรียนจาก `describeOrgBusy` ที่รอดเทสต์ตัวเองมาได้เพราะเทสต์สร้าง input ของ classifier แทนที่จะสร้าง response ที่มันต้องแปล)
 
 `mobile 257 tests` (+17) · analyze ✓ · boundary gate ✓ (59 ไฟล์)
+
+## T-002-M3 — org feature ฝั่ง mobile: domain → data → application → S1 (2026-08-11)
+
+### ⚠️ ขอบเขตต่างจากที่บอร์ดเขียน — และ ux เป็นฝ่ายถูก
+
+บอร์ดเขียนว่า M3 รวม **"`/invite` deep link"** · แต่ ux-wireframe **§13 ระบุตรงข้ามชัดเจน**:
+
+| จอ | Web | Mobile |
+|---|---|---|
+| `/invite` | มีจอนี้ | **ไม่มีในแอป** (deep link = F-006) |
+
+⇒ **ไม่ทำ** · ประดิษฐ์ deep-link scheme ล่วงหน้าคือสิ่งที่ `apps/mobile/CLAUDE.md` ห้ามไว้ตรง ๆ
+("อย่า import ของที่ยังไม่มี — router/deep link เกิดที่ F-006")
+
+### ที่ทำจริงในใบนี้
+
+`domain/` (entities + 2 ports) · `data/` (mapping ทั้งหมด) · `application/` (providers) · `presentation/` S1 ครบ 4 states
+
+**สอง port ไม่ใช่หนึ่ง** — `OrgDirectory` (user-scoped: `/me/organizations`, `POST /organizations`)
+กับ `OrgScoped` (org-scoped: members/roles/invitations) · แยกใน **type system** ⇒ repository ต่อกับ Dio ผิดตัวไม่ได้
+โดยบังเอิญ: `data/` wire `OrgDirectory` เข้า `baseDioProvider` และ `OrgScoped` เข้า `orgDioProvider` และไม่มีตัวไหนเอื้อมถึง client ของอีกตัว
+
+**`data/` กรองแถวที่ไม่ active ทิ้ง** — M-10: แถวที่ถูก revoke พก `status`+`revokedAt` มาเท่านั้น **ไม่มี role เลย**
+⇒ กรองที่นี่ที่เดียว ทำให้ทุกจอข้างบนสมมติ shape เต็มได้ แทนที่จะต้องจำกันทุกจอว่า `roleName` บางทีก็ไม่มี
+
+**entity ของ member ไม่มี `capabilities`** — สัญญาไม่ publish ของเพื่อนร่วมงาน (เหตุผลเดียวกับ §3.6)
+· `isMe`/`isOwner` มาจาก server ⇒ ไม่มีจอไหนคำนวณความเป็นเจ้าของจากข้อมูลที่ไม่ควรมี
+
+### สองอย่างที่ gate จับได้ ไม่ใช่ผมเห็นเอง
+
+1. **boundary gate**: ผมใส่ `@immutable` ใน `domain/` — มันมาจาก `package:flutter` ซึ่ง rule 1 ห้าม ·
+   ถอดออกแล้ว (คลาสยัง immutable โดยโครงสร้าง: ทุก field `final`, ทุก constructor `const`)
+2. **analyzer**: `built_collection` ไม่ใช่ direct dependency ⇒ เขียน mapping ใหม่ให้ไม่ต้องใช้ `BuiltList` เลย
+
+และ **import generated client แบบ `as wire`** เพราะ DTO หลายตัวชื่อชนกับ entity ที่มันแมปไป
+(`CreatedOrganization`, `MemberRow`) — ไม่ prefix แล้วสองฝั่งดูสลับกันได้ ซึ่งคือจังหวะที่ DTO เริ่มเดินทางออกนอก `data/`
+
+### หนี้ที่เปิด
+
+| # | เรื่อง | ปิดตอน |
+|---|---|---|
+| M-1 | จอสร้างร้าน · switcher bottom sheet · จอสมาชิก — ยังไม่ทำ (ชั้น data/application พร้อมครบแล้ว) | รอบถัดไปของ M3 |
+| M-2 | `SessionListSkeleton` ใน `core/ui/` ชื่อเป็นของ auth แต่ widget generic (`rowCount`) — org picker ใช้อยู่ | เปลี่ยนชื่อเป็น mechanical change ที่แตะเทสต์ auth ไม่เกี่ยวกับ F-002 |
+| M-3 | `enterOrganization` ส่ง `capabilities: {}` — picker ไม่มี capability ของแต่ละร้าน (`/me/organizations` ไม่คืน) ⇒ ต้องอ่านจาก `GET /orgs/{orgId}` หลังเข้าร้าน | จอถัดไปที่เข้าร้านจริง |
+
+`mobile 267 tests` (+10) · analyze ✓ · boundary gate ✓ (65 ไฟล์)
