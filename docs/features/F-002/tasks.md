@@ -89,7 +89,7 @@
 
 | ID | งาน | ref → target | deps | status | updated_by |
 |----|-----|--------------|------|--------|------------|
-| T-002-M1 | ★ `core/session` + `orgDioProvider` + **`X-Organization-Id` เข้า interceptor chain** (seam comment วางไว้แล้ว) | `docs/architecture/mobile.md §3.2` · forward-commitments แถว F-002/F-003 | T-002-21, T-002-X1 | todo | — |
+| T-002-M1 | ★ `core/session` + `orgDioProvider` + **`X-Organization-Id` เข้า interceptor chain** (seam comment วางไว้แล้ว) | `docs/architecture/mobile.md §3.2` · forward-commitments แถว F-002/F-003 | T-002-21, T-002-X1 | done | frontend (ดูหมายเหตุท้ายไฟล์) |
 | T-002-M2 | ★ `ApiFailure` mobile: แยก `ORG_ACCESS_DENIED` / `FORBIDDEN` + `409 busy` (กติกาเดียวกับ web) | `mobile.md §3.4` · `api-spec.md §4` | T-002-M1 | todo | — |
 | T-002-M3 | จอมือถือ: เลือกร้าน · สร้างร้าน · ตัวสลับร้านใน AppBar · สมาชิก (อ่าน+เชิญพื้นฐาน) · `/invite` deep link | `ux-wireframe.md §13` (ความต่าง web↔mobile) | T-002-M2 | todo | — |
 
@@ -803,3 +803,48 @@ W-15 (`?invite=1&role=owner` ยังไม่อ่าน) · W-17 (เมน�
 W-18 ("เชิญใหม่อีกครั้ง") — mutation hook พร้อมครบแล้วทั้ง 5 ตัว เหลือแต่ชั้น dialog
 
 `web 284 tests` (+27) · typecheck ✓ lint ✓ build ✓
+
+## T-002-M1 — `core/session` + `orgDioProvider` (2026-08-11)
+
+### ★ ตำแหน่งของ interceptor คือสิ่งที่ทำให้ retry ยังอยู่ในร้านเดิม
+
+chain ตาม mobile.md §3.4:
+```
+HttpsGuard → AuthToken → OrgHeader → Refresh → Retry → ErrorMapping
+```
+`RefreshInterceptor` **replay** request หลัง silent refresh และ `RetryInterceptor` replay GET ที่ล้มชั่วคราว —
+ทั้งคู่ประกอบ request ใหม่จาก `RequestOptions` ⇒ **สิ่งที่ interceptor ก่อนหน้าใส่ไว้ ติดไปด้วย · สิ่งที่ใส่ทีหลัง ไม่ติด**
+· วาง org header ไว้ระดับเดียวกับ auth header (ก่อน refresh) คือเหตุผลที่ request ที่ถูก replay ยังเป็นของร้านเดิม
+· เทสต์ assert **ตำแหน่งใน chain** ไม่ใช่แค่ผลลัพธ์ เพราะผลลัพธ์จะโผล่ก็ต่อเมื่อเจอ 401 จริงเท่านั้น
+
+### สอง client ที่ต้องแยกกัน — บทเรียนที่ web เพิ่งเรียนตอน W3
+
+`baseDioProvider` (org-agnostic) สำหรับ `/auth/*`, `GET /me/organizations`, `POST /organizations`,
+invitation preview/accept — **สี่เส้นนี้มีอยู่เพราะผู้เรียกยังไม่ได้อยู่ในร้าน** (หนึ่งในนั้นยังไม่มีบัญชีด้วยซ้ำ) ·
+ส่ง`X-Organization-Id` ไปคือการยื่น input ที่ route เหล่านั้นไม่ควรได้รับ (I-3)
+
+⇒ `orgDioProvider` สร้าง **Dio ใหม่** ที่ share adapter/options ของ base **ไม่ใช่ mutate ตัว base**
+— mutate จะทำให้ `/auth/refresh` มี org header ติดไปด้วย ซึ่งคือสิ่งที่ไฟล์นี้มีไว้เพื่อแยก
+· มีเทสต์ ★ คุมเฉพาะข้อนี้ (พิสูจน์แดง: เปลี่ยนเป็น mutate ⇒ แดง 2 เคส)
+
+### ไม่มี fallback เมื่อไม่มี active org
+
+`orgDioProvider` **throw** ไม่ใช่คืน base client · การ fallback จะส่ง org-scoped request แบบไม่มี org
+⇒ เปลี่ยนบั๊ก routing ให้กลายเป็น 422 ที่ผู้ใช้แก้ไม่ได้ — หรือแย่กว่านั้น เป็น request ที่ไม่มีใครประกาศ scope ของมัน
+(พิสูจน์แดง: ใส่ fallback ⇒ แดง)
+
+### `SessionState` เป็น sealed — และสองคู่ที่สับสนง่ายไปคนละทาง
+
+`SessionUnknown ≠ SessionNone` — "ยังไม่รู้" กับ "ไม่ได้ล็อกอิน" · ถือว่า unknown = ล็อกเอาต์ ⇒ เตะ session จริงออกทุก cold start
+`SessionAuthed(active: null) ≠ ไม่มี session` — ล็อกอินแล้วแต่ยังไม่เลือกร้าน ⇒ org picker ไม่ใช่หน้า login
+
+**`orgAccessDenied()` ทิ้ง *ร้าน* ไม่ทิ้ง *session*** (D-027) — เหตุผลเดียวกับที่ web แยก `ApiFailure` เป็นคนละ kind
+
+### ข้อจำกัดเชิงโครงที่บันทึกไว้
+
+`baseDioProvider` **ไม่มี default** ต้อง override ที่ composition root — `core/` import `features/` ไม่ได้ (gate rule 2)
+และ base client ที่ wire แล้ว (พร้อม `RefreshInterceptor` ที่ผูกกับ `RefreshCoordinator` ของ auth repo)
+อยู่ใน `features/auth/data` · ทางเลือกอื่นคือเขียน base-dio builder ตัวที่สองใน `core/` ซึ่งแปลว่ามี
+**refresh policy สองชุดในแอปเดียว** — ซึ่งคือวิธีที่มันจะ drift
+
+`mobile 240 tests` (+11) · `flutter analyze` ✓ · boundary gate ✓ (58 ไฟล์)
