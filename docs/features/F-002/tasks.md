@@ -1162,3 +1162,9 @@ NEW-10 (`canAssignRole` ไม่กัน privilege superset) **ทดสอบ
 2. §8 แถว **I-C-02**: `ALREADY_ACCEPTED` → `INVITATION_ALREADY_ACCEPTED` (จากรอบก่อน)
 
 `api unit 664 tests` (+13) · lint ✓ typecheck ✓ · int lane +2 เคส (floor 21→23, min-passed 199→201)
+
+### Q4 ยืนยันบน CI: เขียวครบ 8 job ([run 31616406240](https://github.com/thewinwebdevelop/spec-inventory-manager/actions/runs/31616406240))
+
+- `integration-api`: `test/invitations.e2e.int.test.ts` → **23 passed, 0 failed, 0 skipped** ⇒ คู่เทสต์ M-3 รันจริงกับ Postgres จริง **ผ่านรอบแรก**
+- `node-ci`: `regression-pack.test.ts` 7 ✓ · `role-capability-write-tripwire.test.ts` (G-15) 6 ✓
+- floor ใหม่ `invitations.e2e.int.test.ts=23` ทำงาน (guard พิมพ์ยืนยันจำนวนที่รันจริง)
