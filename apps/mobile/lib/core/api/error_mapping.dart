@@ -23,7 +23,55 @@ ApiFailure mapDioExceptionToApiFailure(DioException e) {
     code: extractErrorCode(response.data),
     retryAfterSeconds: extractRetryAfterSeconds(response.headers.map),
     reason: extractErrorReason(response.data),
+    fieldErrors: extractFieldErrors(response.data),
+    details: extractDetails(response.data),
   );
+}
+
+/// ★ T-002-M3 — `error.fieldErrors` (D-025).
+///
+/// Read here rather than left on the floor because two F-002 screens are
+/// specified against it: S2's `422` puts the server's message under the shop
+/// name, S7's under the email. Values that are not strings are DROPPED
+/// instead of stringified — a screen must never render `{}` or `null` at a
+/// user, and a partially-typed map is still useful.
+Map<String, String> extractFieldErrors(Object? data) {
+  final raw = _errorObject(data)?['fieldErrors'];
+  if (raw is! Map) return const {};
+  final out = <String, String>{};
+  raw.forEach((key, value) {
+    if (key is String && value is String) out[key] = value;
+  });
+  return out;
+}
+
+/// ★ T-002-M3 — `error.details` (D-025), kept as raw values.
+///
+/// The reason this exists at all: `409 ORG_LIMIT_REACHED` carries
+/// `details.limit`, and api-spec §3.1 says so specifically so that no client
+/// hard-codes the cap. Dropping `details` here would leave S2 with a choice
+/// between inventing a number and saying nothing useful.
+///
+/// Types are NOT coerced — a caller that wants a number checks for one, so a
+/// server sending `"5"` fails the check rather than silently becoming 5.
+Map<String, Object?> extractDetails(Object? data) {
+  final raw = _errorObject(data)?['details'];
+  if (raw is! Map) return const {};
+  final out = <String, Object?>{};
+  raw.forEach((key, value) {
+    if (key is String) out[key] = value;
+  });
+  return out;
+}
+
+/// The `error` object of the envelope, or null for any body that is not one
+/// (a proxy error page, a CDN interstitial, an empty response).
+Map<Object?, Object?>? _errorObject(Object? data) {
+  if (data is Map) {
+    final error = data['error'];
+    if (error is Map) return error;
+  }
+  return null;
 }
 
 /// `Retry-After` header (seconds) — 429 throttle UX (api-spec §3). Header

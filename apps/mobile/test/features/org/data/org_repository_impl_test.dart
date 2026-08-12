@@ -110,9 +110,12 @@ void main() {
 
       final members = await repo.listMembers();
 
-      expect(members.single.isMe, isTrue);
-      expect(members.single.isOwner, isTrue);
-      expect(members.single.isActive, isTrue);
+      expect(members.items.single.isMe, isTrue);
+      expect(members.items.single.isOwner, isTrue);
+      expect(members.items.single.isActive, isTrue);
+      // `nextCursor: null` in the body means "that is everybody" — the fact
+      // the backup-owner nudge is gated on (ux-wireframe §7).
+      expect(members.isComplete, isTrue);
     });
 
     test('★ puts the orgId in the PATH as well as the header', () async {
@@ -167,6 +170,70 @@ void main() {
       expect(issued.expiresAt, DateTime.parse('2026-08-12T07:30:00.000Z'));
       expect(issued.inviteUrl, contains('token=9f2b7c'));
       expect(issued.email, 'malee@shop.com');
+    });
+
+    test('★ an invitation\'s status is the SERVER\'s word, never recomputed here', () async {
+      // `expired` is resolved at read time against the server's clock and has
+      // no write path. A client that derived it from `expiresAt` would give a
+      // different answer during the seconds that matter most — and would offer
+      // to reissue a link the server still considers live, or the reverse.
+      final adapter = _FakeAdapter(200, {
+        'items': [
+          {
+            'id': 'inv_1',
+            'email': 'new@example.com',
+            'roleId': 'rol_2',
+            'roleName': 'Admin',
+            'roleKey': 'admin',
+            // Past `expiresAt`, and STILL pending as far as this response is
+            // concerned. The entity must say `pending`.
+            'status': 'pending',
+            'expiresAt': '2020-01-01T00:00:00.000Z',
+            'tokenIssuedAt': '2019-12-31T00:00:00.000Z',
+            'invitedByUserId': 'usr_1',
+            'createdAt': '2019-12-31T00:00:00.000Z',
+            'acceptedAt': null,
+            'acceptedByUserId': null,
+            'acceptedUserCreatedAfterInvite': null,
+          },
+        ],
+        'nextCursor': 'cur_2',
+      });
+      final repo = OrgScopedImpl(
+        members: MembersApi(_dio(adapter), standardSerializers),
+        organizations: OrganizationsApi(_dio(adapter), standardSerializers),
+        invitations: InvitationsApi(_dio(adapter), standardSerializers),
+        orgId: 'org_1',
+      );
+
+      final page = await repo.listInvitations();
+
+      expect(page.items.single.status, 'pending');
+      expect(page.items.single.isPending, isTrue);
+      expect(page.items.single.expiresAt, DateTime.parse('2020-01-01T00:00:00.000Z'));
+      // A missing flag is false, not null — D-028/I-7's note is either shown
+      // or it is not.
+      expect(page.items.single.acceptedUserCreatedAfterInvite, isFalse);
+      // More pages exist, and the caller is told so.
+      expect(page.isComplete, isFalse);
+      expect(page.nextCursor, 'cur_2');
+    });
+
+    test('the invitations list defaults to pending, and passes a cursor when asked', () async {
+      final adapter = _FakeAdapter(200, {'items': <Object>[], 'nextCursor': null});
+      final repo = OrgScopedImpl(
+        members: MembersApi(_dio(adapter), standardSerializers),
+        organizations: OrganizationsApi(_dio(adapter), standardSerializers),
+        invitations: InvitationsApi(_dio(adapter), standardSerializers),
+        orgId: 'org_1',
+      );
+
+      await repo.listInvitations();
+      await repo.listInvitations(status: 'all', cursor: 'cur_2');
+
+      expect(adapter.seen.first.queryParameters['status'], 'pending');
+      expect(adapter.seen.last.queryParameters['status'], 'all');
+      expect(adapter.seen.last.queryParameters['cursor'], 'cur_2');
     });
   });
 }

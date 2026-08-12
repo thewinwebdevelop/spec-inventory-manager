@@ -114,23 +114,68 @@ class OrgScopedImpl implements OrgScoped {
   final String _orgId;
 
   @override
-  Future<List<MemberRow>> listMembers({String status = 'active'}) async {
+  Future<PagedResult<MemberRow>> listMembers({String status = 'active', String? cursor}) async {
     try {
-      final page = await _members.listMembers(orgId: _orgId, status: status);
-      final items = page.data?.items.toList() ?? const <wire.MemberRow>[];
-      return items
-          .map(
-            (m) => MemberRow(
-              userId: m.userId,
-              email: m.email,
-              roleName: m.roleName,
-              roleKey: m.roleKey,
-              status: m.status.name,
-              isMe: m.isMe,
-              isOwner: m.isOwner,
-            ),
-          )
-          .toList(growable: false);
+      final page = await _members.listMembers(orgId: _orgId, status: status, cursor: cursor);
+      final body = page.data;
+      final items = body?.items.toList() ?? const <wire.MemberRow>[];
+      return PagedResult(
+        items: items
+            .map(
+              (m) => MemberRow(
+                userId: m.userId,
+                email: m.email,
+                roleName: m.roleName,
+                roleKey: m.roleKey,
+                status: m.status.name,
+                isMe: m.isMe,
+                isOwner: m.isOwner,
+              ),
+            )
+            .toList(growable: false),
+        // Carried, never dropped: an absent `nextCursor` is the only proof a
+        // count taken from this list is a count of everybody (ux-wireframe §7).
+        nextCursor: body?.nextCursor,
+      );
+    } on DioException catch (e) {
+      throw _asFailure(e);
+    }
+  }
+
+  @override
+  Future<PagedResult<InvitationRow>> listInvitations({
+    String status = 'pending',
+    String? cursor,
+  }) async {
+    try {
+      final page = await _invitations.listInvitations(
+        orgId: _orgId,
+        status: status,
+        cursor: cursor,
+      );
+      final body = page.data;
+      final items = body?.items.toList() ?? const <wire.Invitation>[];
+      return PagedResult(
+        items: items
+            .map(
+              (i) => InvitationRow(
+                id: i.id,
+                email: i.email,
+                roleName: i.roleName,
+                roleKey: i.roleKey,
+                // `expired` is the SERVER's word, computed at read time
+                // against its own clock. Recomputing it here from
+                // `expiresAt` would give the two sides different answers
+                // during the seconds that matter most.
+                status: i.status.name,
+                expiresAt: i.expiresAt,
+                acceptedAt: i.acceptedAt,
+                acceptedUserCreatedAfterInvite: i.acceptedUserCreatedAfterInvite ?? false,
+              ),
+            )
+            .toList(growable: false),
+        nextCursor: body?.nextCursor,
+      );
     } on DioException catch (e) {
       throw _asFailure(e);
     }

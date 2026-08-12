@@ -1,4 +1,5 @@
 // T-002-M2 ★ — which failures move the session, and how far.
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:mobile/core/error/api_failure.dart';
 import 'package:mobile/core/session/session_controller.dart';
@@ -64,5 +65,35 @@ void main() {
       expect(controller.state, isA<SessionAuthed>(), reason: '$failure');
       expect((controller.state as SessionAuthed).active, isNotNull, reason: '$failure');
     }
+  });
+
+  group('the provider (★ T-002-M3 — the wiring M2 left open)', () {
+    test('★ resolves to a listener bound to the app\'s real SessionController', () {
+      // Until this provider existed the class had a test and no caller: a
+      // rule that reads like enforcement and enforces nothing.
+      final container = ProviderContainer();
+      addTearDown(container.dispose);
+      container.read(sessionControllerProvider.notifier).signedIn(orgs: const [], active: _org);
+
+      final moved = container.read(sessionFailureListenerProvider)
+          .handle(const OrgAccessDeniedFailure());
+
+      expect(moved, isTrue);
+      expect(container.read(activeOrgIdProvider), isNull);
+      // The account survives — the shop is what was lost (D-027).
+      expect(container.read(sessionControllerProvider), isA<SessionAuthed>());
+    });
+
+    test('the same instance is reused — one listener, one session', () {
+      final container = ProviderContainer();
+      addTearDown(container.dispose);
+      expect(
+        identical(
+          container.read(sessionFailureListenerProvider),
+          container.read(sessionFailureListenerProvider),
+        ),
+        isTrue,
+      );
+    });
   });
 }

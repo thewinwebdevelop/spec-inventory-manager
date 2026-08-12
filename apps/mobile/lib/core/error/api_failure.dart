@@ -107,21 +107,37 @@ class EntitlementFailure extends ApiFailure {
   final String? feature;
 }
 
-/// 400/422. `fieldErrors` is always empty today — the current wire
-/// `ErrorResponse` envelope (`api_client/lib/src/model/error_response*.dart`)
-/// only carries `{code, message}`, no per-field map yet (a `backend-api`
-/// contract change, not a mobile decision — docs/architecture/refactor-plan.md
-/// §2 "wire envelope").
+/// 400/422.
+///
+/// ★ T-002-M3 — [fieldErrors] is now populated. The previous note here said
+/// the wire envelope "only carries `{code, message}`, no per-field map yet",
+/// and that stopped being true when D-025 landed: `ErrorResponseError`
+/// (`api_client/lib/src/model/error_response_error.dart`) has carried
+/// `details` and `fieldErrors` since. The extraction, not the contract, was
+/// the missing half — see `core/api/error_mapping.dart`.
 class ValidationFailure extends ApiFailure {
   const ValidationFailure({this.code, this.fieldErrors = const {}});
   final String? code;
+
+  /// Keyed by field name (`name`, `email`) — the server's own message for
+  /// that field. A screen still decides whether to show it or its own copy;
+  /// `failureMessage` never reaches for it (B6: server prose is not routed
+  /// to the user by default).
   final Map<String, String> fieldErrors;
 }
 
 /// 409.
 class ConflictFailure extends ApiFailure {
-  const ConflictFailure({this.code});
+  const ConflictFailure({this.code, this.details = const {}});
   final String? code;
+
+  /// `error.details` — the numbers a 409 is meaningless without.
+  ///
+  /// ★ `ORG_LIMIT_REACHED` carries `details.limit` precisely so no screen
+  /// hard-codes the cap (api-spec §3.1): the limit is per-plan, and a screen
+  /// that prints its own number is wrong for every plan but one. A missing
+  /// `limit` must fall back to generic copy — never to an invented figure.
+  final Map<String, Object?> details;
 }
 
 /// 404.
@@ -132,7 +148,17 @@ class NotFoundFailure extends ApiFailure {
 /// 5xx, and the safe fallback for any status this mapper doesn't otherwise
 /// recognize — never silently drops a failure into an unhandled state.
 class ServerFailure extends ApiFailure {
-  const ServerFailure();
+  const ServerFailure({this.code});
+
+  /// ★ T-002-M3 — kept because one 5xx is not like the others:
+  /// `503 ORG_PROVISIONING_UNAVAILABLE` means the plan we would attach the
+  /// new shop to is not configured, and ux-wireframe §3 gives it its own copy
+  /// ("ไม่ใช่ความผิดของคุณ"). Without the code, S2 could only offer the
+  /// generic "ลองใหม่" for a condition retrying will not fix.
+  ///
+  /// Null for a 5xx with no envelope (a gateway HTML page) — the generic
+  /// treatment, which is the right default.
+  final String? code;
 }
 
 /// 426 / `APP_UPDATE_REQUIRED`.
@@ -157,9 +183,16 @@ ApiFailure mapStatusToApiFailure(
   int? status, {
   String? code,
   int? retryAfterSeconds,
+
   /// `error.details.reason` — today only `"busy"` (api-spec §1). Passed in
   /// rather than sniffed here so this file stays pure Dart.
   String? reason,
+
+  /// `error.fieldErrors` / `error.details` (D-025). Passed in for the same
+  /// reason as [reason]: the JSON walk belongs to `core/api`, the
+  /// classification belongs here.
+  Map<String, String> fieldErrors = const {},
+  Map<String, Object?> details = const {},
 }) {
   if (status == null) return const NetworkFailure();
   switch (status) {
@@ -180,18 +213,18 @@ ApiFailure mapStatusToApiFailure(
       return ForbiddenFailure(code: code);
     case 400:
     case 422:
-      return ValidationFailure(code: code);
+      return ValidationFailure(code: code, fieldErrors: fieldErrors);
     case 409:
       // ★ Before the generic conflict, per ux-wireframe §1.4's explicit
       // ordering rule.
       if (reason == busyReason) return const BusyFailure();
-      return ConflictFailure(code: code);
+      return ConflictFailure(code: code, details: details);
     case 404:
       return const NotFoundFailure();
     case 426:
       return const ForceUpdateFailure();
     default:
-      return const ServerFailure();
+      return ServerFailure(code: code);
   }
 }
 

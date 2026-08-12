@@ -1,3 +1,5 @@
+import 'package:flutter_riverpod/flutter_riverpod.dart';
+
 import '../error/api_failure.dart';
 import 'session_controller.dart';
 
@@ -56,3 +58,19 @@ class SessionFailureListener {
     }
   }
 }
+
+/// ★ T-002-M3 — the wiring M2 left open.
+///
+/// Until this provider existed, [SessionFailureListener] was a class with a
+/// test and no caller: a rule that reads like enforcement and enforces
+/// nothing. Every org controller now routes its failure through it before
+/// deciding whether to show an error, so `403 ORG_ACCESS_DENIED` drops the
+/// shop instead of rendering "คุณไม่มีสิทธิ์" on a screen the person is about
+/// to be navigated away from (ux-wireframe §12.1).
+///
+/// The refetch of `/me/organizations` that §12.1 also asks for needs no code:
+/// the shop list is `autoDispose`, so the picker this lands on fetches on
+/// mount and cannot show the shop that just refused.
+final sessionFailureListenerProvider = Provider<SessionFailureListener>(
+  (ref) => SessionFailureListener(ref.read(sessionControllerProvider.notifier)),
+);

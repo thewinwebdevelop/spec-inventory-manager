@@ -91,7 +91,7 @@
 |----|-----|--------------|------|--------|------------|
 | T-002-M1 | ★ `core/session` + `orgDioProvider` + **`X-Organization-Id` เข้า interceptor chain** (seam comment วางไว้แล้ว) | `docs/architecture/mobile.md §3.2` · forward-commitments แถว F-002/F-003 | T-002-21, T-002-X1 | done | frontend (ดูหมายเหตุท้ายไฟล์) |
 | T-002-M2 | ★ `ApiFailure` mobile: แยก `ORG_ACCESS_DENIED` / `FORBIDDEN` + `409 busy` (กติกาเดียวกับ web) | `mobile.md §3.4` · `api-spec.md §4` | T-002-M1 | done | frontend (+ `SessionFailureListener` — ดูหมายเหตุ) |
-| T-002-M3 | จอมือถือ: เลือกร้าน · สร้างร้าน · ตัวสลับร้านใน AppBar · สมาชิก (อ่าน+เชิญพื้นฐาน) · `/invite` deep link | `ux-wireframe.md §13` (ความต่าง web↔mobile) | T-002-M2 | todo | — |
+| T-002-M3 | จอมือถือ: เลือกร้าน · สร้างร้าน · ตัวสลับร้านใน AppBar · สมาชิก (อ่าน+เชิญพื้นฐาน) · ~~`/invite` deep link~~ (ux §13: ไม่มีจอนี้ในแอป → F-006) | `ux-wireframe.md §13` (ความต่าง web↔mobile) | T-002-M2 | done | หนี้ M-3/M-4/M-5 |
 
 ## qa
 
@@ -924,3 +924,68 @@ mapper เดิม**ไม่เคยอ่าน `details` เลย** ⇒ �
 | M-3 | `enterOrganization` ส่ง `capabilities: {}` — picker ไม่มี capability ของแต่ละร้าน (`/me/organizations` ไม่คืน) ⇒ ต้องอ่านจาก `GET /orgs/{orgId}` หลังเข้าร้าน | จอถัดไปที่เข้าร้านจริง |
 
 `mobile 267 tests` (+10) · analyze ✓ · boundary gate ✓ (65 ไฟล์)
+
+## T-002-M3 (ต่อ) — S2 สร้างร้าน · switcher · S6 สมาชิก · S7/S8 เชิญ (2026-08-12)
+
+ปิดหนี้ M-1 ครบทั้งสามจอ + เพิ่ม flow เชิญ (S7 → S8) ตามที่บอร์ดเขียนว่า "อ่าน+เชิญพื้นฐาน"
+
+### สิ่งที่พบก่อน แล้วค่อยเขียนจอ: envelope ส่ง `details`/`fieldErrors` มาตั้งนานแล้ว แต่ไม่มีใครอ่าน
+
+`core/api/error_mapping.dart` ดึงแค่ `code`/`reason`/`Retry-After` · แต่ `ErrorResponseError` ใน generated client
+มี `details` + `fieldErrors` ครบตาม D-025 มาตลอด และคอมเมนต์ใน `api_failure.dart` เขียนไว้ว่า
+"envelope มีแค่ `{code, message}`" — **ข้อความนั้นผิดตั้งแต่ D-025 ลง**
+
+เรื่องนี้ไม่ใช่รายละเอียด: ux สั่งตรง ๆ ว่า `409 ORG_LIMIT_REACHED` ต้องแสดงตัวเลขจาก `details.limit`
+(**ห้าม hardcode** — cap ผูกกับ plan, api-spec §3.1) ⇒ ถ้าไม่ดึงมา S2 มีทางเลือกแค่ "แต่งเลขเอง" กับ "พูดไม่รู้เรื่อง"
+
+เพิ่ม `extractFieldErrors` / `extractDetails` (+ `ServerFailure.code` — `503 ORG_PROVISIONING_UNAVAILABLE`
+เป็น 5xx ตัวเดียวที่ ux ให้ copy ของตัวเอง "ไม่ใช่ความผิดของคุณ") · `mapStatusToApiFailure` ยัง pure เหมือนเดิม —
+การเดิน JSON อยู่ที่ `core/api`, การจำแนกอยู่ที่ `core/error` · แก้คอมเมนต์ที่ผิดด้วย
+
+### wiring ที่ M2 ค้างไว้
+
+`SessionFailureListener` มีคลาส มีเทสต์ **แต่ไม่มีใครเรียก** — กติกาที่อ่านเหมือนบังคับใช้ แต่ไม่ได้บังคับอะไรเลย ·
+เพิ่ม `sessionFailureListenerProvider` และให้ controller ทุกตัวส่ง failure ผ่านมันก่อนตัดสินใจแสดง error
+⇒ `403 ORG_ACCESS_DENIED` ทิ้งร้าน ไม่ใช่แปะ "คุณไม่มีสิทธิ์" บนจอที่กำลังจะโดนพาออกไป (§12.1) ·
+ส่วน refetch `/me/organizations` ที่ §12.1 สั่ง **ไม่ต้องเขียนโค้ด**: รายการร้านเป็น `autoDispose`
+
+### สามจอ + สองแผ่น
+
+| จอ | จุดที่ไม่ยอมลดหย่อน |
+|---|---|
+| **S2 สร้างร้าน** | ปุ่ม disabled ระหว่างส่ง (**ไม่มี Idempotency-Key** ⇒ กด 2 ที = 2 ร้าน) · ร้านใหม่ active **ก่อน** `submit` return (ไม่งั้นจอถัดไป build โดยไม่มีร้าน แล้ว `orgDioProvider` โยน) · ไม่ถามเขตเวลา/สกุลเงิน/แพ็กเกจ |
+| **switcher** | bottom sheet ไม่ใช่ dropdown (§13) · ร้านปัจจุบันบอกด้วย **คำว่า "ร้านที่ใช้อยู่"** ไม่ใช่ ✓ เดี่ยว ๆ · list พังไม่ทำให้ทั้งจอพัง |
+| **S6 สมาชิก** | สองส่วน สอง controller ⇒ **พังแยกกันจริง** · ไม่มีคำเชิญค้าง = ซ่อนทั้งส่วน · `นับ` เฉพาะ active |
+| **S7 เชิญ** | default = สิทธิ์ต่ำสุด (ไม่ใช่ `roles.first` ซึ่งคือ Owner) · Owner **disabled + บอกเหตุผล** ไม่ใช่ซ่อน · แถบ TTL ไม่มีตัวเลข |
+| **S8 ลิงก์** | `pushReplacement` — กด back กลับไปเจอฟอร์มที่กรอกไว้แล้วกดซ้ำไม่ได้ · ไม่มีคำว่า "คัดลอกลิงก์เดิม" ที่ไหนเลย |
+
+### สองจุดที่ตัดสินต่างจากตัวอักษรของ spec — และแจ้งไว้ให้ ux ชี้ขาด
+
+1. **นับ Owner จาก `isOwner` ไม่ใช่ `roleKey === "owner"`** (แถบ D-030) — ux เขียนให้เช็ค `roleKey` และ
+   ให้ **ไม่แสดงแถบ** ถ้ามี `roleKey === null` (custom role ของ F-003, "นับไม่ได้") · แต่ `isOwner` server คำนวณจาก
+   **capabilities** (api-spec §3.7) ซึ่งตรงกับกฎของโปรเจกต์ที่ว่าความเป็นเจ้าของตัดสินด้วย `full_access` เท่านั้น ·
+   เจตนาของ caveat คือ "อย่าเตือนจากตัวเลขที่เชื่อไม่ได้" — `isOwner` คือตัวเลขที่เชื่อได้ · **ผลต่างจริง:**
+   ร้านที่ Owner คนที่สองถือ custom role ที่มี `full_access` จะไม่ขึ้นแถบ (ถูก — มี Owner 2 คน) ซึ่งกฎเดิมก็ไม่ขึ้นเหมือนกันแต่ด้วยเหตุผลผิด
+2. **ปีเป็น ค.ศ.** ตามตัวอย่างในเอกสาร ("29 ก.ค. 2026") — แต่ **web ใช้ `Intl.DateTimeFormat("th-TH")`
+   ซึ่ง default calendar ของ locale นี้คือพุทธศักราช** ⇒ web จะขึ้น "2569" ที่ mobile ขึ้น "2026" ·
+   **สองแพลตฟอร์มไม่ตรงกันอยู่ตอนนี้** และเป็นการตัดสินใจเรื่อง copy ไม่ใช่เรื่อง client → รอ ux เคาะ
+
+### พิสูจน์ว่า gate แดงได้จริง (mutation)
+
+- ตัด `if (!complete) return false;` ในแถบ D-030 ⇒ **แดง**
+- ทำให้ `extractDetails` คืน map ว่างเสมอ ⇒ **แดง** (รวมจอ S2 ที่ต้องโชว์เลขจาก server)
+  รวมสองการกลายพันธุ์ = แดง 5 ตัว · คืนค่าเดิมแล้วเขียวหมด
+
+### หนี้ที่เปิด/ปิด
+
+| # | เรื่อง | สถานะ |
+|---|---|---|
+| M-1 | จอสร้างร้าน · switcher · จอสมาชิก | **ปิด** |
+| M-2 | ชื่อ `SessionListSkeleton` ยังเป็นของ auth | ค้าง |
+| M-3 | `enterOrganization` ส่ง `capabilities: {}` — S7 ใช้ capability ตัดสินว่าเลือก Owner ได้ไหม ⇒ **เข้าร้านจาก picker แล้วจะเลือก Owner ไม่ได้จนกว่าจะปิดหนี้นี้** (สร้างร้านใหม่ไม่กระทบ: response มี capabilities) | ค้าง — **ยกระดับเป็นบล็อกเกอร์ของ S7** |
+| M-4 | ปุ่มบนแถว (เปลี่ยนสิทธิ์ · ถอด · ออกจากร้าน · ออกลิงก์ใหม่ · ยกเลิกคำเชิญ) ยังไม่ทำ ⇒ **แถวจงใจกดไม่ได้** (sheet ที่เปิดมาแล้วว่างแย่กว่าไม่มีปุ่ม) · แผง `INVITATION_PENDING` จึงมีทางออกเดียวคือ "กลับไปแก้อีเมล" | รอบถัดไป |
+| M-5 | 429 ไม่มีนับถอยหลัง — `ThrottleCountdownController` อยู่ใน `features/auth` และ **rule 4 ห้าม import ข้าม feature** ⇒ ต้องยก widget ขึ้น `core/ui` ก่อน | รอบถัดไป |
+| M-6 | ไม่มีคำเชิญ pending = ซ่อนทั้งส่วน ⇒ **ลิงก์ "ดูคำเชิญที่หมดอายุ/ยกเลิกแล้ว" หายไปด้วย** (ทำตามตัวอักษรของ §7) | ถาม ux |
+| M-7 | `Page<T>` ชนกับ `Page` ของ Flutter → เปลี่ยนชื่อเป็น `PagedResult<T>` · controller paging เป็นตัวเล็ก ๆ เฉพาะกิจ **ไม่ใช่** `PagedListController` (F-013) | ตั้งใจ |
+
+`mobile 387 tests` (+120) · analyze ✓ · boundary gate ✓ (78 ไฟล์)

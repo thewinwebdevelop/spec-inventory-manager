@@ -40,16 +40,24 @@ final myOrganizationsProvider = FutureProvider.autoDispose<List<MyOrganization>>
   return ref.watch(orgDirectoryProvider).listMyOrganizations();
 });
 
-/// The members list. `autoDispose` and derived from the ORG-scoped repository,
-/// so switching shops disposes it — there is no stale list to leak across.
-final membersProvider =
-    FutureProvider.autoDispose.family<List<MemberRow>, String>((ref, status) async {
-  return ref.watch(orgScopedRepositoryProvider).listMembers(status: status);
-});
+/// The members and invitations lists live in `paged_controllers.dart` —
+/// they are paginated and each owns its own error, which a `FutureProvider`
+/// cannot express (ux-wireframe §7).
 
 final rolesProvider = FutureProvider.autoDispose<List<RoleRow>>((ref) async {
   return ref.watch(orgScopedRepositoryProvider).listRoles();
 });
+
+/// Shops whose backup-owner nudge (D-030) has been dismissed with "ไว้ทีหลัง".
+///
+/// Deliberately NOT autoDispose and deliberately NOT persisted, which is
+/// exactly what ux-wireframe §7 asks for: dismissal survives leaving the
+/// members screen, and comes back "เมื่อเปิดแอปรอบใหม่". Writing it to storage
+/// would silence a recoverability warning forever on one tap; scoping it to
+/// the widget would put it back in the person's face on every visit.
+///
+/// Keyed by shop id: dismissing it for one shop says nothing about another.
+final backupOwnerNudgeDismissedProvider = StateProvider<Set<String>>((ref) => const {});
 
 /// Entering a shop from the picker.
 ///

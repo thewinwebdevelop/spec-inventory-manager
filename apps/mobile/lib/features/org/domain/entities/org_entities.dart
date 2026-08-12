@@ -12,6 +12,26 @@
 /// [MemberRow.isOwner]).
 library;
 
+/// One page of a cursor-paginated list — `{items, nextCursor}` (D-025).
+///
+/// [nextCursor] is carried up to the screens rather than dropped at the
+/// repository, because two screens need to know the difference between "that
+/// is everybody" and "that is the first 25": the load-more button, and the
+/// backup-owner nudge, which ux-wireframe §7 forbids showing on a partial
+/// list ("นับไม่ครบ = พูดในสิ่งที่ยังไม่รู้").
+///
+/// A local, minimal type on purpose — `PagedListController` (mobile.md §3.3)
+/// is F-013's job, and inventing half of it here would be the version F-013
+/// then has to unpick.
+class PagedResult<T> {
+  const PagedResult({required this.items, this.nextCursor});
+
+  final List<T> items;
+  final String? nextCursor;
+
+  bool get isComplete => nextCursor == null;
+}
+
 /// One row of the shop picker and the switcher (api-spec §3.2).
 class MyOrganization {
   const MyOrganization({
@@ -64,6 +84,49 @@ class MemberRow {
   final bool isOwner;
 
   bool get isActive => status == 'active';
+}
+
+/// One row of the pending-invitations section (api-spec §3.5).
+///
+/// `status` is the whole shape of the row, exactly as on the web client:
+/// only a `pending` invitation has actions, and `expired` is COMPUTED by the
+/// server at read time — there is no write path to it, so the client never
+/// derives it from [expiresAt] either. Two readers computing the same status
+/// from different clocks is how one screen offers to reissue a link the other
+/// already calls dead.
+class InvitationRow {
+  const InvitationRow({
+    required this.id,
+    required this.email,
+    required this.roleName,
+    required this.roleKey,
+    required this.status,
+    required this.expiresAt,
+    this.acceptedAt,
+    this.acceptedUserCreatedAfterInvite = false,
+  });
+
+  final String id;
+  final String email;
+  final String roleName;
+  final String? roleKey;
+
+  /// `pending` | `accepted` | `expired` | `cancelled`.
+  final String status;
+
+  /// The ONLY source of "how long is this link good for" (ux-wireframe §1.4,
+  /// answer to Q14). The TTL depends on the invited role and is recomputed on
+  /// every reissue, so a screen that prints "7 วัน" is right until the first
+  /// Owner invitation and wrong in the dangerous direction after it.
+  final DateTime expiresAt;
+
+  final DateTime? acceptedAt;
+
+  /// D-028/I-7 — the account that accepted was created after the link was
+  /// issued. A quiet ⓘ note, never an accusation.
+  final bool acceptedUserCreatedAfterInvite;
+
+  bool get isPending => status == 'pending';
 }
 
 /// A shop's role, for the invite picker (api-spec §3.6).

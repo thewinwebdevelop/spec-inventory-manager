@@ -136,5 +136,178 @@
         "type": "int"
       }
     }
-  }
+  },
+
+  "actionRetry": "ลองใหม่",
+  "@actionRetry": {
+    "description": "Generic retry action. `ErrorBanner` still carries its own hard-coded default (a pre-F-002 debt); new call sites use this key."
+  },
+
+  "orgCreateTitle": "สร้างร้านใหม่",
+  "orgCreateNameLabel": "ชื่อร้าน",
+  "orgCreateNamePlaceholder": "เช่น ร้านหอมกรุ่นเบเกอรี่",
+  "orgCreateNameHelper": "ตั้งชื่อที่คุณเรียกร้านตัวเอง เปลี่ยนทีหลังได้",
+  "orgCreateInfo": "เมื่อสร้างเสร็จ คุณจะเป็นเจ้าของร้านนี้ และระบบจะเตรียม \"คลังหลัก\" ให้ 1 คลัง · ใช้สกุลเงินบาท (฿) และเวลาประเทศไทย",
+  "orgCreateSubmit": "สร้างร้าน",
+  "orgCreateSubmitting": "กำลังสร้างร้าน...",
+  "orgCreateNameError": "กรอกชื่อร้าน (ไม่เกิน 120 ตัวอักษร)",
+  "orgCreateLimitReached": "คุณสร้างร้านครบ {limit} ร้านแล้ว หากต้องการเพิ่ม กรุณาติดต่อทีมงาน OmniStock",
+  "@orgCreateLimitReached": {
+    "description": "409 ORG_LIMIT_REACHED. The number ALWAYS comes from details.limit (api-spec §3.1) — it is per-plan, so it must never be written into this string.",
+    "placeholders": {
+      "limit": {
+        "type": "int"
+      }
+    }
+  },
+  "orgCreateProvisioningUnavailable": "ตอนนี้ระบบยังเปิดร้านใหม่ให้ไม่ได้ (ไม่ใช่ความผิดของคุณ) ลองใหม่อีกครั้ง หรือติดต่อทีมงาน OmniStock",
+  "orgCreateGenericError": "สร้างร้านไม่สำเร็จ กรุณาลองใหม่อีกครั้ง",
+  "orgCreateThrottled": "สร้างร้านถี่เกินไป กรุณารอสักครู่แล้วลองใหม่",
+  "orgCreateSuccessToast": "สร้างร้าน \"{name}\" เรียบร้อย",
+  "@orgCreateSuccessToast": {
+    "placeholders": {
+      "name": {
+        "type": "String"
+      }
+    }
+  },
+
+  "membersTitle": "สมาชิก",
+  "membersInviteCta": "เชิญสมาชิก",
+  "membersPendingSection": "คำเชิญที่รอตอบรับ ({count})",
+  "@membersPendingSection": {
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
+  "membersSection": "สมาชิกในร้าน ({count})",
+  "@membersSection": {
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
+  "membersYouBadge": "(คุณ)",
+  "membersStatusActive": "ใช้งานอยู่",
+  "membersStatusRevoked": "ถูกถอดแล้ว",
+  "membersShowRevoked": "แสดงสมาชิกที่ถูกถอดออกแล้ว",
+  "membersHideRevoked": "ซ่อนสมาชิกที่ถูกถอดออกแล้ว",
+  "membersOnlyYou": "ตอนนี้มีคุณอยู่คนเดียวในร้านนี้ — ชวนทีมงานเข้ามาช่วยกันได้เลย",
+  "membersLoadError": "โหลดรายชื่อสมาชิกไม่สำเร็จ",
+  "membersLoadMore": "โหลดเพิ่ม",
+  "invitationsLoadError": "โหลดคำเชิญไม่สำเร็จ",
+  "invitationStatusPending": "รอตอบรับ",
+  "invitationStatusExpired": "หมดอายุแล้ว",
+  "invitationStatusCancelled": "ยกเลิกแล้ว",
+  "invitationStatusAccepted": "รับแล้วเมื่อ {dateTime}",
+  "@invitationStatusAccepted": {
+    "placeholders": {
+      "dateTime": {
+        "type": "String"
+      }
+    }
+  },
+  "invitationAcceptedAfterInviteNote": "บัญชีที่กดรับถูกสร้างขึ้นหลังจากออกลิงก์ ตรวจสอบว่าเป็นคนที่คุณตั้งใจเชิญ",
+  "@invitationAcceptedAfterInviteNote": {
+    "description": "D-028/I-7. Informative, never accusatory — no words implying fraud."
+  },
+  "invitationShowArchived": "ดูคำเชิญที่หมดอายุ/ยกเลิกแล้ว",
+  "invitationHideArchived": "ซ่อนคำเชิญที่หมดอายุ/ยกเลิกแล้ว",
+
+  "inviteExpiresAt": "ลิงก์ใช้ได้ถึง {dateTime} ({remaining})",
+  "@inviteExpiresAt": {
+    "description": "ux-wireframe §1.4/§9.1. BOTH parts are derived from the response's expiresAt — never from a hard-coded TTL, which changes with the invited role (D-028/I-7) and restarts on every reissue (D-027).",
+    "placeholders": {
+      "dateTime": {
+        "type": "String"
+      },
+      "remaining": {
+        "type": "String"
+      }
+    }
+  },
+  "remainingDays": "อีกประมาณ {count} วัน",
+  "@remainingDays": {
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
+  "remainingHours": "อีกประมาณ {count} ชั่วโมง",
+  "@remainingHours": {
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
+  "remainingMinutes": "อีกประมาณ {count} นาที",
+  "@remainingMinutes": {
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
+  "remainingExpired": "หมดอายุแล้ว",
+
+  "backupOwnerNudgeBody": "ตอนนี้ร้านนี้มีเจ้าของร้านคนเดียวคือคุณ — ถ้าวันหนึ่งคุณเข้าระบบไม่ได้ จะไม่มีใครในร้านช่วยตั้งรหัสผ่านใหม่ให้ได้ แนะนำให้ตั้งคนที่คุณไว้ใจอีก 1 คนเป็นเจ้าของร้านไว้",
+  "@backupOwnerNudgeBody": {
+    "description": "D-030. Tone is info, not warning: nothing is wrong right now. Never use อันตราย/เสี่ยง/ข้อมูลจะหาย, and never a red warning icon."
+  },
+  "backupOwnerNudgeCta": "เชิญเจ้าของร้านอีกคน",
+  "backupOwnerNudgeDismiss": "ไว้ทีหลัง",
+
+  "inviteTitle": "เชิญสมาชิก",
+  "inviteEmailLabel": "อีเมลของคนที่จะเชิญ",
+  "inviteEmailPlaceholder": "เช่น malee@shop.com",
+  "inviteRoleLabel": "ให้สิทธิ์เป็น",
+  "inviteRoleOwnerDesc": "ทำได้ทุกอย่าง รวมถึงตั้ง/ถอดเจ้าของร้านคนอื่น",
+  "inviteRoleAdminDesc": "จัดการทีมงานและงานประจำวันได้ แต่ตั้งเจ้าของร้านไม่ได้",
+  "inviteRoleStaffDesc": "ทำงานประจำวัน ไม่เห็นรายชื่อทีมงานและข้อมูลผู้เสียภาษี",
+  "inviteOwnerDisabledHelper": "เฉพาะเจ้าของร้านเท่านั้นที่ตั้งเจ้าของร้านคนใหม่ได้",
+  "inviteShortTtlNote": "สิทธิ์ระดับนี้ ลิงก์คำเชิญจะมีอายุสั้นกว่าปกติเพื่อความปลอดภัย",
+  "inviteNoEmailNote": "ระบบยังไม่ส่งอีเมลให้อัตโนมัติ — คุณจะได้ลิงก์ไว้ส่งเองทางแชต (เช่น LINE)",
+  "inviteSubmit": "สร้างลิงก์คำเชิญ",
+  "inviteSubmitting": "กำลังสร้างลิงก์...",
+  "inviteRolesLoadError": "โหลดรายการสิทธิ์ไม่สำเร็จ",
+  "inviteErrorEmailInvalid": "รูปแบบอีเมลไม่ถูกต้อง",
+  "inviteErrorAlreadyMember": "อีเมลนี้เป็นสมาชิกของร้านอยู่แล้ว",
+  "inviteErrorRoleUnavailable": "สิทธิ์ที่เลือกใช้ไม่ได้แล้ว กรุณาเลือกใหม่อีกครั้ง",
+  "inviteErrorPendingTitle": "อีเมลนี้มีคำเชิญค้างอยู่แล้ว",
+  "inviteErrorPendingBody": "คำเชิญเดิม: สิทธิ์ {roleName}",
+  "@inviteErrorPendingBody": {
+    "placeholders": {
+      "roleName": {
+        "type": "String"
+      }
+    }
+  },
+  "inviteErrorPendingBack": "กลับไปแก้อีเมล",
+  "inviteErrorLimitReached": "มีคำเชิญที่รอตอบรับค้างอยู่มากเกินไป — ยกเลิกคำเชิญที่ไม่ใช้แล้วก่อน จึงจะเชิญคนใหม่ได้",
+  "inviteErrorForbidden": "คุณไม่มีสิทธิ์เชิญสมาชิกด้วยสิทธิ์ระดับนี้ — เฉพาะเจ้าของร้านเท่านั้นที่ตั้งเจ้าของร้านคนใหม่ได้",
+  "inviteErrorThrottled": "เชิญสมาชิกถี่เกินไป กรุณารอสักครู่แล้วลองใหม่",
+  "inviteErrorGeneric": "สร้างคำเชิญไม่สำเร็จ กรุณาลองใหม่อีกครั้ง",
+
+  "inviteLinkTitle": "ลิงก์คำเชิญพร้อมแล้ว",
+  "inviteLinkOnceWarning": "ลิงก์นี้แสดงครั้งเดียว — ปิดหน้านี้แล้วจะดูซ้ำไม่ได้ ถ้าทำหาย ให้ออกลิงก์ใหม่จากหน้าสมาชิก",
+  "@inviteLinkOnceWarning": {
+    "description": "ux-wireframe §9.1 — the single gate before the link disappears (D-018: only its hash is stored). Must never say 'คัดลอกลิงก์เดิม' anywhere, because there is no old link to copy."
+  },
+  "inviteLinkFor": "สำหรับ {email}",
+  "@inviteLinkFor": {
+    "placeholders": {
+      "email": {
+        "type": "String"
+      }
+    }
+  },
+  "inviteLinkCopy": "คัดลอกลิงก์",
+  "inviteLinkCopied": "คัดลอกลิงก์แล้ว",
+  "inviteLinkDone": "เสร็จสิ้น",
+  "inviteLinkSemantics": "คัดลอกลิงก์คำเชิญ"
 }
