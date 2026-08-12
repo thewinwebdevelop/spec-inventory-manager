@@ -401,7 +401,8 @@ jobs:
             --require "test/org-rate-limit.e2e.int.test.ts=6" \
             --require "test/openapi-parity.int.test.ts=5" \
             --require "test/response-header-policy.int.test.ts=4" \
-            --min-passed 185
+            --require "test/concurrency-matrix.int.test.ts=14" \
+            --min-passed 199
       - name: dump api log on failure
         if: failure()
         run: cat /tmp/api.log || true

@@ -97,9 +97,9 @@
 
 | ID | งาน | ref → target | deps | status | updated_by |
 |----|-----|--------------|------|--------|------------|
-| T-002-Q1 | unit lane: core-domain (12) · packages/db (10 — รวม **M-9 `upsert` แถวต่อแถว**, `USER_SELECT` freeze, nested read "ลงกลับ") · config (6) | `test-plan.md §5–7` | T-002-02, T-002-08 | todo | — |
+| T-002-Q1 | unit lane: core-domain (12) · packages/db (10 — รวม **M-9 `upsert` แถวต่อแถว**, `USER_SELECT` freeze, nested read "ลงกลับ") · config (6) | `test-plan.md §5–7` | T-002-02, T-002-08 | done | qa (audit ครบ + gate `U-API-14`; redaction จริง → devops D2) |
 | T-002-Q2 | ★ int lane บังคับ: **cross-org leak × 4 persona** · **route-registry capability (รวม `GET`)** · assertion กลาง `passwordHash`/`tokenHash` · **hash-at-rest พิสูจน์ได้** | `test-plan.md §8` | T-002-22 | todo | — |
-| T-002-Q3 | ★ concurrency 13 เคส: Owner คนสุดท้าย 2 ขนาน ×20 รอบ · accept ซ้ำ · invite ซ้ำ · **revoke‖accept** · reissue‖accept · cancel‖accept · PATCH‖DELETE · ยก Owner 2 คนพร้อมกัน · cap 49 · revoke‖revoke · **lock timeout → 409 ไม่ใช่ 500 · ห้าม 40P01/40001 หลุด wire** | `test-plan.md §8` · `architecture.md §5.2` | T-002-03, T-002-22 | todo | — |
+| T-002-Q3 | ★ (เขียนครบ — **รอ CI ยืนยัน**) concurrency 13 เคส: Owner คนสุดท้าย 2 ขนาน ×20 รอบ · accept ซ้ำ · invite ซ้ำ · **revoke‖accept** · reissue‖accept · cancel‖accept · PATCH‖DELETE · ยก Owner 2 คนพร้อมกัน · cap 49 · revoke‖revoke · **lock timeout → 409 ไม่ใช่ 500 · ห้าม 40P01/40001 หลุด wire** | `test-plan.md §8` · `architecture.md §5.2` | T-002-03, T-002-22 | in_progress | qa (`test/concurrency-matrix.int.test.ts` + CI floor) |
 | T-002-Q4 | ★ regression ของ finding: **NEW-1 (Admin→Owner reset = 404 + รหัสเดิมยัง login ได้ + เคสควบคุม)** · C-1 · C-2 · I-1 · NEW-2 · **I-45 สลับ `Role.key` ใน DB แล้วสิทธิ์ต้องไม่ขยับ** · เข้า **smoke tier ถาวร** | `test-plan.md §9` (ทะเบียน 41 finding) | T-002-09, T-002-22 | todo | — |
 | T-002-Q5 | E2E + manual: flow เชิญ→รับ **3 ทางแยกของ US-4** · org switcher · ถูกถอดกลางคัน · Staff เจอ 403 แล้ว UI ทำถูก | `test-plan.md §10` · `ux-wireframe.md §11` | T-002-W6, T-002-M3 | todo | — |
 | T-002-Q6 | perf smoke: member list 200 คน · `/me/organizations` 50 org · overhead membership lookup < 5 ms | `test-plan.md` · `architecture.md §10` | T-002-18 | todo | — |
@@ -989,3 +989,81 @@ mapper เดิม**ไม่เคยอ่าน `details` เลย** ⇒ �
 | M-7 | `Page<T>` ชนกับ `Page` ของ Flutter → เปลี่ยนชื่อเป็น `PagedResult<T>` · controller paging เป็นตัวเล็ก ๆ เฉพาะกิจ **ไม่ใช่** `PagedListController` (F-013) | ตั้งใจ |
 
 `mobile 387 tests` (+120) · analyze ✓ · boundary gate ✓ (78 ไฟล์)
+
+## T-002-Q1/Q3 — qa lane: audit ของ unit lane + concurrency matrix ครบ 13 เคส (2026-08-12)
+
+### สิ่งแรกที่ต้องพูด: int lane **ยังไม่ได้รัน** ในรอบนี้
+
+เครื่องนี้ไม่มี Postgres — docker daemon ไม่ขึ้น (สั่ง `open -a Docker` แล้วไม่ start) และไม่มี postgres ที่ติดตั้งตรง ๆ
+⇒ ทุกไฟล์ `*.int.test.ts` **skip** · ตาม `apps/api/CLAUDE.md` ข้อ 8 ("green locally ≠ tested") **ห้ามอ้างว่าผ่าน**
+สิ่งที่ยืนยันแล้วรอบนี้: `typecheck` · `lint` · unit lane ทุกตัว
+
+### Q1 — audit: unit lane ครบเกือบหมด และ **ช่องว่างจริงมีข้อเดียว**
+
+| ชุด | ต้องมี | มีจริง |
+|---|---|---|
+| `U-CD-01..12` | 12 | **12/12** (label ครบในไฟล์) |
+| `U-DB-01..11` | 11 | **11/11** — `U-DB-06` มีจริง (`org-models.test.ts` เช็ค drift สองทาง) แต่ **ไม่มี label id** ⇒ audit ครั้งหน้าจะหาไม่เจอด้วย grep |
+| `U-CFG-01..07` | 7 | **7/7** |
+| `U-API-01..21` | 21 | ครบตามไฟล์ **ยกเว้น `U-API-14`** |
+
+**`U-API-14` (redact `token`/`tokenHash`/`taxId`/`password*` · ห้าม log query string ของ `/invitations/*`) —
+ไม่มีอะไรให้เทสต์ เพราะ `apps/api` ยังไม่มี structured logger เลย** ใช้ Nest logger ตรง ๆ
+(`main.ts` cap ไว้ที่ `["log","warn","error"]`) และไม่มีชั้น redact ที่ไหน · เขียนเทสต์ต่อ `redact` list
+= ต้องสร้าง list ก่อน ซึ่งเป็นงาน **devops D2 + การตัดสินของ backend-api ไม่ใช่ของ qa**
+
+⇒ ทำครึ่งที่ **พิสูจน์ได้จริงวันนี้** เป็น gate: `src/common/log-hygiene.test.ts`
+- สแกน log call ทุกตัวใน `src/` แล้ว **ลบเนื้อใน string literal ออกก่อน** ⇒ `logger.warn("invalid token")`
+  (คำในประโยค) ผ่าน แต่ `logger.warn(\`${token}\`)` / `logger.log({ tokenHash })` ไม่ผ่าน
+- ห้าม `new PrismaClient({ log: ["query"] })` — คำเดียวในคอนสตรัคเตอร์ที่ทำให้ **parameter** ของทุก statement
+  (คือ `passwordHash`, `tokenHash`, `taxIdEncrypted`) ลงล็อก และ **redact list จับไม่ได้** เพราะค่าไม่ได้ผ่าน field name
+- `main.ts` ห้ามเปิด `debug`/`verbose`
+
+> เมื่อ structured logger ลง (D2) `redact` เป็นชั้นที่สอง · **gate นี้ยังเป็นชั้นแรก** เพราะ redact ครอบแค่ชื่อ field
+> ที่มีคนนึกออก ส่วน gate นี้ครอบ log call ทุกตัวในทรี
+
+**พิสูจน์ว่าแดงได้จริง (mutation บนไฟล์จริง ไม่ใช่ fixture):** ใส่ `${this.taxId}` ใน `prisma.service.ts` ⇒ แดง ·
+`log: ["query"]` ⇒ แดง · เพิ่ม `"debug"` ใน `main.ts` ⇒ แดง · คืนค่าทั้งสามแล้วเขียว
+
+### Q3 — concurrency matrix ครบ 13 เคส (`test/concurrency-matrix.int.test.ts`)
+
+เดิมมี **4/13** (I-C-01/02/07/10) กระจายอยู่ในไฟล์ feature และรัน **6 รอบ ไม่ใช่ 20** ·
+เขียนใหม่เป็นไฟล์ของตัวเอง เพราะ §8 ไม่ใช่ "ลิสต์เคส" แต่เป็นลิสต์เคส **+ กติกา 3 ข้อที่มีความหมายเฉพาะเมื่อบังคับข้ามทั้งชุด**:
+
+1. **ห้ามมี 5xx ที่ไหนเลยในไฟล์** — ทุก response ผ่าน `fire()` ⇒ เช็คทั้งราย response และรวบยอดใน `afterAll`
+   ⇒ เคสที่ลืม assert ก็ยังซ่อน 500 ไม่ได้
+2. **ห้ามมี `40P01`/`40001` ใน output ของ process** — architecture §5.1 อ้างว่า "คว้า lock ลำดับเดียวกันทุกเส้นทาง
+   ⇒ ไม่มี deadlock" · **ไม่มีอะไรเช็คคำอ้างนี้มาก่อนไฟล์นี้** (tap `stdout`/`stderr` แบบ pass-through) ·
+   ข้อยกเว้นเดียวที่ §8 ให้คือ `55P03` ใน I-C-13 ซึ่งเทสต์สร้างเอง
+3. **รอบที่จบด้วย "ชนะ 1" ต้องมี security event ใบเดียว · รอบที่จบด้วย 409 ต้องมี 0 ใบ** —
+   race ที่ทำให้ audit เพี้ยน **status code มองไม่เห็น** และ audit ที่บอกว่าเกิดสิ่งที่ไม่ได้เกิดแย่กว่าไม่มี audit
+
+ทุกเคส **20 รอบ** และ assert invariant กับ **Postgres ท้ายรอบ** ไม่ใช่แค่ status
+(I-C-13 = 3 รอบ ตามข้อยกเว้นที่ §8 เขียนไว้เอง) · ไม่มี `setTimeout` จัดจังหวะที่ไหนเลย — `Promise.all` เท่านั้น
+
+เคสที่ควรพูดถึงเป็นพิเศษ:
+- **I-C-11 (leave ‖ revoke)** — assert ว่า event ออก **ใบเดียว** ห้ามได้ทั้ง `member.left` และ `member.revoked`
+  สำหรับการถอดครั้งเดียว · เพิ่ม assert ฝั่งอ่านด้วย: ร้านต้องหายจาก `/me/organizations` ทันที
+  (แถวที่ `revoked` ในตารางแต่ยังอยู่ในลิสต์ = ร้านที่ picker ฝั่ง mobile จะพากลับเข้าไป)
+- **I-C-12 (Owner 2 คน leave พร้อมกัน)** — ทางใหม่ที่ D-029 เปิดให้ร้านล็อกตัวเองออก ถ้า `DELETE …/membership`
+  ไม่คว้า anchor เดียวกับ `DELETE …/members/{userId}`
+- **I-C-09 (cap)** — ใช้ `MAX_ORGS_PER_USER=2` ผ่าน env (factory ของ production อ่านจาก env อยู่แล้ว)
+  แทนการ seed 49 ร้านต่อรอบ · **สิ่งที่ §8 สนใจคือ "overshoot ไม่เกิน 1 ใบ" ไม่ใช่เลข 50** — สิทธิ์ปรับ env
+  แบบเดียวกับที่ §8 ให้ I-C-13 เรื่อง timeout
+- **I-C-13** — ครบทั้ง 6 ข้อย่อย: busy + ไม่มี SQLSTATE หลุด wire + `traceId` ยังมี + **DB ไม่เปลี่ยนแม้ field เดียว**
+  (snapshot ก่อน/หลัง) + **ไม่มี event** + **org อื่นได้ 200 ระหว่างนั้น** (แก่นของ NEW-4 คือ noisy neighbour
+  ไม่ใช่ error mapping) + หลังปล่อย lock request ถัดไปสำเร็จ
+- **เทสต์ตัวสุดท้ายของไฟล์ = non-vacuity**: assert ว่าทั้ง 13 เคสยิง request จริง — ไม่มีชั้นนี้ ไฟล์ที่ทุกเคส
+  no-op เงียบ ๆ จะผ่านกติกาทั้ง 3 ข้อข้างบนหมด ซึ่งคือรูปเดียวกับ finding "gate ที่แดงไม่ได้" 6 ข้อของรอบ review
+
+**CI floor:** เพิ่ม `--require "test/concurrency-matrix.int.test.ts=14"` และยก `--min-passed` 185 → 199
+⇒ ถ้าไฟล์นี้ skip ทั้งไฟล์ (ลืม env) lane จะ **แดง** ไม่ใช่เขียว
+
+### สถานะ qa lane ตามจริง
+
+| | สถานะ |
+|---|---|
+| Q1 | audit เสร็จ · ปิดช่องว่าง `U-API-14` ด้วย gate + **แจ้งว่า redaction จริงเป็นของ D2** · ค้าง: ใส่ label id ที่ `U-DB-06` |
+| Q2 | audit แล้วว่ามีของครบ (org-leak kit 4+1 persona · route-registry · `assertions.kit` · hash-at-rest) — **แต่ยังไม่ได้รันยืนยันรอบนี้** |
+| Q3 | **เขียนครบ 13 เคส + กติกา 3 ข้อ + non-vacuity** · typecheck/lint เขียว · **ยังไม่ได้รันจริง → ต้องรอ CI** |
+| Q4–Q7 | ยังไม่เริ่ม (Q5/Q6 ต้องมี DB · Q7 เป็น Track 2 ไม่บล็อก merge) |
