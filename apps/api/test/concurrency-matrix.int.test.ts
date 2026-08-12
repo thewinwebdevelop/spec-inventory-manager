@@ -82,6 +82,19 @@ d("F-002 concurrency matrix (test-plan §8)", () => {
   let kit: SeedKit;
   let events: SecurityEventCollector;
 
+  /**
+   * Orgs this suite touched.
+   *
+   * The kit deletes exactly the rows IT created, and this suite makes rows the
+   * kit never sees: an accepted invitation writes a membership through the app,
+   * `POST /invitations` writes an invitation. Those rows still point at
+   * kit-created roles, so `kit.cleanup()` hit
+   * `Membership_organizationId_roleId_fkey` on its first real run. They are
+   * swept here, by org id, before the kit runs — never a global TRUNCATE:
+   * vitest runs these files in parallel against one Postgres.
+   */
+  const touchedOrgIds: string[] = [];
+
   /** Every response this suite produced, for the suite-level rules. */
   const fired: { readonly caseId: string; readonly status: number; readonly body: unknown }[] = [];
 
@@ -142,6 +155,11 @@ d("F-002 concurrency matrix (test-plan §8)", () => {
         ).toBe(0);
       }
     } finally {
+      if (prisma && touchedOrgIds.length > 0) {
+        const where = { organizationId: { in: touchedOrgIds } };
+        await prisma.invitation.deleteMany({ where });
+        await prisma.membership.deleteMany({ where });
+      }
       if (kit) await kit.cleanup();
       if (app) await app.close();
       if (prisma) await prisma.$disconnect();
@@ -180,6 +198,7 @@ d("F-002 concurrency matrix (test-plan §8)", () => {
     people: Record<string, Person>;
   }> {
     const org = await kit.createOrg();
+    touchedOrgIds.push(org.id);
     const people: Record<string, Person> = {};
     for (const [name, roleName] of Object.entries(roles)) {
       const p = await person();
@@ -314,7 +333,15 @@ d("F-002 concurrency matrix (test-plan §8)", () => {
 
         expect(statusesOf(a, b).filter((s) => s === 200), where).toHaveLength(1);
         const loser = codesOf(a, b).find(Boolean);
-        expect(["ALREADY_ACCEPTED", "ALREADY_MEMBER", "CONFLICT"], where).toContain(loser);
+        // `INVITATION_ALREADY_ACCEPTED` is the SHIPPED code (api-spec §4,
+        // `ERROR_CODES`). test-plan §8 writes it as "ALREADY_ACCEPTED", which is
+        // shorthand for a code that does not exist — this assertion was red on
+        // its first real run for exactly that reason. The contract wins over the
+        // plan's abbreviation.
+        expect(
+          ["INVITATION_ALREADY_ACCEPTED", "ALREADY_MEMBER", "CONFLICT"],
+          where,
+        ).toContain(loser);
 
         // And the invitation is not left `pending` — a used token that still
         // reads as usable is a token somebody will try to use.
@@ -391,8 +418,25 @@ d("F-002 concurrency matrix (test-plan §8)", () => {
         if (revoke.status === 200) {
           expect(membership.status, `${where}: revoked, then let straight back in`).toBe("revoked");
           expect([403, 409], where).toContain(accept.status);
+          // Four refusals are all correct here, and WHICH one depends on how far
+          // the accept got before the revoke committed:
+          //   revoke committed first → the invitation predates the revocation
+          //                            → INVITATION_SUPERSEDED (I-1), or
+          //                              CANCELLED once the revoke cascaded, or
+          //                              ORG_ACCESS_DENIED at the guard;
+          //   accept read first      → the person was still an ACTIVE member
+          //                            → ALREADY_MEMBER (I-9).
+          // The last one is what this assertion missed on its first real run.
+          // Note what is NOT on the list: a 200. The invariant above is the
+          // point — refused is refused, and the row ends `revoked`.
           expect(
-            ["INVITATION_SUPERSEDED", "INVITATION_CANCELLED", "CONFLICT", "ORG_ACCESS_DENIED"],
+            [
+              "INVITATION_SUPERSEDED",
+              "INVITATION_CANCELLED",
+              "ALREADY_MEMBER",
+              "CONFLICT",
+              "ORG_ACCESS_DENIED",
+            ],
             where,
           ).toContain(codesOf(accept)[0]);
         } else {

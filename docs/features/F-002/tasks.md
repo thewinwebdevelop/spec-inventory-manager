@@ -1067,3 +1067,22 @@ mapper เดิม**ไม่เคยอ่าน `details` เลย** ⇒ �
 | Q2 | audit แล้วว่ามีของครบ (org-leak kit 4+1 persona · route-registry · `assertions.kit` · hash-at-rest) — **แต่ยังไม่ได้รันยืนยันรอบนี้** |
 | Q3 | **เขียนครบ 13 เคส + กติกา 3 ข้อ + non-vacuity** · typecheck/lint เขียว · **ยังไม่ได้รันจริง → ต้องรอ CI** |
 | Q4–Q7 | ยังไม่เริ่ม (Q5/Q6 ต้องมี DB · Q7 เป็น Track 2 ไม่บล็อก merge) |
+
+### Q3 รอบแรกบน CI: 11/13 เขียวทันที · แดง 3 จุด **และทั้งสามจุดเป็นเทสต์ผิด ไม่ใช่โค้ดผิด**
+
+รัน `integration-api` จริง ([run 31607767660](https://github.com/thewinwebdevelop/spec-inventory-manager/actions/runs/31607767660)) —
+เคสที่ผมเดาว่าเสี่ยงสุด (I-C-08 ต้อง `[200,200]` · I-C-12 ต้อง `LAST_OWNER` · I-C-13 ทั้ง 6 ข้อย่อย) **ผ่านหมดรอบแรก**
+และกติกา "ห้ามมี `40P01`/`40001`" ก็ผ่าน ⇒ คำอ้างของ architecture §5.1 เรื่องลำดับคว้า lock **มีหลักฐานแล้ว**
+
+| แดง | สาเหตุจริง | แก้ที่ |
+|---|---|---|
+| I-C-02 | code ที่ ship คือ **`INVITATION_ALREADY_ACCEPTED`** · **test-plan §8 เขียนย่อว่า `ALREADY_ACCEPTED` ซึ่งไม่มี code นี้อยู่จริง** และผมลอกคำย่อมาใส่ assertion | เทสต์ (contract ชนะคำย่อในแผน) |
+| I-C-04 | round 5 ได้ `409 ALREADY_MEMBER` ซึ่ง **ถูกต้อง**: accept อ่านก่อน revoke commit ⇒ ตอนนั้นยังเป็นสมาชิก active อยู่ (I-9) · ลิสต์ code ของผมแคบเกินไป | เทสต์ (invariant "ห้ามถอดแล้วกลับเข้ามา" ผ่านอยู่แล้ว) |
+| `afterAll` | `Membership_organizationId_roleId_fkey` — kit ลบเฉพาะแถวที่ **kit สร้าง** แต่ suite นี้สร้างแถวผ่าน **แอปจริง** (accept เขียน membership, `POST /invitations` เขียน invitation) ซึ่งยังชี้ไปที่ role ของ kit | เทสต์ (กวาดตาม `organizationId` ก่อน `kit.cleanup()`) |
+
+> **หมายเหตุถึง qa/@product:** ข้อแรกเป็นข้อผิดพลาดในเอกสาร ไม่ใช่แค่ในเทสต์ — `test-plan.md §8` แถว I-C-02
+> ควรแก้ `ALREADY_ACCEPTED` → `INVITATION_ALREADY_ACCEPTED` ให้ตรง `ERROR_CODES` + api-spec §4
+> (ผมไม่แก้ test-plan เอง: เป็นไฟล์ของ qa)
+>
+> ข้อที่สามคือรูปเดิมที่เคยเจอในรอบ security review ("test debris ของผมเองทำให้ scan พัง") — คราวนี้เจอเพราะ
+> รันจริงเท่านั้น ไม่มีทางเจอจาก typecheck/lint
