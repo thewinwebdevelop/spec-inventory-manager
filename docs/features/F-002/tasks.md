@@ -100,7 +100,7 @@
 | T-002-Q1 | unit lane: core-domain (12) · packages/db (10 — รวม **M-9 `upsert` แถวต่อแถว**, `USER_SELECT` freeze, nested read "ลงกลับ") · config (6) | `test-plan.md §5–7` | T-002-02, T-002-08 | done | qa (audit ครบ + gate `U-API-14`; redaction จริง → devops D2) |
 | T-002-Q2 | ★ int lane บังคับ: **cross-org leak × 4 persona** · **route-registry capability (รวม `GET`)** · assertion กลาง `passwordHash`/`tokenHash` · **hash-at-rest พิสูจน์ได้** | `test-plan.md §8` | T-002-22 | todo | — |
 | T-002-Q3 | ★ (เขียนครบ — **รอ CI ยืนยัน**) concurrency 13 เคส: Owner คนสุดท้าย 2 ขนาน ×20 รอบ · accept ซ้ำ · invite ซ้ำ · **revoke‖accept** · reissue‖accept · cancel‖accept · PATCH‖DELETE · ยก Owner 2 คนพร้อมกัน · cap 49 · revoke‖revoke · **lock timeout → 409 ไม่ใช่ 500 · ห้าม 40P01/40001 หลุด wire** | `test-plan.md §8` · `architecture.md §5.2` | T-002-03, T-002-22 | done | qa (`test/concurrency-matrix.int.test.ts` 14/14 เขียวบน CI run 31608348040) |
-| T-002-Q4 | ★ regression ของ finding: **NEW-1 (Admin→Owner reset = 404 + รหัสเดิมยัง login ได้ + เคสควบคุม)** · C-1 · C-2 · I-1 · NEW-2 · **I-45 สลับ `Role.key` ใน DB แล้วสิทธิ์ต้องไม่ขยับ** · เข้า **smoke tier ถาวร** | `test-plan.md §9` (ทะเบียน 41 finding) | T-002-09, T-002-22 | todo | — |
+| T-002-Q4 | ★ regression ของ finding: **NEW-1 (Admin→Owner reset = 404 + รหัสเดิมยัง login ได้ + เคสควบคุม)** · C-1 · C-2 · I-1 · NEW-2 · **I-45 สลับ `Role.key` ใน DB แล้วสิทธิ์ต้องไม่ขยับ** · เข้า **smoke tier ถาวร** | `test-plan.md §9` (ทะเบียน 41 finding) | T-002-09, T-002-22 | done | qa (regression-pack gate + G-15 tripwire + ปิด M-3 ที่ไม่เคยมีเทสต์) |
 | T-002-Q5 | E2E + manual: flow เชิญ→รับ **3 ทางแยกของ US-4** · org switcher · ถูกถอดกลางคัน · Staff เจอ 403 แล้ว UI ทำถูก | `test-plan.md §10` · `ux-wireframe.md §11` | T-002-W6, T-002-M3 | todo | — |
 | T-002-Q6 | perf smoke: member list 200 คน · `/me/organizations` 50 org · overhead membership lookup < 5 ms | `test-plan.md` · `architecture.md §10` | T-002-18 | todo | — |
 | T-002-Q7 | Track 2 (agentic, **ไม่บล็อก merge**): 7 flow persona SME ไทย — คุ้มสุด: **"ออกลิงก์ใหม่"** (ผู้ใช้เข้าใจไหมว่าลิงก์เดิมตาย) และ **404 ของ admin-reset** | `test-plan.md` · WEB_TEAM §3.7 | T-002-Q5 | todo | — |
@@ -1103,3 +1103,62 @@ mapper เดิม**ไม่เคยอ่าน `details` เลย** ⇒ �
 
 **หมายเหตุที่ต้องอ่านคู่กัน:** ใน job `node-ci` ไฟล์นี้ขึ้น `14 skipped` (ไม่มี DB env) — นั่นคือรูปที่ I-37 floor
 มีไว้จับพอดี: ถ้าไม่มี floor ไฟล์นี้ skip ทั้งไฟล์แล้ว lane ก็ยังเขียว
+
+## T-002-Q4 — regression pack: ทำให้ "ทะเบียน 41 finding" เป็นของที่ตรวจได้ (2026-08-12)
+
+### ปัญหาที่แท้จริงของ Q4 ไม่ใช่ "ขาดเทสต์" แต่คือ **ไม่มีใครเทียบทะเบียนกับต้นไม้เทสต์**
+
+§16 เรียก §9 ว่า "permanent pack" (ลบสมาชิกต้องมี D-XXX) · §17.11(ก) ทำให้ "ทุก finding มีเทสต์ **หรือ**
+มีเหตุผลเป็นลายลักษณ์ — ช่องว่าง = แดง" เป็นเงื่อนไข verdict · **แต่ทั้งสองประโยคอยู่ใน markdown เท่านั้น**
+ตารางอยู่ในเอกสาร เทสต์อยู่ในโค้ด ไม่มีอะไรเทียบกัน ⇒ เทสต์ที่ถูกลบ/ย้าย/เปลี่ยนชื่อ ทะเบียนก็ยัง "อ้างว่าปิดแล้ว" ต่อไป
+— **รูปเดียวกับที่ delta review จับ NEW-1 ได้** (กฎที่เชื่อว่าปิดเพราะเอกสารบอกว่าปิด)
+
+⇒ `test/regression-pack.ts` (ทะเบียน 41 ข้อเป็น **data**) + `test/regression-pack.test.ts` (gate)
+- ทุกแถวต้องมี **pin** (ไฟล์ + marker ที่ต้องมีอยู่จริง) **หรือ** `noTest` ที่เขียนเหตุผลจริง (ยาวกว่า 40 ตัวอักษร — เหตุผลคำเดียวคือช่องว่างที่ใส่จุด)
+- ทุก pin ต้อง resolve ได้จริง: ไฟล์ยังอยู่ + ยังมี marker
+- แถวที่ไม่มีเทสต์ **ห้าม** ติด tier ว่า runnable · แถวที่มีเทสต์ห้ามติด `none`
+- **smoke tier ระบุเป็นชื่อ ไม่ใช่จำนวน** — ถอด finding ออกจาก smoke = diff ที่มองเห็น (§16 บังคับ D-XXX)
+- NEW-1 ต้อง pin **ทั้งสองชั้น** (core-domain + int) ตาม §17.11(ข)
+- self-check: pin ที่ชี้ไฟล์ไม่มีจริง / marker ไม่มีจริง ต้องถูกจับ
+
+> **ขอบเขตที่ gate นี้พิสูจน์ไม่ได้ (เขียนไว้ในหัวไฟล์ด้วย):** มันพิสูจน์ว่า "เทสต์ยังอยู่ตรงที่ทะเบียนบอก"
+> **ไม่ได้**พิสูจน์ว่าเทสต์นั้นยัง assert สิ่งที่ถูก — การลดความเข้มของ assert ข้างในไฟล์ที่ pin ไว้ gate นี้มองไม่เห็น
+> (นั่นคืองานของ code review) · เขียนไว้ตรง ๆ เพราะ **gate ที่ถูกเชื่อว่าพิสูจน์มากกว่าที่ทำได้ แย่กว่าไม่มี gate**
+
+### สิ่งที่ gate จับได้ทันทีในการรันครั้งแรก: **M-3 ไม่มีเทสต์เลย**
+
+§9.0 pin M-3 (cap ต้องไม่นับคำเชิญที่หมดอายุ) ไว้ที่ **"I-27"** — **ไม่มี I-27 อยู่จริง** ·
+`INVITATION_LIMIT_REACHED` มีใน service, ใน error registry, ใน contract · **ไม่มีในเทสต์ไฟล์ไหนเลย**
+⇒ กฎถูก implement ถูกต้อง (`expiresAt: { gt: now }`) แต่ไม่มีอะไรเฝ้า
+
+เขียนปิดใน `invitations.e2e.int.test.ts` เป็นคู่:
+- seed คำเชิญ **หมดอายุเต็มโควตา (100 ใบ)** → เชิญคนใหม่ต้อง **201**
+- control: seed **ที่ยังไม่หมดอายุ 100 ใบ** → ต้อง `409 INVITATION_LIMIT_REACHED` + `details.limit = 100`
+  (ถ้าไม่มีครึ่งหลัง เทสต์แรกจะเขียวบน build ที่ไม่มี cap เลย)
+- ค่า 100 อ่านจาก `INVITATION_PENDING_CAP_DEFAULT` ไม่ใช่เขียนเลขซ้ำในเทสต์
+
+### G-15 — tripwire ของ NEW-10 ที่ §17.11(ฉ) บังคับ แต่ **ไม่เคยมีอยู่**
+
+NEW-10 (`canAssignRole` ไม่กัน privilege superset) **ทดสอบไม่ได้ใน F-002 จริง ๆ** — role คงที่ 3 ตัว ไม่มี role CRUD
+⇒ เทสต์ที่เขียนไปก็จะเขียวตลอดกาลโดยไม่พิสูจน์อะไร ซึ่งคือรูป gate ที่โปรเจกต์นี้จับได้ในรีวิวตัวเองมาแล้ว 6 ครั้ง
+
+`src/orgs/role-capability-write-tripwire.test.ts` จึงเป็น **tripwire ไม่ใช่คำสัญญา**: แดงทันทีที่มีไฟล์นอก allowlist
+เขียน `Role` หรือรับ `capabilities` มาจาก request ⇒ เปลี่ยน "F-003 **ควร**จัดการเรื่องนี้" เป็น "F-003 **merge ไม่ได้**ถ้าไม่จัดการ"
+· allowlist มีไฟล์เดียว (provisioning ที่สร้าง role จาก `SYSTEM_ROLE_BLUEPRINT` ที่ frozen) และมีเทสต์ว่า **เหตุผลของ allowlist ยังจริงอยู่**
+
+**mutation บนไฟล์จริง:** เพิ่ม `role.update({ data: { capabilities: dto.capabilities } })` ใน `members.service.ts`
+⇒ **แดง 2 ข้อ** (กฎ role-write และกฎ capabilities-from-input จับแยกกันคนละทาง) · คืนค่าแล้วเขียว
+
+### เรื่องที่ตัดสินใจ **ไม่** ทำ และเหตุผล
+
+**ไม่สร้างตัวรัน smoke tier แยกใน CI** — §16 ตั้งเป้า "smoke < 5 นาที" แต่ตอนนี้ทั้ง suite รันบนทุก PR อยู่แล้วใน ~3 นาที
+⇒ กลไกคัดเลือกยังไม่ให้ประโยชน์อะไรวันนี้ และการทำ registry แบบชื่อเทสต์จะต้องไป**เปลี่ยนชื่อเทสต์ ~25 ตัวในไฟล์ของ backend-api**
+· สิ่งที่ขาดจริงคือ **การบังคับสมาชิกภาพของ tier** ซึ่ง gate ข้างบนทำแล้ว (ถอดออกจาก smoke = แดง)
+⇒ ถ้า suite โตจนเกิน 5 นาทีเมื่อไหร่ ค่อยสร้างตัวรันจาก registry เดิมนี้ได้เลย
+
+### ถึง qa: สองแถวใน `test-plan.md` ที่ควรแก้ (ผมไม่แก้เอง — ไฟล์ของ qa)
+
+1. §9.0 แถว **M-3**: pin "I-27" → ไม่มีอยู่จริง ควรชี้ไปที่คู่เทสต์ใหม่ใน `invitations.e2e.int.test.ts`
+2. §8 แถว **I-C-02**: `ALREADY_ACCEPTED` → `INVITATION_ALREADY_ACCEPTED` (จากรอบก่อน)
+
+`api unit 664 tests` (+13) · lint ✓ typecheck ✓ · int lane +2 เคส (floor 21→23, min-passed 199→201)

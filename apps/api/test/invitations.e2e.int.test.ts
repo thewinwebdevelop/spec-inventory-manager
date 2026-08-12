@@ -21,6 +21,10 @@ import {
 import { AccessTokenService } from "../src/auth/access-token.service";
 import { collectSecurityEvents } from "../src/auth";
 import { INVITATION_RESPONSE_HEADERS } from "../src/orgs";
+// Straight from the config module rather than the barrel: the cap is not part
+// of `orgs/`'s public surface, and the point of reading it is that the test
+// must not restate the number the service enforces.
+import { INVITATION_PENDING_CAP_DEFAULT } from "../src/orgs/org-config";
 import { assertErrorEnvelope, assertNoSecretFields, assertResponseHeaders } from "./assertions.kit";
 import { INT_LANE_ENABLED, applyTestEnv, createTestApp, type TestApp } from "./app.kit";
 import { createSeedKit, type SeedKit } from "./f002-seed.kit";
@@ -583,5 +587,83 @@ d("F-002 invitations, org side (E2E, DB)", () => {
     // stay distinguishable from "member but lacking the capability" (I-5).
     assertErrorEnvelope(res, { status: 403, code: "ORG_ACCESS_DENIED" });
     expect(await prisma.invitation.count({ where: { organizationId: a.orgId } })).toBe(0);
+  });
+
+  // ── M-3 · the pending cap counts LIVE invitations only ───────────────────
+  //
+  // ★ T-002-Q4. The regression pack (test-plan §9.0) pins M-3 to "I-27". There
+  // was no I-27: `INVITATION_LIMIT_REACHED` appeared in the service, in the
+  // error registry and in the contract, and in no test anywhere. The rule was
+  // implemented correctly and guarded by nothing — found by the pack's own gate
+  // (`regression-pack.test.ts`) on its first run, which is what that gate is
+  // for.
+  //
+  // Why the rule matters in the direction it does: counting EXPIRED
+  // invitations would let a shop lock itself out of inviting anybody at all,
+  // just by leaving old links to rot. That is a self-inflicted denial of
+  // service with no security benefit — the opposite of the reason a cap exists.
+
+  /** Seeds [count] pending rows, live or long dead, without spending HTTP. */
+  async function seedPending(
+    orgId: string,
+    roleId: string,
+    count: number,
+    options: { readonly expired: boolean },
+  ): Promise<void> {
+    const now = Date.now();
+    for (let i = 0; i < count; i++) {
+      await kit.createInvitation({
+        organizationId: orgId,
+        email: `cap-${options.expired ? "dead" : "live"}-${i}-${now}@example.com`,
+        roleId,
+        status: "pending",
+        // Stored `pending` in both cases — `expired` is COMPUTED at read time
+        // and has no write path (A-4), so an expired invitation IS a pending
+        // row with a past `expiresAt`. Seeding a stored "expired" status would
+        // test a state the system cannot produce.
+        tokenIssuedAt: new Date(now - (options.expired ? 30 : 0) * 86_400_000),
+        expiresAt: new Date(now + (options.expired ? -86_400_000 : 7 * 86_400_000)),
+      });
+    }
+  }
+
+  it("★ M-3: expired invitations do NOT consume the cap", async () => {
+    const { owner, orgId } = await newOrg("ร้านคำเชิญหมดอายุ");
+    const staff = await roleNamed(orgId, "Staff");
+
+    // A full cap's worth of DEAD links, and one live one so the count is not
+    // trivially zero.
+    await seedPending(orgId, staff.id, INVITATION_PENDING_CAP_DEFAULT, { expired: true });
+    await seedPending(orgId, staff.id, 1, { expired: false });
+
+    const res = await invite(orgId, owner.accessToken, {
+      email: "after-the-dead-ones@example.com",
+      roleId: staff.id,
+    });
+
+    expect(
+      res.status,
+      `a shop with ${INVITATION_PENDING_CAP_DEFAULT} EXPIRED links was refused a new invitation: ` +
+        JSON.stringify(res.body),
+    ).toBe(201);
+  });
+
+  it("★ M-3 (control): live invitations DO consume it, and the limit is reported", async () => {
+    // Without this half the test above would pass on a build with no cap at
+    // all — the non-vacuity pair.
+    const { owner, orgId } = await newOrg("ร้านคำเชิญเต็ม");
+    const staff = await roleNamed(orgId, "Staff");
+
+    await seedPending(orgId, staff.id, INVITATION_PENDING_CAP_DEFAULT, { expired: false });
+
+    const res = await invite(orgId, owner.accessToken, {
+      email: "one-too-many@example.com",
+      roleId: staff.id,
+    });
+
+    assertErrorEnvelope(res, { status: 409, code: "INVITATION_LIMIT_REACHED" });
+    // The number is sent so no client hard-codes it (api-spec §3.1's rule,
+    // applied to this cap too) — the mobile and web screens both read it.
+    expect(res.body.error.details).toEqual({ limit: INVITATION_PENDING_CAP_DEFAULT });
   });
 });
