@@ -1168,3 +1168,39 @@ NEW-10 (`canAssignRole` ไม่กัน privilege superset) **ทดสอบ
 - `integration-api`: `test/invitations.e2e.int.test.ts` → **23 passed, 0 failed, 0 skipped** ⇒ คู่เทสต์ M-3 รันจริงกับ Postgres จริง **ผ่านรอบแรก**
 - `node-ci`: `regression-pack.test.ts` 7 ✓ · `role-capability-write-tripwire.test.ts` (G-15) 6 ✓
 - floor ใหม่ `invitations.e2e.int.test.ts=23` ทำงาน (guard พิมพ์ยืนยันจำนวนที่รันจริง)
+
+## T-002-Q6 — perf smoke ครบ 4 เคสของ §14 (2026-08-12)
+
+`test/perf-smoke.int.test.ts` — P-01..P-04 · **right-size ไม่ใช่ load test**: 4 รูปแบบ, process เดียว, ไม่มี concurrency
+· คำถามคือ "ร้านขนาดจริงยังตอบในเวลาที่รับได้ไหม" ไม่ใช่ "รับได้กี่ req/s" (load test บน CI runner ที่แชร์กัน = วัด runner)
+
+| id | สถานการณ์ | budget | สถิติที่ใช้ |
+|---|---|---|---|
+| P-01 | 200 สมาชิก + 100 คำเชิญ → `GET /members?limit=25` | p95 < 200 ms | p95 |
+| P-02 | user อยู่ 50 ร้าน → `GET /me/organizations` | p95 < 150 ms | p95 |
+| P-03 | ราคาของ membership lookup ต่อ request | < 5 ms | **median delta** |
+| P-04 | `GET /invitations?limit=25` บน 100 ใบ | p95 < 200 ms | p95 |
+
+### สามข้อที่ตัดสินใจแล้วเขียนเหตุผลไว้ในไฟล์
+
+1. **P-03 ใช้ผลต่างของ median ไม่ใช่ p95** — ของที่วัดมีขนาด ~5 ms · ผลต่างของ p95 สองตัวบน runner ที่มีเพื่อนบ้าน
+   คือผลต่างของ outlier สองตัว = **วัดอารมณ์ของ runner แล้วเรียกว่า tenancy overhead** · median ทนต่อ process ข้างเคียง
+   (รายงาน max ควบไว้ด้วย เผื่อ tail ถดถอยจริง) · **ค่าติดลบไม่ใช่ failure** — แปลว่า lookup ถูกกว่า noise ซึ่งคือคำตอบที่ §1.5 หวัง
+2. **§14 บอกว่า "เกิน budget = ต้องมีคำอธิบาย ไม่ใช่ retry จนผ่าน"** ⇒ suite นี้ **ไม่ retry** และ **พิมพ์ตัวเลขทุกเคสเสมอ**
+   ไม่ว่าจะผ่านหรือไม่ผ่าน — ตัวเลขคือของที่ส่งมอบ ส่วน assertion เป็นแค่สัญญาณเตือน
+3. **200 สมาชิกไม่ได้สร้างด้วย `kit.createUser`** — hasher ของ production ช้าโดยเจตนา 200 ครั้ง = เสียเวลานาทีนึงพิสูจน์ว่า argon2 ทำงาน
+   ⇒ insert ตรงด้วย placeholder ที่ **หน้าตาไม่เหมือน hash เลย** (`"not-a-hash · perf fixture · this account cannot log in"`)
+   บัญชีพวกนี้ไม่เคย login · คนเดียวที่ login คือ Owner ซึ่งมาจาก kit พร้อม hash จริง
+
+**เทสต์ตัวที่ 5 = non-vacuity ของ fixture**: assert ว่ามีสมาชิก 201 แถวและคำเชิญ 100 ใบจริง ๆ ·
+ถ้า seed พลาดเหลือ 2 แถว ทุก budget ข้างบนจะผ่านสบาย ๆ แล้วไม่ได้พิสูจน์อะไร — กับดักเดียวกับ gate ที่แดงไม่ได้
+
+**fixture ใหม่ `PingController`** (`@Public`, ไม่ทำอะไรเลย) — P-03 ต้องมี baseline ที่ทำทุกอย่างเหมือนกันยกเว้น tenancy chain ·
+`boom/public` ใช้ไม่ได้เพราะมัน throw (จะกลายเป็นวัด exception filter) · แยก controller ไม่ใช่เพิ่ม route ใน `ProbeController`
+เพราะ `@Get("public")` จะไปอยู่ข้าง `@Get(":orgId")` ซึ่ง Nest match ตามลำดับประกาศ = "ร้านชื่อ public" ในอีก refactor เดียว
+
+`f002-seed.kit.test.ts` ที่ assert รายชื่อ fixture controller แบบ **exact list** แดงทันที ⇒ แก้ในคอมมิตเดียวกัน
+**ไม่ผ่อนเป็น `toContain`** (การผ่อนคือการปิดตาเรื่อง "fixture ตัวไหนมีอยู่บ้าง" ซึ่งเป็นเรื่องที่ควรแดงเมื่อเปลี่ยน)
+
+`api unit 664` · lint ✓ typecheck ✓ · CI floor `perf-smoke.int.test.ts=5`, min-passed 201→206
+**ยังไม่ได้รันจริง** (ไม่มี Postgres ในเครื่อง) — ต้องรอ CI

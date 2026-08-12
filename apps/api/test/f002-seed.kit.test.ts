@@ -183,10 +183,16 @@ describe("TestFixturesModule — two independent conditions (§12.2 item 9)", ()
     );
   });
 
-  it("registers both fixture controllers when BOTH conditions hold", () => {
+  it("registers every fixture controller when BOTH conditions hold", () => {
+    // An EXACT list, not `toContain`: these controllers throw on purpose and
+    // read tenant data, so "which fixtures exist" is a fact worth failing on
+    // when it changes. `PingController` (T-002-Q6) was added deliberately — the
+    // public baseline the perf smoke's P-03 measures against — and updating
+    // this line in the same commit is the intended cost of that.
     const mod = TestFixturesModule.register({ NODE_ENV: "test", ENABLE_TEST_FIXTURES: "1" });
     expect(mod.controllers?.map((c) => (c as { name: string }).name).sort()).toEqual([
       "BoomController",
+      "PingController",
       "ProbeController",
     ]);
   });

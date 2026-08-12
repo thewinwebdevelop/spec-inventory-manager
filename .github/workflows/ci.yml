@@ -402,7 +402,8 @@ jobs:
             --require "test/openapi-parity.int.test.ts=5" \
             --require "test/response-header-policy.int.test.ts=4" \
             --require "test/concurrency-matrix.int.test.ts=14" \
-            --min-passed 201
+            --require "test/perf-smoke.int.test.ts=5" \
+            --min-passed 206
       - name: dump api log on failure
         if: failure()
         run: cat /tmp/api.log || true

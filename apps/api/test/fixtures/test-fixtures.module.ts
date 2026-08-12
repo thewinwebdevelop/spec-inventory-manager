@@ -12,6 +12,7 @@
 // condition; a throw names the reason at the exact line.
 import { Module, type DynamicModule } from "@nestjs/common";
 import { BoomController } from "./boom.controller";
+import { PingController } from "./ping.controller";
 import { ProbeController } from "./probe.controller";
 
 export class TestFixturesDisabledError extends Error {
@@ -36,6 +37,9 @@ export class TestFixturesModule {
     if (env.ENABLE_TEST_FIXTURES !== "1") {
       throw new TestFixturesDisabledError("ENABLE_TEST_FIXTURES is not \"1\"");
     }
-    return { module: TestFixturesModule, controllers: [BoomController, ProbeController] };
+    return {
+      module: TestFixturesModule,
+      controllers: [BoomController, PingController, ProbeController],
+    };
   }
 }
