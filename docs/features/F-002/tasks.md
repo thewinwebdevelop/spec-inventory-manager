@@ -99,7 +99,7 @@
 |----|-----|--------------|------|--------|------------|
 | T-002-Q1 | unit lane: core-domain (12) · packages/db (10 — รวม **M-9 `upsert` แถวต่อแถว**, `USER_SELECT` freeze, nested read "ลงกลับ") · config (6) | `test-plan.md §5–7` | T-002-02, T-002-08 | done | qa (audit ครบ + gate `U-API-14`; redaction จริง → devops D2) |
 | T-002-Q2 | ★ int lane บังคับ: **cross-org leak × 4 persona** · **route-registry capability (รวม `GET`)** · assertion กลาง `passwordHash`/`tokenHash` · **hash-at-rest พิสูจน์ได้** | `test-plan.md §8` | T-002-22 | todo | — |
-| T-002-Q3 | ★ (เขียนครบ — **รอ CI ยืนยัน**) concurrency 13 เคส: Owner คนสุดท้าย 2 ขนาน ×20 รอบ · accept ซ้ำ · invite ซ้ำ · **revoke‖accept** · reissue‖accept · cancel‖accept · PATCH‖DELETE · ยก Owner 2 คนพร้อมกัน · cap 49 · revoke‖revoke · **lock timeout → 409 ไม่ใช่ 500 · ห้าม 40P01/40001 หลุด wire** | `test-plan.md §8` · `architecture.md §5.2` | T-002-03, T-002-22 | in_progress | qa (`test/concurrency-matrix.int.test.ts` + CI floor) |
+| T-002-Q3 | ★ (เขียนครบ — **รอ CI ยืนยัน**) concurrency 13 เคส: Owner คนสุดท้าย 2 ขนาน ×20 รอบ · accept ซ้ำ · invite ซ้ำ · **revoke‖accept** · reissue‖accept · cancel‖accept · PATCH‖DELETE · ยก Owner 2 คนพร้อมกัน · cap 49 · revoke‖revoke · **lock timeout → 409 ไม่ใช่ 500 · ห้าม 40P01/40001 หลุด wire** | `test-plan.md §8` · `architecture.md §5.2` | T-002-03, T-002-22 | done | qa (`test/concurrency-matrix.int.test.ts` 14/14 เขียวบน CI run 31608348040) |
 | T-002-Q4 | ★ regression ของ finding: **NEW-1 (Admin→Owner reset = 404 + รหัสเดิมยัง login ได้ + เคสควบคุม)** · C-1 · C-2 · I-1 · NEW-2 · **I-45 สลับ `Role.key` ใน DB แล้วสิทธิ์ต้องไม่ขยับ** · เข้า **smoke tier ถาวร** | `test-plan.md §9` (ทะเบียน 41 finding) | T-002-09, T-002-22 | todo | — |
 | T-002-Q5 | E2E + manual: flow เชิญ→รับ **3 ทางแยกของ US-4** · org switcher · ถูกถอดกลางคัน · Staff เจอ 403 แล้ว UI ทำถูก | `test-plan.md §10` · `ux-wireframe.md §11` | T-002-W6, T-002-M3 | todo | — |
 | T-002-Q6 | perf smoke: member list 200 คน · `/me/organizations` 50 org · overhead membership lookup < 5 ms | `test-plan.md` · `architecture.md §10` | T-002-18 | todo | — |
@@ -1086,3 +1086,20 @@ mapper เดิม**ไม่เคยอ่าน `details` เลย** ⇒ �
 >
 > ข้อที่สามคือรูปเดิมที่เคยเจอในรอบ security review ("test debris ของผมเองทำให้ scan พัง") — คราวนี้เจอเพราะ
 > รันจริงเท่านั้น ไม่มีทางเจอจาก typecheck/lint
+
+### Q3 รอบสอง: เขียวครบ — **ยืนยันแล้วว่า "ผ่าน" ไม่ใช่ "เขียนเสร็จ"**
+
+[run 31608348040](https://github.com/thewinwebdevelop/spec-inventory-manager/actions/runs/31608348040) — **8 job เขียวหมด**
+· `integration-api` รายงาน `test/concurrency-matrix.int.test.ts (14 tests) 30374ms`
+· I-37 floor guard รายงาน `14 passed, 0 failed, 0 skipped`
+
+⇒ ที่รันจริงคือ **20 รอบ × 11 เคส + 3 รอบของ I-C-13** บน Postgres จริง ใน 30 วินาที
+
+**สิ่งที่ตอนนี้มีหลักฐาน (ไม่ใช่คำอ้างในเอกสารอีกแล้ว):**
+- architecture §5.1 "คว้า lock ลำดับเดียวกันทุกเส้นทาง ⇒ ไม่มี deadlock" — ไม่มี `40P01`/`40001` โผล่ใน output ของทั้ง suite
+- §8 กติกา 1 "ห้ามมี 500 จาก race" — 0 ครั้งจากทุก response ที่ suite ยิง
+- §8 กติกา 3 "audit ต้องไม่บวมและไม่โกหก" — I-C-11 ได้ event ใบเดียวต่อการถอดหนึ่งครั้ง ทุกรอบ · I-C-13 ได้ 0 ใบ
+- D-029 ไม่ได้เปิดทางให้ร้านล็อกตัวเองออก — I-C-12 เหลือ owner 1 คนทุกรอบ
+
+**หมายเหตุที่ต้องอ่านคู่กัน:** ใน job `node-ci` ไฟล์นี้ขึ้น `14 skipped` (ไม่มี DB env) — นั่นคือรูปที่ I-37 floor
+มีไว้จับพอดี: ถ้าไม่มี floor ไฟล์นี้ skip ทั้งไฟล์แล้ว lane ก็ยังเขียว
