@@ -1204,3 +1204,26 @@ NEW-10 (`canAssignRole` ไม่กัน privilege superset) **ทดสอบ
 
 `api unit 664` · lint ✓ typecheck ✓ · CI floor `perf-smoke.int.test.ts=5`, min-passed 201→206
 **ยังไม่ได้รันจริง** (ไม่มี Postgres ในเครื่อง) — ต้องรอ CI
+
+### Q6 ผลจริงบน CI ([run 31618708716](https://github.com/thewinwebdevelop/spec-inventory-manager/actions/runs/31618708716)) — เขียวครบ 8 job
+
+**baseline ครั้งแรก (2026-08-12, GitHub-hosted ubuntu-latest + service container Postgres):**
+
+| id | สถิติ | วัดได้ | budget | median | max | headroom |
+|---|---|---|---|---|---|---|
+| P-01 | p95 | **16.7 ms** | 200 | 8.7 | 20.7 | ~12× |
+| P-02 | p95 | **12.3 ms** | 150 | 7.2 | 14.5 | ~12× |
+| P-03 | median-delta | **1.4 ms** | 5 | 2.8 | 6.2 | ~3.5× |
+| P-04 | p95 | **10.1 ms** | 200 | 7.2 | 12.2 | ~20× |
+
+**P-03 = 1.4 ms คือราคาที่ §1.5 จ่ายเพื่อ "ไม่ cache membership"** — middleware + 2 guards + membership lookup ต่อ request
+· ตัวเลขนี้ทำให้การตัดสินใจนั้นมีราคาที่อ้างอิงได้ ไม่ใช่ความรู้สึก
+
+### ข้อสังเกตที่ต้องบันทึกไว้ ไม่ใช่ปล่อยผ่านเพราะเขียว
+
+budget มี headroom 12–20× ⇒ **budget อย่างเดียวจับการถดถอยที่มีความหมายไม่ได้** — ถ้า P-01 แย่ลงจาก 16.7 เป็น 100 ms
+(เลวลง 6 เท่า, น่าจะแปลว่ามี query ต่อแถวโผล่มา) มันก็ยัง "ผ่าน" budget 200 สบาย ๆ
+
+⇒ **ตัวที่ใช้จริงคือกติกา ±50% เทียบ baseline ของ §14** ซึ่งใช้ได้ก็ต่อเมื่อ **baseline ถูกจดไว้** — ตารางข้างบนคือ baseline นั้น
+· ยังไม่ทำเป็น gate อัตโนมัติ เพราะตัวเลขผูกกับสเปกของ runner (§14 เขียนเองว่าให้ใช้เป็นสัญญาณ + วิจารณญาณคน)
+⇒ **ถ้าจะทำ gate ต้องเก็บ baseline ต่อ runner class ไม่ใช่ค่าเดียวทั้งโปรเจกต์** — ข้อเสนอนี้ฝากไว้ให้ devops/qa ตัดสิน
