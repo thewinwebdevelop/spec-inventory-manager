@@ -97,6 +97,29 @@ describe("InviteScreen — the token leaves the URL", () => {
     expect(seen[0].body).toContain(TOKEN);
   });
 
+  it("★ E-12: the token reaches no web storage, at any point in the flow", async () => {
+    // The clause of E-12 (I-6ข) the URL tests do not cover. Stripping the
+    // address bar is worthless if the value was parked in `localStorage` on
+    // the way past: an XSS on any page of this origin reads it, and unlike the
+    // URL it survives the tab. The token is a bearer credential for MEMBERSHIP
+    // of a shop — it belongs in a React ref for the length of one flow and
+    // nowhere else.
+    stubFetch(200, PREVIEW);
+    renderScreen();
+
+    await waitFor(() => expect(replaceState).toHaveBeenCalled());
+    await waitFor(() => expect(screen.getByText(PREVIEW.organizationName)).toBeInTheDocument());
+
+    for (const store of [window.localStorage, window.sessionStorage] as const) {
+      const dump = Object.keys(store)
+        .map((key) => `${key}=${store.getItem(key) ?? ""}`)
+        .join("\n");
+      expect(dump, "the invitation token was written to web storage").not.toContain(TOKEN);
+    }
+    // Nor in a cookie — the other store a page can write without asking.
+    expect(document.cookie).not.toContain(TOKEN);
+  });
+
   it("shows the shop, the role and the MASKED address", async () => {
     stubFetch(200, PREVIEW);
     renderScreen();

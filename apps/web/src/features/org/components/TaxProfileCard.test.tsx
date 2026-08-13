@@ -62,7 +62,9 @@ function stubReveal(status: number, body: unknown, headers: Record<string, strin
 
 function renderCard(capabilities: string[], onStale = vi.fn()) {
   const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } });
-  render(
+  // `unmount` is returned as well as `onStale`: E-14(ค) needs to take the card
+  // away and bring it back, which is what a reload looks like from here.
+  const view = render(
     <QueryClientProvider client={queryClient}>
       <ActiveOrgProvider value={activeOrg(capabilities)}>
         <TaxProfileCard
@@ -74,7 +76,7 @@ function renderCard(capabilities: string[], onStale = vi.fn()) {
       </ActiveOrgProvider>
     </QueryClientProvider>,
   );
-  return { onStale };
+  return { onStale, unmount: view.unmount };
 }
 
 beforeEach(() => setAccessToken("tok", 900));
@@ -127,6 +129,46 @@ describe("TaxProfileCard — reveal", () => {
     await waitFor(() => expect(document.body.textContent).not.toContain(TIN));
     // Back to the masked value, not to nothing.
     expect(screen.getByText("•••••••••4567")).toBeInTheDocument();
+  });
+
+  it("★ E-14(ข): the revealed number reaches no web storage, and no cookie", async () => {
+    // The DOM test above covers what is on screen. This covers what OUTLIVES
+    // the screen: a TIN in `localStorage` survives the tab, is readable by any
+    // script on this origin, and turns a capability-gated, audited, rate-limited
+    // reveal into a value anybody can pick up later. §3.16 lets the full number
+    // out through exactly one route — it must not acquire a second home on the
+    // way to the screen.
+    stubReveal(200, { taxId: TIN, entityType: "company", revealedAt: "2026-08-06T10:00:00Z" });
+    renderCard([CAPABILITY_MANAGE_ORG_SETTINGS]);
+
+    await userEvent.click(screen.getByRole("button", { name: orgProfileTh.tax.reveal }));
+    await screen.findByText(TIN);
+    await userEvent.click(screen.getByRole("button", { name: orgProfileTh.tax.hide }));
+    await waitFor(() => expect(document.body.textContent).not.toContain(TIN));
+
+    for (const store of [window.localStorage, window.sessionStorage] as const) {
+      const dump = Object.keys(store)
+        .map((key) => `${key}=${store.getItem(key) ?? ""}`)
+        .join("\n");
+      expect(dump, "the tax id was written to web storage").not.toContain(TIN);
+    }
+    expect(document.cookie).not.toContain(TIN);
+  });
+
+  it("★ E-14(ค): a reload starts from the masked value — the reveal is not remembered", async () => {
+    // A remount is what a reload is, from the component's point of view. If the
+    // number came back on its own, it came from somewhere that survived — which
+    // is precisely what (ข) forbids and what the audit trail could not see.
+    stubReveal(200, { taxId: TIN, entityType: "company", revealedAt: "2026-08-06T10:00:00Z" });
+    const first = renderCard([CAPABILITY_MANAGE_ORG_SETTINGS]);
+
+    await userEvent.click(screen.getByRole("button", { name: orgProfileTh.tax.reveal }));
+    await screen.findByText(TIN);
+    first.unmount();
+
+    renderCard([CAPABILITY_MANAGE_ORG_SETTINGS]);
+    expect(document.body.textContent).not.toContain(TIN);
+    expect(screen.getByRole("button", { name: orgProfileTh.tax.reveal })).toBeInTheDocument();
   });
 
   it("★ re-showing costs a SECOND request — nothing is cached", async () => {
