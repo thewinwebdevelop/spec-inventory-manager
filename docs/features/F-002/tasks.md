@@ -101,7 +101,7 @@
 | T-002-Q2 | ★ int lane บังคับ: **cross-org leak × 4 persona** · **route-registry capability (รวม `GET`)** · assertion กลาง `passwordHash`/`tokenHash` · **hash-at-rest พิสูจน์ได้** | `test-plan.md §8` | T-002-22 | todo | — |
 | T-002-Q3 | ★ (เขียนครบ — **รอ CI ยืนยัน**) concurrency 13 เคส: Owner คนสุดท้าย 2 ขนาน ×20 รอบ · accept ซ้ำ · invite ซ้ำ · **revoke‖accept** · reissue‖accept · cancel‖accept · PATCH‖DELETE · ยก Owner 2 คนพร้อมกัน · cap 49 · revoke‖revoke · **lock timeout → 409 ไม่ใช่ 500 · ห้าม 40P01/40001 หลุด wire** | `test-plan.md §8` · `architecture.md §5.2` | T-002-03, T-002-22 | done | qa (`test/concurrency-matrix.int.test.ts` 14/14 เขียวบน CI run 31608348040) |
 | T-002-Q4 | ★ regression ของ finding: **NEW-1 (Admin→Owner reset = 404 + รหัสเดิมยัง login ได้ + เคสควบคุม)** · C-1 · C-2 · I-1 · NEW-2 · **I-45 สลับ `Role.key` ใน DB แล้วสิทธิ์ต้องไม่ขยับ** · เข้า **smoke tier ถาวร** | `test-plan.md §9` (ทะเบียน 41 finding) | T-002-09, T-002-22 | done | qa (regression-pack gate + G-15 tripwire + ปิด M-3 ที่ไม่เคยมีเทสต์) |
-| T-002-Q5 | E2E + manual: flow เชิญ→รับ **3 ทางแยกของ US-4** · org switcher · ถูกถอดกลางคัน · Staff เจอ 403 แล้ว UI ทำถูก | `test-plan.md §10` · `ux-wireframe.md §11` | T-002-W6, T-002-M3 | todo | — |
+| T-002-Q5 | E2E + manual: flow เชิญ→รับ **3 ทางแยกของ US-4** · org switcher · ถูกถอดกลางคัน · Staff เจอ 403 แล้ว UI ทำถูก | `test-plan.md §10` · `ux-wireframe.md §11` | T-002-W6, T-002-M3 | in_progress | qa (E-11/E-12ข/E-14ขค ทำแล้ว · E-01..E-10/E-13 บล็อกที่ไม่มี Playwright+stack ใน CI → devops) |
 | T-002-Q6 | perf smoke: member list 200 คน · `/me/organizations` 50 org · overhead membership lookup < 5 ms | `test-plan.md` · `architecture.md §10` | T-002-18 | todo | — |
 | T-002-Q7 | Track 2 (agentic, **ไม่บล็อก merge**): 7 flow persona SME ไทย — คุ้มสุด: **"ออกลิงก์ใหม่"** (ผู้ใช้เข้าใจไหมว่าลิงก์เดิมตาย) และ **404 ของ admin-reset** | `test-plan.md` · WEB_TEAM §3.7 | T-002-Q5 | todo | — |
 
@@ -1272,3 +1272,13 @@ rate limit คุมไว้ กลายเป็นของที่ใค�
 > **ผมไม่ประกาศว่า E-12/E-14 ปิดแล้ว** — ปิดเฉพาะข้อย่อยที่ jsdom พิสูจน์ได้ · ข้อย่อยที่เหลือรอเลน browser จริง
 
 `web 293 tests` (+5) · lint ✓ typecheck ✓
+
+### Q5 (ส่วน E2E) ยืนยันบน CI: เขียวครบ 8 job ([run 31732617996](https://github.com/thewinwebdevelop/spec-inventory-manager/actions/runs/31732617996))
+
+`node-ci` รัน web suite 293 tests รวม E-11 copy lint (สแกน mobile tree ด้วย) และข้อย่อย storage ของ E-12/E-14
+
+**Q5 ยังไม่ done** — ที่ทำแล้วคือ 3 แถวจาก 14 แถวของ §12.1 · ที่เหลือรอ 2 อย่างซึ่ง **ไม่ใช่งานเขียนเทสต์**:
+1. **Playwright + stack ครบใน `e2e-web`** (Postgres + Redis + API + web) — วันนี้ job นั้นไม่มี service container เลย
+2. **emulator ใน `flutter-ci`** สำหรับ E-10
+
+⇒ ทั้งสองข้อเป็น **devops** · ส่วน manual §12.2 (M-01..M-07) เป็นของคน ทำแทนไม่ได้ — และ §17.6 บังคับว่าต้องทำก่อนออก verdict
