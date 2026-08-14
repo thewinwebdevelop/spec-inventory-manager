@@ -19,12 +19,13 @@ import { memberActionsFor, isOwner } from "../member-actions";
 import { closeInviteLink, openInviteLink, type InviteLinkState } from "../invite-link";
 import { INVITE_LINK_CLOSED } from "../invite-link";
 import { formatExpiry } from "../expiry";
-import { membersTh, roleLabel } from "../i18n";
+import { invitationConfirmTh, membersTh, roleLabel } from "../i18n";
 import { errorsTh } from "../../../i18n/errors";
 import { useActiveOrg } from "../../../lib/org/org-context";
 import { toApiFailure, failureMessage } from "../../../lib/api/error";
 import { useToast } from "../../../components/providers/ToastProvider";
 import { Button } from "../../../components/ui/Button";
+import { ConfirmDialog } from "../../../components/ui/ConfirmDialog";
 import { ErrorBanner } from "../../../components/ui/ErrorBanner";
 import { SkeletonRow } from "../../../components/ui/Skeleton";
 import { CopyLinkPanel } from "./CopyLinkPanel";
@@ -37,6 +38,16 @@ export function MembersScreen() {
   const [invitationStatus, setInvitationStatus] = useState<"pending" | "all">("pending");
   const [inviting, setInviting] = useState(false);
   const [link, setLink] = useState<InviteLinkState>(INVITE_LINK_CLOSED);
+  /**
+   * ★ T-002-Q7 · §9.2/§9.3 — the confirmation both actions were missing.
+   *
+   * Held as the row being acted on rather than a boolean, because the dialog
+   * names the invitee and the role: a confirmation that says "are you sure"
+   * without saying about whom is one people learn to press through.
+   */
+  const [confirming, setConfirming] = useState<
+    { action: "reissue" | "cancel"; id: string; email: string; roleName: string } | null
+  >(null);
 
   const members = useMembers(memberStatus);
   const invitations = useInvitations(invitationStatus);
@@ -96,16 +107,11 @@ export function MembersScreen() {
                       variant="secondary"
                       disabled={reissue.isPending}
                       onClick={() =>
-                        reissue.mutate(invitation.id, {
-                          onSuccess: (issued) =>
-                            setLink(
-                              openInviteLink({
-                                inviteUrl: issued.inviteUrl,
-                                email: invitation.email,
-                                expiresAt: issued.expiresAt,
-                              }),
-                            ),
-                          onError: (err) => toast.error(failureMessage(toApiFailure(err))),
+                        setConfirming({
+                          action: "reissue",
+                          id: invitation.id,
+                          email: invitation.email,
+                          roleName: roleLabel(invitation.roleKey, invitation.roleName),
                         })
                       }
                     >
@@ -115,8 +121,11 @@ export function MembersScreen() {
                       variant="secondary"
                       disabled={cancel.isPending}
                       onClick={() =>
-                        cancel.mutate(invitation.id, {
-                          onError: (err) => toast.error(failureMessage(toApiFailure(err))),
+                        setConfirming({
+                          action: "cancel",
+                          id: invitation.id,
+                          email: invitation.email,
+                          roleName: roleLabel(invitation.roleKey, invitation.roleName),
                         })
                       }
                     >
@@ -220,6 +229,64 @@ export function MembersScreen() {
           onClose={() => {
             setLink(closeInviteLink());
             void invitations.refetch();
+          }}
+        />
+      )}
+
+      {/* ★ T-002-Q7 · §9.2/§9.3. Both confirmations use the SAME dialog and
+          both default focus to the harmless button — for `cancel` that is
+          "ไม่ยกเลิก", worded so that reading only the buttons cannot pick the
+          wrong one. Reissue is `default`, not `destructive`: nothing is
+          destroyed, a link is replaced, and dressing every consequential action
+          in red is how people stop reading red. */}
+      {confirming !== null && (
+        <ConfirmDialog
+          open
+          title={
+            confirming.action === "reissue"
+              ? invitationConfirmTh.reissue.title
+              : invitationConfirmTh.cancelInvitation.title
+          }
+          body={
+            confirming.action === "reissue"
+              ? invitationConfirmTh.reissue.body(confirming.email, confirming.roleName)
+              : invitationConfirmTh.cancelInvitation.body(confirming.email, confirming.roleName)
+          }
+          cancelLabel={
+            confirming.action === "reissue"
+              ? invitationConfirmTh.reissue.cancel
+              : invitationConfirmTh.cancelInvitation.cancel
+          }
+          confirmLabel={
+            confirming.action === "reissue"
+              ? invitationConfirmTh.reissue.confirm
+              : invitationConfirmTh.cancelInvitation.confirm
+          }
+          variant={confirming.action === "cancel" ? "destructive" : "default"}
+          onCancel={() => setConfirming(null)}
+          onConfirm={() => {
+            const target = confirming;
+            setConfirming(null);
+            if (target.action === "reissue") {
+              reissue.mutate(target.id, {
+                onSuccess: (issued) => {
+                  toast.success(invitationConfirmTh.reissue.doneToast);
+                  setLink(
+                    openInviteLink({
+                      inviteUrl: issued.inviteUrl,
+                      email: target.email,
+                      expiresAt: issued.expiresAt,
+                    }),
+                  );
+                },
+                onError: (err) => toast.error(failureMessage(toApiFailure(err))),
+              });
+              return;
+            }
+            cancel.mutate(target.id, {
+              onSuccess: () => toast.success(invitationConfirmTh.cancelInvitation.doneToast),
+              onError: (err) => toast.error(failureMessage(toApiFailure(err))),
+            });
           }}
         />
       )}

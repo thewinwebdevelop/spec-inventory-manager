@@ -48,7 +48,15 @@ const FORBIDDEN_PHRASES: readonly { readonly phrase: string; readonly why: strin
     },
     { phrase: "ใช้ลิงก์เดิม", why: "the previous link stopped working the moment a new one was issued" },
     { phrase: "ลิงก์เดิมยังใช้ได้", why: "flatly untrue after a reissue (D-027)" },
-    { phrase: "ส่งลิงก์เดิม", why: "sending it would send a dead link" },
+    // ⚠️ NARROWED, and the narrowing is the interesting part. The bare
+    // "ส่งลิงก์เดิม" was on this list until ux's own §9.2 sentence tripped it:
+    // "ถ้าคุณส่งลิงก์เดิมให้ใครไว้ ต้องส่งลิงก์ใหม่ให้เขาแทน" — a PAST
+    // conditional ("if you already sent it"), which is exactly the sentence
+    // D-027 wants said. A lint that fails the spec's approved copy is the lint
+    // being wrong, not the copy; the ban is on telling somebody to send it
+    // NOW, so it has to include the words that do that.
+    { phrase: "ส่งลิงก์เดิมอีกครั้ง", why: "tells the reader to send a link that is already dead" },
+    { phrase: "ส่งลิงก์เดิมได้", why: "says the old link is still sendable" },
     { phrase: "ลิงก์เดิมใช้ได้", why: "same claim, shorter" },
   ]);
 

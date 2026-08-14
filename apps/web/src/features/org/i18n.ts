@@ -265,3 +265,39 @@ export const copyLinkTh = {
   close: "เสร็จแล้ว",
   copyFailed: "คัดลอกอัตโนมัติไม่สำเร็จ — กดค้างที่ลิงก์เพื่อคัดลอกเอง",
 } as const;
+
+/**
+ * §9.2/§9.3 — the two confirmations, verbatim from ux.
+ *
+ * ★ T-002-Q7. Both were MISSING: the buttons fired their mutation on the first
+ * press. Reissuing is the one action in F-002 that breaks something already in
+ * somebody else's hands — the link the inviter has sent over LINE stops working
+ * the instant the new one is minted (D-027) — and the reader had no way to know
+ * that before pressing. The Contract summary's item 4 says "ยืนยันก่อนเสมอ";
+ * Track 2's most valuable flow is precisely "does the user understand that the
+ * old link dies", and with no dialog the answer could only ever be no.
+ */
+export const invitationConfirmTh = {
+  reissue: {
+    title: "ออกลิงก์ใหม่?",
+    body: (email: string, roleName: string) =>
+      `ลิงก์เดิมที่ส่งไปแล้วจะใช้ไม่ได้ทันที ถ้าคุณส่งลิงก์เดิมให้ใครไว้ ต้องส่งลิงก์ใหม่ให้เขาแทน
+
+` +
+      `อีเมลและสิทธิ์ของคำเชิญไม่เปลี่ยน (${email} · ${roleName})`,
+    cancel: "ยกเลิก",
+    confirm: "ออกลิงก์ใหม่",
+    /** §9.2 — said again after the fact, because it has already happened. */
+    doneToast: "ออกลิงก์ใหม่แล้ว ลิงก์เดิมใช้ไม่ได้แล้ว",
+  },
+  cancelInvitation: {
+    title: "ยกเลิกคำเชิญนี้?",
+    body: (email: string, roleName: string) =>
+      `ลิงก์ที่ส่งไปแล้วจะใช้ไม่ได้ทันที\n${email} · ${roleName}`,
+    /** §9.3 — the safe choice is the one that does nothing, and it is worded
+     *  so that reading only the buttons cannot pick the wrong one. */
+    cancel: "ไม่ยกเลิก",
+    confirm: "ยกเลิกคำเชิญ",
+    doneToast: "ยกเลิกคำเชิญแล้ว",
+  },
+} as const;
