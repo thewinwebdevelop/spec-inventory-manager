@@ -63,7 +63,7 @@
 | T-002-D1b | **ปิดกับดัก "เขียวเพราะไม่ได้รัน"**: ให้ lane `db-migrate` รัน DB-backed test จริง + `tool/ci/assert-tests-ran.mjs` (skip/หาย/ลดจำนวน = CI แดง) · แก้ `integration-api` ที่เดิมมีสาขา "ถ้ามี script ค่อยรัน" | `.github/workflows/ci.yml` · `tool/ci/` | T-002-02 | done | devops |
 | T-002-D1c | เพิ่มขั้น `prisma db seed` ใน lane `integration-api` — **ไม่มี `PlanDefinition` ⇒ `POST /organizations` = 503 ทุกเคส** (architecture §12.3 ข้อ 2) | `.github/workflows/ci.yml` | T-002-07 | done | devops |
 | T-002-D1 | CI job `integration-api`: เพิ่ม env ใหม่ + ขั้น **`prisma db seed`** (ไม่มี = สร้างร้านไม่ได้เลย 503 ทุกเคส) + **`connection_limit` ของ `TEST_DATABASE_URL` ≥ จำนวน request ขนานของ test-plan §8** (ไม่งั้นขนานปลอม) | `architecture.md §12.3` · `§15 แถว 13` → `.github/workflows/` | T-002-06, T-002-07 | done | product (env + seed มีอยู่แล้วจาก wave ก่อน · เพิ่ม `connection_limit=25` — default ของ Prisma มาจากจำนวน CPU = 5 บน runner 2 core ⇒ เทสต์ concurrency จะกลายเป็น serial ที่ pool แล้วผ่านโดยไม่เคยแข่งกันเลย) |
-| T-002-D2 | ค่าจริงของ env per-environment: `DEFAULT_ORG_PLAN_KEY` (dogfood = `comp_full`) · `INVITATION_TOKEN_SECRET` · `WEB_APP_BASE_URL` · **log scrubbing: ห้าม log query string ของ `/invitations/*`** | `architecture.md §6.2/§7.3` · `api-spec.md §1` | T-002-06 | todo | — |
+| T-002-D2 | ค่าจริงของ env per-environment: `DEFAULT_ORG_PLAN_KEY` (dogfood = `comp_full`) · `INVITATION_TOKEN_SECRET` · `WEB_APP_BASE_URL` · **log scrubbing: ห้าม log query string ของ `/invitations/*`** | `architecture.md §6.2/§7.3` · `api-spec.md §1` | T-002-06 | done | devops (`infra/env/README.md` matrix + gateway log rule + drift gate `env-example.test.ts`) |
 
 ## ux
 
@@ -1282,3 +1282,43 @@ rate limit คุมไว้ กลายเป็นของที่ใค�
 2. **emulator ใน `flutter-ci`** สำหรับ E-10
 
 ⇒ ทั้งสองข้อเป็น **devops** · ส่วน manual §12.2 (M-01..M-07) เป็นของคน ทำแทนไม่ได้ — และ §17.6 บังคับว่าต้องทำก่อนออก verdict
+
+## T-002-D2 — env ต่อ environment + log scrubbing (2026-08-14)
+
+D2 มีสองครึ่งที่คนละธรรมชาติกัน: ครึ่งหนึ่ง**เขียนโค้ดบังคับได้** อีกครึ่ง**ยังบังคับไม่ได้เพราะ Phase 0 ไม่มี environment จริง**
+· ทำทั้งสองครึ่ง แต่ไม่แกล้งทำให้ครึ่งหลังดูเหมือนเสร็จ
+
+### ครึ่งที่บังคับได้: `.env.example` กับ schema ห้าม drift
+
+`env.ts` บรรทัด 5 เขียนไว้ว่า *"The list of required vars mirrors .env.example at the repo root exactly"*
+· **ไม่มีอะไรเช็คประโยคนี้** — เคส POSITIVE ใน `env.test.ts` เป็น **สำเนาที่พิมพ์ด้วยมือ** ของไฟล์นั้น
+⇒ schema กับไฟล์ที่ operator เอาไปคัดลอกจริง drift ได้ทั้งสองทาง และรู้ตัวอีกทีตอน**service ไม่ยอม boot ใน environment ที่ deploy ไปแล้ว**
+
+`packages/config/src/env-example.test.ts` อ่านไฟล์จริงแล้วเทียบสองทาง:
+- **var ที่ required ต้องอยู่ใน `.env.example`** — ทางที่พังจริง: ใครตั้ง environment จากไฟล์เก่าจะได้ service ที่ exit ตอน start
+- **var ที่อยู่ในไฟล์ต้องมีคน validate หรือมีคำอธิบายว่าใครอ่าน** — `API_ORIGIN` (apps/web อ่าน) และ
+  **`TRUSTED_PROXY_IPS` ซึ่ง _ไม่มีโค้ดไหนอ่านเลย_** (เอกสารบอก operator ให้ตั้ง แต่ไม่มี consumer)
+  ⇒ ใส่ allowlist พร้อมเหตุผล **ไม่ใช่เอาเข้า schema** เพราะการ validate มันจะทำให้ดูเหมือน implement แล้ว
+- แยก `envObjectSchema` ออกจาก `envSchema` (object + superRefine) เพื่อ enumerate key ได้ — เหตุผลเขียนไว้ในไฟล์
+
+**mutation สองทาง:** comment `DEFAULT_ORG_PLAN_KEY` ทิ้ง ⇒ แดง · เพิ่ม var ที่ไม่มีใคร validate ⇒ แดง
+
+### ครึ่งที่เป็นเอกสาร (Phase 0 ไม่มี deploy target)
+
+**`infra/env/README.md`** — matrix ของ 3 ตัว × 4 environment + **ผลที่ตามมาเมื่อตั้งผิด** ซึ่งเป็นส่วนที่ operator เดาเองไม่ได้:
+- `DEFAULT_ORG_PLAN_KEY` ผิด/ไม่ได้ seed ⇒ **สร้างร้านได้ 503 ทุกครั้ง** ขณะที่ทุก endpoint อื่นปกติ (ไม่ใช่ outage)
+- `INVITATION_TOKEN_SECRET` **หมุนแล้วคำเชิญที่ค้างตายหมดเงียบ ๆ** (hash ทางเดียว re-key ไม่ได้) ⇒ ต้องยกเลิกของค้าง + แจ้งให้ออกลิงก์ใหม่ก่อน · และ**ห้ามใช้ค่าเดียวกันข้าม environment** เพราะ token ที่ออกจากที่หนึ่งจะใช้ได้อีกที่
+- `WEB_APP_BASE_URL` ผิด **ไม่พังตอน boot** — ได้ลิงก์คำเชิญที่ชี้ผิดโฮสต์ และคนที่รู้คือผู้ถูกเชิญ
+
+**`infra/gateway/README.md`** — กฎ log scrubbing + config จริงของ nginx/Caddy
+· กฎคือ **path ของ `/invitations/*` log ได้ แต่ query string ห้าม log เลย** และ body ของ preview/accept ห้าม log เลย
+· ระบุสถานะตามจริง 3 ชั้น: **(ก)** log call ของแอปเอง — บังคับแล้วด้วย gate ของ Q1 **(ข)** request logger — **ยังไม่มี**
+**(ค)** proxy — **ตั้งไม่ได้ ยังไม่มี deploy target** · และเขียนไว้ว่า ถ้า PaaS ไหน log URL เต็มโดยเปลี่ยน format ไม่ได้
+**นั่นคือ finding ที่ต้องยกก่อน launch ไม่ใช่รายละเอียดที่รับไว้เฉย ๆ**
+
+### ที่ยัง **ทำไม่ได้** และไม่ควรแกล้งว่าทำได้
+
+ค่าจริงของ secret ต้องอยู่ใน secret store ของ environment นั้น — **ผมไม่สร้าง ไม่ถือ และไม่ commit ค่าจริง** ·
+สิ่งที่ทำได้คือทำให้ "ค่าไหนไปที่ไหน ใครตั้ง ตั้งผิดแล้วเกิดอะไร" เขียนไว้ครบ และทำให้ contract กับโค้ด drift ไม่ได้
+
+`config 63 tests` (+6) · lint ✓

@@ -113,7 +113,18 @@ function isAcceptableWebAppBaseUrl(raw: string, nodeEnv: string): boolean {
   return ["localhost", "127.0.0.1", "[::1]", "::1"].includes(url.hostname);
 }
 
-export const envSchema = z
+/**
+ * The object half of the schema, exported so the SHAPE can be enumerated.
+ *
+ * ★ T-002-D2: the header of this file claims the required vars "mirror
+ * .env.example at the repo root exactly". Nothing checked that claim —
+ * `env.test.ts`'s positive case is a hand-written copy of the file, so the
+ * schema and the file operators actually copy could drift in either direction
+ * and only a failed BOOT would say so. `env-example.test.ts` now reads the real
+ * file and compares it against these keys, which is why the object is named
+ * rather than inlined into the `superRefine` chain.
+ */
+export const envObjectSchema = z
   .object({
     DATABASE_URL: z
       .string({ required_error: "DATABASE_URL is required" })
@@ -196,7 +207,9 @@ export const envSchema = z
     MAX_ORGS_PER_USER: positiveIntEnv("MAX_ORGS_PER_USER", MAX_ORGS_PER_USER_DEFAULT),
     ...orgTxTimeoutShape,
     ...orgRateLimitShape,
-  })
+  });
+
+export const envSchema = envObjectSchema
   .superRefine((env, ctx) => {
     if (env.JWT_ACCESS_SECRET === env.JWT_REFRESH_SECRET) {
       ctx.addIssue({

@@ -110,3 +110,68 @@ is still `todo` on the backend-api board as of this writing — there is
 nothing to put a ceiling in front of yet, and no concrete deploy target
 (Phase 0) to configure a real edge rule against. Tracked here so the task
 isn't lost; revisit once `T-001-07` lands and a deploy target exists.
+
+## T-002-D2 — never log the query string of `/invitations/*`
+
+Spec: [F-002 architecture §7.3](../../docs/features/F-002/architecture.md) (I-6) ·
+[api-spec §1](../../docs/features/F-002/api-spec.md).
+
+An invitation token is a bearer credential for **membership of a shop**, and in
+Phase 0 there is no email verification behind it (§7.6): whoever holds the token
+takes the invitation. The API keeps it out of query strings by design —
+`POST /invitations/preview` and `POST /invitations/accept` take it in the body —
+but the token still travels in a URL in the one place it must: the link the
+inviter copies into LINE. That is D-012, not a bug.
+
+So the rule for anything that writes an access log:
+
+> **`/invitations/*` may be logged as a path. Its query string may not be
+> logged at all, and the bodies of `preview`/`accept` may not be logged at all.**
+
+A URL in a log is a working credential sitting in a file that is backed up,
+shipped to a log aggregator, and readable by more people than the shop has
+members.
+
+### Where this has to be enforced, and what is true today
+
+| layer | status |
+|---|---|
+| **the API's own log calls** | **enforced now** — `apps/api/src/common/log-hygiene.test.ts` (T-002-Q1) fails the build if any source file passes a token, a tax id, a password or a request URL/body to a logger, and refuses a Prisma client built with query logging (its parameters include `tokenHash`). |
+| **an HTTP request logger** | **does not exist yet.** `apps/api` uses Nest's built-in logger capped at `["log","warn","error"]` and logs no requests. When a structured logger lands (pino or otherwise), it needs a `redact` list — and the gate above stays as the first layer, because a redact list only covers the field names somebody remembered to list. |
+| **the edge / reverse proxy** | **not configurable yet — Phase 0 has no deploy target.** Whoever stands one up must apply the rule below before the first real invitation is sent. |
+
+### The proxy rule, for whichever proxy is chosen
+
+The default access-log format of every common proxy includes the full request
+target, query string included. It has to be changed, not filtered afterwards.
+
+- **nginx** — log the path without the query, using `$uri` (decoded path only)
+  instead of `$request`/`$request_uri`, which both carry the query:
+
+  ```nginx
+  log_format  omnistock  '$remote_addr "$request_method $uri" $status $body_bytes_sent';
+  access_log  /var/log/nginx/access.log  omnistock;
+  ```
+
+- **Caddy** — the JSON logger records `request.uri` including the query; drop the
+  field on this prefix rather than trying to rewrite it:
+
+  ```caddyfile
+  @invitations path /invitations/*
+  log {
+    format filter {
+      fields {
+        request>uri delete
+      }
+    }
+  }
+  ```
+
+- **A PaaS router with a fixed log format** — if the platform logs full URLs and
+  the format cannot be changed, that is a finding to raise before launch, not a
+  detail to accept: the mitigation would be shortening the token's life, which
+  is a product decision (§7.5), not an infra one.
+
+**Division of labour:** `backend-api` owns the application logger's redaction
+when one exists; `devops` owns this proxy rule; `qa`'s gate above is what keeps
+the application half honest in the meantime.
