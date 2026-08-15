@@ -30,7 +30,7 @@ test("E-01 · signs up, creates a shop, and is inside it", async ({ page }) => {
   // ── signup ────────────────────────────────────────────────────────────
   await page.goto("/signup");
   await page.getByLabel("อีเมล").fill(email);
-  await page.getByLabel("รหัสผ่าน").fill(PASSWORD);
+  await page.getByLabel("รหัสผ่าน", { exact: true }).fill(PASSWORD);
   await page.getByRole("button", { name: "สมัครใช้งาน" }).click();
 
   // Signup does NOT auto-login (locked in api-spec §4 open item 1): it lands
@@ -39,7 +39,7 @@ test("E-01 · signs up, creates a shop, and is inside it", async ({ page }) => {
   await expect(page.getByLabel("อีเมล")).toHaveValue(email);
 
   // ── login ─────────────────────────────────────────────────────────────
-  await page.getByLabel("รหัสผ่าน").fill(PASSWORD);
+  await page.getByLabel("รหัสผ่าน", { exact: true }).fill(PASSWORD);
   await page.getByRole("button", { name: "เข้าสู่ระบบ" }).click();
 
   // ── a member of nothing yet: S1's empty state, which must offer the way
@@ -48,6 +48,8 @@ test("E-01 · signs up, creates a shop, and is inside it", async ({ page }) => {
   await expect(page.getByText("คุณยังไม่ได้อยู่ในร้านไหน")).toBeVisible();
 
   // ── create the shop ───────────────────────────────────────────────────
+  // The empty state renders `<Link><Button>สร้างร้านใหม่</Button></Link>`, so
+  // both roles carry that name — the LINK is the one that navigates.
   await page.getByRole("link", { name: "สร้างร้านใหม่" }).click();
   await expect(page).toHaveURL(/\/orgs\/new/);
 
@@ -69,10 +71,10 @@ test("E-01b · the shop persists across a reload — the session survives", asyn
 
   await page.goto("/signup");
   await page.getByLabel("อีเมล").fill(email);
-  await page.getByLabel("รหัสผ่าน").fill(PASSWORD);
+  await page.getByLabel("รหัสผ่าน", { exact: true }).fill(PASSWORD);
   await page.getByRole("button", { name: "สมัครใช้งาน" }).click();
   await expect(page).toHaveURL(/\/login/);
-  await page.getByLabel("รหัสผ่าน").fill(PASSWORD);
+  await page.getByLabel("รหัสผ่าน", { exact: true }).fill(PASSWORD);
   await page.getByRole("button", { name: "เข้าสู่ระบบ" }).click();
   await expect(page).toHaveURL(/\/select-org/);
 

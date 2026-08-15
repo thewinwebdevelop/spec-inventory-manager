@@ -53,10 +53,20 @@ function LoginPageInner() {
     setLoading(true);
     try {
       await login(email, password);
-      // F-002 will own the post-login destination (org context); for now
-      // land on the app root — this is not a data-shape decision, just a
-      // placeholder redirect target until F-002 exists.
-      router.push("/");
+      // ★ T-002-Q5 — F-002 owns this destination, and never claimed it.
+      //
+      // The line here read `router.push("/")` with a comment saying F-002
+      // would take it over. F-002 shipped its screens and left the redirect
+      // pointing at the F-000 placeholder shell, so a successful login landed
+      // on "apps/web placeholder shell (T-000-09)" and the org flow was
+      // reachable only by typing the URL. Found by writing E-01, which is the
+      // first thing that ever walked login → shop as one journey.
+      //
+      // `/select-org` is what ux-wireframe §1.1's flow map has always said:
+      // login สำเร็จ → S1. The picker itself decides where to go from there —
+      // it is the screen that knows whether the person has no shops, one, or
+      // several.
+      router.push("/select-org");
     } catch (err) {
       if (err instanceof ApiError) {
         if (err.status === 429) {

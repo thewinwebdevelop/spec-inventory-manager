@@ -1360,3 +1360,43 @@ ban list มีวลี `"ส่งลิงก์เดิม"` · ประ�
 *"ข้อความที่ฉันส่งไปแล้วใช้ไม่ได้แล้ว"* หรือเปล่า — คำถูกแล้ว แต่จะ**ลง**หรือไม่ มีแต่คนอ่านที่ตอบได้
 
 `web 300 tests` (+7) · lint ✓ typecheck ✓
+
+## T-002-Q5 (ต่อ) — สร้างเลนเบราว์เซอร์จริง: 3 รอบแดง เจอ 3 อย่างที่ไม่มีใครเจอมาก่อน (2026-08-15)
+
+`e2e-web` เดิม boot web ตัวเดียวแล้วยิง `GET /` · ตอนนี้ยก **Postgres + Redis + migrate + seed + API + web** ครบ
+และ **ลบเงื่อนไข `if apps/web declares test:e2e`** ที่ทำให้ job นี้เขียวมาหลายเดือนบน repo ที่ไม่มี browser suite เลย
+(รูป "เขียวเพราะไม่ได้รัน" ที่ I-37 มีไว้จับ นั่งอยู่ในเลนที่ควรเป็นด่านสุดท้าย)
+
+### รอบ 1 · build ของ API ล้ม
+`Cannot find module '@omnistock/core-domain'` — job build แค่ `web^...` ⇒ เปลี่ยนเป็น turbo build ทั้งสองแอป
+· **guard I-37 ที่เพิ่งเขียนทำงานถูก**: job ไม่ได้ผ่านแบบเงียบ ๆ แต่แดงด้วย "no Playwright report was produced"
+
+### รอบ 2 · 🔴 **`node dist/main.js` รันไม่ได้ — production start script ของ repo ไม่เคยทำงาน**
+
+```
+ERR_MODULE_NOT_FOUND  file:///…/packages/config/src/env
+```
+
+`@omnistock/config` ship **TypeScript source** (`main: "src/index.ts"`) — tsx/vitest/webpack resolve ได้ **Node เปล่า ๆ ไม่ได้**
+⇒ `pnpm --filter api run start` **ไม่เคยทำงาน** และไม่มีใครรู้เพราะไม่เคยมีใครสตาร์ท API แบบนั้น (Phase 0 ไม่มี deploy target · ทุก suite รัน in-process)
+
+**เลนนี้ boot ด้วย `tsx` แบบเดียวกับ `dev`** — เพราะเลนนี้ทดสอบ *แอป* ไม่ใช่ *การแพ็กเกจ* ·
+**ไม่กลบช่องว่าง**: ต้องปิดก่อน deploy และเป็นงานระบบ build (ให้ workspace package emit JS หรือ bundle API) → **devops + backend-api**
+· แก้ `main` ของ config ตอนนี้ = ไปแตะสิ่งที่ทุกเลนพึ่งพา ในคอมมิตที่ควรเป็นแค่ "ทำให้ E2E รันได้"
+
+### รอบ 3 · 🔴 **login สำเร็จแล้วไปโผล่หน้า placeholder ของ F-000**
+
+`login/page.tsx` เขียนว่า `router.push("/")` พร้อมคอมเมนต์ *"F-002 will own the post-login destination"*
+— **F-002 ship จอครบแล้วและไม่เคยมารับ** ⇒ ล็อกอินสำเร็จแล้วเจอ *"apps/web placeholder shell (T-000-09)"*
+และ flow ของร้านเข้าถึงได้ด้วยการพิมพ์ URL เอาเองเท่านั้น
+
+ux-wireframe **§1.1 flow map เขียนไว้ตั้งแต่ต้นว่า login สำเร็จ → S1 `/select-org`** ⇒ แก้ตามนั้น
+**เจอเพราะเขียน E-01** ซึ่งเป็นสิ่งแรกที่เดิน login → ร้าน เป็นการเดินทางเดียวกัน — ไม่มี component test ตัวไหนถามคำถามนี้ได้
+
+และ selector: `getByLabel("รหัสผ่าน")` ชนกับปุ่ม `aria-label="แสดงรหัสผ่าน"` (คำหนึ่งเป็น substring ของอีกคำ) ⇒ `{ exact: true }`
+
+### flaky ที่ต้องบันทึกตามกติกา §16 (ห้าม skip เงียบ)
+
+`ChangePasswordForm > success/data state` แดง 1 ครั้งในการรัน suite เต็ม (6.2 วินาที) · รันเดี่ยวผ่าน (1.5 วินาที) ·
+รัน suite เต็มซ้ำผ่าน ⇒ **timeout ภายใต้ load ไม่ใช่ตรรกะผิด** · ไม่เกี่ยวกับการแก้ redirect (คนละไฟล์ คนละ flow)
+**เจ้าของ: frontend · เส้นตาย: ก่อน Gate F** — ถ้าเกิดซ้ำใน CI ให้ยก timeout ของเคสนั้นหรือแยก argon2 mock ออก **ห้าม `.skip`**
