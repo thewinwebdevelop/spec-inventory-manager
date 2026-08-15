@@ -101,7 +101,7 @@
 | T-002-Q2 | ★ int lane บังคับ: **cross-org leak × 4 persona** · **route-registry capability (รวม `GET`)** · assertion กลาง `passwordHash`/`tokenHash` · **hash-at-rest พิสูจน์ได้** | `test-plan.md §8` | T-002-22 | todo | — |
 | T-002-Q3 | ★ (เขียนครบ — **รอ CI ยืนยัน**) concurrency 13 เคส: Owner คนสุดท้าย 2 ขนาน ×20 รอบ · accept ซ้ำ · invite ซ้ำ · **revoke‖accept** · reissue‖accept · cancel‖accept · PATCH‖DELETE · ยก Owner 2 คนพร้อมกัน · cap 49 · revoke‖revoke · **lock timeout → 409 ไม่ใช่ 500 · ห้าม 40P01/40001 หลุด wire** | `test-plan.md §8` · `architecture.md §5.2` | T-002-03, T-002-22 | done | qa (`test/concurrency-matrix.int.test.ts` 14/14 เขียวบน CI run 31608348040) |
 | T-002-Q4 | ★ regression ของ finding: **NEW-1 (Admin→Owner reset = 404 + รหัสเดิมยัง login ได้ + เคสควบคุม)** · C-1 · C-2 · I-1 · NEW-2 · **I-45 สลับ `Role.key` ใน DB แล้วสิทธิ์ต้องไม่ขยับ** · เข้า **smoke tier ถาวร** | `test-plan.md §9` (ทะเบียน 41 finding) | T-002-09, T-002-22 | done | qa (regression-pack gate + G-15 tripwire + ปิด M-3 ที่ไม่เคยมีเทสต์) |
-| T-002-Q5 | E2E + manual: flow เชิญ→รับ **3 ทางแยกของ US-4** · org switcher · ถูกถอดกลางคัน · Staff เจอ 403 แล้ว UI ทำถูก | `test-plan.md §10` · `ux-wireframe.md §11` | T-002-W6, T-002-M3 | in_progress | qa (E-11/E-12ข/E-14ขค ทำแล้ว · E-01..E-10/E-13 บล็อกที่ไม่มี Playwright+stack ใน CI → devops) |
+| T-002-Q5 | E2E + manual: flow เชิญ→รับ **3 ทางแยกของ US-4** · org switcher · ถูกถอดกลางคัน · Staff เจอ 403 แล้ว UI ทำถูก | `test-plan.md §10` · `ux-wireframe.md §11` | T-002-W6, T-002-M3 | in_progress | qa (harness Playwright + stack ครบใน CI แล้ว · E-01/E-01b/E-11/E-12ข/E-14ขค เขียว = 5/14 · เหลือ E-02..E-10/E-13 + manual) |
 | T-002-Q6 | perf smoke: member list 200 คน · `/me/organizations` 50 org · overhead membership lookup < 5 ms | `test-plan.md` · `architecture.md §10` | T-002-18 | todo | — |
 | T-002-Q7 | Track 2 (agentic, **ไม่บล็อก merge**): 7 flow persona SME ไทย — คุ้มสุด: **"ออกลิงก์ใหม่"** (ผู้ใช้เข้าใจไหมว่าลิงก์เดิมตาย) และ **404 ของ admin-reset** | `test-plan.md` · WEB_TEAM §3.7 | T-002-Q5 | in_progress | qa (runbook + finding แรกของ flow 2 → แก้แล้ว · การรันจริงรอ stack) |
 
@@ -1458,3 +1458,32 @@ TypeError: Cannot read properties of undefined (reading 'checkIp')
 
 > นี่คือเหตุผลที่ §12.1 มีอยู่ · unit test 304 ตัวและ int test 200+ ตัว **ไม่มีตัวไหนถามคำถามนี้ได้**
 > เพราะทุกตัวเริ่มต้นตอน "อยู่ในสถานะที่ต้องการแล้ว"
+
+### รอบ 7 · ✅ **เขียว** — เลนเบราว์เซอร์มีอยู่จริงแล้ว ([run 31863032629](https://github.com/thewinwebdevelop/spec-inventory-manager/actions/runs/31863032629))
+
+```
+✓ E-01  · signs up, creates a shop, and is inside it   (1.2s)
+✓ E-01b · the shop persists across a reload            (1.3s)
+  2 passed
+```
+
+8 job เขียวหมด · `e2e-web` เป็น merge gate จริงแล้ว ไม่ใช่ smoke ที่ยิง `GET /`
+
+### สิ่งที่ได้จากการสร้างเลนนี้: **บั๊กจริง 5 ข้อ ใน 7 รอบ**
+
+| # | สิ่งที่เจอ | ใครเจอไม่ได้ |
+|---|---|---|
+| 1 | job ไม่ได้ build dependency ของ API | — (CI config) |
+| 2 | **`node dist/main.js` รันไม่ได้** (config ship TS source) | ทุก suite รัน in-process |
+| 3 | **`tsx src/main.ts` DI inject `undefined` ทุกตัว** (ไม่มี decorator metadata) | vitest ใช้ SWC จึงไม่เจอ |
+| 4 | **login ไม่พาไปไหน** — ยังชี้ placeholder ของ F-000 | ไม่มีเทสต์ไหนเดินข้ามจอ |
+| 5 | **login สำเร็จแล้วแอปยังเชื่อว่าไม่มีใครล็อกอิน** | component test ทุกตัว mock ว่า "ล็อกอินแล้ว" |
+
+ข้อ 2+3 รวมกันแปลว่า **แอปนี้ไม่มีทางรันที่ใช้งานได้เลยนอก harness ของเทสต์** — ยังไม่ปิด ส่งต่อ backend-api + devops
+
+### Q5 ยัง **ไม่ done**
+
+ทำแล้ว **E-01/E-01b** (browser) + **E-11/E-12ข/E-14ขค** (static + jsdom) = 5 จาก 14 แถวของ §12.1
+· ที่เหลือ (E-02..E-10, E-13) เขียนได้แล้ววันนี้เพราะ **harness มีแล้ว** — เหลือแค่เวลาเขียน ไม่ใช่ของที่ขาด
+· ยกเว้น **E-10 (mobile)** ที่ยังต้องการ emulator ใน `flutter-ci`
+· **manual §12.2 (M-01..M-07) เป็นของคน** — §17.6 บังคับว่าต้องทำก่อนออก verdict
