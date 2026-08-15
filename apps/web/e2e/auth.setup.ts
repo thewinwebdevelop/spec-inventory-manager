@@ -1,5 +1,5 @@
 import { test as setup } from "@playwright/test";
-import { createShop, freshEmail, signUpAndLogin } from "./helpers";
+import { createShop, freshEmail, signUpAndLogin, resetIpThrottle } from "./helpers";
 
 /**
  * One Owner ACCOUNT for the whole browser lane — credentials, not a session.
@@ -27,6 +27,7 @@ import { dirname } from "node:path";
 export const SHARED_FIXTURE = "e2e/.auth/shared.json";
 
 setup("create the shared Owner and shop", async ({ page }) => {
+  await resetIpThrottle();
   const email = freshEmail("shared-owner");
   await signUpAndLogin(page, email);
 

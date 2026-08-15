@@ -1,5 +1,5 @@
 import { expect, test, type Page } from "@playwright/test";
-import { createShop, freshEmail, invite, login, openMembers, readShared } from "./helpers";
+import { createShop, freshEmail, invite, login, openMembers, readShared, resetIpThrottle } from "./helpers";
 
 /**
  * One account, one page, in order — see the note in e02: F-001's per-IP
@@ -12,6 +12,7 @@ let page: Page;
 let orgId = "";
 
 test.beforeAll(async ({ browser }) => {
+  await resetIpThrottle();
   page = await browser.newContext().then((c) => c.newPage());
   // A login, not a restored cookie: refresh tokens rotate, so replaying one
   // saved state from several contexts is reuse — and F-001 revokes the family
@@ -95,6 +96,11 @@ test("E-03 · the link shows once, a duplicate invite offers a way out, and reis
     "reissue returned the same token — D-027 says the previous link dies, which " +
       "is only true if a new one was actually minted",
   ).not.toBe(firstUrl);
+
+  // Close it, the way a person would. An open modal leaves the page behind it
+  // out of the accessibility tree, so the next case could not even find the
+  // heading it was looking for.
+  await reissued.getByRole("button", { name: "เสร็จแล้ว" }).click();
 });
 
 test("E-03b · the old link is DEAD the moment a new one exists", async ({ browser }) => {

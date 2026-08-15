@@ -551,6 +551,14 @@ jobs:
       # "green because it never ran" shape I-37 exists to catch, sitting in the
       # lane that was supposed to be the last line of defence.
       - name: run the web Playwright suite (test-plan §12.1)
+        # `E2E_REDIS_URL` lets the suite clear F-001's per-IP pre-auth counter
+        # between files. That counter is per IP per five minutes and every page
+        # load spends a slot through `/auth/refresh`, so one runner driving a
+        # browser hits it after about three files — a situation that exists
+        # only in CI. The underlying finding (an office behind one NAT hits the
+        # same wall) is filed for backend-api, not worked around here.
+        env:
+          E2E_REDIS_URL: redis://localhost:6379
         run: pnpm --filter web run test:e2e
       - name: I-37 — a browser lane that ran no cases is RED, not green
         if: always()

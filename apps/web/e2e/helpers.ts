@@ -1,5 +1,6 @@
 import { readFileSync } from "node:fs";
 import { expect, type Page } from "@playwright/test";
+import Redis from "ioredis";
 
 /**
  * The journeys every §12.1 row starts from.
@@ -12,6 +13,39 @@ import { expect, type Page } from "@playwright/test";
  */
 
 export const PASSWORD = "E2e-passphrase-8Kx!";
+
+/**
+ * Clears F-001's per-IP pre-auth counter for this runner.
+ *
+ * ⚠️ WHAT THIS IS AND IS NOT. It is a test-only reset of an abuse counter this
+ * lane does not test, and it touches no production code. It exists because the
+ * counter is per IP and per five minutes (`IP_WINDOW_MAX = 20`, a hard-coded
+ * constant), every full page load spends a slot through `POST /auth/refresh`,
+ * and a whole browser suite runs from one address inside one window. Without
+ * it the lane's capacity is about three files, and every file added after that
+ * fails with "ลองเข้าสู่ระบบถี่เกินไป" — the throttle being right about a
+ * situation that only exists in CI.
+ *
+ * It is NOT a way to avoid the finding: an office behind one NAT hits the same
+ * wall, and that belongs to backend-api and the security reviewer (see
+ * tasks.md). A suite that tested the throttle would obviously not call this.
+ *
+ * No-ops without `E2E_REDIS_URL`, so a local run against somebody's own stack
+ * cannot quietly wipe keys they meant to keep.
+ */
+export async function resetIpThrottle(): Promise<void> {
+  const url = process.env.E2E_REDIS_URL;
+  if (!url) return;
+
+  const redis = new Redis(url, { lazyConnect: true, maxRetriesPerRequest: 1 });
+  try {
+    await redis.connect();
+    const keys = await redis.keys("throttle:ip:*");
+    if (keys.length > 0) await redis.del(...keys);
+  } finally {
+    redis.disconnect();
+  }
+}
 
 /** The Owner + shop `auth.setup.ts` created for the whole lane. */
 export function readShared(): { email: string; orgId: string; shopName: string } {

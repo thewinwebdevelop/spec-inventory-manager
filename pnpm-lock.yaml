@@ -189,6 +189,9 @@ importers:
       '@types/react-dom':
         specifier: ^18.3.5
         version: 18.3.7(@types/react@18.3.31)
+      ioredis:
+        specifier: ^5.4.1
+        version: 5.10.1
       jsdom:
         specifier: ^25.0.1
         version: 25.0.1

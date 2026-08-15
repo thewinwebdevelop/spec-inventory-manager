@@ -1,5 +1,5 @@
 import { expect, test, type Page } from "@playwright/test";
-import { createShop, login, openSwitcher, readShared } from "./helpers";
+import { createShop, login, openSwitcher, readShared, resetIpThrottle } from "./helpers";
 
 /**
  * ONE account and ONE page for the whole file, in order.
@@ -16,6 +16,7 @@ test.describe.configure({ mode: "serial" });
 let page: Page;
 
 test.beforeAll(async ({ browser }) => {
+  await resetIpThrottle();
   // Signed in already, from the lane's shared state — this file is about
   // switching between shops, not about how somebody signs in.
   page = await browser.newContext().then((c) => c.newPage());

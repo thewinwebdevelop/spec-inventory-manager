@@ -7,7 +7,7 @@ import {
   login,
   openMembers,
   readShared,
-  signUpAndLogin,
+  signUpAndLogin,  resetIpThrottle,
 } from "./helpers";
 
 /**
@@ -28,6 +28,7 @@ let shopName = "";
 const staffEmail = freshEmail("staff");
 
 test.beforeAll(async ({ browser }) => {
+  await resetIpThrottle();
   // The Owner is the lane's shared account; only the Staff member has to be a
   // real new signup, because "somebody who has an account accepts an
   // invitation" is the branch §11.2 describes.

@@ -1,4 +1,5 @@
 import { expect, test } from "@playwright/test";
+import { resetIpThrottle } from "./helpers";
 
 /**
  * E-01 (test-plan §12.1) — signup → create a shop → land inside it.
@@ -23,6 +24,10 @@ function freshEmail(): string {
 }
 
 const PASSWORD = "E2e-passphrase-8Kx!";
+
+test.beforeEach(async () => {
+  await resetIpThrottle();
+});
 
 test("E-01 · signs up, creates a shop, and is inside it", async ({ page }) => {
   const email = freshEmail();
