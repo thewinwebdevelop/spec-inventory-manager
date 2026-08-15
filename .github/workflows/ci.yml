@@ -490,10 +490,23 @@ jobs:
           pnpm --filter @omnistock/db exec prisma generate
           pnpm --filter @omnistock/db exec prisma migrate deploy
           pnpm --filter @omnistock/db exec prisma db seed
+      # ⚠️ `tsx src/main.ts`, NOT `pnpm --filter api run start`.
+      #
+      # FINDING from building this lane (recorded in tasks.md, T-002-Q5):
+      # `node dist/main.js` — the repo's own `start` script — does not run.
+      # `@omnistock/config` ships TypeScript source (`main: src/index.ts`), so
+      # the compiled entrypoint dies on `ERR_MODULE_NOT_FOUND` resolving
+      # `packages/config/src/env`. That path works under tsx/vitest/webpack and
+      # has never been exercised, because nothing has ever started the API in
+      # production mode — Phase 0 has no deploy target.
+      #
+      # This lane runs the app, not the packaging, so it boots the way `dev`
+      # does. The packaging is a real gap that has to close before a deploy,
+      # and it is filed rather than papered over here.
       - name: boot apps/api in the background
         env:
           NODE_ENV: test
-        run: pnpm --filter api run start &>/tmp/api.log &
+        run: pnpm --filter api exec tsx src/main.ts &>/tmp/api.log &
       - name: wait for the API to answer
         run: |
           for i in $(seq 1 60); do
