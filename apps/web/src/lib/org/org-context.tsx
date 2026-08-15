@@ -22,6 +22,7 @@
  * (architecture §3.1), and every hidden button still needs its error path.
  */
 import { createContext, useContext, useMemo, type ReactNode } from "react";
+import { hasCapability } from "@omnistock/core-domain";
 import type { components } from "@omnistock/contracts";
 
 export type OrgProfile = components["schemas"]["OrgProfile"];
@@ -93,5 +94,18 @@ export function useActiveOrgOptional(): ActiveOrg | null {
  * has the feature.
  */
 export function useCan(capability: string): boolean {
-  return useActiveOrg().capabilities.has(capability);
+  // ★ T-002-Q5 — `hasCapability`, not `Set.has`.
+  //
+  // FOUND BY E-08b, and it was a real one. An Owner's role carries exactly one
+  // capability, `full_access` (SYSTEM_ROLE_BLUEPRINT), and the server treats it
+  // as a wildcard — which is why the API happily let an Owner open the members
+  // list and invite people. This hook did a plain set lookup, so it answered
+  // "no" to `manage_members` for the one person who can do everything: the
+  // Owner never saw the members entry in their own sidebar and could only reach
+  // the screen by typing the URL.
+  //
+  // Imported from `core-domain` rather than reimplemented here, because a
+  // second copy of an authorization rule is how the client and the server come
+  // to disagree — which is precisely what happened.
+  return hasCapability([...useActiveOrg().capabilities], capability);
 }

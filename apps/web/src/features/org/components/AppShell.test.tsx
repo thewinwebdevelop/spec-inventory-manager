@@ -43,6 +43,18 @@ function renderShell(capabilities: string[]) {
 }
 
 describe("AppShell", () => {
+  it("★ an OWNER sees สมาชิก — `full_access` is a wildcard, not a missing capability", () => {
+    // The regression E-08b caught in a browser. An Owner's role carries exactly
+    // one capability (`full_access`, SYSTEM_ROLE_BLUEPRINT) and the server
+    // treats it as covering everything — so the Owner could open the members
+    // screen by URL and invite people, while their own sidebar hid the entry.
+    //
+    // Every existing case here passes an explicit capability list, which is why
+    // none of them could see it: they described a user who does not exist.
+    renderShell(["full_access"]);
+    expect(screen.getByText(orgTh.shell.nav.members)).toBeInTheDocument();
+  });
+
   it("★ hides สมาชิก without manage_members — hidden, not disabled", () => {
     // §4 (Q13): a disabled entry raises a question the user cannot answer.
     renderShell(["view_products"]);
