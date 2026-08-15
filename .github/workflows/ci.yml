@@ -559,6 +559,15 @@ jobs:
             echo "::error::no Playwright report was produced — the suite did not run"
             exit 1
           fi
+          # A report with zero cases is the same failure wearing a hat: a
+          # `testDir` typo or a filter that matched nothing produces a perfectly
+          # valid, perfectly empty report.
+          cases=$(grep -o '"testId"' apps/web/playwright-report/index.html | wc -l | tr -d ' ')
+          echo "playwright report references $cases test entries"
+          if [ "$cases" -lt 1 ]; then
+            echo "::error::the Playwright report contains no test cases"
+            exit 1
+          fi
       - name: upload the Playwright report on failure
         if: failure()
         uses: actions/upload-artifact@v4
