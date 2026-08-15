@@ -1,5 +1,5 @@
 import { expect, test, type Page } from "@playwright/test";
-import { createShop, freshEmail, invite, landOnPicker, openMembers } from "./helpers";
+import { createShop, freshEmail, invite, login, openMembers, readShared } from "./helpers";
 
 /**
  * One account, one page, in order — see the note in e02: F-001's per-IP
@@ -12,10 +12,11 @@ let page: Page;
 let orgId = "";
 
 test.beforeAll(async ({ browser }) => {
-  page = await browser
-    .newContext({ storageState: "e2e/.auth/owner.json" })
-    .then((c) => c.newPage());
-  await landOnPicker(page);
+  page = await browser.newContext().then((c) => c.newPage());
+  // A login, not a restored cookie: refresh tokens rotate, so replaying one
+  // saved state from several contexts is reuse — and F-001 revokes the family
+  // for exactly that.
+  await login(page, readShared().email);
   orgId = await createShop(page, `ร้านเชิญ ${Date.now()}`);
 });
 

@@ -4,8 +4,9 @@ import {
   createShop,
   freshEmail,
   invite,
-  landOnPicker,
+  login,
   openMembers,
+  readShared,
   signUpAndLogin,
 } from "./helpers";
 
@@ -30,12 +31,13 @@ test.beforeAll(async ({ browser }) => {
   // The Owner is the lane's shared account; only the Staff member has to be a
   // real new signup, because "somebody who has an account accepts an
   // invitation" is the branch §11.2 describes.
-  ownerPage = await browser
-    .newContext({ storageState: "e2e/.auth/owner.json" })
-    .then((c) => c.newPage());
+  ownerPage = await browser.newContext().then((c) => c.newPage());
   staffPage = await browser.newContext().then((c) => c.newPage());
 
-  await landOnPicker(ownerPage);
+  // A login, not a restored cookie: refresh tokens rotate, so replaying one
+  // saved state from several contexts is reuse — and F-001 revokes the family
+  // for exactly that.
+  await login(ownerPage, readShared().email);
   shopName = `ร้านสิทธิ์ ${Date.now()}`;
   orgId = await createShop(ownerPage, shopName);
 

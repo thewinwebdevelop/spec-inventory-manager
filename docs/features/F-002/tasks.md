@@ -1563,3 +1563,18 @@ E-04 แดงที่ `beforeAll` ด้วย *"ลองเข้าสู�
 
 **สิ่งที่ผมทำแทน:** ให้เทสต์ **เดินด้วยการคลิก ไม่ใช่ `goto`** — client-side navigation ไม่ remount provider จึงไม่ยิง refresh
 · ซึ่งนอกจากประหยัดโควตาแล้วยัง**เหมือนที่คนใช้จริงมากกว่า** (คนไม่พิมพ์ URL ทีละหน้า)
+
+### 🔴 บทเรียนที่แพงที่สุดของเลนนี้: **`storageState` ที่แชร์กันหลาย context = token reuse**
+
+พยายามประหยัดโควตา throttle ด้วยการ save `storageState` ครั้งเดียวแล้วให้ทุกไฟล์ restore
+⇒ API ตอบ **`401 INVALID_REFRESH`**
+
+เพราะ **refresh token หมุนทุกครั้ง (F-001)** · state ที่ save ไว้ครั้งเดียวแล้วเอาไป restore 3 context
+= **ส่ง token ใบเดิมซ้ำ 3 ครั้ง** = รูปเดียวกับ token ที่ถูกขโมยไปใช้ ⇒ **reuse detection เพิกถอนทั้ง family**
+
+> **server ทำถูก · suite ของผมต่างหากที่ดูเหมือนคนขโมย cookie**
+
+⇒ เปลี่ยนเป็นแชร์ **credential ไม่ใช่ session**: setup สร้างบัญชี 1 ใบ + ร้าน แล้วแต่ละไฟล์ **login เอง 1 ครั้ง**
+(ถูกกว่า signup+login ครึ่งหนึ่ง และทุก context ได้ family ของตัวเอง)
+
+**นี่คือสิ่งที่เลน E2E ให้ที่เลนอื่นให้ไม่ได้:** unit/int test ไม่มีวันเจอ เพราะไม่มีตัวไหนถือ session ข้าม context จริง ๆ

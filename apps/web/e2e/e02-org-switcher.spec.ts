@@ -1,5 +1,5 @@
 import { expect, test, type Page } from "@playwright/test";
-import { createShop, landOnPicker, openSwitcher } from "./helpers";
+import { createShop, login, openSwitcher, readShared } from "./helpers";
 
 /**
  * ONE account and ONE page for the whole file, in order.
@@ -18,10 +18,11 @@ let page: Page;
 test.beforeAll(async ({ browser }) => {
   // Signed in already, from the lane's shared state — this file is about
   // switching between shops, not about how somebody signs in.
-  page = await browser
-    .newContext({ storageState: "e2e/.auth/owner.json" })
-    .then((c) => c.newPage());
-  await landOnPicker(page);
+  page = await browser.newContext().then((c) => c.newPage());
+  // A login, not a restored cookie: refresh tokens rotate, so replaying one
+  // saved state from several contexts is reuse — and F-001 revokes the family
+  // for exactly that.
+  await login(page, readShared().email);
 });
 
 test.afterAll(async () => {
