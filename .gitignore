@@ -69,3 +69,8 @@ coverage/
 .claude/skills/writing-fragments
 .claude/skills/writing-great-skills
 .claude/skills/writing-shape
+
+# Playwright (F-002 T-002-Q5) — run output, never committed
+apps/web/playwright-report/
+apps/web/playwright-results.json
+apps/web/test-results/

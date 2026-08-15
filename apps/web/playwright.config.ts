@@ -34,7 +34,17 @@ export default defineConfig({
   retries: 0,
   timeout: 30_000,
   expect: { timeout: 10_000 },
-  reporter: process.env.CI ? [["list"], ["html", { open: "never" }]] : [["list"]],
+  reporter: process.env.CI
+    ? [
+        ["list"],
+        ["html", { open: "never" }],
+        // Machine-readable, for the lane's own "did anything actually run"
+        // check. The HTML report is for humans: its cases live in a packed
+        // payload, not as greppable text, which the first version of that
+        // check learned by failing a green suite.
+        ["json", { outputFile: "playwright-results.json" }],
+      ]
+    : [["list"]],
   use: {
     baseURL: process.env.E2E_BASE_URL ?? "http://localhost:3001",
     // Kept only for the failures: a passing run of this size would otherwise

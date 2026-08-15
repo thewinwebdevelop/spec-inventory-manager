@@ -554,20 +554,18 @@ jobs:
         run: pnpm --filter web run test:e2e
       - name: I-37 — a browser lane that ran no cases is RED, not green
         if: always()
+        # Reads the JSON reporter, not the HTML one. The first version grepped
+        # `index.html` for case ids and failed a run in which all six tests
+        # passed: the HTML report keeps its data in a packed payload, so the
+        # count was always zero. A guard that reddens a green suite is worse
+        # than no guard — it teaches the next person to delete it — so this one
+        # reads the machine-readable output and prints what it counted.
         run: |
-          if [ ! -f apps/web/playwright-report/index.html ]; then
-            echo "::error::no Playwright report was produced — the suite did not run"
+          if [ ! -f apps/web/playwright-results.json ]; then
+            echo "::error::no Playwright JSON report — the suite did not run"
             exit 1
           fi
-          # A report with zero cases is the same failure wearing a hat: a
-          # `testDir` typo or a filter that matched nothing produces a perfectly
-          # valid, perfectly empty report.
-          cases=$(grep -o '"testId"' apps/web/playwright-report/index.html | wc -l | tr -d ' ')
-          echo "playwright report references $cases test entries"
-          if [ "$cases" -lt 1 ]; then
-            echo "::error::the Playwright report contains no test cases"
-            exit 1
-          fi
+          node tool/ci/assert-playwright-ran.mjs apps/web/playwright-results.json
       - name: upload the Playwright report on failure
         if: failure()
         uses: actions/upload-artifact@v4
