@@ -63,8 +63,17 @@ test("E-04 · an invited person with an account joins, and appears in the list",
   // The invitee opens the link the inviter would have sent over LINE.
   await acceptInvite(staffPage, link);
 
-  // They land INSIDE the shop — the invitation says which one, so there is
-  // nothing to choose.
+  // Accepting does NOT teleport them into the shop: §11.2 confirms what just
+  // happened and which role they got, then offers the way in. I had assumed a
+  // redirect — the screen is better, because "you are now a พนักงาน of X" is
+  // exactly what somebody who clicked a link from a chat needs to read before
+  // anything else changes.
+  await expect(
+    staffPage.getByRole("heading", { name: new RegExp(`เข้าร่วม .*${shopName}`) }),
+  ).toBeVisible({ timeout: 20_000 });
+  await expect(staffPage.getByText("สิทธิ์ของคุณ: พนักงาน")).toBeVisible();
+
+  await staffPage.getByRole("link", { name: "เริ่มใช้งานร้านนี้" }).click();
   await expect(staffPage).toHaveURL(new RegExp(`/o/${orgId}`), { timeout: 20_000 });
   await expect(staffPage.getByRole("main").getByText(shopName).first()).toBeVisible();
 
