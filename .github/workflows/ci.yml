@@ -415,6 +415,55 @@ jobs:
   # needed when qa/frontend land `test:e2e`.
   e2e-web:
     runs-on: ubuntu-latest
+    # ★ T-002-Q5 — this lane used to boot the web server alone and ask it for
+    # `GET /`. Every row of test-plan §12.1 crosses the whole stack (signup,
+    # provisioning, the org header), so a browser suite against a web server
+    # with no API behind it could only ever have tested the login page's
+    # markup. The services below are what make the lane mean something.
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_USER: omnistock
+          POSTGRES_PASSWORD: omnistock
+          POSTGRES_DB: omnistock_e2e
+        ports: ["5432:5432"]
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+      redis:
+        image: redis:7
+        ports: ["6379:6379"]
+        options: >-
+          --health-cmd "redis-cli ping"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+    env:
+      DATABASE_URL: postgresql://omnistock:omnistock@localhost:5432/omnistock_e2e
+      REDIS_URL: redis://localhost:6379
+      JWT_ACCESS_SECRET: e2e-access-secret-32-chars-minimum-value!!
+      JWT_REFRESH_SECRET: e2e-refresh-secret-32-chars-different-va!
+      INVITATION_TOKEN_SECRET: e2e-invitation-secret-32-chars-distinct!!
+      # The API builds `${WEB_APP_BASE_URL}/invite?token=…`; this lane's browser
+      # opens those links, so it has to be the web server this job boots.
+      WEB_APP_BASE_URL: http://localhost:3001
+      # Without a seeded PlanDefinition under this key, `POST /organizations`
+      # answers 503 for every case (§6.2) — see the seed step below.
+      DEFAULT_ORG_PLAN_KEY: comp_full
+      PORT: "3000"
+      # ⚠️ NODE_ENV is deliberately NOT set at the job level. `next build` and
+      # `next start` manage it themselves, and an inherited non-standard value
+      # makes Next warn and behave unlike the production build this lane is
+      # supposed to exercise. The API needs it (the schema has no default), so
+      # it is set on the API's own steps only — as `test`, because the schema
+      # refuses a plain-http WEB_APP_BASE_URL in production and http://localhost
+      # is what this lane actually serves.
+      # apps/web's rewrite target — the same-origin `/auth/*` proxy that makes
+      # the `Path=/auth` refresh cookie work (infra/gateway/README.md).
+      API_ORIGIN: http://localhost:3000
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
@@ -424,6 +473,35 @@ jobs:
       - run: pnpm install --frozen-lockfile
       - name: build workspace deps (web needs contracts built)
         run: pnpm turbo build --filter=web^...
+      - name: generate Prisma client + migrate + seed the plan
+        env:
+          NODE_ENV: test
+        # Order matters and each step has a distinct failure: no client = the
+        # API cannot import @omnistock/db; no migration = every query fails; no
+        # seed = 503 on the one endpoint E-01 exists to exercise.
+        run: |
+          pnpm --filter @omnistock/db exec prisma generate
+          pnpm --filter @omnistock/db exec prisma migrate deploy
+          pnpm --filter @omnistock/db exec prisma db seed
+      - name: build + boot apps/api in the background
+        env:
+          NODE_ENV: test
+        run: |
+          pnpm --filter api run build
+          pnpm --filter api run start &>/tmp/api.log &
+      - name: wait for the API to answer
+        run: |
+          for i in $(seq 1 60); do
+            code=$(curl -s -o /dev/null -w '%{http_code}' http://localhost:3000/health || true)
+            if [ "$code" = "200" ] || [ "$code" = "503" ]; then
+              echo "API answering on :3000 (attempt $i, status $code)"
+              exit 0
+            fi
+            sleep 1
+          done
+          echo "::error::apps/api never answered on :3000 — the browser suite would have tested a web server with nothing behind it"
+          cat /tmp/api.log || true
+          exit 1
       - name: build apps/web (production)
         run: pnpm --filter web run build
       - name: boot apps/web in the background
@@ -442,20 +520,31 @@ jobs:
           echo "::error::apps/web never answered 200 on / within 30s"
           cat /tmp/web.log || true
           exit 1
-      - name: install Playwright browsers (only if apps/web declares test:e2e)
+      - name: install Playwright browsers
+        run: pnpm --filter web exec playwright install --with-deps chromium
+      # ★ The conditional that used to wrap the two steps above is GONE. It read
+      # "run the suite if apps/web declares test:e2e", which meant this job was
+      # green for months on a repo that had no browser suite at all — the exact
+      # "green because it never ran" shape I-37 exists to catch, sitting in the
+      # lane that was supposed to be the last line of defence.
+      - name: run the web Playwright suite (test-plan §12.1)
+        run: pnpm --filter web run test:e2e
+      - name: I-37 — a browser lane that ran no cases is RED, not green
+        if: always()
         run: |
-          if node -e "process.exit(require('./apps/web/package.json').scripts['test:e2e'] ? 0 : 1)"; then
-            pnpm --filter web exec playwright install --with-deps chromium
-          else
-            echo "::notice::apps/web has no 'test:e2e' script yet (F-001 T-001-15/16/18 not landed) — the required GET / boot-smoke above still ran and gated this job; this step is a no-op until frontend/qa add the script + Playwright config."
+          if [ ! -f apps/web/playwright-report/index.html ]; then
+            echo "::error::no Playwright report was produced — the suite did not run"
+            exit 1
           fi
-      - name: run web Playwright suite (T-001-18/qa, once it lands)
-        run: |
-          if node -e "process.exit(require('./apps/web/package.json').scripts['test:e2e'] ? 0 : 1)"; then
-            pnpm --filter web run test:e2e
-          else
-            echo "::notice::skipped — see previous step"
-          fi
-      - name: dump web log on failure
+      - name: upload the Playwright report on failure
         if: failure()
-        run: cat /tmp/web.log || true
+        uses: actions/upload-artifact@v4
+        with:
+          name: playwright-report
+          path: apps/web/playwright-report
+          retention-days: 7
+      - name: dump the logs on failure
+        if: failure()
+        run: |
+          echo "───────── api"; cat /tmp/api.log || true
+          echo "───────── web"; cat /tmp/web.log || true

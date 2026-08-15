@@ -7,7 +7,8 @@
     "lint": "eslint \"src/**/*.{ts,tsx}\"",
     "typecheck": "tsc -p tsconfig.json --noEmit",
     "test": "vitest run --passWithNoTests",
-    "dev": "next dev"
+    "dev": "next dev",
+    "test:e2e": "playwright test"
   },
   "dependencies": {
     "@omnistock/contracts": "workspace:*",
@@ -25,6 +26,7 @@
     "tailwindcss": "^4.3.2"
   },
   "devDependencies": {
+    "@playwright/test": "^1.50.1",
     "@testing-library/jest-dom": "^6.6.3",
     "@testing-library/react": "^16.1.0",
     "@testing-library/user-event": "^14.5.2",
