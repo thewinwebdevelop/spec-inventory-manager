@@ -471,8 +471,15 @@ jobs:
           node-version-file: ".nvmrc"
       - uses: pnpm/action-setup@v4
       - run: pnpm install --frozen-lockfile
-      - name: build workspace deps (web needs contracts built)
-        run: pnpm turbo build --filter=web^...
+      # ★ Both apps, through turbo, so their workspace deps are built first.
+      # The first run of this lane built only `web^...` and the API failed to
+      # compile on `Cannot find module '@omnistock/core-domain'` — the web
+      # filter has no reason to build the API's dependencies, and this lane now
+      # boots the API.
+      - name: build the API and web (turbo builds their workspace deps first)
+        env:
+          NODE_ENV: test
+        run: pnpm turbo build --filter=api --filter=web
       - name: generate Prisma client + migrate + seed the plan
         env:
           NODE_ENV: test
@@ -483,12 +490,10 @@ jobs:
           pnpm --filter @omnistock/db exec prisma generate
           pnpm --filter @omnistock/db exec prisma migrate deploy
           pnpm --filter @omnistock/db exec prisma db seed
-      - name: build + boot apps/api in the background
+      - name: boot apps/api in the background
         env:
           NODE_ENV: test
-        run: |
-          pnpm --filter api run build
-          pnpm --filter api run start &>/tmp/api.log &
+        run: pnpm --filter api run start &>/tmp/api.log &
       - name: wait for the API to answer
         run: |
           for i in $(seq 1 60); do
@@ -502,8 +507,6 @@ jobs:
           echo "::error::apps/api never answered on :3000 — the browser suite would have tested a web server with nothing behind it"
           cat /tmp/api.log || true
           exit 1
-      - name: build apps/web (production)
-        run: pnpm --filter web run build
       - name: boot apps/web in the background
         run: pnpm --filter web exec next start -p 3001 &>/tmp/web.log &
         working-directory: .
