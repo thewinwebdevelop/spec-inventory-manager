@@ -1400,3 +1400,34 @@ ux-wireframe **§1.1 flow map เขียนไว้ตั้งแต่ต�
 `ChangePasswordForm > success/data state` แดง 1 ครั้งในการรัน suite เต็ม (6.2 วินาที) · รันเดี่ยวผ่าน (1.5 วินาที) ·
 รัน suite เต็มซ้ำผ่าน ⇒ **timeout ภายใต้ load ไม่ใช่ตรรกะผิด** · ไม่เกี่ยวกับการแก้ redirect (คนละไฟล์ คนละ flow)
 **เจ้าของ: frontend · เส้นตาย: ก่อน Gate F** — ถ้าเกิดซ้ำใน CI ให้ยก timeout ของเคสนั้นหรือแยก argon2 mock ออก **ห้าม `.skip`**
+
+### รอบ 4 · 🔴 **แอปไม่มีทางรันที่ใช้งานได้เลย — ทั้ง `dev` และ `start` พังคนละแบบ**
+
+`POST /auth/signup` ตอบ 500:
+
+```
+TypeError: Cannot read properties of undefined (reading 'checkIp')
+  at AuthController.signup (auth.controller.ts:80)
+```
+
+`this.throttle` เป็น `undefined` — **DI ของ Nest ไม่ได้ inject อะไรเลย** เพราะ esbuild/tsx **ไม่ emit `design:paramtypes`**
+
+**และ repo นี้รู้เรื่องนี้อยู่แล้ว** — `apps/api/vitest.config.ts` เขียนไว้ตรง ๆ:
+
+> *"NestJS type-based DI needs emitted decorator metadata (`design:paramtypes`), which esbuild/tsx do NOT produce ...
+> Without this, full-module @nestjs/testing builds inject `undefined` for typed constructor params
+> (**the ThrottleService-into-controller bug**)"*
+
+⇒ แก้ให้ **เลนเทสต์** ด้วย SWC แล้ว · **ไม่มีใครแก้ให้ตัวแอป**
+
+| ทางรัน | สถานะ |
+|---|---|
+| `pnpm --filter api run start` (`node dist/main.js`) | ❌ `ERR_MODULE_NOT_FOUND` — config ship TS source |
+| `pnpm --filter api run dev` (`tsx watch src/main.ts`) | ❌ DI inject `undefined` ทุกตัว — ไม่มี decorator metadata |
+| เลนเทสต์ (vitest + SWC) | ✅ — เป็นทางเดียวที่แอปนี้เคย "ทำงาน" |
+
+**เลน E2E ใช้ `tsx dist/main.js`**: entry ที่ tsc compile (มี metadata) + tsx เป็นตัว resolve TS-source package
+— แต่ละครึ่งชี้ไปที่ช่องว่างคนละอัน และรวมกันคือคำอธิบายว่าทำไมไม่มีใครเคยเจอ: **ไม่เคยมีใครสตาร์ทแอปนี้นอก harness ของเทสต์**
+
+⇒ ส่งต่อ **backend-api + devops**: ก่อน deploy ต้องเลือกทางใดทางหนึ่ง — ให้ workspace package emit JS,
+หรือ bundle API, หรือย้าย build ไป SWC/nest-cli ให้ `dev` ใช้ได้จริง · **นี่ไม่ใช่การตัดสินใจของคนที่ทำ CI ให้เขียว**

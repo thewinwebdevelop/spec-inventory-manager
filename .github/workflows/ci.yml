@@ -490,23 +490,30 @@ jobs:
           pnpm --filter @omnistock/db exec prisma generate
           pnpm --filter @omnistock/db exec prisma migrate deploy
           pnpm --filter @omnistock/db exec prisma db seed
-      # ⚠️ `tsx src/main.ts`, NOT `pnpm --filter api run start`.
+      # ⚠️ `tsx dist/main.js` — the COMPILED entry, loaded through tsx. Neither
+      # half of that is arbitrary, and between them they name two real gaps
+      # (both filed in tasks.md, T-002-Q5):
       #
-      # FINDING from building this lane (recorded in tasks.md, T-002-Q5):
-      # `node dist/main.js` — the repo's own `start` script — does not run.
-      # `@omnistock/config` ships TypeScript source (`main: src/index.ts`), so
-      # the compiled entrypoint dies on `ERR_MODULE_NOT_FOUND` resolving
-      # `packages/config/src/env`. That path works under tsx/vitest/webpack and
-      # has never been exercised, because nothing has ever started the API in
-      # production mode — Phase 0 has no deploy target.
+      #   `node dist/main.js` (the repo's `start` script) dies with
+      #   ERR_MODULE_NOT_FOUND on `packages/config/src/env`: @omnistock/config
+      #   ships TypeScript source, which plain Node cannot load. → tsx resolves
+      #   it.
       #
-      # This lane runs the app, not the packaging, so it boots the way `dev`
-      # does. The packaging is a real gap that has to close before a deploy,
-      # and it is filed rather than papered over here.
+      #   `tsx src/main.ts` (the repo's `dev` script) boots, and then every
+      #   typed constructor parameter is `undefined` — esbuild does not emit
+      #   `design:paramtypes`, so Nest's DI has nothing to resolve. The first
+      #   request died on `Cannot read properties of undefined (reading
+      #   'checkIp')`. apps/api's own vitest config documents this exact bug
+      #   ("the ThrottleService-into-controller bug") and fixes it for the test
+      #   lane with SWC — nothing fixes it for the app. → tsc's output has the
+      #   metadata.
+      #
+      # So the compiled entry supplies the metadata and tsx supplies the
+      # resolution. Neither `dev` nor `start` can run this API as it stands.
       - name: boot apps/api in the background
         env:
           NODE_ENV: test
-        run: pnpm --filter api exec tsx src/main.ts &>/tmp/api.log &
+        run: pnpm --filter api exec tsx dist/main.js &>/tmp/api.log &
       - name: wait for the API to answer
         run: |
           for i in $(seq 1 60); do
