@@ -4,6 +4,7 @@ import {
   createShop,
   freshEmail,
   invite,
+  landOnPicker,
   openMembers,
   signUpAndLogin,
 } from "./helpers";
@@ -34,7 +35,7 @@ test.beforeAll(async ({ browser }) => {
     .then((c) => c.newPage());
   staffPage = await browser.newContext().then((c) => c.newPage());
 
-  await ownerPage.goto("/select-org");
+  await landOnPicker(ownerPage);
   shopName = `ร้านสิทธิ์ ${Date.now()}`;
   orgId = await createShop(ownerPage, shopName);
 

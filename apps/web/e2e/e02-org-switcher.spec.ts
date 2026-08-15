@@ -1,5 +1,5 @@
 import { expect, test, type Page } from "@playwright/test";
-import { createShop, openSwitcher } from "./helpers";
+import { createShop, landOnPicker, openSwitcher } from "./helpers";
 
 /**
  * ONE account and ONE page for the whole file, in order.
@@ -21,7 +21,7 @@ test.beforeAll(async ({ browser }) => {
   page = await browser
     .newContext({ storageState: "e2e/.auth/owner.json" })
     .then((c) => c.newPage());
-  await page.goto("/select-org");
+  await landOnPicker(page);
 });
 
 test.afterAll(async () => {

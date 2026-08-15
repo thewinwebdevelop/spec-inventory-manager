@@ -36,6 +36,23 @@ export async function signUpAndLogin(page: Page, email: string): Promise<void> {
   await expect(page).toHaveURL(/\/select-org/);
 }
 
+/**
+ * Lands on the shop picker and waits for the app to be READY, not merely
+ * rendered.
+ *
+ * A context restored from `storageState` carries the refresh cookie and no
+ * access token — that lives in memory by design — so the first thing the app
+ * does is bootstrap. Acting before that settles sends a request with no
+ * credential, and the server answers `401 UNAUTHENTICATED`, which the screen
+ * reports as "สร้างร้านไม่สำเร็จ". That is not a bug in the app: a real person
+ * cannot click before the page has drawn. Waiting for the picker's own heading
+ * is the same signal they use.
+ */
+export async function landOnPicker(page: Page): Promise<void> {
+  await page.goto("/select-org");
+  await expect(page.getByRole("heading", { name: "เลือกร้านที่จะเข้าใช้งาน" })).toBeVisible();
+}
+
 /** Signs an EXISTING account in. */
 export async function login(page: Page, email: string): Promise<void> {
   await page.goto("/login");
