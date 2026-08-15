@@ -119,7 +119,17 @@ test("E-03b · the old link is DEAD the moment a new one exists", async ({ brows
 
   // The screen must say the link is unusable — not offer to join, and not
   // crash. `INVITATION_INVALID` is a 404, and §11.4 gives it its own copy.
+  //
+  // Pinned to the exact heading rather than a loose /ลิงก์|คำเชิญ/: that
+  // pattern matched the heading AND the explanation under it, and a message
+  // this specific is worth asserting by its words. It is what the person
+  // holding a dead link actually reads.
   await expect(inviteePage.getByRole("button", { name: "เข้าร่วมร้านนี้" })).toHaveCount(0);
-  await expect(inviteePage.getByText(/ลิงก์|คำเชิญ/)).toBeVisible();
+  await expect(
+    inviteePage.getByRole("heading", { name: "ลิงก์คำเชิญนี้ใช้ไม่ได้" }),
+  ).toBeVisible();
+  // …and it says what to do next, which is the half that keeps it from being
+  // a dead end (§11.4).
+  await expect(inviteePage.getByText(/ขอลิงก์ใหม่จากเจ้าของร้าน/)).toBeVisible();
   await invitee.close();
 });
