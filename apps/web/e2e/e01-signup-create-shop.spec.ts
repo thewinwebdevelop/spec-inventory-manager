@@ -47,6 +47,19 @@ test("E-01 · signs up, creates a shop, and is inside it", async ({ page }) => {
   await expect(page).toHaveURL(/\/select-org/);
   await expect(page.getByText("คุณยังไม่ได้อยู่ในร้านไหน")).toBeVisible();
 
+  // ★ The session's ONLY durable half. The access token lives in memory and
+  // dies with the tab; `omni_rt` (httpOnly, Path=/auth) is what rebuilds it.
+  // Asserted here rather than left implicit because the first run of this lane
+  // reached `/o/{id}` and was then bounced to /login by `401 NO_REFRESH_TOKEN`
+  // — the browser had no cookie to send, and every screen before this point
+  // worked anyway on the in-memory token. This is the assertion that tells the
+  // two apart.
+  const cookies = await page.context().cookies();
+  expect(
+    cookies.map((c) => c.name),
+    `no refresh cookie after login — the session cannot survive anything. Cookies: ${JSON.stringify(cookies)}`,
+  ).toContain("omni_rt");
+
   // ── create the shop ───────────────────────────────────────────────────
   // The empty state renders `<Link><Button>สร้างร้านใหม่</Button></Link>`, so
   // both roles carry that name — the LINK is the one that navigates.
@@ -58,7 +71,7 @@ test("E-01 · signs up, creates a shop, and is inside it", async ({ page }) => {
   await page.getByRole("button", { name: "สร้างร้าน", exact: true }).click();
 
   // ── THE ASSERTION: inside the new shop, by URL and by what is on screen ──
-  await expect(page).toHaveURL(/\/o\/org_[A-Za-z0-9]+/, { timeout: 20_000 });
+  await expect(page).toHaveURL(/\/o\/[A-Za-z0-9_-]+/, { timeout: 20_000 });
   await expect(page.getByText(shopName).first()).toBeVisible();
 });
 
@@ -82,7 +95,7 @@ test("E-01b · the shop persists across a reload — the session survives", asyn
   const shopName = `ร้านค้าง ${Date.now()}`;
   await page.getByLabel("ชื่อร้าน").fill(shopName);
   await page.getByRole("button", { name: "สร้างร้าน", exact: true }).click();
-  await expect(page).toHaveURL(/\/o\/org_[A-Za-z0-9]+/, { timeout: 20_000 });
+  await expect(page).toHaveURL(/\/o\/[A-Za-z0-9_-]+/, { timeout: 20_000 });
 
   const insideTheShop = page.url();
   await page.reload();
