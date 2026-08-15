@@ -1,5 +1,25 @@
-import { expect, test } from "@playwright/test";
+import { expect, test, type Page } from "@playwright/test";
 import { createShop, freshEmail, invite, openMembers, signUpAndLogin } from "./helpers";
+
+/**
+ * One account, one page, in order — see the note in e02: F-001's per-IP
+ * pre-auth throttle (`IP_WINDOW_MAX = 20` / 5 min) is a hard-coded constant,
+ * and a lane that authenticates per test spends the budget on logins.
+ */
+test.describe.configure({ mode: "serial" });
+
+let page: Page;
+let orgId = "";
+
+test.beforeAll(async ({ browser }) => {
+  page = await browser.newContext().then((c) => c.newPage());
+  await signUpAndLogin(page, freshEmail("inviter"));
+  orgId = await createShop(page, `ร้านเชิญ ${Date.now()}`);
+});
+
+test.afterAll(async () => {
+  await page.close();
+});
 
 /**
  * E-03 (test-plan §12.1) — invite → copy the link → invite the same person
@@ -11,11 +31,7 @@ import { createShop, freshEmail, invite, openMembers, signUpAndLogin } from "./h
  * is issued (D-027), and every guard rail around that — the show-once warning,
  * the confirmation, the wording — exists because of it.
  */
-test("E-03 · the link shows once, a duplicate invite offers a way out, and reissuing warns first", async ({
-  page,
-}) => {
-  await signUpAndLogin(page, freshEmail("owner"));
-  const orgId = await createShop(page, `ร้านเชิญ ${Date.now()}`);
+test("E-03 · the link shows once, a duplicate invite offers a way out, and reissuing warns first", async () => {
   await openMembers(page, orgId);
 
   const guest = freshEmail("guest");
@@ -51,7 +67,10 @@ test("E-03 · the link shows once, a duplicate invite offers a way out, and reis
   await dialog.getByRole("button", { name: "ยกเลิก" }).click();
 
   // ── reissue asks BEFORE it breaks the link that was already sent ─────────
-  await page.getByRole("button", { name: "ออกลิงก์ใหม่" }).first().click();
+  // Scoped to the row: `.first()` would be a coin flip the moment a second
+  // invitation exists, and this shop is about to have one.
+  const row = page.locator("li", { hasText: guest });
+  await row.getByRole("button", { name: "ออกลิงก์ใหม่" }).click();
 
   const confirm = page.getByRole("alertdialog");
   await expect(confirm).toBeVisible();
@@ -75,19 +94,17 @@ test("E-03 · the link shows once, a duplicate invite offers a way out, and reis
   ).not.toBe(firstUrl);
 });
 
-test("E-03b · the old link is DEAD the moment a new one exists", async ({ page, context }) => {
+test("E-03b · the old link is DEAD the moment a new one exists", async ({ browser }) => {
   // The half a screenshot cannot show. Everything above is about what the
   // inviter is told; this is whether it is true for the person holding the
   // first link.
-  await signUpAndLogin(page, freshEmail("owner"));
-  const orgId = await createShop(page, `ร้านลิงก์ตาย ${Date.now()}`);
   await openMembers(page, orgId);
 
   const guest = freshEmail("guest");
   const firstUrl = await invite(page, guest, "พนักงาน");
   await page.getByRole("dialog", { name: "ลิงก์คำเชิญพร้อมแล้ว" }).getByRole("button", { name: "เสร็จแล้ว" }).click();
 
-  await page.getByRole("button", { name: "ออกลิงก์ใหม่" }).first().click();
+  await page.locator("li", { hasText: guest }).getByRole("button", { name: "ออกลิงก์ใหม่" }).click();
   await page.getByRole("alertdialog").getByRole("button", { name: "ออกลิงก์ใหม่" }).click();
   await expect(page.getByRole("dialog", { name: "ลิงก์คำเชิญพร้อมแล้ว" })).toBeVisible({
     timeout: 20_000,
@@ -95,7 +112,7 @@ test("E-03b · the old link is DEAD the moment a new one exists", async ({ page,
 
   // A separate browser context: the invitee is a different person on a
   // different machine, holding the link that was sent before the reissue.
-  const invitee = await context.browser()!.newContext();
+  const invitee = await browser.newContext();
   const inviteePage = await invitee.newPage();
   const link = new URL(firstUrl);
   await inviteePage.goto(`${link.pathname}${link.search}`);

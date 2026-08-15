@@ -51,6 +51,21 @@ export async function createShop(page: Page, name: string): Promise<string> {
   return orgId!;
 }
 
+/**
+ * Opens the shop switcher.
+ *
+ * It is a `<details>/<summary>` disclosure on web — the shop lives in the URL
+ * (web.md §3.2), so the list inside is links, and it is collapsed until asked
+ * for. Mobile's tap-the-AppBar bottom sheet is the other shape (§13).
+ */
+export async function openSwitcher(page: Page): Promise<void> {
+  const summary = page.locator("details > summary").first();
+  if (!(await page.locator("details[open]").count())) {
+    await summary.click();
+  }
+  await expect(page.getByText("สลับร้าน")).toBeVisible();
+}
+
 export async function openMembers(page: Page, orgId: string): Promise<void> {
   await page.goto(`/o/${orgId}/settings/members`);
   await expect(page.getByRole("heading", { name: "สมาชิก" })).toBeVisible();

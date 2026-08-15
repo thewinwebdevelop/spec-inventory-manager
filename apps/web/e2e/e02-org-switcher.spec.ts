@@ -1,5 +1,28 @@
-import { expect, test } from "@playwright/test";
-import { createShop, freshEmail, signUpAndLogin } from "./helpers";
+import { expect, test, type Page } from "@playwright/test";
+import { createShop, freshEmail, openSwitcher, signUpAndLogin } from "./helpers";
+
+/**
+ * ONE account and ONE page for the whole file, in order.
+ *
+ * Not a style choice: F-001 throttles pre-auth endpoints per IP
+ * (`IP_WINDOW_MAX = 20` per 5 minutes, a hard-coded constant — auth.constants).
+ * The whole browser lane runs from one address, so a suite that signs up and
+ * logs in per test spends its budget on authentication and then starts failing
+ * with "ลองเข้าสู่ระบบถี่เกินไป" — which is the throttle working exactly as
+ * designed. Two auth calls per file keeps the lane inside it.
+ */
+test.describe.configure({ mode: "serial" });
+
+let page: Page;
+
+test.beforeAll(async ({ browser }) => {
+  page = await browser.newContext().then((c) => c.newPage());
+  await signUpAndLogin(page, freshEmail("switcher"));
+});
+
+test.afterAll(async () => {
+  await page.close();
+});
 
 /**
  * E-02 (test-plan §12.1) — one person, two shops, and no bleed between them.
@@ -10,12 +33,13 @@ import { createShop, freshEmail, signUpAndLogin } from "./helpers";
  * failure this catches is a query cache keyed without the org id, which looks
  * perfect until the second shop shows the first one's data.
  */
-test("E-02 · switching shops changes the URL and the data with it", async ({ page }) => {
-  await signUpAndLogin(page, freshEmail("two-shops"));
+let nameA = "";
+let nameB = "";
 
-  const nameA = `ร้าน ก ${Date.now()}`;
+test("E-02 · switching shops changes the URL and the data with it", async () => {
+  nameA = `ร้าน ก ${Date.now()}`;
   const orgA = await createShop(page, nameA);
-  const nameB = `ร้าน ข ${Date.now()}`;
+  nameB = `ร้าน ข ${Date.now()}`;
   const orgB = await createShop(page, nameB);
 
   expect(orgA, "the two shops must be different").not.toBe(orgB);
@@ -28,6 +52,7 @@ test("E-02 · switching shops changes the URL and the data with it", async ({ pa
   // The switcher is a LIST in the sidebar, not a menu that opens: on web the
   // shop is in the URL (web.md §3.2), so switching is following a link. The
   // bottom-sheet-on-tap shape is mobile's (§13).
+  await openSwitcher(page);
   await page.getByRole("link", { name: new RegExp(nameA) }).click();
 
   await expect(page).toHaveURL(new RegExp(`/o/${orgA}`));
@@ -46,16 +71,11 @@ test("E-02 · switching shops changes the URL and the data with it", async ({ pa
   await expect(page.getByText(nameA)).toHaveCount(0);
 });
 
-test("E-02b · the switcher lists both shops and marks the current one in WORDS", async ({
-  page,
-}) => {
+test("E-02b · the switcher lists both shops and marks the current one in WORDS", async () => {
   // §14: never colour or a tick alone. A screen reader user picks the shop
-  // they are already in by reading, or not at all.
-  await signUpAndLogin(page, freshEmail("switcher"));
-  const nameA = `ร้านหนึ่ง ${Date.now()}`;
-  await createShop(page, nameA);
-  const nameB = `ร้านสอง ${Date.now()}`;
-  await createShop(page, nameB);
+  // they are already in by reading, or not at all. Runs after E-02, which
+  // left two shops on this account.
+  await openSwitcher(page);
 
   await expect(page.getByRole("link", { name: new RegExp(nameA) })).toBeVisible();
   await expect(page.getByRole("link", { name: new RegExp(nameB) })).toBeVisible();
