@@ -39,9 +39,25 @@ export async function login(page: Page, email: string): Promise<void> {
   await expect(page).toHaveURL(/\/select-org/);
 }
 
-/** Creates a shop from wherever the picker is, and returns its id. */
+/**
+ * Creates a shop from wherever the picker is, and returns its id.
+ *
+ * ⚠️ NAVIGATES BY CLICKING, not by `goto`. Every full page load bootstraps the
+ * session with a `POST /auth/refresh`, and that endpoint shares F-001's per-IP
+ * pre-auth budget with login and signup (`checkIp`, auth.controller) — 20 per
+ * five minutes, hard-coded. A suite that `goto`s everywhere spends its budget
+ * on page loads and then fails with "ลองเข้าสู่ระบบถี่เกินไป", which is the
+ * throttle working correctly. Clicking is also what a person does.
+ */
 export async function createShop(page: Page, name: string): Promise<string> {
-  await page.goto("/orgs/new");
+  if (!/\/orgs\/new/.test(page.url())) {
+    const link = page.getByRole("link", { name: "สร้างร้านใหม่" }).first();
+    if (await link.count()) {
+      await link.click();
+    } else {
+      await page.goto("/orgs/new");
+    }
+  }
   await page.getByLabel("ชื่อร้าน").fill(name);
   await page.getByRole("button", { name: "สร้างร้าน", exact: true }).click();
 
@@ -67,7 +83,14 @@ export async function openSwitcher(page: Page): Promise<void> {
 }
 
 export async function openMembers(page: Page, orgId: string): Promise<void> {
-  await page.goto(`/o/${orgId}/settings/members`);
+  // Same reason as `createShop`: follow the nav entry when it is on screen.
+  const nav = page.getByRole("navigation", { name: "เมนูของร้าน" });
+  const entry = nav.getByRole("link", { name: "สมาชิก" });
+  if (await entry.count()) {
+    await entry.click();
+  } else {
+    await page.goto(`/o/${orgId}/settings/members`);
+  }
   // `exact` matters: "สมาชิกในร้าน (n)" is a heading on this page too.
   await expect(page.getByRole("heading", { name: "สมาชิก", exact: true })).toBeVisible();
 }

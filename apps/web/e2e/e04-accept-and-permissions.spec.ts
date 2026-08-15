@@ -93,7 +93,10 @@ test("E-13 · the last Owner cannot leave, and is told what to do instead", asyn
   // to arrive as a sentence that names the way out, because F-002 has no
   // "delete shop" — an Owner who cannot leave and cannot delete is stuck with
   // a shop forever if the message just says "conflict".
-  await ownerPage.goto(`/o/${orgId}/settings/org`);
+  await ownerPage
+    .getByRole("navigation", { name: "เมนูของร้าน" })
+    .getByRole("link", { name: "ข้อมูลร้าน" })
+    .click();
   await ownerPage.getByRole("button", { name: "ออกจากร้านนี้" }).click();
 
   const dialog = ownerPage.getByRole("dialog", { name: new RegExp(`ออกจาก${shopName}`) });
@@ -115,7 +118,10 @@ test("E-13b · a Staff member CAN leave, and the shop disappears from their list
   // The other side of D-029: leaving needs no capability, and Staff cannot even
   // open the members screen — which is why the affordance lives on the shop's
   // own page and not there.
-  await staffPage.goto(`/o/${orgId}/settings/org`);
+  await staffPage
+    .getByRole("navigation", { name: "เมนูของร้าน" })
+    .getByRole("link", { name: "ข้อมูลร้าน" })
+    .click();
   await staffPage.getByRole("button", { name: "ออกจากร้านนี้" }).click();
 
   const dialog = staffPage.getByRole("dialog", { name: new RegExp(`ออกจาก${shopName}`) });
