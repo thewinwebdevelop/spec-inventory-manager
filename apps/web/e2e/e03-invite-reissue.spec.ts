@@ -1,5 +1,5 @@
 import { expect, test, type Page } from "@playwright/test";
-import { createShop, freshEmail, invite, openMembers, signUpAndLogin } from "./helpers";
+import { createShop, freshEmail, invite, openMembers } from "./helpers";
 
 /**
  * One account, one page, in order — see the note in e02: F-001's per-IP
@@ -12,8 +12,10 @@ let page: Page;
 let orgId = "";
 
 test.beforeAll(async ({ browser }) => {
-  page = await browser.newContext().then((c) => c.newPage());
-  await signUpAndLogin(page, freshEmail("inviter"));
+  page = await browser
+    .newContext({ storageState: "e2e/.auth/owner.json" })
+    .then((c) => c.newPage());
+  await page.goto("/select-org");
   orgId = await createShop(page, `ร้านเชิญ ${Date.now()}`);
 });
 

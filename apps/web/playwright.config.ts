@@ -55,5 +55,14 @@ export default defineConfig({
     locale: "th-TH",
     timezoneId: "Asia/Bangkok",
   },
-  projects: [{ name: "chromium", use: { ...devices["Desktop Chrome"] } }],
+  projects: [
+    // Creates the shared Owner + shop once (see auth.setup.ts for why the
+    // lane's real budget is pre-auth requests per five minutes, not time).
+    { name: "setup", testMatch: /auth\.setup\.ts/ },
+    {
+      name: "chromium",
+      dependencies: ["setup"],
+      use: { ...devices["Desktop Chrome"], storageState: "e2e/.auth/owner.json" },
+    },
+  ],
 });

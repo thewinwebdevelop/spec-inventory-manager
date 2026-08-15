@@ -1,5 +1,9 @@
 import { expect, test } from "@playwright/test";
 
+// E-01's subject IS the signup journey, so it opts out of the lane's shared
+// signed-in state and starts from an empty jar like a first-time visitor.
+test.use({ storageState: { cookies: [], origins: [] } });
+
 /**
  * E-01 (test-plan §12.1) — signup → create a shop → land inside it.
  *

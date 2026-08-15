@@ -26,10 +26,15 @@ let shopName = "";
 const staffEmail = freshEmail("staff");
 
 test.beforeAll(async ({ browser }) => {
-  ownerPage = await browser.newContext().then((c) => c.newPage());
+  // The Owner is the lane's shared account; only the Staff member has to be a
+  // real new signup, because "somebody who has an account accepts an
+  // invitation" is the branch §11.2 describes.
+  ownerPage = await browser
+    .newContext({ storageState: "e2e/.auth/owner.json" })
+    .then((c) => c.newPage());
   staffPage = await browser.newContext().then((c) => c.newPage());
 
-  await signUpAndLogin(ownerPage, freshEmail("owner"));
+  await ownerPage.goto("/select-org");
   shopName = `ร้านสิทธิ์ ${Date.now()}`;
   orgId = await createShop(ownerPage, shopName);
 

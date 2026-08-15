@@ -1,3 +1,4 @@
+import { readFileSync } from "node:fs";
 import { expect, type Page } from "@playwright/test";
 
 /**
@@ -11,6 +12,11 @@ import { expect, type Page } from "@playwright/test";
  */
 
 export const PASSWORD = "E2e-passphrase-8Kx!";
+
+/** The Owner + shop `auth.setup.ts` created for the whole lane. */
+export function readShared(): { email: string; orgId: string; shopName: string } {
+  return JSON.parse(readFileSync("e2e/.auth/shared.json", "utf8"));
+}
 
 /** Unique per call — one database serves the whole run. */
 export function freshEmail(prefix = "e2e"): string {
