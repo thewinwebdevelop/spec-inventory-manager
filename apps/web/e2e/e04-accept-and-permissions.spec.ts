@@ -106,6 +106,17 @@ test("E-08 · a Staff member is not offered the members screen, and is not throw
   await expect(staffPage).toHaveURL(new RegExp(`/o/${orgId}`));
 });
 
+test("E-08b · the Owner, unlike the Staff member, IS offered the members entry", async () => {
+  // The counterpart to E-08, and a check on the client's own copy of the
+  // capabilities: the nav hides "สมาชิก" without `manage_members`, so an Owner
+  // who cannot see it would mean the client lost capabilities the server still
+  // honours — the kind of mismatch that looks like a permissions bug to the
+  // person and like nothing at all to the API.
+  await expect(
+    ownerPage.getByRole("navigation", { name: "เมนูของร้าน" }).getByRole("link", { name: "สมาชิก" }),
+  ).toBeVisible();
+});
+
 test("E-13 · the last Owner cannot leave, and is told what to do instead", async () => {
   // AC-5.7 / D-029. The refusal is the interesting half: `409 LAST_OWNER` has
   // to arrive as a sentence that names the way out, because F-002 has no
@@ -117,7 +128,9 @@ test("E-13 · the last Owner cannot leave, and is told what to do instead", asyn
     .click();
   await ownerPage.getByRole("button", { name: "ออกจากร้านนี้" }).click();
 
-  const dialog = ownerPage.getByRole("dialog", { name: new RegExp(`ออกจาก${shopName}`) });
+  // `alertdialog`, not `dialog` — LeaveOrgDialog uses the assertive role
+  // (ui.md §6: it asks before something irreversible).
+  const dialog = ownerPage.getByRole("alertdialog", { name: new RegExp(`ออกจาก${shopName}`) });
   await expect(dialog).toBeVisible();
   await dialog.getByRole("button", { name: "ออกจากร้านนี้" }).click();
 
@@ -142,7 +155,7 @@ test("E-13b · a Staff member CAN leave, and the shop disappears from their list
     .click();
   await staffPage.getByRole("button", { name: "ออกจากร้านนี้" }).click();
 
-  const dialog = staffPage.getByRole("dialog", { name: new RegExp(`ออกจาก${shopName}`) });
+  const dialog = staffPage.getByRole("alertdialog", { name: new RegExp(`ออกจาก${shopName}`) });
   await dialog.getByRole("button", { name: "ออกจากร้านนี้" }).click();
 
   // Out of the shop and back at the picker, which must no longer offer it.
