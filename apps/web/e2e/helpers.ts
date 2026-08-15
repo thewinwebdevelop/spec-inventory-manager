@@ -68,7 +68,8 @@ export async function openSwitcher(page: Page): Promise<void> {
 
 export async function openMembers(page: Page, orgId: string): Promise<void> {
   await page.goto(`/o/${orgId}/settings/members`);
-  await expect(page.getByRole("heading", { name: "สมาชิก" })).toBeVisible();
+  // `exact` matters: "สมาชิกในร้าน (n)" is a heading on this page too.
+  await expect(page.getByRole("heading", { name: "สมาชิก", exact: true })).toBeVisible();
 }
 
 /**

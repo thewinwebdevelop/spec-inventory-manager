@@ -46,7 +46,7 @@ test("E-02 · switching shops changes the URL and the data with it", async () =>
 
   // Created second, so this is where `createShop` left us.
   await expect(page).toHaveURL(new RegExp(`/o/${orgB}`));
-  await expect(page.getByText(nameB).first()).toBeVisible();
+  await expect(page.getByRole("main").getByText(nameB).first()).toBeVisible();
 
   // ── switch back to the first ──────────────────────────────────────────────
   // The switcher is a LIST in the sidebar, not a menu that opens: on web the
@@ -56,19 +56,24 @@ test("E-02 · switching shops changes the URL and the data with it", async () =>
   await page.getByRole("link", { name: new RegExp(nameA) }).click();
 
   await expect(page).toHaveURL(new RegExp(`/o/${orgA}`));
-  await expect(page.getByText(nameA).first()).toBeVisible();
+  await expect(page.getByRole("main").getByText(nameA).first()).toBeVisible();
 
-  // ★ The bleed check: the shop we left must not still be on screen anywhere.
-  // A cache keyed by query name alone would leave B's profile rendered under
-  // A's URL, and every screenshot would look correct.
-  await expect(page.getByText(nameB)).toHaveCount(0);
+  // ★ The bleed check, scoped to the CONTENT.
+  //
+  // Not the whole page: the switcher legitimately lists every shop this person
+  // belongs to, so B's name is on screen by design while A is open. My first
+  // version asserted over the whole document and failed on the switcher — a
+  // false positive that would have taught the next reader to weaken the check.
+  // What must never happen is B's DATA rendering under A's URL, which is what
+  // a query cache keyed without the org id produces.
+  await expect(page.getByRole("main").getByText(nameB)).toHaveCount(0);
 
   // ── and the URL is the source of truth, not the click ────────────────────
   // Navigating straight to B — a bookmark, a second tab, a shared link — must
   // land in B, not in whatever the app happened to remember.
   await page.goto(`/o/${orgB}`);
-  await expect(page.getByText(nameB).first()).toBeVisible();
-  await expect(page.getByText(nameA)).toHaveCount(0);
+  await expect(page.getByRole("main").getByText(nameB).first()).toBeVisible();
+  await expect(page.getByRole("main").getByText(nameA)).toHaveCount(0);
 });
 
 test("E-02b · the switcher lists both shops and marks the current one in WORDS", async () => {
