@@ -1431,3 +1431,30 @@ TypeError: Cannot read properties of undefined (reading 'checkIp')
 
 ⇒ ส่งต่อ **backend-api + devops**: ก่อน deploy ต้องเลือกทางใดทางหนึ่ง — ให้ workspace package emit JS,
 หรือ bundle API, หรือย้าย build ไป SWC/nest-cli ให้ `dev` ใช้ได้จริง · **นี่ไม่ใช่การตัดสินใจของคนที่ทำ CI ให้เขียว**
+
+### รอบ 5–6 · 🔴 **login สำเร็จแล้ว แอปยังเชื่อว่าไม่มีใครล็อกอิน** (บั๊กจริงบนโค้ดที่ ship แล้ว)
+
+รอบ 5 ไปได้ไกลสุด: signup ✓ login ✓ `/select-org` ✓ `/orgs/new` ✓ **ร้านถูกสร้างจริง** (`/o/cmsttsxui…`)
+→ **แล้วเด้งไป `/login`**
+
+ผมกำลังจะเดาว่าเป็นเรื่อง cookie `Secure` บน http แล้ว**หยุด** — เดาผิด 1 ครั้ง = อีก 1 รอบ CI ⇒
+ใส่ assertion ที่**แยกสองสมมติฐานออกจากกันได้**: หลัง login เช็ก `context.cookies()` มี `omni_rt` ไหม
+· **มี** ⇒ ไม่ใช่เรื่อง cookie ⇒ ตัดสมมติฐานทิ้งได้ทั้งก้อน
+
+**สาเหตุจริง:** `SessionProvider` bootstrap **ครั้งเดียวตอน mount** แล้วไม่เคยเปลี่ยนใจ · ไม่มีเมธอดให้บอกว่า "เพิ่งล็อกอินสำเร็จ"
+⇒ login ที่เกิด **หลัง** bootstrap ไม่อัปเดต state เลย
+
+| route | อ่าน session ไหม | ผล |
+|---|---|---|
+| `/select-org`, `/orgs/new` | ไม่อ่าน | ✅ ทำงานปกติ |
+| `/o/{orgId}` (`OrgGuard`) | อ่าน | ❌ เตะกลับ `/login` |
+
+**ทำไมไม่มีเทสต์ไหนเห็น:** component test ทุกตัว mount provider ด้วย `bootstrap={async () => true}` = *ล็อกอินอยู่แล้ว*
+โดยเจตนา เพราะแต่ละตัวกำลังทดสอบเรื่องอื่น · **สถานะที่พังมีอยู่เฉพาะใน page load ที่เริ่มแบบ signed-out แล้วล็อกอินกลางทาง**
+— ซึ่งเป็น "การเดินทาง" ไม่ใช่ "จอ" และไม่ใช่เรื่องของ component ไหนเลย
+
+แก้: เพิ่ม `beginSession()` + login page เรียกมัน · เทสต์ 4 เคสประกบ (`session-context.test.tsx`)
+· **mutation:** ทำให้ `beginSession` เป็น no-op ⇒ **แดง 2** (รวมเคส endSession ที่พิสูจน์ว่าลำดับยังถูก)
+
+> นี่คือเหตุผลที่ §12.1 มีอยู่ · unit test 304 ตัวและ int test 200+ ตัว **ไม่มีตัวไหนถามคำถามนี้ได้**
+> เพราะทุกตัวเริ่มต้นตอน "อยู่ในสถานะที่ต้องการแล้ว"

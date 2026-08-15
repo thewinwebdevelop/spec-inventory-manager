@@ -10,10 +10,12 @@ import { useThrottleCountdown } from "../../hooks/use-throttle-countdown";
 import { authTh } from "../../features/auth/i18n";
 import { ApiError, login } from "../../lib/auth-client";
 import { loginErrorMessage } from "../../lib/error-messages";
+import { useSession } from "../../lib/session/session-context";
 
 function LoginPageInner() {
   const router = useRouter();
   const searchParams = useSearchParams();
+  const session = useSession();
 
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
@@ -53,6 +55,11 @@ function LoginPageInner() {
     setLoading(true);
     try {
       await login(email, password);
+      // ★ T-002-Q5 — tell the provider, or the app still believes nobody is
+      // signed in. It bootstraps once per page load, and that bootstrap ran
+      // before this login; `OrgGuard` reads the result, so without this line
+      // `/o/{orgId}` sends the person who just signed in back to `/login`.
+      session.beginSession();
       // ★ T-002-Q5 — F-002 owns this destination, and never claimed it.
       //
       // The line here read `router.push("/")` with a comment saying F-002

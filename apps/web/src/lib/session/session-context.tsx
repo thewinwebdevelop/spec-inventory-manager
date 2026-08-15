@@ -31,6 +31,22 @@ import {
 
 interface SessionValue {
   readonly state: SessionState;
+  /**
+   * Record that a sign-in just happened IN THIS PAGE LOAD.
+   *
+   * ★ T-002-Q5 — this was missing, and the gap was invisible to every test.
+   * The provider bootstraps once on mount; before F-002 nothing in the app
+   * read the session, so a login that arrived after that bootstrap simply
+   * never updated it. `/select-org` and `/orgs/new` do not consult the
+   * session, so they worked — and `OrgGuard` does, so `/o/{orgId}` bounced a
+   * freshly-logged-in person straight back to `/login`.
+   *
+   * Every component test mounts this provider with `bootstrap={async () =>
+   * true}`, i.e. already signed in, which is why none of them could see it.
+   * E-01 walks signup → login → shop in one page load, and found it on the
+   * first run that got that far.
+   */
+  readonly beginSession: () => void;
   /** Drop the local session. Used by the 401 path and by logout. */
   readonly endSession: () => void;
 }
@@ -72,6 +88,7 @@ export function SessionProvider({
   const value = useMemo<SessionValue>(
     () => ({
       state,
+      beginSession: () => setState(settledSession(true)),
       endSession: () => {
         clearAccessToken();
         setState(settledSession(false));
