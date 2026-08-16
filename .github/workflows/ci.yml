@@ -536,14 +536,21 @@ jobs:
           # ⚠️ 10.0.2.2, never localhost. Inside the emulator localhost is the
           # emulated device, so a suite pointed at it fails with connection
           # refused that reads exactly like the API being down.
+          # ⚠️ ONE LINE PER COMMAND, no backslash continuations. The action does
+          # not preserve them: the first run turned `\` + newline into a space,
+          # so `grep`, `-q` and `/tmp/mobile-e2e.log` arrived as extra POSITIONAL
+          # arguments to `flutter test` — i.e. as test paths. Flutter then saw one
+          # file under `integration_test/` and several outside it and refused
+          # with "Integration tests and unit tests cannot be run in a single
+          # invocation", which reads like a problem with the test and was a
+          # problem with the YAML.
+          #
+          # The grep is load-bearing rather than belt-and-braces: `sh` on the
+          # runner is dash, which has no `pipefail`, so a failing suite piped
+          # into `tee` exits 0 and the step would pass.
           script: |
-            flutter test integration_test/org_flow_test.dart \
-              --dart-define=API_BASE_URL=http://10.0.2.2:3000 \
-              --reporter expanded 2>&1 | tee /tmp/mobile-e2e.log
-            grep -q "All tests passed" /tmp/mobile-e2e.log || {
-              echo "::error::the mobile integration suite did not report a pass"
-              exit 1
-            }
+            flutter test integration_test/org_flow_test.dart --dart-define=API_BASE_URL=http://10.0.2.2:3000 --reporter expanded 2>&1 | tee /tmp/mobile-e2e.log
+            grep -q "All tests passed" /tmp/mobile-e2e.log || { echo "::error::the mobile integration suite did not report a pass"; exit 1; }
       - name: dump the API log on failure
         if: failure()
         run: cat /tmp/api.log || true
