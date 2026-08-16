@@ -33,6 +33,25 @@ import { unwrap } from "../../../lib/api/clients";
 
 export type TaxIdReveal = components["schemas"]["TaxIdReveal"];
 
+/**
+ * ★ The header this request cannot go without.
+ *
+ * `POST …/tax-profile/reveal` takes NO body — the caller and the shop are both
+ * in the request already — so `openapi-fetch` sent no `Content-Type`, and the
+ * route sits behind `JsonOnlyGuard`, which requires `application/json` on
+ * anything it guards. The result was `415 UNSUPPORTED_MEDIA_TYPE`, mapped by
+ * the card to "ขอดูเลขเต็มไม่สำเร็จ": pressing "แสดงเลขเต็ม" failed for
+ * everybody, always, and the one screen in F-002 that shows a full tax id was
+ * unreachable. Found by E-14 in the browser lane; every unit test on both
+ * sides passed, because each mocked the other one's half.
+ *
+ * It is the only bodyless route behind that guard today. Filed for
+ * backend-api/security-reviewer: whether a bodyless POST should have to
+ * declare a content type at all is their call, and the next such route will
+ * meet the same wall.
+ */
+const JSON_CONTENT_TYPE = { "Content-Type": "application/json" } as const;
+
 export function useRevealTaxId(): UseMutationResult<TaxIdReveal, unknown, void> {
   const client = useOrgApiClient();
   const { orgId } = useActiveOrg();
@@ -40,7 +59,10 @@ export function useRevealTaxId(): UseMutationResult<TaxIdReveal, unknown, void> 
   return useMutation({
     mutationFn: () =>
       unwrap(
-        client.POST("/orgs/{orgId}/tax-profile/reveal", { params: { path: { orgId } } }),
+        client.POST("/orgs/{orgId}/tax-profile/reveal", {
+          params: { path: { orgId } },
+          headers: JSON_CONTENT_TYPE,
+        }),
       ),
     // No `onSuccess` cache write, deliberately — see the note above. If you
     // are here to add one, the number you are about to cache is somebody's

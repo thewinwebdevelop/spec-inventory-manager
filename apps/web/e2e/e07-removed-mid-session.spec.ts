@@ -82,6 +82,12 @@ test("S9 · the Owner changes the Staff member's role, and the list says so", as
   // the row's OTHER action reaches its mutation — and because a member whose
   // role just changed is a more interesting one to remove.
   await openMembers(ownerPage, orgId);
+  // The 30s `staleTime` again, third time in this lane: the Owner last looked
+  // at this list before the invitation was accepted, so coming back inside the
+  // window shows the cached version — a pending invitation and no new member,
+  // exactly what E-04 hit. A person watching for somebody to join reloads;
+  // so does this test. The finding is in tasks.md, for ux/frontend.
+  await ownerPage.reload();
   const row = ownerPage.locator("li", { hasText: staffEmail });
   await row.getByRole("button", { name: "เปลี่ยนสิทธิ์" }).click();
 
