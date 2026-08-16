@@ -101,7 +101,7 @@
 | T-002-Q2 | ★ int lane บังคับ: **cross-org leak × 4 persona** · **route-registry capability (รวม `GET`)** · assertion กลาง `passwordHash`/`tokenHash` · **hash-at-rest พิสูจน์ได้** | `test-plan.md §8` | T-002-22 | todo | — |
 | T-002-Q3 | ★ (เขียนครบ — **รอ CI ยืนยัน**) concurrency 13 เคส: Owner คนสุดท้าย 2 ขนาน ×20 รอบ · accept ซ้ำ · invite ซ้ำ · **revoke‖accept** · reissue‖accept · cancel‖accept · PATCH‖DELETE · ยก Owner 2 คนพร้อมกัน · cap 49 · revoke‖revoke · **lock timeout → 409 ไม่ใช่ 500 · ห้าม 40P01/40001 หลุด wire** | `test-plan.md §8` · `architecture.md §5.2` | T-002-03, T-002-22 | done | qa (`test/concurrency-matrix.int.test.ts` 14/14 เขียวบน CI run 31608348040) |
 | T-002-Q4 | ★ regression ของ finding: **NEW-1 (Admin→Owner reset = 404 + รหัสเดิมยัง login ได้ + เคสควบคุม)** · C-1 · C-2 · I-1 · NEW-2 · **I-45 สลับ `Role.key` ใน DB แล้วสิทธิ์ต้องไม่ขยับ** · เข้า **smoke tier ถาวร** | `test-plan.md §9` (ทะเบียน 41 finding) | T-002-09, T-002-22 | done | qa (regression-pack gate + G-15 tripwire + ปิด M-3 ที่ไม่เคยมีเทสต์) |
-| T-002-Q5 | E2E + manual: flow เชิญ→รับ **3 ทางแยกของ US-4** · org switcher · ถูกถอดกลางคัน · Staff เจอ 403 แล้ว UI ทำถูก | `test-plan.md §10` · `ux-wireframe.md §11` | T-002-W6, T-002-M3 | in_progress | qa (harness Playwright + stack ครบใน CI แล้ว · E-01/E-01b/E-11/E-12ข/E-14ขค เขียว = 5/14 · เหลือ E-02..E-10/E-13 + manual) |
+| T-002-Q5 | E2E + manual: flow เชิญ→รับ **3 ทางแยกของ US-4** · org switcher · ถูกถอดกลางคัน · Staff เจอ 403 แล้ว UI ทำถูก | `test-plan.md §10` · `ux-wireframe.md §11` | T-002-W6, T-002-M3 | in_progress | qa (**เลนเบราว์เซอร์เขียว 26/26 เคส** [run 31959752691](https://github.com/thewinwebdevelop/spec-inventory-manager/actions/runs/31959752691) · §12.1 ครบ **13/14 แถว** = E-01..E-09 · E-11..E-14 · **เหลือ E-10 (mobile ต้องมี emulator lane → devops)** + manual §12.2 M-01..M-07 ซึ่งเป็นงานคน) |
 | T-002-Q6 | perf smoke: member list 200 คน · `/me/organizations` 50 org · overhead membership lookup < 5 ms | `test-plan.md` · `architecture.md §10` | T-002-18 | todo | — |
 | T-002-Q7 | Track 2 (agentic, **ไม่บล็อก merge**): 7 flow persona SME ไทย — คุ้มสุด: **"ออกลิงก์ใหม่"** (ผู้ใช้เข้าใจไหมว่าลิงก์เดิมตาย) และ **404 ของ admin-reset** | `test-plan.md` · WEB_TEAM §3.7 | T-002-Q5 | in_progress | qa (runbook + finding แรกของ flow 2 → แก้แล้ว · การรันจริงรอ stack) |
 
@@ -1737,3 +1737,33 @@ WARN [DomainExceptionFilter] error status=415 code=UNSUPPORTED_MEDIA_TYPE
 owner เปิดจอสมาชิกไว้ตอนยังไม่มีใครรับคำเชิญ → กลับมาภายใน 30 วิ → เห็น cache เดิม → ไม่มีแถวสมาชิกใหม่ให้กด
 · แก้เทสต์แบบเดียวกับ E-04 (reload + คอมเมนต์เหตุผล) · **3 ครั้งใน 3 ไฟล์แล้ว — ข้อเสนอสำหรับ ux/frontend: จอสมาชิกควร override `staleTime: 0`**
 เพราะเป็นจอเดียวที่ข้อมูลตั้งใจให้เปลี่ยนจากนอกเบราว์เซอร์ (ทั้งฟีเจอร์คือรอคนอื่นกดรับ)
+
+### สรุปสถานะ Q5 หลังเลนเบราว์เซอร์เขียวครบ (2026-08-16)
+
+[run 31959752691](https://github.com/thewinwebdevelop/spec-inventory-manager/actions/runs/31959752691) — **8/8 job · `expected=26 unexpected=0 flaky=0 skipped=0`**
+
+| แถว §12.1 | สถานะ | ที่ไหน |
+|---|---|---|
+| E-01 · E-01b | ✅ | `e01-signup-create-shop` |
+| E-02 · E-02b | ✅ | `e02-org-switcher` |
+| E-03 · E-03b | ✅ | `e03-invite-reissue` |
+| E-04 · E-08 · E-08b · E-13 · E-13b | ✅ | `e04-accept-and-permissions` |
+| E-05 · E-12 ★ | ✅ | `e05-signup-through-invite` |
+| E-06 ★ | ✅ | `e06-wrong-account` |
+| E-07 (+S9) | ✅ | `e07-removed-mid-session` |
+| E-09 · E-14 ★ | ✅ | `e09-tax-profile` |
+| E-11 | ✅ | `copy-lint.test.ts` (static scan ทั้ง web+mobile) |
+| **E-10 (mobile)** | ❌ | **ยังไม่มี** — ต้องมี emulator lane |
+
+**E-10 ไม่ทำเองเพราะเป็นการตัดสินใจของ devops:** ต้องเพิ่ม `integration_test` + Android emulator ใน CI
+(`reactivecircus/android-emulator-runner` ~5–10 นาที/รัน) + ให้แอปคุยกับ stack จริง ⇒ **เพิ่มเวลา CI ให้ทุก PR**
+· ทางเลือกที่ถูกกว่าแต่พิสูจน์ parity ไม่ได้จริง: widget test + fake API (ซึ่งมีอยู่แล้ว 391 ตัว)
+⇒ **ให้ devops/ผู้ใช้เลือก** ว่าจะจ่ายเวลา CI เพื่อ E-10 หรือรับความเสี่ยงแล้วเลื่อนไป F-006 (ตอนที่ router/deep link ลงครบ)
+
+**สิ่งที่เลนนี้เจอทั้งหมด (บั๊กจริงที่ไม่มีเลนอื่นเจอได้เลย):**
+1. 🔴 เจ้าของร้านไม่เห็นเมนู "สมาชิก" ของตัวเอง (`useCan` ไม่รู้จัก wildcard) — และอีก **5 จุดถัดมา** รวมถึงกิ่งที่ไม่มีวันถูกเรียก (D-030 nudge)
+2. 🔴 `POST /tax-profile/reveal` ตอบ **415 ทุกครั้ง** ⇒ "แสดงเลขเต็ม" ใช้ไม่ได้เลยทั้งระบบ
+3. 🟠 W-17: S9/S10 เป็น `<span>` — mutation hook 5 ตัวไม่มีคนเรียก
+4. 🟠 หน้าปฏิเสธ `INVITATION_EMAIL_MISMATCH` ทิ้ง `details.emailMasked` ⇒ บอกให้สลับบัญชีโดยไม่บอกว่าบัญชีไหน
+5. 🟠 staleness 30 วิ บนจอสมาชิก (โดน 3 ครั้ง) — และเวอร์ชันของคนที่เพิ่งถูกถอด
+6. 🟡 client แยกไม่ออกว่า role ไหนคือเจ้าของร้าน ถ้าคนดูไม่ใช่เจ้าของ (§3.6 ไม่ส่ง capabilities)
