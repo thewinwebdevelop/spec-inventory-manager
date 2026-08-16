@@ -1,6 +1,5 @@
-import { expect, request, test, type APIRequestContext, type Page } from "@playwright/test";
+import { expect, test, type Page } from "@playwright/test";
 import {
-  PASSWORD,
   acceptInvite,
   createShop,
   freshEmail,
@@ -25,20 +24,21 @@ import {
  *    something a colleague did in a different shop is the failure this row
  *    exists to prevent.
  *
- * ⚠️ THE REVOKE IS AN API CALL, and that is faithful rather than convenient:
- * §12.1 words this row as "ยิง revoke จาก session อื่น" — another session, not
- * this browser. It is also the only way today: W-17 (tasks.md) — the member row
- * renders its actions as `<span>`, so the web UI has no clickable remove. When
- * W-17 lands, the Owner's half becomes a click here and the assertions below do
- * not change.
+ * The removal is driven through the OWNER'S BROWSER, which is what §12.1
+ * means by "จาก session อื่น" — another session, not the one being removed.
+ * It could not be written this way until now: the member row rendered its
+ * actions as `<span>`s (W-17), so the first version of this file revoked over
+ * the API instead. The assertions did not change when the button appeared,
+ * which is the point of having written them about the removed person's screen
+ * rather than about the click.
+ *
+ * It also covers S9 on the way past, because the cast is already assembled and
+ * changing somebody's role is the other half of §7's row actions.
  */
 test.describe.configure({ mode: "serial" });
 
-const API_ORIGIN = process.env.API_ORIGIN ?? "http://localhost:3000";
-
 let ownerPage: Page;
 let staffPage: Page;
-let api: APIRequestContext;
 let orgId = "";
 let shopName = "";
 let ownOrgName = "";
@@ -70,42 +70,66 @@ test.beforeAll(async ({ browser }) => {
   await acceptInvite(staffPage, link);
   await staffPage.getByRole("link", { name: "เริ่มใช้งานร้านนี้" }).click();
   await expect(staffPage).toHaveURL(new RegExp(`/o/${orgId}`), { timeout: 20_000 });
-
-  api = await request.newContext({ baseURL: API_ORIGIN });
 });
 
 test.afterAll(async () => {
-  await api.dispose();
   await ownerPage.close();
   await staffPage.close();
 });
 
+test("S9 · the Owner changes the Staff member's role, and the list says so", async () => {
+  // §10.1, through the button W-17 was missing. Runs first because it proves
+  // the row's OTHER action reaches its mutation — and because a member whose
+  // role just changed is a more interesting one to remove.
+  await openMembers(ownerPage, orgId);
+  const row = ownerPage.locator("li", { hasText: staffEmail });
+  await row.getByRole("button", { name: "เปลี่ยนสิทธิ์" }).click();
+
+  const dialog = ownerPage.getByRole("dialog", { name: new RegExp(`เปลี่ยนสิทธิ์ของ`) });
+  await expect(dialog).toBeVisible();
+  // The current role is stated in words, not implied by a filled radio (§14).
+  await expect(dialog.getByText("(สิทธิ์ปัจจุบัน)")).toBeVisible();
+  // Saving nothing is not an option: a write that changes nothing still writes
+  // an audit row saying somebody did something they did not do.
+  await expect(dialog.getByRole("button", { name: "บันทึกสิทธิ์" })).toBeDisabled();
+
+  await dialog.getByRole("radio", { name: "ผู้ดูแล" }).check();
+  await dialog.getByRole("button", { name: "บันทึกสิทธิ์" }).click();
+
+  await expect(dialog).toBeHidden({ timeout: 20_000 });
+  await expect(ownerPage.locator("li", { hasText: staffEmail }).getByText("ผู้ดูแล")).toBeVisible({
+    timeout: 20_000,
+  });
+});
+
 test("E-07 · removed while inside the shop: refused at once, and sent to the picker — not to /login", async () => {
   // ── the other session does the removing ─────────────────────────────────
-  // A body-transport login (the mobile shape): an access token in the response
-  // and no cookies, so this context is a genuinely separate session rather
-  // than a copy of the browser's.
-  const auth = await api.post("/auth/login", {
-    data: { email: readShared().email, password: PASSWORD, tokenTransport: "body" },
+  // The Owner's own browser, through S10 — a different session from the one
+  // being removed, which is what the AC is about.
+  await openMembers(ownerPage, orgId);
+  await ownerPage
+    .locator("li", { hasText: staffEmail })
+    .getByRole("button", { name: "ถอดออกจากร้าน" })
+    .click();
+
+  // §10.2 (ux review item 8): four consequences, not "แน่ใจหรือไม่". The third
+  // one is the one nobody predicts — removing somebody also cancels the
+  // invitation sitting in their inbox (I-1).
+  const confirm = ownerPage.getByRole("alertdialog", {
+    name: new RegExp(`ถอด .*${staffEmail.replace(/[.+]/g, "\\$&")}`),
   });
-  expect(auth.ok(), `the API refused the owner's login: ${auth.status()}`).toBeTruthy();
-  const { accessToken } = (await auth.json()) as { accessToken: string };
+  await expect(confirm).toBeVisible();
+  await expect(confirm.getByText("เขาจะเข้าถึงข้อมูลของร้านนี้ไม่ได้ทันที")).toBeVisible();
+  await expect(confirm.getByText("ประวัติการทำรายการที่เขาเคยทำไว้ยังอยู่ครบ")).toBeVisible();
+  await expect(confirm.getByText("ถ้ามีคำเชิญของอีเมลนี้ค้างอยู่ ระบบจะยกเลิกให้ด้วย")).toBeVisible();
+  await expect(confirm.getByText("ให้กลับเข้ามาใหม่ได้ด้วยการเชิญใหม่เท่านั้น")).toBeVisible();
 
-  const headers = {
-    Authorization: `Bearer ${accessToken}`,
-    "X-Organization-Id": orgId,
-  };
-
-  const list = await api.get(`/orgs/${orgId}/members`, { headers });
-  expect(list.ok(), `could not read the member list: ${list.status()}`).toBeTruthy();
-  const { items } = (await list.json()) as {
-    items: { userId: string; email: string; status: string }[];
-  };
-  const target = items.find((m) => m.email === staffEmail);
-  expect(target, `${staffEmail} is not in the member list: ${JSON.stringify(items)}`).toBeTruthy();
-
-  const removed = await api.delete(`/orgs/${orgId}/members/${target!.userId}`, { headers });
-  expect(removed.ok(), `the remove was refused: ${removed.status()}`).toBeTruthy();
+  await confirm.getByRole("button", { name: "ถอดออกจากร้าน" }).click();
+  await expect(confirm).toBeHidden({ timeout: 20_000 });
+  // The default list is the ACTIVE members, so the row leaves it.
+  await expect(ownerPage.locator("li", { hasText: staffEmail })).toHaveCount(0, {
+    timeout: 20_000,
+  });
 
   // ── the next thing the removed person does ──────────────────────────────
   //

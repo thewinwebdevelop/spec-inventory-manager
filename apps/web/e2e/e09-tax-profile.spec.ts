@@ -92,8 +92,15 @@ test("E-09 · a wrong checksum is corrected AT THE FIELD, and the fix goes throu
   const dialog = ownerPage.getByRole("dialog", { name: "ข้อมูลผู้เสียภาษี" });
   await expect(dialog).toBeVisible();
 
-  // Personal is the default, and the warning about what these digits are must
-  // be on screen WHILE they are typed — not after saving (§6).
+  // The default is นิติบุคคล, not บุคคลธรรมดา — my assumption was the other
+  // way round and the first run said so. It is the better default: a shop
+  // declaring a tax identity is usually a company, and the personal branch is
+  // the one that needs a warning, so it should be chosen deliberately.
+  await dialog.getByRole("radio", { name: "บุคคลธรรมดา" }).check();
+
+  // …and choosing it says what those digits are, WHILE they are typed rather
+  // than after saving (§6): for a personal taxpayer this field is a national
+  // ID, and somebody typing it deserves to know who will be able to see it.
   await expect(dialog.getByText(/คือเลขบัตรประชาชนของเจ้าของกิจการ/)).toBeVisible();
 
   const field = dialog.getByLabel("เลขประจำตัวผู้เสียภาษี (13 หลัก)");

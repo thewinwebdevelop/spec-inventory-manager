@@ -30,6 +30,9 @@ import { ErrorBanner } from "../../../components/ui/ErrorBanner";
 import { SkeletonRow } from "../../../components/ui/Skeleton";
 import { CopyLinkPanel } from "./CopyLinkPanel";
 import { InviteDialog } from "./InviteDialog";
+import { ChangeRoleDialog } from "./ChangeRoleDialog";
+import { RemoveMemberDialog } from "./RemoveMemberDialog";
+import { LeaveOrgDialog } from "./LeaveOrgDialog";
 
 export function MembersScreen() {
   const org = useActiveOrg();
@@ -47,6 +50,20 @@ export function MembersScreen() {
    */
   const [confirming, setConfirming] = useState<
     { action: "reissue" | "cancel"; id: string; email: string; roleName: string } | null
+  >(null);
+  /**
+   * W-17 — which member dialog is open, and about whom.
+   *
+   * One piece of state rather than three booleans: the three actions are
+   * mutually exclusive by construction (`memberActionsFor` never offers
+   * "remove" and "leave" on the same row), and three flags would let a future
+   * edit open two at once.
+   */
+  const [acting, setActing] = useState<
+    | { kind: "change-role"; userId: string; email: string; roleId: string; isOwner: boolean }
+    | { kind: "remove"; userId: string; email: string }
+    | { kind: "leave" }
+    | null
   >(null);
 
   const members = useMembers(memberStatus);
@@ -194,11 +211,43 @@ export function MembersScreen() {
                 {actions.ownerOnlyNotice && (
                   <p className="text-body-sm opacity-70">{membersTh.ownerOnlyNotice}</p>
                 )}
-                {actions.changeRole && <span className="text-body-sm">{membersTh.changeRole}</span>}
-                {actions.removeFromOrg && (
-                  <span className="text-body-sm">{membersTh.removeFromOrg}</span>
+                {/* W-17 closed. These were `<span>`s: the actions §7 offers
+                    were rendered as words, so every one of S9/S10 was
+                    unreachable and the five mutation hooks W5 wrote had no
+                    caller. A row of text that names what you may do and does
+                    not do it is worse than no row at all. */}
+                {actions.changeRole && (
+                  <Button
+                    variant="secondary"
+                    onClick={() =>
+                      setActing({
+                        kind: "change-role",
+                        userId: member.userId,
+                        email: member.email,
+                        roleId: member.roleId,
+                        isOwner: member.isOwner,
+                      })
+                    }
+                  >
+                    {membersTh.changeRole}
+                  </Button>
                 )}
-                {actions.leaveOrg && <span className="text-body-sm">{membersTh.leaveOrg}</span>}
+                {actions.removeFromOrg && (
+                  <Button
+                    variant="secondary"
+                    onClick={() =>
+                      setActing({ kind: "remove", userId: member.userId, email: member.email })
+                    }
+                  >
+                    {membersTh.removeFromOrg}
+                  </Button>
+                )}
+                {/* S10.3 entry (ข) — the same dialog S4's link opens (D-029). */}
+                {actions.leaveOrg && (
+                  <Button variant="secondary" onClick={() => setActing({ kind: "leave" })}>
+                    {membersTh.leaveOrg}
+                  </Button>
+                )}
               </li>
             );
           })}
@@ -221,6 +270,20 @@ export function MembersScreen() {
           }}
         />
       )}
+
+      {acting?.kind === "change-role" && (
+        <ChangeRoleDialog
+          member={acting}
+          ownerRoleIds={ownerRoleIds}
+          onClose={() => setActing(null)}
+        />
+      )}
+
+      {acting?.kind === "remove" && (
+        <RemoveMemberDialog member={acting} onClose={() => setActing(null)} />
+      )}
+
+      {acting?.kind === "leave" && <LeaveOrgDialog onClose={() => setActing(null)} />}
 
       {link.status === "open" && (
         <CopyLinkPanel
