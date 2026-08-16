@@ -1767,3 +1767,30 @@ owner เปิดจอสมาชิกไว้ตอนยังไม่�
 4. 🟠 หน้าปฏิเสธ `INVITATION_EMAIL_MISMATCH` ทิ้ง `details.emailMasked` ⇒ บอกให้สลับบัญชีโดยไม่บอกว่าบัญชีไหน
 5. 🟠 staleness 30 วิ บนจอสมาชิก (โดน 3 ครั้ง) — และเวอร์ชันของคนที่เพิ่งถูกถอด
 6. 🟡 client แยกไม่ออกว่า role ไหนคือเจ้าของร้าน ถ้าคนดูไม่ใช่เจ้าของ (§3.6 ไม่ส่ง capabilities)
+
+### E-10 — emulator lane (ผู้ใช้เลือก "ทำเลย" 2026-08-16) · และมันเจอของทันทีก่อนรันด้วยซ้ำ
+
+#### 🔴🔴 ฝั่ง mobile ของ F-002 **รันในแอปจริงไม่ได้เลย** — ไม่มีใคร wire
+
+`orgDirectoryProvider` / `orgScopedRepositoryProvider` ตั้งใจให้ throw `UnimplementedError` แล้วให้ composition root override
+· **เทสต์ทุกไฟล์ override ด้วย fake · แอปไม่ override สักตัว** ⇒ 4 จอ + controller + repository impl + เทสต์เขียว ~390 ตัว **เปิดใช้จริงไม่ได้**
+(เจอตอนจะเขียน E-10 — คือสิ่งที่เลนที่รัน "แอปจริงบนเครื่องจริง" มีไว้เจอ · เป็นฝาแฝดของ W-17 ฝั่ง web)
+
+**แก้:**
+- `createAuthStack()` (additive) คืน `(repository, dio)` — เพราะ `api_providers.dart` เขียนไว้เองว่า "override `baseDioProvider` ด้วย wired client จาก `createAuthClient()`" แต่ไม่มีทางเอา Dio ออกมาได้ · `createAuthClient()` เดิม delegate ต่อ ไม่เปลี่ยนพฤติกรรม
+- `buildAppOverrides()` wire ครบ: `baseDio` (**instance เดียวกับ auth repo — refresh chain เดียวในแอป**) + org directory + org scoped
+- `features/org/data/org_client_factory.dart` — boundary gate ตีกลับตอนแรกเพราะผม import generated client ใน `app/` (rule 3 อนุญาตเฉพาะ `features/*/data/**` + `core/api/**`) · **gate ถูก ผมผิด** ⇒ ย้ายไป `data/` แบบเดียวกับ `auth_client_factory`
+- `test/app/bootstrap_test.dart` 6 เคส — provider resolve ได้ · Dio ตัวเดียว · ไม่มีร้านแล้ว throw (ไม่เดา) · มีร้านแล้ว org client มี interceptor มากกว่า base (คือ `X-Organization-Id`)
+
+#### เลน `mobile-e2e` (job ใหม่ แยกจาก flutter-ci)
+
+Postgres + Redis + API จริง (**คนละ database กับ e2e-web** เพราะรันขนานกัน) → emulator api-34 (`reactivecircus/android-emulator-runner`, เปิด KVM)
+→ `flutter test integration_test/org_flow_test.dart --dart-define=API_BASE_URL=http://10.0.2.2:3000`
+· **10.0.2.2 ไม่ใช่ localhost** — ใน emulator `localhost` คือตัวเครื่องจำลองเอง อาการเวลาพลาดคือ connection refused ที่อ่านเหมือน API ล่ม
+· มี guard `grep "All tests passed"` กัน job เขียวทั้งที่ไม่ได้รันอะไร (บทเรียน I-37)
+· **แยก job เพราะ boot emulator ~5 นาที** — analyze/test ของ flutter-ci ต้องเร็วเหมือนเดิม
+
+`integration_test/org_flow_test.dart` 3 เคส: สร้างร้าน (จอจริง + `onCreated` + session เข้าร้านทันที) · รายชื่อร้าน+สมาชิกจาก server จริง · **ถูกถอดกลางคัน**
+· **ยอมรับตรง ๆ ว่า 2 ขั้นยิง API ตรง**: mobile ไม่มี accept-invitation และไม่มี remove-member ใน port (D-012 ลิงก์เปิดบนเว็บ · §7 row action เป็นของ web)
+⇒ เทสต์ที่แกล้งทำเป็นมีจะเป็นการเทสต์สิ่งที่ไม่มีอยู่ · และ "อีก session ถอดเราออกระหว่างใช้งาน" คือสิ่งที่ AC เขียนไว้พอดี
+· ไม่ขับ navigation ของแอปเอง เพราะ **ยังไม่มี router** (F-006) — เทสต์ประกอบจอแบบที่ router จะทำ และเขียนบอกไว้ว่าวันที่ F-006 ลง ตรงนี้คือสิ่งที่ถูกแทน

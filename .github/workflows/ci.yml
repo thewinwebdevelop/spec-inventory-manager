@@ -413,6 +413,141 @@ jobs:
   # Also runs apps/web's Playwright suite (T-001-18/qa) once it exists, via the
   # same existence-check convention as the api job above — no CI file change
   # needed when qa/frontend land `test:e2e`.
+  # ★ T-002-Q5 / E-10 — the browser lane's mobile equivalent: the Flutter app's
+  # REAL provider graph, on a real emulator, against a real API and Postgres.
+  #
+  # WHY IT IS WORTH THE MINUTES. Every one of the 390-odd widget tests overrides
+  # the org repositories with fakes, so all of them agree with a client the app
+  # never builds — and the first thing this lane found is that the app did not
+  # build one at all: `orgDirectoryProvider` threw `UnimplementedError` outside
+  # tests, so F-002's whole mobile half could not run. The web lane found six
+  # defects nothing else could see, two of them total (an Owner who could not
+  # see their own members menu; a reveal endpoint that answered 415 every
+  # time). This is the same instrument pointed at the other client.
+  #
+  # It is a SEPARATE job from flutter-ci on purpose: analyze/test stay fast and
+  # required, and this one's emulator boot (~5 min) does not sit in front of
+  # them.
+  mobile-e2e:
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_USER: omnistock
+          POSTGRES_PASSWORD: omnistock
+          POSTGRES_DB: omnistock_mobile_e2e
+        ports: ["5432:5432"]
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+      redis:
+        image: redis:7
+        ports: ["6379:6379"]
+        options: >-
+          --health-cmd "redis-cli ping"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+    env:
+      # Its OWN database, not the web lane's: the two jobs run in parallel and
+      # a shared one would make either lane's failures depend on the other's
+      # rows — the kind of flake nobody can reproduce.
+      DATABASE_URL: postgresql://omnistock:omnistock@localhost:5432/omnistock_mobile_e2e
+      REDIS_URL: redis://localhost:6379
+      JWT_ACCESS_SECRET: e2e-access-secret-32-chars-minimum-value!!
+      JWT_REFRESH_SECRET: e2e-refresh-secret-32-chars-different-va!
+      INVITATION_TOKEN_SECRET: e2e-invitation-secret-32-chars-distinct!!
+      WEB_APP_BASE_URL: http://localhost:3001
+      DEFAULT_ORG_PLAN_KEY: comp_full
+      PORT: "3000"
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version-file: ".nvmrc"
+      - uses: pnpm/action-setup@v4
+      - run: pnpm install --frozen-lockfile
+      - name: build the API (turbo builds its workspace deps first)
+        env:
+          NODE_ENV: test
+        run: pnpm turbo build --filter=api
+      - name: generate Prisma client + migrate + seed the plan
+        env:
+          NODE_ENV: test
+        run: |
+          pnpm --filter @omnistock/db exec prisma generate
+          pnpm --filter @omnistock/db exec prisma migrate deploy
+          pnpm --filter @omnistock/db exec prisma db seed
+      # The compiled entry through tsx — same reasoning as e2e-web, where the
+      # two failure modes of `start` and `dev` are written out in full.
+      - name: boot apps/api in the background
+        env:
+          NODE_ENV: test
+        run: pnpm --filter api exec tsx dist/main.js &>/tmp/api.log &
+      - name: wait for the API to answer
+        run: |
+          for i in $(seq 1 60); do
+            code=$(curl -s -o /dev/null -w '%{http_code}' http://localhost:3000/health || true)
+            if [ "$code" = "200" ] || [ "$code" = "503" ]; then
+              echo "API answering on :3000 (attempt $i, status $code)"
+              exit 0
+            fi
+            sleep 1
+          done
+          echo "::error::apps/api never answered on :3000 — the mobile lane would have tested nothing"
+          cat /tmp/api.log || true
+          exit 1
+      - uses: subosito/flutter-action@v2
+        with:
+          flutter-version-file: apps/mobile/.flutter-version
+      - name: build_runner — generate api_client .g.dart (built_value companions)
+        working-directory: apps/mobile/api_client
+        run: |
+          flutter pub get
+          dart run build_runner build --delete-conflicting-outputs
+      - name: flutter pub get
+        working-directory: apps/mobile
+        run: flutter pub get
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "17"
+      # KVM, or the emulator falls back to software rendering and the boot
+      # takes long enough to time out.
+      - name: enable KVM
+        run: |
+          echo 'KERNEL=="kvm", GROUP="kvm", MODE="0666", OPTIONS+="static_node=kvm"' \
+            | sudo tee /etc/udev/rules.d/99-kvm4all.rules
+          sudo udevadm control --reload-rules
+          sudo udevadm trigger --name-match=kvm
+      - name: E-10 — the org flow on a real device against the real API
+        uses: reactivecircus/android-emulator-runner@v2
+        with:
+          api-level: 34
+          target: google_apis
+          arch: x86_64
+          # No window, no audio, no boot animation: nothing here looks at the
+          # screen, and each of them is a way for the boot to hang.
+          emulator-options: -no-window -gpu swiftshader_indirect -noaudio -no-boot-anim -camera-back none
+          working-directory: apps/mobile
+          # ⚠️ 10.0.2.2, never localhost. Inside the emulator localhost is the
+          # emulated device, so a suite pointed at it fails with connection
+          # refused that reads exactly like the API being down.
+          script: |
+            flutter test integration_test/org_flow_test.dart \
+              --dart-define=API_BASE_URL=http://10.0.2.2:3000 \
+              --reporter expanded 2>&1 | tee /tmp/mobile-e2e.log
+            grep -q "All tests passed" /tmp/mobile-e2e.log || {
+              echo "::error::the mobile integration suite did not report a pass"
+              exit 1
+            }
+      - name: dump the API log on failure
+        if: failure()
+        run: cat /tmp/api.log || true
+
   e2e-web:
     runs-on: ubuntu-latest
     # ★ T-002-Q5 — this lane used to boot the web server alone and ask it for

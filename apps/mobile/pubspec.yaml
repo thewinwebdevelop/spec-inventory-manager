@@ -79,6 +79,11 @@ dependencies:
 dev_dependencies:
   flutter_test:
     sdk: flutter
+  # E-10's browser-lane equivalent: the org flow on a real device against a
+  # real API (integration_test/org_flow_test.dart). Runs only in the
+  # `mobile-e2e` CI job, never in `flutter test`.
+  integration_test:
+    sdk: flutter
 
   # T-001-17 — mocks the generated Dio-based AuthApi in widget/unit tests
   # without a real network call.
