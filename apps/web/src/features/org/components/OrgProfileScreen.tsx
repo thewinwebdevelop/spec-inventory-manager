@@ -13,6 +13,7 @@ import { useSearchParams } from "next/navigation";
 import { useQueryClient } from "@tanstack/react-query";
 import Link from "next/link";
 import { useActiveOrg } from "../../../lib/org/org-context";
+import { can } from "../../../lib/org/capability";
 import { orgKey } from "../../../lib/org/org-keys";
 import { onboardingItems, CAPABILITY_MANAGE_ORG_SETTINGS } from "../tax-card";
 import { orgProfileTh } from "../i18n";
@@ -31,8 +32,10 @@ export function OrgProfileScreen() {
   // `?leave=1`, and the confirm opens here — where Staff can reach it (D-029).
   const [leaving, setLeaving] = useState(useSearchParams().get("leave") === "1");
 
-  const canEditSettings = org.capabilities.has(CAPABILITY_MANAGE_ORG_SETTINGS);
-  const canManageMembers = org.capabilities.has(CAPABILITY_MANAGE_MEMBERS);
+  // ★ `can`, not `.has`: an Owner's role carries `full_access` alone, so a set
+  // lookup told the Owner they could not rename their own shop (capability.ts).
+  const canEditSettings = can(org.capabilities, CAPABILITY_MANAGE_ORG_SETTINGS);
+  const canManageMembers = can(org.capabilities, CAPABILITY_MANAGE_MEMBERS);
   const onboarding = onboardingItems(org.profile, org.capabilities);
   const refetchProfile = () =>
     void queryClient.invalidateQueries({ queryKey: orgKey(org.orgId, "profile") });

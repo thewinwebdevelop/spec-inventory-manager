@@ -17,6 +17,7 @@ import Link from "next/link";
 import { useLeaveOrganization } from "../api/use-member-mutations";
 import { toLeaveOrgOutcome } from "../leave-org";
 import { useActiveOrg } from "../../../lib/org/org-context";
+import { can } from "../../../lib/org/capability";
 import { CAPABILITY_MANAGE_MEMBERS } from "../member-actions";
 import { useToast } from "../../../components/providers/ToastProvider";
 import { Button } from "../../../components/ui/Button";
@@ -49,10 +50,11 @@ export function LeaveOrgDialog({ onClose }: { onClose: () => void }) {
         router.replace("/select-org");
       },
       onError: (err) => {
-        const outcome = toLeaveOrgOutcome(
-          err,
-          org.capabilities.has(CAPABILITY_MANAGE_MEMBERS),
-        );
+        // ★ `can`, not `.has` (capability.ts): this decides whether the
+        // last-Owner refusal offers the members screen as the way out — and
+        // the person who hits that refusal is ALWAYS an Owner, so the set
+        // lookup withheld the way out from everybody who ever saw it.
+        const outcome = toLeaveOrgOutcome(err, can(org.capabilities, CAPABILITY_MANAGE_MEMBERS));
         if (outcome.kind === "already-left") {
           // Not an error to fix — they already left. Close and let `OrgGuard`
           // run §12.1 on the next request.

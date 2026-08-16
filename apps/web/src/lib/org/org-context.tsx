@@ -22,7 +22,7 @@
  * (architecture §3.1), and every hidden button still needs its error path.
  */
 import { createContext, useContext, useMemo, type ReactNode } from "react";
-import { hasCapability } from "@omnistock/core-domain";
+import { can } from "./capability";
 import type { components } from "@omnistock/contracts";
 
 export type OrgProfile = components["schemas"]["OrgProfile"];
@@ -104,8 +104,9 @@ export function useCan(capability: string): boolean {
   // Owner never saw the members entry in their own sidebar and could only reach
   // the screen by typing the URL.
   //
-  // Imported from `core-domain` rather than reimplemented here, because a
-  // second copy of an authorization rule is how the client and the server come
-  // to disagree — which is precisely what happened.
-  return hasCapability([...useActiveOrg().capabilities], capability);
+  // `can` is the single adapter over core-domain's rule — a second copy of an
+  // authorization rule is how the client and the server come to disagree,
+  // which is precisely what happened. Five more `.has()` call sites had the
+  // same defect (tax card, onboarding, profile screen, leave dialog, mobile).
+  return can(useActiveOrg().capabilities, capability);
 }

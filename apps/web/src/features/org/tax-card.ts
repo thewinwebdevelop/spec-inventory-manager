@@ -16,6 +16,7 @@
  *    `taxProfileComplete` is the only answer to that question.
  */
 import type { components } from "@omnistock/contracts";
+import { can } from "../../lib/org/capability";
 
 export type OrgProfile = components["schemas"]["OrgProfile"];
 
@@ -40,7 +41,8 @@ export function taxCardView(
   profile: OrgProfile,
   capabilities: ReadonlySet<string>,
 ): TaxCardView {
-  const canEdit = capabilities.has(CAPABILITY_MANAGE_ORG_SETTINGS);
+  // ★ `can`, not `.has` — an Owner holds only `full_access` (see capability.ts).
+  const canEdit = can(capabilities, CAPABILITY_MANAGE_ORG_SETTINGS);
 
   // `taxProfileComplete` decides, NOT the presence of `taxProfile` or of any
   // field inside it. A caller without the capability gets a `taxProfile` that
@@ -84,7 +86,10 @@ export function onboardingItems(
   capabilities: ReadonlySet<string>,
 ): OnboardingItems | null {
   // The whole card is for people who can act on it.
-  if (!capabilities.has(CAPABILITY_MANAGE_ORG_SETTINGS)) return null;
+  // ★ `can`, not `.has`: this card was invisible to every Owner, and the
+  // backup-owner nudge below is DEFINED for an Owner alone in their shop —
+  // it could never have been reached.
+  if (!can(capabilities, CAPABILITY_MANAGE_ORG_SETTINGS)) return null;
 
   const items: OnboardingItems = {
     inviteTeam: profile.counts.activeMembers === 1,

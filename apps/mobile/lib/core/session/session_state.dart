@@ -17,6 +17,11 @@ library;
 
 import 'package:flutter/foundation.dart' show immutable;
 
+/// The capability that IS ownership (D-028/C-1), and a WILDCARD for every
+/// other capability. It lives here, in core, because both meanings are read
+/// outside the invite screen that first needed it.
+const String fullAccessCapability = 'full_access';
+
 /// What the caller may DO in a shop, cached after login/switch.
 ///
 /// `capabilities` is RBAC (F-003) and `entitlements` is the plan tier (F-007).
@@ -42,9 +47,20 @@ class ActiveOrg {
 
   /// Ownership is a CAPABILITY, never a role name or key — `roleKey` is an
   /// open set that F-003 lets people create.
-  bool get isOwner => capabilities.contains('full_access');
+  bool get isOwner => capabilities.contains(fullAccessCapability);
 
-  bool can(String capability) => capabilities.contains(capability);
+  /// ★ `full_access` is a WILDCARD, so this is not set membership.
+  ///
+  /// A system Owner's role carries `full_access` and nothing else — no
+  /// `manage_members`, no `manage_org_settings` — and the server's
+  /// `CapabilityGuard` reads it as "everything". A plain `contains` therefore
+  /// answers "no" for the one person who may do anything, and every gate built
+  /// on it hides the app from its owner. That is not hypothetical: the web app
+  /// had the same line, and it cost the Owner their own members menu, the tax
+  /// declaration, the reveal button and the rename affordance (tasks.md,
+  /// 2026-08-16). Same rule as core-domain's `hasCapability`.
+  bool can(String capability) =>
+      capabilities.contains(fullAccessCapability) || capabilities.contains(capability);
 }
 
 @immutable

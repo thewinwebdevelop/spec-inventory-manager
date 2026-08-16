@@ -148,3 +148,39 @@ describe("onboardingItems", () => {
     });
   });
 });
+
+describe("★ the Owner who actually exists — `full_access` and nothing else", () => {
+  // WHY THIS BLOCK EXISTS. Every case above hands in a capability list it
+  // invented, and one of them hands in `{manage_org_settings, full_access}` —
+  // a user no shop has ever contained. `SYSTEM_ROLE_BLUEPRINT` gives the Owner
+  // role exactly one capability, `full_access`, and the server reads it as a
+  // wildcard. Against that list this module answered "no" to everything, so
+  // the real Owner got the read-only card: no edit, no reveal, and — the part
+  // that stings — no backup-owner nudge, in a function that returned early
+  // before reaching the branch written for precisely their situation.
+  const ownersRole = new Set([CAPABILITY_FULL_ACCESS]);
+
+  it("may declare the shop's tax identity", () => {
+    const view = taxCardView(profile(), ownersRole);
+    expect(view.kind).toBe("undeclared");
+    expect(view.kind === "undeclared" && view.canEdit).toBe(true);
+  });
+
+  it("sees the details tier, which is what carries the reveal button", () => {
+    const declared = profile({
+      taxProfileComplete: true,
+      taxProfile: {
+        entityType: "company",
+        taxIdMasked: "•••••••••3454",
+        vatRegistered: true,
+        branchCode: "00000",
+      },
+    } as Partial<OrgProfile>);
+    expect(taxCardView(declared, ownersRole).kind).toBe("details");
+  });
+
+  it("★ gets the D-030 nudge — the branch it was written for", () => {
+    const alone = profile({ counts: { activeMembers: 1, pendingInvitations: 0 } });
+    expect(onboardingItems(alone, ownersRole)?.inviteBackupOwner).toBe(true);
+  });
+});

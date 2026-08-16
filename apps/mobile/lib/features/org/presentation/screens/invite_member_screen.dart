@@ -3,6 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../../../core/l10n/l10n.dart';
 import '../../../../core/session/session_controller.dart';
+import '../../../../core/session/session_state.dart';
 import '../../../../core/theme/app_theme.dart';
 import '../../../../core/ui/error_banner.dart';
 import '../../../../core/ui/labeled_text_field.dart';
@@ -13,10 +14,6 @@ import '../../domain/entities/org_entities.dart';
 import '../widgets/expiry_text.dart';
 import '../widgets/role_label.dart';
 import 'invite_link_screen.dart';
-
-/// The capability that IS ownership (D-028/C-1). Granting a role that has it
-/// is granting ownership, which is why only an Owner may pick it.
-const String fullAccessCapability = 'full_access';
 
 /// S7 — เชิญสมาชิก, mobile (ux-wireframe §8 + §13: full screen, so the
 /// keyboard does not fight the form).

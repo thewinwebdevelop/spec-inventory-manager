@@ -1656,3 +1656,29 @@ override เป็น `staleTime: 0`/`refetchOnMount: "always"` ไหม (ร�
    ⇒ **ux (copy) + frontend (plumbing)** · เทสต์**ไม่ assert** เรื่องนี้ทั้งสองทาง เพื่อให้วันที่แก้แล้วไม่มีเคสแดง
 3. **cache 30 วิ กับคนที่เพิ่งถูกถอด** — คลิกในร้านหลังถูกถอดอาจไม่ยิง request เลย (`staleTime`) ⇒ ยังเห็นจอเดิมได้ไม่เกินครึ่งนาที
    ขอบเขตจำกัด (เห็นข้อมูลที่โหลดไว้แล้ว · **ทุก write โดน server ปฏิเสธ** ซึ่งคือ control จริง) แต่เป็นเรื่องเดียวกับที่ E-04 เจอ · ส่งต่อ ux/frontend
+
+### 🔴🔴🔴 บั๊ก `full_access` ไม่ใช่ที่เดียว — มีอีก **5 จุด** และจุดหนึ่งทำให้โค้ดที่เขียนไว้ไม่มีวันถูกเรียก (2026-08-16)
+
+เจอตอนกำลังจะเขียน E-09/E-14: `taxCardView` ก็ทำ `capabilities.has(...)` เหมือนกัน ⇒ ไล่ดูทั้ง repo แล้วเจอครบชุด
+
+| ไฟล์ | บรรทัดเดิม | เจ้าของร้าน (`full_access` ล้วน) เจออะไร |
+|---|---|---|
+| `tax-card.ts` canEdit | `capabilities.has(MANAGE_ORG_SETTINGS)` | **ประกาศ/แก้ข้อมูลผู้เสียภาษีไม่ได้เลย** ⇒ AC-7.1 เข้าไม่ถึงทาง UI |
+| `tax-card.ts` `onboardingItems` | เหมือนกัน | การ์ด onboarding ไม่ขึ้นเลย · **รวมถึง nudge หาเจ้าของร้านสำรอง (D-030) ซึ่งนิยามว่า "ถือ `full_access` + เป็นสมาชิกคนเดียว"** — โค้ดอยู่ใต้ `return null` ที่ตัดเจ้าของร้านทิ้งก่อน ⇒ **ไม่มีวันถูกเรียกถึง** |
+| `OrgProfileScreen.tsx` ×2 | เหมือนกัน | เปลี่ยนชื่อร้านตัวเองไม่ได้ |
+| `LeaveOrgDialog.tsx` | `has(MANAGE_MEMBERS)` | ตอนโดน `409 LAST_OWNER` **ไม่ได้ลิงก์ไปหน้าสมาชิก** ซึ่งคือทางออกเดียว — และคนที่เจอจอนี้เป็นเจ้าของร้าน**เสมอ** ⇒ ทางออกถูกซ่อนจากทุกคนที่เคยเห็นมัน |
+| mobile `session_state.dart` `can()` | `capabilities.contains(c)` | ทุก gate บนมือถือ ตอบ "ไม่" กับเจ้าของร้าน |
+
+**แก้ที่ราก ไม่ใช่ทีละจุด:**
+- web: `src/lib/org/capability.ts` — `can(capabilities, x)` ห่อ `hasCapability` ของ core-domain · ทุกจุด (รวม `useCan`) เรียกผ่านตัวนี้
+- mobile: `ActiveOrg.can` = `contains(full_access) || contains(x)` · ย้าย `fullAccessCapability` จากไฟล์จอ → `core/session` (ทิศทาง dependency ถูกต้อง)
+- **tripwire `capability-lint.test.ts`** (แบบเดียวกับ G-15): สแกน source ทั้ง web+mobile — ห้ามไฟล์ไหนถาม membership ของ capability เอง
+  ยกเว้นถาม `full_access` ตรง ๆ (คือถามตัว wildcard เอง = ถูก) และไฟล์ที่ implement กฎ 2 ไฟล์
+  · มี SELF-CHECK ทั้งสองทาง (บรรทัดจริงที่พัง = จับได้ · `ownerRoleIds.has(role.id)`/`entitlements.contains()` = ไม่ตะครุบ)
+  · **mutation แล้ว**: คืน `.has()` ที่ `tax-card.ts` ⇒ tripwire แดงระบุไฟล์+บรรทัด · คืน `contains` ที่ Dart ⇒ เทสต์ Dart แดง
+
+**ทำไมเทสต์เดิมไม่เจอ (ย้ำอีกรอบเพราะมันคือแก่นของเรื่องนี้):** `tax-card.test.ts` มีบรรทัด
+`new Set([MANAGE_ORG_SETTINGS, FULL_ACCESS])` — **ผู้ใช้ที่ไม่มีอยู่จริง** · role Owner ตาม `SYSTEM_ROLE_BLUEPRINT` ถือ `full_access` **ตัวเดียว**
+⇒ เพิ่ม describe block "the Owner who actually exists" (3 เคส) + Dart 4 เคส · web 312 tests เขียว · flutter analyze สะอาด
+
+**บทเรียนที่ควรอยู่ถาวร:** กฎ authorization ที่ client ต้องรู้ ให้ **import จาก core-domain เสมอ** — ทุกครั้งที่มีคนเขียนใหม่เพราะ "มันก็แค่เช็คว่ามีใน list ไหม" จะได้บั๊กเดิมกลับมา และมันจะ**เขียวทุกเทสต์**
