@@ -206,11 +206,17 @@ test("E-14 ★ · a Staff member sees no digits, no button, and gets 403 asking 
 
   const html = await staffPage.content();
   expect(html, "a staff member's page contains the tax id").not.toContain(VALID_TAX_ID);
-  // Not even a fragment of it: the mask must be built server-side, not by
-  // trimming a number the browser was given.
-  expect(html, "a staff member's page contains part of the tax id").not.toContain(
-    VALID_TAX_ID.slice(-4),
-  );
+
+  // …and not the MASK either, which is the assertion that has teeth here:
+  // `taxIdMasked` is a field the server sends only to somebody who may see the
+  // details (§3.16), so its presence would mean the tier was decided in the
+  // browser out of data it should never have received.
+  //
+  // ⚠️ This replaced a scan for the last four digits, which failed on a page
+  // with no leak at all: Next.js writes module ids into the RSC payload, and
+  // one of them is literally `3454`. A four-digit needle in a whole document
+  // is not evidence of anything — my assertion was wrong, not the app.
+  expect(html, "the masked tax id reached a staff member").not.toContain("•••••••••3454");
 
   // ★ And the button being absent is a courtesy, not the control. The control
   // is the server refusing the call that the missing button would have made.
