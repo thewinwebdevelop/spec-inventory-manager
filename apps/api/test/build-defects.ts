@@ -102,6 +102,18 @@ export const BUILD_DEFECTS: readonly BuildDefect[] = Object.freeze([
       { file: "apps/web/e2e/e01-signup-create-shop.spec.ts", must: ["select-org"] },
     ],
   },
+  {
+    finding: "B-11",
+    title: "the backup-owner nudge overflowed its row on a phone-width screen",
+    tier: "full",
+    foundBy: "E-10 on a real emulator — Flutter reported the overflow as an error",
+    pins: [
+      {
+        file: "apps/mobile/test/features/org/presentation/members_screen_test.dart",
+        must: ["fits a phone", "physicalSize"],
+      },
+    ],
+  },
   // ── open, and owned by somebody else ──────────────────────────────────────
   {
     finding: "B-7",

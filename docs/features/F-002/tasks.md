@@ -101,7 +101,7 @@
 | T-002-Q2 | ★ int lane บังคับ: **cross-org leak × 4 persona** · **route-registry capability (รวม `GET`)** · assertion กลาง `passwordHash`/`tokenHash` · **hash-at-rest พิสูจน์ได้** | `test-plan.md §8` | T-002-22 | done | qa (**แถวนี้ค้างสถานะ ไม่ใช่ค้างงาน** — ของมีครบและรันใน CI มานานแล้ว: `test/org-leak.kit.ts` **5 persona** (มากกว่าที่ขอ — เพิ่ม `underprivilegedInA` ที่แยก 403 FORBIDDEN ออกจาก ORG_ACCESS_DENIED ตาม I-5) · `test/route-registry.kit.ts` · `test/assertions.kit.ts` · D-018 hash-at-rest ที่ `invitations.e2e.int.test.ts` + `f002-seed.kit.int.test.ts` · มี floor ใน CI ทุกไฟล์) |
 | T-002-Q3 | ★ (เขียนครบ — **รอ CI ยืนยัน**) concurrency 13 เคส: Owner คนสุดท้าย 2 ขนาน ×20 รอบ · accept ซ้ำ · invite ซ้ำ · **revoke‖accept** · reissue‖accept · cancel‖accept · PATCH‖DELETE · ยก Owner 2 คนพร้อมกัน · cap 49 · revoke‖revoke · **lock timeout → 409 ไม่ใช่ 500 · ห้าม 40P01/40001 หลุด wire** | `test-plan.md §8` · `architecture.md §5.2` | T-002-03, T-002-22 | done | qa (`test/concurrency-matrix.int.test.ts` 14/14 เขียวบน CI run 31608348040) |
 | T-002-Q4 | ★ regression ของ finding: **NEW-1 (Admin→Owner reset = 404 + รหัสเดิมยัง login ได้ + เคสควบคุม)** · C-1 · C-2 · I-1 · NEW-2 · **I-45 สลับ `Role.key` ใน DB แล้วสิทธิ์ต้องไม่ขยับ** · เข้า **smoke tier ถาวร** | `test-plan.md §9` (ทะเบียน 41 finding) | T-002-09, T-002-22 | done | qa (regression-pack gate + G-15 tripwire + ปิด M-3 ที่ไม่เคยมีเทสต์) |
-| T-002-Q5 | E2E + manual: flow เชิญ→รับ **3 ทางแยกของ US-4** · org switcher · ถูกถอดกลางคัน · Staff เจอ 403 แล้ว UI ทำถูก | `test-plan.md §10` · `ux-wireframe.md §11` | T-002-W6, T-002-M3 | in_progress | qa (**เลนเบราว์เซอร์เขียว 26/26 เคส** [run 31959752691](https://github.com/thewinwebdevelop/spec-inventory-manager/actions/runs/31959752691) · §12.1 ครบ **13/14 แถว** = E-01..E-09 · E-11..E-14 · **เหลือ E-10 (mobile ต้องมี emulator lane → devops)** + manual §12.2 M-01..M-07 ซึ่งเป็นงานคน) |
+| T-002-Q5 | E2E + manual: flow เชิญ→รับ **3 ทางแยกของ US-4** · org switcher · ถูกถอดกลางคัน · Staff เจอ 403 แล้ว UI ทำถูก | `test-plan.md §10` · `ux-wireframe.md §11` | T-002-W6, T-002-M3 | in_progress | qa (**§12.1 ครบ 14/14 แถวแล้ว** — web 26/26 เคส + **E-10 บน emulator จริง 3/3** [run 31991966111](https://github.com/thewinwebdevelop/spec-inventory-manager/actions/runs/31991966111) เขียวครบ 9 job · **เหลือเฉพาะ manual §12.2 M-01..M-07 ซึ่งเป็นงานคน** และ §17.6 บังคับให้มีก่อนตัดสิน verdict) |
 | T-002-Q6 | perf smoke: member list 200 คน · `/me/organizations` 50 org · overhead membership lookup < 5 ms | `test-plan.md` · `architecture.md §10` | T-002-18 | done | qa (`test/perf-smoke.int.test.ts` P-01..P-04 · SAMPLES=30/WARMUPS=5 · **P-03 ใช้ median delta ไม่ใช่ p95** เพราะวัดส่วนต่างของ 2 เส้นบน runner ที่ noisy · มี non-vacuity test เช็คขนาด fixture · floor ใน CI) |
 | T-002-Q7 | Track 2 (agentic, **ไม่บล็อก merge**): 7 flow persona SME ไทย — คุ้มสุด: **"ออกลิงก์ใหม่"** (ผู้ใช้เข้าใจไหมว่าลิงก์เดิมตาย) และ **404 ของ admin-reset** | `test-plan.md` · WEB_TEAM §3.7 | T-002-Q5 | in_progress | qa (runbook + finding แรกของ flow 2 → แก้แล้ว · การรันจริงรอ stack) |
 
@@ -1922,3 +1922,27 @@ final before = await staffContainer...listMembers();   // ← พนักงา
 · ผมใช้ call ที่ persona นั้นทำไม่ได้มาเป็นตัวพิสูจน์ว่า "เขาอยู่ในร้านจริง" — **เทสต์ผิด ไม่ใช่แอปผิด**
 · แก้เป็น `listRoles()` ซึ่งเป็น `@AnyActiveMember()`: สำเร็จตราบเท่าที่ยังเป็นสมาชิก = property ที่การถอดกำลังจะทำลายพอดี
 · ส่วน userId ของคนที่จะถอด อ่านผ่าน client ของ **เจ้าของร้าน** ซึ่งมีสิทธิ์จริง
+
+## ✅ E-10 เขียวบน emulator จริง — §12.1 ครบ 14/14 แถว (2026-08-17)
+
+[run 31991966111](https://github.com/thewinwebdevelop/spec-inventory-manager/actions/runs/31991966111) — **เขียวครบ 9 job**
+
+```
+00:03 +1: E-10 · creates a shop on a real API and lands inside it
+00:05 +2: E-10 · the shop list and the members list come back from the server
+00:08 +3: ★ E-10 · removed mid-session: the shop goes, the session stays
+          All tests passed!
+```
+
+**ราคาที่จ่ายไป 4 รอบ CI และสิ่งที่ได้กลับมา:**
+
+| รอบ | แดงเพราะ | เป็นของใคร |
+|---|---|---|
+| 1 | YAML: `\` ต่อบรรทัดกลายเป็นชื่อไฟล์เทสต์ | ผม |
+| 2 | **`ApiError(201)` — สมัครสมาชิกบนมือถือพังทุกครั้ง** | **แอป/contract** |
+| 3 | `pumpAndSettle` กับ skeleton ที่หมุนไม่หยุด + **overflow 5px บนจอมือถือ** | ผม + **แอป** |
+| 4 | ผมใช้ `listMembers()` เป็น probe ของ persona ที่ไม่มีสิทธิ์ | ผม |
+
+⇒ **บั๊กจริงของแอป 3 ตัวจากเลนนี้** (mobile ไม่ถูก wire · signup พังทั้งหมด · UI ล้นจอ) และทั้งสามตัว **unit test ~390 ตัวเขียวทับอยู่**
+
+**สรุปเครื่องมือของ F-002 ตอนนี้:** unit (web 323 · mobile 397 · api) + int (Postgres/Redis จริง) + **browser 26 เคส** + **emulator 3 เคส** + tripwire เชิงโครงสร้าง 4 ตัว (G-15 · capability · copy-lint · boolean-enum) + pack 2 ชุด (§9 41 ข้อ · build 11 ข้อ)
