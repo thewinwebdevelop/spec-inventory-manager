@@ -1957,10 +1957,10 @@ final before = await staffContainer...listMembers();   // ← พนักงา
 | **B** Design | ✅ pass | ครบชุด: architecture · data-model · api-spec · ux-wireframe · ui · test-plan · **security-review 3 ฉบับ** (build-B: *"ไม่มีข้อที่ผมเสนอให้บล็อก merge"*) · **sync-back แล้ว** ที่ `docs/01-data-model.md` + `02-architecture.md` + `DECISIONS.md` (commit `3570f2d`) |
 | **C** Domain & Data | ✅ pass | cross-tenant: `org-leak.kit.int.test.ts` **5 persona** (floor 20 เคสใน CI) · **money/stock = N/A และนี่คือเหตุผล**: `grep StockMovement\|Decimal apps/api/src/orgs/` ว่างเปล่า — F-002 ไม่แตะเงิน/สต๊อกเลย · logic แกนเป็น pure fn ใน `core-domain` · **query bounded**: composite index ตรงกับ query จริงทุกตัว (`[organizationId,status,createdAt]` · `[userId,status]` · `[organizationId,email,status]`) · contract + client regen เขียว (`contracts-drift`) |
 | **D** Experience | ✅ pass (มีข้อสังเกต) | 4 states ครบทั้ง web/mobile · copy ไทยเป็นของ ux + **copy-lint บังคับถ้อยคำ AC-3.4** · ไม่มี hex ในจอ (token ล้วน) · **ข้อสังเกตไม่บล็อก:** B-7 (list ค้าง 30 วิ) · B-8 (จอปฏิเสธไม่บอกบัญชี) — เปิดค้างและมีเจ้าของแล้ว |
-| **E** Quality | ⚠️ **ไม่ผ่าน 2 ช่อง** | **เขียว:** [run 31992513221](https://github.com/thewinwebdevelop/spec-inventory-manager/actions/runs/31992513221) 9/9 job · web 323 · mobile 397 · browser 26 · emulator 3 · **test integrity:** ไม่มี `.skip/xit` เลย · มี mutation-check บันทึกไว้ 21 จุด · **diff hygiene:** ไล่ commit ทั้ง 25 ตัวของรอบนี้ **ไม่มีตัวไหนแตะ protected path** · **แดง:** (1) **manual §12.2 M-01..M-07 ยังไม่ได้ทำ — เป็นงานคน** (2) **dependency ใหม่ 4 ตัวยังไม่ได้ขออนุมัติ PM** |
+| **E** Quality | ⚠️ **ไม่ผ่าน 1 ช่อง** (เดิม 2 · dependency อนุมัติแล้ว 2026-08-18) | **เขียว:** [run 31992513221](https://github.com/thewinwebdevelop/spec-inventory-manager/actions/runs/31992513221) 9/9 job · web 323 · mobile 397 · browser 26 · emulator 3 · **test integrity:** ไม่มี `.skip/xit` เลย · มี mutation-check บันทึกไว้ 21 จุด · **diff hygiene:** ไล่ commit ทั้ง 25 ตัวของรอบนี้ **ไม่มีตัวไหนแตะ protected path** · **แดง:** **manual §12.2 M-01..M-07 ยังไม่ได้ทำ — เป็นงานคน** (ช่อง dependency ปิดแล้ว) |
 | **F** Release | ⏸️ ยังไม่เริ่ม (ถูกต้องตามลำดับ) | อยู่บน branch ✓ · version ยัง `0.0.0` · ไม่มี CHANGELOG · **ไม่มี rollback plan** · **`docs/RETRO.md` ไม่มี F-002 เลย** → เป็นงานของ release + PM |
 
-### dependency ใหม่ที่ต้องขออนุมัติ (เหตุผลแนบครบ)
+### dependency ใหม่ — ✅ **ผู้ใช้อนุมัติครบทั้ง 4 ตัว 2026-08-18**
 
 | package | ที่ไหน | ทำไม |
 |---|---|---|
@@ -1969,8 +1969,8 @@ final before = await staffContainer...listMembers();   // ← พนักงา
 | `@omnistock/core-domain` | apps/web (dep) | **ให้ client ใช้ `hasCapability` ตัวเดียวกับ server** — สาเหตุของบั๊ก B-1 คือมีสำเนาที่สอง |
 | `integration_test` | apps/mobile (dev) | E-10 บน emulator (มากับ Flutter SDK ไม่ใช่ package ภายนอก) |
 
-**VERDICT: ยัง NOT DONE** — ค้าง 2 อย่างที่ **ผมทำแทนไม่ได้**:
-1. **manual §12.2** (M-01..M-07) — §17.6 บังคับให้มีก่อนตัดสิน · เป็นงานคน
-2. **อนุมัติ dependency 4 ตัว** — เป็นสิทธิ์ของ PM/ผู้ใช้
+**VERDICT: ยัง NOT DONE** — เหลือ **ข้อเดียว** ที่ผมทำแทนไม่ได้:
+1. ~~อนุมัติ dependency 4 ตัว~~ → ✅ **ผู้ใช้อนุมัติแล้ว 2026-08-18** (บันทึกไว้ตรงนี้เพราะ Gate E บังคับว่าต้องมี "PM approval + reason" เป็นหลักฐาน ไม่ใช่ความทรงจำ)
+2. **manual §12.2** (M-01..M-07) — §17.6 บังคับให้มีก่อนตัดสิน · **เป็นงานคน**
 
 ส่วน Gate F เป็นของ release ตามลำดับปกติ (ยังไม่ถึงคิว) · B-7..B-10 เปิดค้างแต่**ไม่บล็อก** — qa เป็นคนชี้ขาด
