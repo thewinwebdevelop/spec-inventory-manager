@@ -1852,3 +1852,28 @@ gate บังคับ 4 ข้อ: pin ต้อง resolve · ไม่มี
 · SELF-CHECK ทั้งสองทางของ resolver (ไฟล์หาย · ไฟล์อยู่แต่ marker หาย)
 
 **ผลรัน CI ของการแก้ contract** ([run 31989431720](https://github.com/thewinwebdevelop/spec-inventory-manager/actions/runs/31989431720)): **oasdiff เขียว = ไม่ breaking** · contracts-drift เขียว = regen ตรงกับ CI · flutter 397 เขียว · web 323 เขียว
+
+### E-10 รอบที่รันจริง: **เคสแรกเขียว** — และเคสที่สองฆ่า emulator ด้วย `pumpAndSettle`
+
+[run 31989775706](https://github.com/thewinwebdevelop/spec-inventory-manager/actions/runs/31989775706)
+
+```
+00:23 +1: E-10 · creates a shop on a real API and lands inside it     ← ✅ ผ่าน
+01:23 +1: ... - did not complete [E]   (อีก 2 เคส + tearDownAll)
+adb: could not connect to TCP port 5554: Connection refused           ← emulator ตายไปแล้ว
+```
+
+**เคสแรกผ่าน = การแก้ boolean-enum ได้ผลจริง** — signup → login → สร้างร้าน → session เข้าร้านทันที ผ่านของจริงหมด
+
+**เคสที่สองตาย 60 วิ โดยไม่มี exception ให้อ่าน** เพราะ:
+`MembersScreen` ขึ้น skeleton ตอนโหลด · skeleton คือ `AnimationController(...)..repeat()` (`core/ui/skeleton.dart`)
+⇒ **มีเฟรมถูก schedule ตลอดเวลา ⇒ `pumpAndSettle` ไม่มีวันคืนค่า** มันเรนเดอร์เฟรมรัวที่สุดเท่าที่ทำได้
+⇒ บน emulator ที่ render ด้วย software = พายุ CPU ⇒ process ตาย ⇒ harness เห็นแค่ "did not complete"
+
+**skeleton ถูกแล้วที่หมุนไม่หยุด — เทสต์ผิดที่ไปรอให้มันหยุด**
+
+แก้: `pumpUntil(finder)` (pump ทีละ 100ms แล้วหยุดทันทีที่เจอ) แทน `pumpAndSettle` ทุกจุด
+· `pump()` ตอนวางจอเหลือเฟรมเดียว · เคสสร้างร้าน pump เป็นสเต็ปจนกว่า callback จะกลับมา
+· เพิ่ม `-memory 3072` ให้ emulator เป็น headroom — **ไม่ใช่ตัวแก้** แต่เพื่อให้พายุครั้งหน้าออกมาเป็น assertion ที่แดง ไม่ใช่เครื่องตาย
+
+**บทเรียนสำหรับ integration test ของ Flutter ทุกตัวหลังจากนี้:** จอไหนมี skeleton = ห้าม `pumpAndSettle`

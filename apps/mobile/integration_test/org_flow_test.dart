@@ -56,6 +56,32 @@ void main() {
     return container;
   }
 
+  /// ⚠️ NEVER `pumpAndSettle` on these screens, and the reason cost a CI run.
+  ///
+  /// The loading skeleton is an `AnimationController(...)..repeat()`
+  /// (`core/ui/skeleton.dart`), so a frame is always scheduled and
+  /// `pumpAndSettle` never returns — it just renders frames as fast as it can
+  /// until it gives up. On a software-rendered emulator that is a CPU storm:
+  /// the first run of this lane lost the emulator process mid-case, and the
+  /// suite reported three tests as "did not complete" with no exception to
+  /// read. The skeleton is right to animate forever; the test was wrong to
+  /// wait for it to stop.
+  ///
+  /// So: pump in fixed steps and stop as soon as the thing being waited for is
+  /// on screen.
+  Future<void> pumpUntil(
+    WidgetTester tester,
+    Finder finder, {
+    Duration timeout = const Duration(seconds: 20),
+  }) async {
+    final deadline = DateTime.now().add(timeout);
+    while (DateTime.now().isBefore(deadline)) {
+      await tester.pump(const Duration(milliseconds: 100));
+      if (finder.evaluate().isNotEmpty) return;
+    }
+    fail('timed out after $timeout waiting for: $finder');
+  }
+
   Future<void> pump(WidgetTester tester, ProviderContainer container, Widget screen) async {
     await tester.pumpWidget(
       UncontrolledProviderScope(
@@ -67,11 +93,20 @@ void main() {
         ),
       ),
     );
-    await tester.pumpAndSettle();
+    // One frame, not a settle: the screen may be showing a skeleton.
+    await tester.pump();
   }
 
   /// Signs a brand-new account in through the real auth repository, and puts
   /// the session where the router would have.
+  ///
+  /// ⚠️ BUDGET. F-001 throttles pre-auth requests per IP — `IP_WINDOW_MAX = 20`
+  /// per five minutes — and every signup and every login spends one. This file
+  /// spends ten (four accounts, two extra API logins), so it fits with room to
+  /// spare and needs no counter reset. A fifth account, or a retry loop around
+  /// one of these, puts it near the wall; the web lane had to add a Redis reset
+  /// for exactly that reason, and that reset is a bypass of a real control
+  /// rather than something to reach for casually.
   Future<void> signUpAndSignIn(ProviderContainer container, String email) async {
     final auth = container.read(authRepositoryProvider);
     await auth.signup(email: email, password: password);
@@ -88,10 +123,15 @@ void main() {
 
     final name = 'ร้านมือถือ ${DateTime.now().millisecondsSinceEpoch}';
     await tester.enterText(find.byType(TextField), name);
-    await tester.pumpAndSettle();
+    await tester.pump();
     await tester.tap(find.text('สร้างร้าน'));
-    // Real network: pump until the response lands rather than settling once.
-    await tester.pumpAndSettle(const Duration(seconds: 10));
+
+    // A real request is in flight. Pump in steps until the screen has moved
+    // past "กำลังสร้างร้าน..." rather than settling — see `pumpUntil`.
+    final deadline = DateTime.now().add(const Duration(seconds: 25));
+    while (created == null && DateTime.now().isBefore(deadline)) {
+      await tester.pump(const Duration(milliseconds: 100));
+    }
 
     expect(created, isNotNull, reason: 'POST /organizations did not come back');
     expect(created!.name, name);
@@ -124,11 +164,10 @@ void main() {
     expect(mine.map((o) => o.id), contains(org.id));
 
     await pump(tester, container, const MembersScreen());
-    await tester.pumpAndSettle(const Duration(seconds: 10));
 
     // The creator is a member, and an Owner. Their capability list is
     // `full_access` alone — the case that broke web's whole nav.
-    expect(find.textContaining('สมาชิกในร้าน'), findsWidgets);
+    await pumpUntil(tester, find.textContaining('สมาชิกในร้าน'));
     expect(find.textContaining('@omnistock.test'), findsWidgets);
   });
 

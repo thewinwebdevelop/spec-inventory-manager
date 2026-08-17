@@ -531,7 +531,15 @@ jobs:
           arch: x86_64
           # No window, no audio, no boot animation: nothing here looks at the
           # screen, and each of them is a way for the boot to hang.
-          emulator-options: -no-window -gpu swiftshader_indirect -noaudio -no-boot-anim -camera-back none
+          # `-memory 3072`: the default is tight for a device that is also
+          # hosting a debug Flutter app while Postgres, Redis, the API and a
+          # Gradle JVM share the runner. The first real run lost the emulator
+          # process mid-case (three tests reported "did not complete", no
+          # exception to read) — the cause was a `pumpAndSettle` against an
+          # infinite skeleton animation, fixed in the test, and the headroom
+          # here is so that the next such storm produces a failed assertion
+          # rather than a dead device.
+          emulator-options: -no-window -gpu swiftshader_indirect -noaudio -no-boot-anim -camera-back none -memory 3072
           working-directory: apps/mobile
           # ⚠️ 10.0.2.2, never localhost. Inside the emulator localhost is the
           # emulated device, so a suite pointed at it fails with connection
