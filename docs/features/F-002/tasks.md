@@ -1825,3 +1825,30 @@ regen ทั้ง TS + Dart · `bool get verified` แล้ว · แก้ fa
 > **⚠️ นี่คือการแก้ contract ซึ่งเป็นของ backend-api** — ผมลงมือเพราะมันทำให้ generated client **ใช้งานไม่ได้ทั้งเส้น** และ oasdiff ใน CI เป็นคนตัดสินว่า breaking หรือไม่ (docker รันในเครื่องไม่ได้)
 > ถ้า backend-api เห็นต่าง ให้ revert ได้ทันที — แต่ต้องมีทางอื่นให้ Dart client ใช้งานได้ก่อน
 > **บทเรียนเชิงกฎ: อย่าใส่ `enum` บน `boolean` ในสัญญา** — มันคือคอมเมนต์ที่ generator บางตัวอ่านเป็นชนิดข้อมูล
+
+### pack ของ "บั๊กที่เจอตอน build" + tripwire กันชนิดของบั๊กกลับมา (2026-08-17)
+
+**`packages/contracts/src/generator-hostile-shapes.test.ts`** — สแกน bundle: **ห้าม `type: boolean` มี `enum`**
+· mutation แล้ว: ใส่ `enum: [false]` กลับเข้า `verified` ⇒ แดงพร้อมบอก `openapi.yaml:1611`
+· เหตุผลที่ต้อง ban ทั้งรูปแบบ ไม่ใช่แค่ 3 จุดที่แก้: มันคือ**คอมเมนต์ที่ generator บางตัวอ่านเป็นชนิดข้อมูล** — คนถัดไปที่เขียนก็จะเขียนแบบเดิม
+
+**`apps/api/test/build-defects.ts` + gate** — แยกจาก `regression-pack.ts` (ซึ่ง mirror §9 และ gate ล็อกจำนวนไว้ 41)
+เพราะ**คนละสายพันธุ์**: §9 มาจากรีวิวเอกสาร · อันนี้มาจากการ**รันของจริง** และทุกข้อมี unit test เขียวทับอยู่ตอนที่มันพัง
+
+| id | เรื่อง | สถานะ |
+|---|---|---|
+| B-1 | client ไม่รู้จัก `full_access` เป็น wildcard (6 จุด) | ✅ pin: tripwire + 3 เทสต์ |
+| B-2 | reveal ตอบ 415 ทุกครั้ง | ✅ pin: hook test + E-14 |
+| B-3 | W-17 action เป็น `<span>` | ✅ pin: actions test + E-07 |
+| B-4 | mobile providers ไม่ถูก wire | ✅ pin: bootstrap test + E-10 |
+| B-5 | boolean+enum ทำ Dart client พัง | ✅ pin: contract scan + fake ที่ส่ง boolean จริง |
+| B-6 | redirect หลังล็อกอินชี้ placeholder ของ F-000 | ✅ pin: session test + E-01 |
+| B-7 | รายชื่อสมาชิกค้าง 30 วิ | 🟠 เปิด → **ux + frontend** |
+| B-8 | จอปฏิเสธไม่บอกว่าให้ใช้บัญชีไหน | 🟠 เปิด → **ux + frontend** |
+| B-9 | client ระบุ role เจ้าของร้านไม่ได้ (§3.6) | 🟠 เปิด → **backend-api** |
+| B-10 | `dev`/`start` รัน API ไม่ได้ | 🟠 เปิด → **devops + backend-api** |
+
+gate บังคับ 4 ข้อ: pin ต้อง resolve · ไม่มีแถวว่าง · **แถวที่ยังเปิดต้องระบุเจ้าของ** (ไม่มีชื่อ = กลายเป็นตำนาน) · ทุกแถวต้องบอกว่า**เจอด้วยเครื่องมืออะไร**
+· SELF-CHECK ทั้งสองทางของ resolver (ไฟล์หาย · ไฟล์อยู่แต่ marker หาย)
+
+**ผลรัน CI ของการแก้ contract** ([run 31989431720](https://github.com/thewinwebdevelop/spec-inventory-manager/actions/runs/31989431720)): **oasdiff เขียว = ไม่ breaking** · contracts-drift เขียว = regen ตรงกับ CI · flutter 397 เขียว · web 323 เขียว
