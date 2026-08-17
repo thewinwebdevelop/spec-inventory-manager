@@ -1877,3 +1877,23 @@ adb: could not connect to TCP port 5554: Connection refused           ← emulat
 · เพิ่ม `-memory 3072` ให้ emulator เป็น headroom — **ไม่ใช่ตัวแก้** แต่เพื่อให้พายุครั้งหน้าออกมาเป็น assertion ที่แดง ไม่ใช่เครื่องตาย
 
 **บทเรียนสำหรับ integration test ของ Flutter ทุกตัวหลังจากนี้:** จอไหนมี skeleton = ห้าม `pumpAndSettle`
+
+### รอบถัดมา: เจอ **บั๊ก UI จริงบนเครื่องจริง** + เครื่องยังตายอยู่ (2026-08-17)
+
+[run 31990514496](https://github.com/thewinwebdevelop/spec-inventory-manager/actions/runs/31990514496)
+
+**🟠 B-11 · การ์ด "เจ้าของร้านสำรอง" ล้นขอบจอโทรศัพท์**
+```
+A RenderFlex overflowed by 5.0 pixels on the right.
+Row … members_screen.dart:152   ← ปุ่ม "เชิญเจ้าของร้านอีกคน" + "ไว้ทีหลัง"
+constraints: 0.0<=w<=256.0
+```
+Flutter ถือว่า overflow เป็น **error** เพราะแปลว่ามีเนื้อหาที่ผู้ใช้มองไม่เห็น
+**ทำไม widget test 391 ตัวไม่เจอ:** harness เรนเดอร์ที่ **800×600 ซึ่งกว้างกว่ามือถือทุกรุ่น** — layout ที่พังบนเครื่องจริงจึงพอดีในเทสต์
+· แก้: `Row` → `Wrap` (คงดีไซน์ side-by-side ของ ux เมื่อมีที่ · ตกบรรทัดเมื่อไม่มี — ซึ่งคือสิ่งที่ **label ภาษาไทยต้องการ** เพราะยาวกว่าอังกฤษที่คนมักใช้กะ layout)
+· **เพิ่มเทสต์ที่ตั้งจอเป็น 360dp ก่อน** แล้ว assert `tester.takeException()` เป็น null · **mutation แล้ว**: เอา `Row` กลับมา ⇒ แดง
+
+**🔴 เครื่องยังตายอยู่ (รอบที่ 2)** — เคส 3 รัน 40 วิแล้ว "did not complete" ทั้ง 2 เคสที่เหลือ + `adb emu kill` ตอบ connection refused
+· รอบแรกอธิบายได้ด้วย `pumpAndSettle` (พายุเฟรม) · **รอบนี้เคส 3 ไม่แตะ widget เลย ยิงแต่ HTTP** ⇒ คำอธิบายเดิมใช้ไม่ได้
+· **เลิกเดา ใส่เครื่องมือวัดแทน:** เก็บ `adb devices` · `free -m` · `logcat -d -t 400` **ก่อน teardown** แล้ว dump ตอน job แดง
+⇒ รอบหน้าจะตอบได้ว่า Android ฆ่าแอป · host หมด RAM · หรือ emulator ตายเอง — ไม่ใช่เดาเป็นครั้งที่สาม

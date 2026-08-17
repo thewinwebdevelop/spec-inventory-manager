@@ -149,13 +149,25 @@ class _BackupOwnerNudge extends ConsumerWidget {
             ],
           ),
           const SizedBox(height: AppSpacing.s3),
-          Row(
+          // `Wrap`, not `Row`. FOUND ON A REAL DEVICE (E-10): the two buttons
+          // side by side overflowed by 5px inside this card, which Flutter
+          // reports as an error because it means content nobody can see. Every
+          // widget test passed — they render at 800x600, wider than any phone.
+          //
+          // Wrapping keeps ux's side-by-side layout wherever there is room and
+          // drops the dismiss button onto its own line where there is not,
+          // which is what Thai labels need: they are longer than the English
+          // such layouts are usually eyeballed with, and a phone in a shop is
+          // narrower than a test harness.
+          Wrap(
+            spacing: AppSpacing.s3,
+            runSpacing: AppSpacing.s2,
+            crossAxisAlignment: WrapCrossAlignment.center,
             children: [
               FilledButton(
                 onPressed: onInviteOwner,
                 child: Text(t.backupOwnerNudgeCta),
               ),
-              const SizedBox(width: AppSpacing.s3),
               TextButton(
                 onPressed: () => ref
                     .read(backupOwnerNudgeDismissedProvider.notifier)

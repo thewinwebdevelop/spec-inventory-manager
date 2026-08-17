@@ -207,4 +207,38 @@ void main() {
     // The count is of ACTIVE members — a revoked row is not one of them.
     expect(find.text('สมาชิกในร้าน (1)'), findsOneWidget);
   });
+
+  testWidgets('★ the backup-owner nudge fits a phone — found overflowing on a real device',
+      (tester) async {
+    // E-10 caught this on an emulator: the nudge's two buttons sat in a `Row`
+    // and overflowed by 5px, which Flutter reports as an error because it
+    // means content the user cannot see. Every widget test passed, and this is
+    // why: the default test surface is 800x600 logical pixels — wider than any
+    // phone — so the layout that breaks on the device fits in the harness.
+    //
+    // So this case sets a phone-sized surface first. 360dp is the narrow end
+    // of what Thai shop owners carry, and the labels here are Thai, which is
+    // longer than the English such layouts are usually eyeballed with.
+    tester.view.physicalSize = const Size(1080, 1920);
+    tester.view.devicePixelRatio = 3.0;
+    addTearDown(tester.view.resetPhysicalSize);
+    addTearDown(tester.view.resetDevicePixelRatio);
+
+    // One active Owner, and it is me: exactly D-030's condition.
+    await _pump(tester, FakeOrgScoped(memberPages: [
+      PagedResult(items: [
+        member(id: 'usr_1', email: 'somchai@shop.com', isMe: true, isOwner: true, roleKey: 'owner'),
+      ]),
+    ]));
+    await tester.pumpAndSettle();
+
+    expect(find.text('เชิญเจ้าของร้านอีกคน'), findsOneWidget);
+    expect(find.text('ไว้ทีหลัง'), findsOneWidget);
+    // A RenderFlex overflow surfaces here. `null` is the whole assertion.
+    expect(
+      tester.takeException(),
+      isNull,
+      reason: 'the nudge overflowed at phone width — the layout hides content',
+    );
+  });
 }

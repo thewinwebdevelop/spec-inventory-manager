@@ -557,11 +557,25 @@ jobs:
           # runner is dash, which has no `pipefail`, so a failing suite piped
           # into `tee` exits 0 and the step would pass.
           script: |
-            flutter test integration_test/org_flow_test.dart --dart-define=API_BASE_URL=http://10.0.2.2:3000 --reporter expanded 2>&1 | tee /tmp/mobile-e2e.log
+            flutter test integration_test/org_flow_test.dart --dart-define=API_BASE_URL=http://10.0.2.2:3000 --reporter expanded 2>&1 | tee /tmp/mobile-e2e.log || true
+            adb devices > /tmp/adb-devices.txt 2>&1 || true
+            free -m > /tmp/mem.txt 2>&1 || true
+            adb logcat -d -t 400 > /tmp/logcat.txt 2>&1 || true
             grep -q "All tests passed" /tmp/mobile-e2e.log || { echo "::error::the mobile integration suite did not report a pass"; exit 1; }
-      - name: dump the API log on failure
+      # ⚠️ Collected BEFORE the emulator is torn down (the lines above run
+      # inside the action's script), because the question these answer cannot
+      # be asked afterwards: two runs ended with three tests reporting "did not
+      # complete" and no exception anywhere, and `adb emu kill` then failing
+      # with "connection refused" — i.e. the device was already gone. Whether
+      # that is Android killing the app, the host running out of memory, or the
+      # emulator itself dying is not something to guess at a third time.
+      - name: dump the evidence on failure
         if: failure()
-        run: cat /tmp/api.log || true
+        run: |
+          echo "───────── adb devices"; cat /tmp/adb-devices.txt || true
+          echo "───────── free -m";     cat /tmp/mem.txt || true
+          echo "───────── logcat (tail)"; tail -200 /tmp/logcat.txt || true
+          echo "───────── api";         cat /tmp/api.log || true
 
   e2e-web:
     runs-on: ubuntu-latest
