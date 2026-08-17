@@ -25,9 +25,15 @@ SignupResponse:
     email:
       type: string
     verified:
+      # ⚠️ NO `enum: [false]` here, and it is not a style choice. That
+      # constraint is documentation ("a new account is never verified") that
+      # openapi-generator's dart-dio target reads as an ENUM: it emitted an
+      # `EnumClass` whose wire value is the STRING "false", so deserializing
+      # the API's JSON `false` threw and every mobile signup failed with
+      # `ApiError(status: 201)`. Found by E-10 on a real emulator against the
+      # real API (tasks.md, 2026-08-17); no unit test on either side could
+      # see it, because each mocked the other's half.
       type: boolean
-      enum:
-        - false
 
 LoginRequest:
   type: object

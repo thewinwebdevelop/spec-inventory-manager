@@ -3,7 +3,6 @@
 //
 
 // ignore_for_file: unused_element
-import 'package:built_collection/built_collection.dart';
 import 'package:built_value/built_value.dart';
 import 'package:built_value/serializer.dart';
 
@@ -33,8 +32,7 @@ abstract class ReissuedLink implements Built<ReissuedLink, ReissuedLinkBuilder> 
   DateTime get tokenIssuedAt;
 
   @BuiltValueField(wireName: r'rotated')
-  ReissuedLinkRotatedEnum get rotated;
-  // enum rotatedEnum {  true,  };
+  bool get rotated;
 
   ReissuedLink._();
 
@@ -82,7 +80,7 @@ class _$ReissuedLinkSerializer implements PrimitiveSerializer<ReissuedLink> {
     yield r'rotated';
     yield serializers.serialize(
       object.rotated,
-      specifiedType: const FullType(ReissuedLinkRotatedEnum),
+      specifiedType: const FullType(bool),
     );
   }
 
@@ -138,8 +136,8 @@ class _$ReissuedLinkSerializer implements PrimitiveSerializer<ReissuedLink> {
         case r'rotated':
           final valueDes = serializers.deserialize(
             value,
-            specifiedType: const FullType(ReissuedLinkRotatedEnum),
-          ) as ReissuedLinkRotatedEnum;
+            specifiedType: const FullType(bool),
+          ) as bool;
           result.rotated = valueDes;
           break;
         default:
@@ -169,18 +167,5 @@ class _$ReissuedLinkSerializer implements PrimitiveSerializer<ReissuedLink> {
     );
     return result.build();
   }
-}
-
-class ReissuedLinkRotatedEnum extends EnumClass {
-
-  @BuiltValueEnumConst(wireName: r'true')
-  static const ReissuedLinkRotatedEnum true_ = _$reissuedLinkRotatedEnum_true_;
-
-  static Serializer<ReissuedLinkRotatedEnum> get serializer => _$reissuedLinkRotatedEnumSerializer;
-
-  const ReissuedLinkRotatedEnum._(String name): super(name);
-
-  static BuiltSet<ReissuedLinkRotatedEnum> get values => _$reissuedLinkRotatedEnumValues;
-  static ReissuedLinkRotatedEnum valueOf(String name) => _$reissuedLinkRotatedEnumValueOf(name);
 }
 

@@ -705,8 +705,7 @@ export interface components {
         SignupResponse: {
             userId: string;
             email: string;
-            /** @enum {boolean} */
-            verified: false;
+            verified: boolean;
         };
         /** @description The project-standard error envelope, produced by `DomainExceptionFilter` for every failure (F-001 §3.5, F-002 api-spec §1/§4). `code` is a machine-readable UPPER_SNAKE value the client switches on; `message` is user-facing Thai copy the client MUST NOT parse. */
         ErrorResponse: {
@@ -781,8 +780,7 @@ export interface components {
             refreshToken?: string | null;
         };
         OkResponse: {
-            /** @enum {boolean} */
-            ok: true;
+            ok: boolean;
         };
         AdminResetRequest: {
             newPassword: string;
@@ -1129,8 +1127,7 @@ export interface components {
             expiresAt: string;
             /** Format: date-time */
             tokenIssuedAt: string;
-            /** @enum {boolean} */
-            rotated: true;
+            rotated: boolean;
         };
         /** @description Body of `POST /invitations/preview` and `POST /invitations/accept`. ⛔ THE TOKEN TRAVELS IN THE BODY AND ONLY IN THE BODY (I-6) — that is why both routes are POSTs. In a query string it would land in access logs, in every proxy in front of us, and in the `Referer` of anything the invite page loads. @frontend: read it out of the URL, `history.replaceState` it away immediately, and keep it in memory (never localStorage). */
         RedeemInvitationRequest: {

@@ -765,9 +765,9 @@ ReissuedLink:
       type: string
       format: date-time
     rotated:
+      # Same reason as `SignupResponse.verified`: a boolean with an `enum`
+      # is unusable from the generated Dart client.
       type: boolean
-      enum:
-        - true
 
 CancelledInvitation:
   type: object

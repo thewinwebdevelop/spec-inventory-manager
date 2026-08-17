@@ -6,53 +6,6 @@ part of 'reissued_link.dart';
 // BuiltValueGenerator
 // **************************************************************************
 
-const ReissuedLinkRotatedEnum _$reissuedLinkRotatedEnum_true_ =
-    const ReissuedLinkRotatedEnum._('true_');
-
-ReissuedLinkRotatedEnum _$reissuedLinkRotatedEnumValueOf(String name) {
-  switch (name) {
-    case 'true_':
-      return _$reissuedLinkRotatedEnum_true_;
-    default:
-      throw ArgumentError(name);
-  }
-}
-
-final BuiltSet<ReissuedLinkRotatedEnum> _$reissuedLinkRotatedEnumValues =
-    BuiltSet<ReissuedLinkRotatedEnum>(const <ReissuedLinkRotatedEnum>[
-  _$reissuedLinkRotatedEnum_true_,
-]);
-
-Serializer<ReissuedLinkRotatedEnum> _$reissuedLinkRotatedEnumSerializer =
-    _$ReissuedLinkRotatedEnumSerializer();
-
-class _$ReissuedLinkRotatedEnumSerializer
-    implements PrimitiveSerializer<ReissuedLinkRotatedEnum> {
-  static const Map<String, Object> _toWire = const <String, Object>{
-    'true_': 'true',
-  };
-  static const Map<Object, String> _fromWire = const <Object, String>{
-    'true': 'true_',
-  };
-
-  @override
-  final Iterable<Type> types = const <Type>[ReissuedLinkRotatedEnum];
-  @override
-  final String wireName = 'ReissuedLinkRotatedEnum';
-
-  @override
-  Object serialize(Serializers serializers, ReissuedLinkRotatedEnum object,
-          {FullType specifiedType = FullType.unspecified}) =>
-      _toWire[object.name] ?? object.name;
-
-  @override
-  ReissuedLinkRotatedEnum deserialize(
-          Serializers serializers, Object serialized,
-          {FullType specifiedType = FullType.unspecified}) =>
-      ReissuedLinkRotatedEnum.valueOf(
-          _fromWire[serialized] ?? (serialized is String ? serialized : ''));
-}
-
 class _$ReissuedLink extends ReissuedLink {
   @override
   final String token;
@@ -63,7 +16,7 @@ class _$ReissuedLink extends ReissuedLink {
   @override
   final DateTime tokenIssuedAt;
   @override
-  final ReissuedLinkRotatedEnum rotated;
+  final bool rotated;
 
   factory _$ReissuedLink([void Function(ReissuedLinkBuilder)? updates]) =>
       (ReissuedLinkBuilder()..update(updates))._build();
@@ -138,9 +91,9 @@ class ReissuedLinkBuilder
   set tokenIssuedAt(DateTime? tokenIssuedAt) =>
       _$this._tokenIssuedAt = tokenIssuedAt;
 
-  ReissuedLinkRotatedEnum? _rotated;
-  ReissuedLinkRotatedEnum? get rotated => _$this._rotated;
-  set rotated(ReissuedLinkRotatedEnum? rotated) => _$this._rotated = rotated;
+  bool? _rotated;
+  bool? get rotated => _$this._rotated;
+  set rotated(bool? rotated) => _$this._rotated = rotated;
 
   ReissuedLinkBuilder() {
     ReissuedLink._defaults(this);

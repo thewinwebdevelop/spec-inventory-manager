@@ -104,6 +104,8 @@ OkResponse:
     - ok
   properties:
     ok:
+      # Same reason as `SignupResponse.verified` — a boolean with an `enum`
+      # generates a string-valued EnumClass for Dart. This one is on every
+      # `OkResponse` route (logout, logout-all, …), so it would have broken
+      # those the moment mobile called them for real.
       type: boolean
-      enum:
-        - true

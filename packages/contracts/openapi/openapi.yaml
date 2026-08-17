@@ -1608,8 +1608,6 @@ components:
           type: string
         verified:
           type: boolean
-          enum:
-            - false
     ErrorResponse:
       type: object
       description: |
@@ -1775,8 +1773,6 @@ components:
       properties:
         ok:
           type: boolean
-          enum:
-            - true
     AdminResetRequest:
       type: object
       required:
@@ -2482,8 +2478,6 @@ components:
           format: date-time
         rotated:
           type: boolean
-          enum:
-            - true
     RedeemInvitationRequest:
       type: object
       description: |

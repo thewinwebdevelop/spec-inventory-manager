@@ -1794,3 +1794,34 @@ Postgres + Redis + API จริง (**คนละ database กับ e2e-web**
 · **ยอมรับตรง ๆ ว่า 2 ขั้นยิง API ตรง**: mobile ไม่มี accept-invitation และไม่มี remove-member ใน port (D-012 ลิงก์เปิดบนเว็บ · §7 row action เป็นของ web)
 ⇒ เทสต์ที่แกล้งทำเป็นมีจะเป็นการเทสต์สิ่งที่ไม่มีอยู่ · และ "อีก session ถอดเราออกระหว่างใช้งาน" คือสิ่งที่ AC เขียนไว้พอดี
 · ไม่ขับ navigation ของแอปเอง เพราะ **ยังไม่มี router** (F-006) — เทสต์ประกอบจอแบบที่ router จะทำ และเขียนบอกไว้ว่าวันที่ F-006 ลง ตรงนี้คือสิ่งที่ถูกแทน
+
+### 🔴🔴🔴 เลน emulator รอบแรกที่รันจริง: **สมัครสมาชิกบนมือถือใช้ไม่ได้เลย** — `ApiError(status: 201)`
+
+ทั้ง 3 เคสตายที่ขั้นเดียวกัน (`auth.signup`) ด้วย `ApiError(status: 201, code: null)` — คือ **server ตอบ 201 สำเร็จ แต่ client ถอดรหัส body ไม่ได้**
+
+**ลูกโซ่ (ยาวและน่าสนใจ):**
+1. contract เขียน `SignupResponse.verified: {type: boolean, enum: [false]}` — เจตนาดี แปลว่า "บัญชีใหม่ยังไม่ verified เสมอ"
+2. openapi-generator target **dart-dio** อ่าน `enum` บน boolean แล้วสร้าง **`EnumClass` ที่ wire value เป็น STRING `"false"`**
+3. server ส่ง JSON boolean `false` ⇒ deserialize พัง ⇒ `res.data == null` ⇒ repo โยน `ApiError(201, null)`
+4. **ไม่มีเทสต์ไหนเห็น** เพราะ…
+
+#### 🔴 …fake ถูกแก้ให้ตรงกับ **client** แทนที่จะตรงกับ **server**
+
+```dart
+// เดิมใน auth_repository_impl_test.dart
+'verified': 'false',   // ← สตริง! พร้อมคอมเมนต์อธิบายว่า built_value ต้องการแบบนี้
+{'ok': 'true'}         // ← เหมือนกัน อีก 4 ไฟล์
+```
+
+มีคนเห็นว่า generated model เป็น string enum แล้ว **ปรับ fake ให้ตรงกับมัน** แทนที่จะถามว่า "แล้ว server ส่งอะไรจริง ๆ"
+⇒ เทสต์เขียวเพราะมัน**จำลองบั๊กได้อย่างซื่อสัตย์** · นี่คือรูปแบบที่อันตรายที่สุดของ mock ที่เจอในโปรเจกต์นี้จนถึงตอนนี้
+
+**แก้:** ลบ `enum` ออกจาก boolean **ทั้ง 3 จุด** ในสัญญา (ไม่ใช่แค่จุดที่พัง):
+- `SignupResponse.verified` (พังจริง พิสูจน์แล้ว)
+- `OkResponse.ok` — อยู่บนทุกเส้นที่คืน `OkResponse` (logout, logout-all, change-password) ⇒ **จะพังทันทีที่ mobile เรียกจริง**
+- `ReissuedLink.rotated`
+regen ทั้ง TS + Dart · `bool get verified` แล้ว · แก้ fake 5 ไฟล์ให้ส่ง JSON boolean จริง · TS: `verified: false` → `boolean` (ไม่มีโค้ดไหนอ่าน field นี้)
+
+> **⚠️ นี่คือการแก้ contract ซึ่งเป็นของ backend-api** — ผมลงมือเพราะมันทำให้ generated client **ใช้งานไม่ได้ทั้งเส้น** และ oasdiff ใน CI เป็นคนตัดสินว่า breaking หรือไม่ (docker รันในเครื่องไม่ได้)
+> ถ้า backend-api เห็นต่าง ให้ revert ได้ทันที — แต่ต้องมีทางอื่นให้ Dart client ใช้งานได้ก่อน
+> **บทเรียนเชิงกฎ: อย่าใส่ `enum` บน `boolean` ในสัญญา** — มันคือคอมเมนต์ที่ generator บางตัวอ่านเป็นชนิดข้อมูล
