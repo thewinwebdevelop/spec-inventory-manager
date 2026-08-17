@@ -230,10 +230,16 @@ void main() {
     staffContainer.read(sessionControllerProvider.notifier).switchOrg(
           ActiveOrg(orgId: org.id, name: org.name, capabilities: const {}),
         );
-    // They are really in: an org-scoped read succeeds before the removal, so
-    // the refusal below cannot be mistaken for "this never worked".
-    final before = await staffContainer.read(orgScopedRepositoryProvider).listMembers();
-    expect(before.items, isNotEmpty);
+    // ── they are really in, proven with a call THEY may make ─────────────
+    //
+    // ⚠️ `listRoles`, not `listMembers`, and the first version got this wrong.
+    // `GET …/members` requires `manage_members`, so a พนักงาน asking for it
+    // gets `403 FORBIDDEN` — the server being right, and the opposite of what
+    // this line is trying to establish. `GET …/roles` is `@AnyActiveMember()`:
+    // it succeeds for exactly as long as they are a member, which is the
+    // property the removal is about to end.
+    final before = await staffContainer.read(orgScopedRepositoryProvider).listRoles();
+    expect(before, isNotEmpty, reason: 'the invited member cannot reach their own shop');
 
     // ── the removal, from another session ─────────────────────────────────
     final ownerToken = await apiLogin(ownerEmail);
@@ -241,7 +247,9 @@ void main() {
       'Authorization': 'Bearer $ownerToken',
       'X-Organization-Id': org.id,
     };
-    final target = before.items.firstWhere((m) => m.email == staffEmail);
+    // Read through the OWNER's client — they hold `manage_members`.
+    final members = await ownerContainer.read(orgScopedRepositoryProvider).listMembers();
+    final target = members.items.firstWhere((m) => m.email == staffEmail);
     final removed = await api.delete<Map<String, dynamic>>(
       '/orgs/${org.id}/members/${target.userId}',
       options: Options(headers: headers),
@@ -255,11 +263,11 @@ void main() {
     // not a call to `sessionExpired`.
     Object? failure;
     try {
-      await staffContainer.read(orgScopedRepositoryProvider).listMembers();
+      await staffContainer.read(orgScopedRepositoryProvider).listRoles();
     } catch (e) {
       failure = e;
     }
-    expect(failure, isNotNull, reason: 'a removed member could still read the member list');
+    expect(failure, isNotNull, reason: 'a removed member could still reach the shop');
     expect(failure, isA<OrgAccessDeniedFailure>());
 
     staffContainer.read(sessionControllerProvider.notifier).orgAccessDenied();
