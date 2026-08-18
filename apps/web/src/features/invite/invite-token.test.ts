@@ -119,3 +119,56 @@ describe("toInviteError — §11.4's table", () => {
     }
   });
 });
+
+describe("★ B-8 — the refusal names the account to switch to", () => {
+  // FOUND BY E-06 in the browser lane. The screen said "sign in with the
+  // invited account" one step after the screen that had shown WHICH account,
+  // and expected the reader to remember it. The server had been sending the
+  // masked address all along, for this exact purpose (contract §3.15); web
+  // dropped `details` for every `forbidden`.
+  const mismatch = (details?: Record<string, unknown>) =>
+    new ApiRequestError(403, {
+      error: { code: "INVITATION_EMAIL_MISMATCH", message: "x", details },
+    });
+
+  it("uses `details.emailMasked` — and keeps §11.4's instruction with it", () => {
+    const error = toInviteError(mismatch({ emailMasked: "m***@shop.com" }));
+
+    expect(error.title).toBe("บัญชีไม่ตรงกับคำเชิญ");
+    expect(error.body).toContain("m***@shop.com");
+    // Both halves are ux's, verbatim: §11.1's naming sentence and §11.4's
+    // instruction. Neither is replaced by the other.
+    expect(error.body).toContain("คำเชิญนี้ออกให้");
+    expect(error.body).toContain("กรุณาเข้าสู่ระบบด้วยบัญชีที่ถูกเชิญ");
+    // …and the way out is unchanged.
+    expect(error.next.kind).toBe("switch-account");
+  });
+
+  it("★ falls back cleanly when the server sent no masked address", () => {
+    // Older server, or a path that omits it: the screen must still be the
+    // §11.4 refusal, not a half-built sentence with a gap in it.
+    const error = toInviteError(mismatch());
+
+    expect(error.body).toBe("กรุณาเข้าสู่ระบบด้วยบัญชีที่ถูกเชิญ");
+    expect(error.body).not.toContain("undefined");
+    expect(error.next.kind).toBe("switch-account");
+  });
+
+  it("ignores a masked address that is not a usable string", () => {
+    // `details` is `Record<string, unknown>` on the wire — a number or an
+    // empty string must not become part of the copy.
+    for (const bad of [42, "", null, {}]) {
+      const error = toInviteError(mismatch({ emailMasked: bad }));
+      expect(error.body).toBe("กรุณาเข้าสู่ระบบด้วยบัญชีที่ถูกเชิญ");
+    }
+  });
+
+  it("★ no OTHER code grows a masked address", () => {
+    // The composition is scoped to one code on purpose. A generic "append
+    // details to the body" would put server internals into user-facing copy.
+    const otherWithDetails = new ApiRequestError(403, {
+      error: { code: "FORBIDDEN", message: "x", details: { emailMasked: "m***@shop.com" } },
+    });
+    expect(toInviteError(otherWithDetails).body).not.toContain("m***@shop.com");
+  });
+});

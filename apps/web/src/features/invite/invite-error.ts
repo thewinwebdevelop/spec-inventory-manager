@@ -12,6 +12,7 @@
  * what to ask for.
  */
 import { toApiFailure } from "../../lib/api/error";
+import { inviteScreenTh } from "./i18n";
 
 export type InviteNextStep =
   /** Back to the app's front door. */
@@ -82,10 +83,32 @@ const BY_CODE: Readonly<Record<string, InviteError>> = Object.freeze({
   },
   INVITATION_EMAIL_MISMATCH: {
     title: "บัญชีไม่ตรงกับคำเชิญ",
+    // The fallback, for a server that sent no `emailMasked`. When it does send
+    // one, `withMaskedEmail` below names the account — see its note.
     body: "กรุณาเข้าสู่ระบบด้วยบัญชีที่ถูกเชิญ",
     next: { kind: "switch-account" },
   },
 });
+
+/**
+ * ★ B-8 — put the masked address back into the refusal.
+ *
+ * The screen used to say "sign in with the invited account" one step after the
+ * screen that had shown WHICH account, and the reader was expected to remember
+ * it. The server sends `details.emailMasked` for this code specifically "so the
+ * UI can say which account to use" (contract §3.15) and web was dropping it.
+ *
+ * ⚠️ NO NEW WORDING. Both halves are ux's, verbatim: the naming sentence is
+ * §11.1's `issuedTo` ("คำเชิญนี้ออกให้ …", already on the preview screen) and
+ * the instruction is §11.4's existing body. They are joined with the ` · `
+ * separator the other multi-clause copy in this feature uses. Inventing a new
+ * sentence here would be writing copy, which is not this file's job.
+ */
+function withMaskedEmail(error: InviteError, details: Readonly<Record<string, unknown>>): InviteError {
+  const masked = details.emailMasked;
+  if (typeof masked !== "string" || masked.length === 0) return error;
+  return { ...error, body: `${inviteScreenTh.issuedTo(masked)} · ${error.body}` };
+}
 
 const GENERIC: InviteError = Object.freeze({
   title: "เปิดคำเชิญไม่สำเร็จ",
@@ -116,7 +139,19 @@ export function toInviteError(error: unknown): InviteError {
       ? failure.code
       : undefined;
 
-  return (code !== undefined && BY_CODE[code]) || GENERIC;
+  const mapped = (code !== undefined && BY_CODE[code]) || GENERIC;
+
+  // Only the mismatch case has a masked address to add, and only when the
+  // server sent one. Everything else is returned untouched.
+  if (
+    code === "INVITATION_EMAIL_MISMATCH" &&
+    (failure.kind === "forbidden" || failure.kind === "conflict") &&
+    failure.details
+  ) {
+    return withMaskedEmail(mapped, failure.details);
+  }
+
+  return mapped;
 }
 
 /** Codes this screen has bespoke copy for — exported so a test can enumerate them. */

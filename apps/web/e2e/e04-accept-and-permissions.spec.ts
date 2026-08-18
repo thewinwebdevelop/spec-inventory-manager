@@ -79,27 +79,18 @@ test("E-04 · an invited person with an account joins, and appears in the list",
 
   // …and the Owner sees them, with the role the invitation carried — not a
   // default, and not the inviter's own.
+  // ★ NO RELOAD, and that is the assertion.
+  //
+  // This case used to need one: org queries were fresh for 30s app-wide, so
+  // coming back to the screen served the cached list — the invitation still
+  // reading "รอตอบรับ" over "สมาชิกในร้าน (1)" for somebody who had already
+  // joined. B-7. The two lists on this screen now set `staleTime: 0`, because
+  // they exist to report what OTHER people did, and revisiting the screen is
+  // the moment to ask again.
+  //
+  // Removing the workaround is how the fix gets proven: if the caching change
+  // regresses, this line goes red instead of quietly passing.
   await openMembers(ownerPage, orgId);
-
-  // ⚠️ A RELOAD, and it is not padding — it is the one trigger that exists.
-  //
-  // Org queries stay fresh for 30s (`staleTime`, query-client.ts), so coming
-  // back to a screen visited a moment ago serves the CACHED list. On this
-  // screen that means the invitation still reads "รอตอบรับ" and the person who
-  // just joined is missing — the snapshot from the run that caught this shows
-  // exactly that: "คำเชิญที่รอตอบรับ (1)" over "สมาชิกในร้าน (1)". Nothing in
-  // this tab can know better: the accept happened in a different browser, so
-  // no mutation invalidated anything here and `refetchOnWindowFocus` never
-  // fires either.
-  //
-  // Not overridden in the app from a test: 30s was chosen deliberately and the
-  // window self-heals. The user-visible consequence is filed in tasks.md for
-  // ux/frontend. Reloading is what the puzzled Owner does, and it is honest
-  // about what it takes to see the truth.
-  await ownerPage.reload();
-  await expect(
-    ownerPage.getByRole("heading", { name: "สมาชิก", exact: true }),
-  ).toBeVisible({ timeout: 20_000 });
 
   const row = ownerPage.locator("li", { hasText: staffEmail });
   await expect(row).toBeVisible();

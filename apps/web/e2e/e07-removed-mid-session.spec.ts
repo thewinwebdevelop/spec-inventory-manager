@@ -81,13 +81,9 @@ test("S9 · the Owner changes the Staff member's role, and the list says so", as
   // §10.1, through the button W-17 was missing. Runs first because it proves
   // the row's OTHER action reaches its mutation — and because a member whose
   // role just changed is a more interesting one to remove.
+  // No reload — B-7 is fixed: the member and invitation lists refetch when the
+  // screen is opened, because they report what somebody else did.
   await openMembers(ownerPage, orgId);
-  // The 30s `staleTime` again, third time in this lane: the Owner last looked
-  // at this list before the invitation was accepted, so coming back inside the
-  // window shows the cached version — a pending invitation and no new member,
-  // exactly what E-04 hit. A person watching for somebody to join reloads;
-  // so does this test. The finding is in tasks.md, for ux/frontend.
-  await ownerPage.reload();
   const row = ownerPage.locator("li", { hasText: staffEmail });
   await row.getByRole("button", { name: "เปลี่ยนสิทธิ์" }).click();
 
@@ -140,14 +136,14 @@ test("E-07 · removed while inside the shop: refused at once, and sent to the pi
   // ── the next thing the removed person does ──────────────────────────────
   //
   // A click first, because that is what a person in the middle of using the
-  // shop actually does. It is NOT asserted on, and the reason is worth writing
-  // down: org queries are fresh for 30s (`staleTime`, query-client.ts), so a
-  // click inside the shop can be served entirely from cache — no request, no
-  // 403, no eviction. What that costs is bounded (they see data they already
-  // had; every WRITE is refused by the server, which is the control that
-  // matters) but it is real, and it is the same staleness E-04 ran into.
-  // Filed in tasks.md rather than asserted, because pinning it either way
-  // would freeze a decision that belongs to ux/frontend.
+  // shop actually does. It is NOT asserted on, deliberately: the shop PROFILE
+  // query — the one `OrgGuard` reads to decide "am I still in this shop" —
+  // keeps the app-wide 30s freshness, so a click can be served from cache with
+  // no request and no eviction. That is left alone on purpose. B-7's fix is
+  // scoped to the two lists that report other people's actions; the profile is
+  // this shop's own data, and AC-5.1 asks for the NEXT REQUEST to be refused,
+  // which is exactly what happens below. Every write is refused meanwhile,
+  // which is the control that actually matters.
   await staffPage
     .getByRole("navigation", { name: "เมนูของร้าน" })
     .getByRole("link", { name: "ข้อมูลร้าน" })

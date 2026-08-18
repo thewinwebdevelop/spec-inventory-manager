@@ -97,14 +97,21 @@ test("E-06 · joining as the wrong account is refused, and the refusal offers th
   });
   await expect(strangerPage.getByText("กรุณาเข้าสู่ระบบด้วยบัญชีที่ถูกเชิญ")).toBeVisible();
 
-  // ⚠️ NOT asserted here, on purpose: §12.1 words E-06 as the refusal SAYING
-  // `u***@…`, and it does not. The server sends `details.emailMasked` for this
-  // code precisely "so the UI can say which account to use" (contract §3.15),
-  // web's `toApiFailure` drops `details` for `forbidden`, and §11.4's sentence
-  // says "that account" without naming it — so the reader is told to switch to
-  // an account the screen no longer identifies, one step after a screen that
-  // did. Left unasserted rather than pinned, so that fixing it does not turn
-  // this case red. Filed in tasks.md for ux (copy) + frontend (plumbing).
+  // ★ AND IT NAMES THE ACCOUNT (B-8, fixed 2026-08-18).
+  //
+  // This assertion did not exist when the case was written: the refusal used to
+  // say "sign in with the invited account" one step after the screen that had
+  // shown WHICH account, and expected the reader to remember. The server had
+  // been sending `details.emailMasked` all along for exactly this (§3.15) and
+  // web dropped `details` for every `forbidden`.
+  await expect(
+    strangerPage.getByText(/คำเชิญนี้ออกให้/),
+    "the refusal does not say which account to switch to — B-8 has regressed",
+  ).toBeVisible();
+
+  // …still MASKED, which is the other half. Naming the account must not turn
+  // into disclosing it: the reader is, by definition, not that person.
+  await expect(strangerPage.getByText(invitee, { exact: false })).toHaveCount(0);
   // A dead end here would be cruel: they cannot fix this from this screen
   // without an account switch, so the screen has to offer one.
   await expect(

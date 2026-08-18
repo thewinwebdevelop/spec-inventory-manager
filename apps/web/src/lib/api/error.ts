@@ -52,8 +52,17 @@ export type ApiFailure =
   /** 403 ORG_ACCESS_DENIED — not an active member (removed / never was / org
    * does not exist). Leave the org, go to the picker, refetch the org list. */
   | { kind: "org-access-denied" }
-  /** 403 FORBIDDEN — a member who may not do THIS. Stay on the page. */
-  | { kind: "forbidden"; code?: string }
+  /**
+   * 403 FORBIDDEN — a member who may not do THIS. Stay on the page.
+   *
+   * `details` is carried for the same reason `conflict` carries it: the server
+   * sends code-specific context that the copy needs. B-8 was this field being
+   * dropped — `INVITATION_EMAIL_MISMATCH` arrives with `details.emailMasked`
+   * precisely "so the UI can say which account to use" (contract §3.15), and
+   * the screen ended up telling people to switch to an account it could no
+   * longer name.
+   */
+  | { kind: "forbidden"; code?: string; details?: Readonly<Record<string, unknown>> }
   /** 403 from the entitlement layer (F-007) — show the upgrade CTA. */
   | { kind: "entitlement"; feature?: string }
   /** 422. `ORG_MISMATCH`/`ORG_CONTEXT_REQUIRED` land here on purpose: they are
@@ -110,7 +119,7 @@ function fromStatus(err: ApiError): ApiFailure {
     // Order matters: the specific code first, the catch-all after. A 403 with
     // no code at all is treated as FORBIDDEN — the non-destructive reading.
     if (code === ERROR_CODE.ORG_ACCESS_DENIED) return { kind: "org-access-denied" };
-    return { kind: "forbidden", code };
+    return { kind: "forbidden", code, details: detailsOf(err) };
   }
 
   if (err.status === 404) return { kind: "not-found", code };

@@ -117,27 +117,45 @@ export const BUILD_DEFECTS: readonly BuildDefect[] = Object.freeze([
   // ── open, and owned by somebody else ──────────────────────────────────────
   {
     finding: "B-7",
-    title: "the members list is 30s stale after somebody accepts an invitation",
-    tier: "none",
+    title: "the members list was 30s stale after somebody accepted an invitation",
+    tier: "smoke",
     foundBy: "E-04, then S9, then E-07 — three files before it was believed",
     owner: "ux + frontend",
-    noTest:
-      "OPEN by decision, not by omission. `staleTime: 30_000` is a deliberate default and the " +
-      "window heals itself; whether the members screen — the one screen whose data is MEANT to " +
-      "change from outside this browser — should override it is ux/frontend's call. Pinning " +
-      "either behaviour now would freeze that decision. The three E2E files reload and say why.",
+    partial:
+      "CLOSED as a caching policy on TWO queries, not app-wide. `useMembers` and `useInvitations` " +
+      "set `staleTime: 0` because they exist to report what somebody ELSE did, on another " +
+      "machine; the 30s default stays everywhere else, including the org PROFILE query that " +
+      "`OrgGuard` reads — a removed member is still evicted on their next real request (AC-5.1), " +
+      "which is what that AC asks for. The three E2E files had a `reload()` workaround; removing " +
+      "it is how the fix is proven, so a regression reddens them instead of passing quietly.",
+    pins: [
+      {
+        file: "apps/web/src/features/org/api/use-members.staleness.test.tsx",
+        must: ["staleTime", "B-7"],
+      },
+      { file: "apps/web/e2e/e04-accept-and-permissions.spec.ts", must: ["NO RELOAD"] },
+    ],
   },
   {
     finding: "B-8",
-    title: "the wrong-account refusal drops `details.emailMasked`, so it names no account to switch to",
-    tier: "none",
+    title: "the wrong-account refusal dropped `details.emailMasked`, so it named no account",
+    tier: "smoke",
     foundBy: "E-06, browser lane",
-    owner: "ux (copy) + frontend (plumbing)",
-    noTest:
-      "OPEN. The server sends `emailMasked` for this code precisely so the UI can say which " +
-      "account to use; web's `toApiFailure` drops `details` for `forbidden` and §11.4's sentence " +
-      "says 'that account' without naming it. Deliberately NOT asserted either way in e06, so " +
-      "that fixing it does not turn a case red.",
+    owner: "ux + frontend",
+    partial:
+      "CLOSED with NO new copy. `toApiFailure` now carries `details` on the `forbidden` kind — " +
+      "the same reason `conflict` already carried it — and the mismatch body composes two " +
+      "sentences ux had already approved: §11.1's `issuedTo` naming line and §11.4's existing " +
+      "instruction. Scoped to that one code on purpose; a generic 'append details to the copy' " +
+      "would put server internals in front of users. Falls back to the bare §11.4 sentence when " +
+      "the server sends no masked address.",
+    pins: [
+      {
+        file: "apps/web/src/features/invite/invite-token.test.ts",
+        must: ["B-8", "emailMasked"],
+      },
+      { file: "apps/web/e2e/e06-wrong-account.spec.ts", must: ["B-8"] },
+    ],
   },
   {
     finding: "B-9",
