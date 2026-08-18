@@ -7,6 +7,7 @@ import {
   login,
   openMembers,
   readShared,
+  reopenMembers,
   resetIpThrottle,
   signUpAndLogin,
 } from "./helpers";
@@ -81,9 +82,10 @@ test("S9 · the Owner changes the Staff member's role, and the list says so", as
   // §10.1, through the button W-17 was missing. Runs first because it proves
   // the row's OTHER action reaches its mutation — and because a member whose
   // role just changed is a more interesting one to remove.
-  // No reload — B-7 is fixed: the member and invitation lists refetch when the
-  // screen is opened, because they report what somebody else did.
-  await openMembers(ownerPage, orgId);
+  // Left and came back (B-7): the lists refetch when the screen MOUNTS, and a
+  // click on the route we are already on does not mount anything. See
+  // `reopenMembers`.
+  await reopenMembers(ownerPage, orgId);
   const row = ownerPage.locator("li", { hasText: staffEmail });
   await row.getByRole("button", { name: "เปลี่ยนสิทธิ์" }).click();
 

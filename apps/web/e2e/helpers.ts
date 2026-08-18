@@ -160,6 +160,29 @@ export async function openMembers(page: Page, orgId: string): Promise<void> {
  * caller's own capabilities (D-028/C-1), so passing the label is closer to
  * what the person actually picks than an id would be.
  */
+/**
+ * Leaves the members screen and comes back — the way a person does.
+ *
+ * ⚠️ WHY THIS EXISTS AND `openMembers` IS NOT ENOUGH. `openMembers` clicks the
+ * nav entry, and when the page is ALREADY on that route the click changes
+ * nothing: no unmount, no mount, no query. B-7 made the two lists refetch when
+ * the screen is opened (`staleTime: 0`), and "opened" means MOUNTED. A test
+ * that clicks a link to the page it is already on proves nothing about that,
+ * and the first run after the fix said so — the snapshot still read
+ * "คำเชิญที่รอตอบรับ (1)" over "สมาชิกในร้าน (1)".
+ *
+ * The round trip through another screen is what an Owner actually does between
+ * sending a link and checking whether it was accepted. Switching to LINE and
+ * back is the other one, and that path works too now: `refetchOnWindowFocus`
+ * was already on, but the 30s freshness used to swallow it.
+ */
+export async function reopenMembers(page: Page, orgId: string): Promise<void> {
+  const nav = page.getByRole("navigation", { name: "เมนูของร้าน" });
+  await nav.getByRole("link", { name: "ข้อมูลร้าน" }).click();
+  await expect(page.getByRole("heading", { name: "ข้อมูลร้าน" })).toBeVisible({ timeout: 20_000 });
+  await openMembers(page, orgId);
+}
+
 export async function invite(page: Page, email: string, roleName: string): Promise<string> {
   await page.getByRole("button", { name: "เชิญสมาชิก" }).first().click();
 

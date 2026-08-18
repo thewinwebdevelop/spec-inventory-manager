@@ -7,6 +7,7 @@ import {
   login,
   openMembers,
   readShared,
+  reopenMembers,
   signUpAndLogin,  resetIpThrottle,
 } from "./helpers";
 
@@ -79,18 +80,17 @@ test("E-04 · an invited person with an account joins, and appears in the list",
 
   // …and the Owner sees them, with the role the invitation carried — not a
   // default, and not the inviter's own.
-  // ★ NO RELOAD, and that is the assertion.
+  // ★ A ROUND TRIP, not a reload — and not a click on the page we are already
+  // on either, which was this test's first attempt after B-7 and proved
+  // nothing: clicking the nav entry for the current route does not remount the
+  // screen, so no query runs. `reopenMembers` leaves and comes back, which is
+  // what an Owner does between sending a link and checking on it.
   //
-  // This case used to need one: org queries were fresh for 30s app-wide, so
-  // coming back to the screen served the cached list — the invitation still
-  // reading "รอตอบรับ" over "สมาชิกในร้าน (1)" for somebody who had already
-  // joined. B-7. The two lists on this screen now set `staleTime: 0`, because
-  // they exist to report what OTHER people did, and revisiting the screen is
-  // the moment to ask again.
-  //
-  // Removing the workaround is how the fix gets proven: if the caching change
-  // regresses, this line goes red instead of quietly passing.
-  await openMembers(ownerPage, orgId);
+  // Before B-7 this still showed the cached list — 30s freshness app-wide —
+  // and the workaround was `reload()`. Doing it by navigation instead is how
+  // the fix gets proven: a regression reddens this line rather than passing
+  // quietly behind a full page load.
+  await reopenMembers(ownerPage, orgId);
 
   const row = ownerPage.locator("li", { hasText: staffEmail });
   await expect(row).toBeVisible();

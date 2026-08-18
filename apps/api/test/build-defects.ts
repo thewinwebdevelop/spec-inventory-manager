@@ -126,14 +126,24 @@ export const BUILD_DEFECTS: readonly BuildDefect[] = Object.freeze([
       "set `staleTime: 0` because they exist to report what somebody ELSE did, on another " +
       "machine; the 30s default stays everywhere else, including the org PROFILE query that " +
       "`OrgGuard` reads — a removed member is still evicted on their next real request (AC-5.1), " +
-      "which is what that AC asks for. The three E2E files had a `reload()` workaround; removing " +
-      "it is how the fix is proven, so a regression reddens them instead of passing quietly.",
+      "which is what that AC asks for. " +
+      "SCOPE, stated plainly: this makes the lists fresh whenever the screen is MOUNTED — coming " +
+      "back to it, or returning to the tab (`refetchOnWindowFocus`, which the 30s window used to " +
+      "swallow, and which is the LINE round trip). It does NOT update a screen somebody is " +
+      "sitting on without touching anything; that needs polling, which is a product decision " +
+      "about requests and battery that nobody has taken. The E2E proof is a navigation round " +
+      "trip rather than a `reload()`, because a reload would pass even if the fix were reverted.",
     pins: [
       {
         file: "apps/web/src/features/org/api/use-members.staleness.test.tsx",
         must: ["staleTime", "B-7"],
       },
-      { file: "apps/web/e2e/e04-accept-and-permissions.spec.ts", must: ["NO RELOAD"] },
+      // Pinned on the MECHANISM, not on a sentence: the first version of this
+      // pin quoted a comment ("NO RELOAD") that I then rewrote, and the gate
+      // caught it — which is the gate working, and a lesson about what a pin
+      // should name. `reopenMembers` is the thing that would have to disappear
+      // for the coverage to disappear.
+      { file: "apps/web/e2e/e04-accept-and-permissions.spec.ts", must: ["reopenMembers"] },
     ],
   },
   {
