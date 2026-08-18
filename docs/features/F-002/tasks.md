@@ -1993,3 +1993,26 @@ final before = await staffContainer...listMembers();   // ← พนักงา
 และ test-plan เองรู้อยู่แล้วที่ **§13 ข้อ 3**: *"เพิ่ม lane ... ตอนที่จอ tax profile ลง mobile จริง (ยังไม่มีใน F-002)"*
 ⇒ **§12.2 ขัดกับ §13 ในเอกสารฉบับเดียวกัน** · ข้อเสนอ: M-07 เป็น N/A ของ F-002 แล้วผูกกับ feature ที่เอาจอภาษีขึ้น mobile
 · **ไม่แก้ให้เพราะ test-plan เป็นของ qa** — เขียนไว้พร้อมหลักฐานเพื่อให้ตัดสินได้ในนาทีเดียว
+
+### B-10 ครึ่งแรกปิดแล้ว: **กับดักหายไป** (แต่สาเหตุยังอยู่ และเป็นของเจ้าของอื่น) — 2026-08-18
+
+reproduce ในเครื่องก่อนแก้ ไม่ได้เชื่อโน้ตเก่าของตัวเอง:
+
+```
+$ node dist/main.js        → SyntaxError: Unexpected token 'export'
+                             at packages/config/src/index.ts:8
+$ tsx  dist/main.js        → Invalid environment variables: DATABASE_URL is required …
+                             (= แอปโหลดครบแล้ว เหลือแค่ env)
+```
+
+**แก้ script (ไม่เพิ่ม dependency):** `start` → `tsx dist/main.js` (ชุดที่ CI พิสูจน์ทุกวัน) ·
+`dev` → `tsc && tsx dist/main.js` เพราะของเดิม `tsx watch src/main.ts` **บูตขึ้นแล้ว DI พังเงียบ ๆ**
+(esbuild ไม่ปล่อย `design:paramtypes` — repo นี้รู้อยู่แล้ว: `vitest.config.ts` ถึงต้องรันผ่าน SWC และเรียกมันว่า "the ThrottleService-into-controller bug")
+· เพิ่ม `dev:compile:watch` + `dev:run:watch` ไว้ให้คนที่อยาก watch จริง ๆ รันสองเทอร์มินัล — **ไม่แอบเพิ่ม process runner เข้ามาเป็น dependency**
+
+**เทสต์ `run-scripts.test.ts`** จับ**ทั้งสองกับดัก**พร้อมเหตุผลของแต่ละอัน + SELF-CHECK + ยืนยันว่า `start` ตรงกับคำสั่งใน CI เป๊ะ
+· **mutation แล้ว**: เปลี่ยน `start` กลับเป็น `node dist/main.js` ⇒ แดง 2 เคส พร้อมข้อความว่าทำไม
+
+**ครึ่งหลังยังเปิด และไม่ใช่ของผม:** `config` · `contracts` · `db` ยัง ship TypeScript source (`"main": "src/index.ts"`)
+ขณะที่ `core-domain` · `connectors` ship `dist/index.js` แล้ว ⇒ ตราบใดที่ยังไม่ทำให้เหมือนกัน `node dist/main.js` ตรง ๆ จะใช้ไม่ได้
+และ `tsx` จะเป็น runtime dependency ต่อไป — **packaging decision ของ devops + backend-api**

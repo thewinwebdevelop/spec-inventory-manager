@@ -156,14 +156,22 @@ export const BUILD_DEFECTS: readonly BuildDefect[] = Object.freeze([
   },
   {
     finding: "B-10",
-    title: "neither `dev` nor `start` can run the API (config ships TS source; tsx emits no decorator metadata)",
-    tier: "none",
+    title: "neither `dev` nor `start` could run the API (config ships TS source; tsx emits no decorator metadata)",
+    tier: "full",
     foundBy: "booting the stack for the browser lane",
     owner: "devops + backend-api",
-    noTest:
-      "OPEN. `node dist/main.js` dies on @omnistock/config's TypeScript source; `tsx src/main.ts` " +
-      "boots and then every injected constructor parameter is undefined, because esbuild emits no " +
-      "`design:paramtypes`. CI works around it with `tsx dist/main.js` and the workflow says so at " +
-      "length. A packaging decision, not a test.",
+    partial:
+      "HALF closed, and the halves are different jobs. The TRAP is gone — `start` and every " +
+      "`dev*` script now boot the compiled entry through tsx, the combination CI runs green, and " +
+      "the test below fails if either broken form comes back. The CAUSE is untouched: three of " +
+      "the four workspace packages the API depends on ship TypeScript source, and until they " +
+      "emit `dist/` like core-domain and connectors already do, plain `node dist/main.js` cannot " +
+      "work and tsx stays a runtime dependency. That is a packaging decision for its owners.",
+    pins: [
+      {
+        file: "apps/api/test/run-scripts.test.ts",
+        must: ["design:paramtypes", "ships TypeScript source"],
+      },
+    ],
   },
 ]);

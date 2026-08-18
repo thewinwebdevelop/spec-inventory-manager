@@ -10,13 +10,15 @@
 
 ## 0. ยกสแตกขึ้นมาในเครื่อง
 
-⚠️ **อย่าใช้ `pnpm dev` และอย่าใช้ `pnpm start` กับ API** — ทั้งคู่รัน API ไม่ขึ้น และนี่คือ B-10 ที่ยังเปิดค้าง:
+✅ **อัปเดต 2026-08-18:** `pnpm --filter api dev` และ `start` **ใช้ได้แล้ว** — script ถูกแก้ให้บูตไฟล์ที่ compile แล้วผ่าน `tsx`
+(ชุดเดียวกับที่ CI รันเขียว) และมีเทสต์ `run-scripts.test.ts` กันไม่ให้กลับไปพังอีก
+· ด้านล่างคือ**สาเหตุ**ที่ยังอยู่ (packaging — B-10 ครึ่งหลัง) เก็บไว้เพราะมันอธิบายว่าทำไม `node dist/main.js` ตรง ๆ ยังใช้ไม่ได้:
 
 - `node dist/main.js` (`start`) ตายที่ `@omnistock/config` เพราะ package นั้นส่ง TypeScript source มาให้ Node ตรง ๆ
 - `tsx src/main.ts` (`dev`) บูตขึ้น แล้ว **ทุก constructor parameter ที่ inject เป็น `undefined`** เพราะ esbuild
   ไม่ปล่อย `design:paramtypes` ให้ DI ของ Nest อ่าน — request แรกตายที่ `Cannot read properties of undefined (reading 'checkIp')`
 
-ชุดที่ **ใช้ได้จริง** (คือชุดที่ job `e2e-web` รันแล้วเขียวทุกวัน):
+ชุดที่ **ใช้ได้จริง** (คือชุดที่ job `e2e-web` รันแล้วเขียวทุกวัน · ตอนนี้ `pnpm --filter api start` ก็คือคำสั่งเดียวกันแล้ว):
 
 ```bash
 # 1. Postgres + Redis

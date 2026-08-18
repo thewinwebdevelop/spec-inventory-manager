@@ -9,8 +9,10 @@
     "test": "vitest run",
     "test:integration": "vitest run int.test",
     "depcruise": "omnistock-api-boundaries",
-    "dev": "tsx watch src/main.ts",
-    "start": "node dist/main.js",
+    "dev": "tsc -p tsconfig.json && tsx dist/main.js",
+    "dev:compile:watch": "tsc -p tsconfig.json --watch --preserveWatchOutput",
+    "dev:run:watch": "tsx watch dist/main.js",
+    "start": "tsx dist/main.js",
     "check-env": "tsx scripts/check-env.ts"
   },
   "dependencies": {
