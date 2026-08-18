@@ -23,7 +23,7 @@
 //
 // Back-office exception (docs/02-architecture.md §5): the cross-org admin path
 // is a SEPARATE seam (`/admin/...` + super-admin guard), never this one.
-import { Prisma } from "./generated/client";
+import { Prisma } from "../generated/client";
 import { isOrgScopedModel, ORGANIZATION_MODEL, ORG_AGNOSTIC_MODELS } from "./org-models";
 
 /**

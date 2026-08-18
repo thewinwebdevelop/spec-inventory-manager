@@ -15,7 +15,7 @@
 // interleave (no lost update) — the §5/§5.1 invariant, end to end.
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { ORG_TX_TIMEOUTS } from "@omnistock/config";
-import { PrismaClient } from "./generated/client";
+import { PrismaClient } from "../generated/client";
 import { OrgBusyError, lockCurrentOrganization, runInOrgLockTransaction, runWithOrgContext } from "./org-lock";
 
 // Same convention as tenancy.db.test.ts (and apps/api's *.int.test.ts): gate on

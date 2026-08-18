@@ -15,7 +15,7 @@
 // of three required layers (U-DB-11 + G-02 + I-09ช) — not a substitute for them.
 
 import { describe, expect, it } from "vitest";
-import { Prisma } from "./generated/client";
+import { Prisma } from "../generated/client";
 import { USER_SELECT } from "./user-select";
 
 const userModel = Prisma.dmmf.datamodel.models.find((m) => m.name === "User");

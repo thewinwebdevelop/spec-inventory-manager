@@ -10,7 +10,7 @@
  * Spec: docs/features/F-000/test-plan.md §3–5. Needs DATABASE_URL.
  * Exit 0 = all pass; exit 1 = one or more AC failed (prints an AC-by-AC verdict).
  */
-import { PrismaClient } from "./generated/client";
+import { PrismaClient } from "../generated/client";
 import { ledgerGuardExtension, LedgerImmutableError } from "./ledger-guard";
 import { ORG_AGNOSTIC_MODELS } from "./org-models";
 

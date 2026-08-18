@@ -2113,3 +2113,36 @@ web's S7 **filter ตัวเลือกเจ้าของร้านอ�
 ⇒ web เปลี่ยนเป็น show-but-disable · **ใช้ประโยค helper ของ mobile คำต่อคำ** (`"เฉพาะเจ้าของร้านเท่านั้นที่ตั้งเจ้าของร้านคนใหม่ได้"`) — สองแพลตฟอร์มตอบคำถามเดียวกันด้วยคำเดียวกัน
 
 web 331 · mobile org 118 เขียว · TS+Dart client regen แล้ว · รอ `oasdiff` ตัดสินว่า additive
+
+## B-10 ครึ่งหลังปิดแล้ว — `node dist/main.js` รันได้จริง (2026-08-19)
+
+```
+$ node dist/main.js
+Invalid environment variables:
+  - DATABASE_URL: DATABASE_URL is required     ← แอปโหลดครบทั้งก้อนแล้ว เหลือแค่ config
+```
+
+**ขอบเขตจริง: 2 package ไม่ใช่ 3** — ไล่ดูจาก `dist` ที่ compile แล้วว่า require อะไรจริง:
+`core-domain` (28 จุด · ship dist อยู่แล้ว) · `db` (16) · `config` (11) · **`contracts` = 0** เพราะ API ใช้ `import type` เท่านั้น ⇒ ไม่ต้องแตะ
+
+**การตัดสินใจที่สำคัญที่สุด: ย้าย Prisma client ออกจาก `src/`** ไป `packages/db/generated/`
+· `src/` กับ `dist/` เป็น sibling ⇒ `../generated/client` resolve ไปที่เดียวกันทั้งจากซอร์สและจากไฟล์ที่ compile แล้ว
+· **ทางเลือกที่ diff เล็กกว่าคือ copy client เข้า `dist/` ตอน build — และนั่นคือทางที่อันตรายกว่า**: จะมี client 2 ชุด และชุดหนึ่งเก่ากว่า schema ได้เงียบ ๆ
+⇒ เลือกทางที่ diff ใหญ่กว่าแต่**ไม่มีโอกาสมีสำเนาที่สอง**
+
+**`tsconfig.build.json` แยกจาก `tsconfig.json`** ทั้งสอง package: ตัวเดิมยัง `noEmit` + include ไฟล์เทสต์ (typecheck/vitest อ่านตัวนั้น) · ตัวใหม่ ship เฉพาะไฟล์ runtime
+⇒ กัน `*.test.ts` และ `*.compile-test.ts` (ไฟล์ที่ตั้งใจให้พังตอน compile) หลุดเข้า `dist/`
+
+#### ⚠️ กับดักที่เกือบเขียวในเครื่องผมแล้วแดงในทุกเครื่องอื่น
+
+build ครั้งแรกที่ไม่ใส่ `types` **ผ่านในเครื่องผม** · `--traceResolution` บอกว่ามันไปเจอ @types/node ที่ **`/Users/tar/node_modules`** — นอก repo ทั้งก้อน
+⇒ ใส่ `"types": ["node"]` + ประกาศ `@types/node` เป็น devDependency ของ 2 package นั้น (เวอร์ชันเดียวกับที่ apps ใช้อยู่ `^22.10.2` — ไม่ใช่ package ใหม่ของ repo แต่**ขอแจ้งไว้เพราะ Gate E บังคับ**)
+· ค้นพบระหว่างทาง: `tsconfig.json` ของ config ที่ใช้ `"types": []` typecheck ผ่านได้**เพราะมีไฟล์เทสต์อยู่ใน program** และ types ของ vitest อ้าง Node ต่อ — เส้นทางที่ config ตัว emit สืบทอดไม่ได้
+
+**scripts + CI:** `start` → `node dist/main.js` · `dev` → `tsc && node dist/main.js` · `dev:run:watch` → `node --watch` · **CI เลิกใช้คำสั่งที่มีอยู่แค่ในไฟล์ workflow แล้วรัน `pnpm --filter api start` ของ repo เอง** — CI จึงพิสูจน์คำสั่งที่คนพิมพ์จริง
+
+**`run-scripts.test.ts` ถูกกลับข้าง** (ครั้งที่ 2 ในเซสชันนี้ที่ guard ทำนายการกลับข้างของตัวเองถูก): ห้าม `tsx` ใน boot path แล้ว
+· เพิ่ม guard ของ **สาเหตุ** ไม่ใช่แค่อาการ: ไล่ `package.json` ของทุก package ที่ API โหลด runtime แล้วยืนยันว่า `main` ลงท้าย `.js`
+· **mutation แล้ว**: คืน `config.main` เป็น `src/index.ts` ⇒ แดงพร้อมชื่อ package
+
+api 680 tests เขียว · db/config/core-domain/contracts เขียว · typecheck+lint สะอาด

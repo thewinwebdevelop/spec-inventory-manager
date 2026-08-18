@@ -481,12 +481,12 @@ jobs:
           pnpm --filter @omnistock/db exec prisma generate
           pnpm --filter @omnistock/db exec prisma migrate deploy
           pnpm --filter @omnistock/db exec prisma db seed
-      # The compiled entry through tsx — same reasoning as e2e-web, where the
-      # two failure modes of `start` and `dev` are written out in full.
+      # The repo's own `start` script (`node dist/main.js`) — see e2e-web for
+      # what this used to have to be, and why B-10 changed it.
       - name: boot apps/api in the background
         env:
           NODE_ENV: test
-        run: pnpm --filter api exec tsx dist/main.js &>/tmp/api.log &
+        run: pnpm --filter api start &>/tmp/api.log &
       - name: wait for the API to answer
         run: |
           for i in $(seq 1 60); do
@@ -668,30 +668,23 @@ jobs:
           pnpm --filter @omnistock/db exec prisma generate
           pnpm --filter @omnistock/db exec prisma migrate deploy
           pnpm --filter @omnistock/db exec prisma db seed
-      # ⚠️ `tsx dist/main.js` — the COMPILED entry, loaded through tsx. Neither
-      # half of that is arbitrary, and between them they name two real gaps
-      # (both filed in tasks.md, T-002-Q5):
+      # ✅ `pnpm --filter api start`, which is now `node dist/main.js`.
       #
-      #   `node dist/main.js` (the repo's `start` script) dies with
-      #   ERR_MODULE_NOT_FOUND on `packages/config/src/env`: @omnistock/config
-      #   ships TypeScript source, which plain Node cannot load. → tsx resolves
-      #   it.
+      # This used to be `tsx dist/main.js` with twenty lines explaining why
+      # neither `dev` nor `start` could run the API: `@omnistock/config` and
+      # `@omnistock/db` shipped TypeScript source, so plain Node died on the
+      # first `export` it met, and `tsx src/main.ts` booted into a DI graph full
+      # of `undefined` because esbuild emits no `design:paramtypes`.
       #
-      #   `tsx src/main.ts` (the repo's `dev` script) boots, and then every
-      #   typed constructor parameter is `undefined` — esbuild does not emit
-      #   `design:paramtypes`, so Nest's DI has nothing to resolve. The first
-      #   request died on `Cannot read properties of undefined (reading
-      #   'checkIp')`. apps/api's own vitest config documents this exact bug
-      #   ("the ThrottleService-into-controller bug") and fixes it for the test
-      #   lane with SWC — nothing fixes it for the app. → tsc's output has the
-      #   metadata.
-      #
-      # So the compiled entry supplies the metadata and tsx supplies the
-      # resolution. Neither `dev` nor `start` can run this API as it stands.
+      # B-10 closed both. The packages emit `dist/` like `core-domain` always
+      # did, the compiled entry keeps the decorator metadata, and there is no
+      # TypeScript loader in the boot path at all. Running the repo's own
+      # `start` script — rather than a command that exists only in this file —
+      # is the point: CI now proves the thing a person types.
       - name: boot apps/api in the background
         env:
           NODE_ENV: test
-        run: pnpm --filter api exec tsx dist/main.js &>/tmp/api.log &
+        run: pnpm --filter api start &>/tmp/api.log &
       - name: wait for the API to answer
         run: |
           for i in $(seq 1 60); do

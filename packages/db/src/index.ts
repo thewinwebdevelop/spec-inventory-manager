@@ -3,7 +3,7 @@
 // prisma/schema.prisma (19 tables per docs/features/F-000/data-model.md) into
 // src/generated/client via `pnpm db:generate`. Ledger-immutability trigger
 // migration lands in T-000-05.
-export * from "./generated/client";
+export * from "../generated/client";
 
 // Ledger immutability — Layer 1 app-side guard (F-000 · T-000-05).
 // Layer 2 (the guarantee) is the DB trigger in the ledger_immutability migration.

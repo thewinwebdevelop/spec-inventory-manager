@@ -14,7 +14,7 @@
 // FIRST, so the probe observes post-injection args.
 
 import { describe, expect, it } from "vitest";
-import { Prisma, PrismaClient } from "./generated/client";
+import { Prisma, PrismaClient } from "../generated/client";
 import {
   applyOrgScope,
   MissingOrgContextError,

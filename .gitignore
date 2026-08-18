@@ -16,7 +16,7 @@ build/
 
 # prisma
 *.db
-packages/db/src/generated/
+packages/db/generated/
 
 # flutter
 apps/mobile/.dart_tool/

@@ -198,22 +198,26 @@ export const BUILD_DEFECTS: readonly BuildDefect[] = Object.freeze([
   },
   {
     finding: "B-10",
-    title: "neither `dev` nor `start` could run the API (config ships TS source; tsx emits no decorator metadata)",
-    tier: "full",
+    title: "neither `dev` nor `start` could run the API (config shipped TS source; tsx emits no decorator metadata)",
+    tier: "smoke",
     foundBy: "booting the stack for the browser lane",
     owner: "devops + backend-api",
     partial:
-      "HALF closed, and the halves are different jobs. The TRAP is gone — `start` and every " +
-      "`dev*` script now boot the compiled entry through tsx, the combination CI runs green, and " +
-      "the test below fails if either broken form comes back. The CAUSE is untouched: three of " +
-      "the four workspace packages the API depends on ship TypeScript source, and until they " +
-      "emit `dist/` like core-domain and connectors already do, plain `node dist/main.js` cannot " +
-      "work and tsx stays a runtime dependency. That is a packaging decision for its owners.",
+      "CLOSED, both halves. The trap: `start`/`dev` now boot the compiled entry with plain " +
+      "`node`, and the guard bans a TypeScript loader in the boot path entirely. The cause: " +
+      "`@omnistock/config` and `@omnistock/db` emit `dist/` like `core-domain` and `connectors` " +
+      "always did, so `node dist/main.js` loads the application and stops at " +
+      "\"DATABASE_URL is required\" — a configuration failure, not a loader failure. " +
+      "`@omnistock/contracts` still ships source ON PURPOSE: the API imports it with " +
+      "`import type` only, so it never reaches the runtime. " +
+      "The Prisma client moved from `src/generated/` to `generated/` at the package root, which " +
+      "is what lets one directory serve both `src/` and `dist/` — the alternative was copying it " +
+      "into `dist/` at build time, i.e. two clients with one of them free to go stale against " +
+      "the schema. CI now runs the repo's own `start` script rather than a command that existed " +
+      "only in the workflow.",
     pins: [
-      {
-        file: "apps/api/test/run-scripts.test.ts",
-        must: ["design:paramtypes", "ships TypeScript source"],
-      },
+      // Mechanisms, not sentences — the lesson from B-7's stale pin.
+      { file: "apps/api/test/run-scripts.test.ts", must: ["design:paramtypes", "RUNTIME_PACKAGES"] },
     ],
   },
 ]);

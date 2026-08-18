@@ -11,13 +11,7 @@
 
 generator client {
   provider = "prisma-client-js"
-  // ★ B-10 — OUTSIDE `src/`, deliberately. `src/` and `dist/` are siblings, so
-  // `../generated/client` resolves to the same directory from a TypeScript
-  // source file and from its compiled output. That is what lets this package
-  // ship `dist/` (so plain `node` can load it) without copying the generated
-  // client into `dist/` as well — and a copy is the thing to avoid: two
-  // clients, one of them silently older than the schema.
-  output   = "../generated/client"
+  output   = "../src/generated/client"
 }
 
 datasource db {

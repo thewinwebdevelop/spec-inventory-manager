@@ -18,7 +18,7 @@
 // ledger guard -> feed the result into withOrgScope) using only
 // `@omnistock/db` exports, so the seam is pinned without this package
 // depending on `apps/api`.
-import { PrismaClient } from "./generated/client";
+import { PrismaClient } from "../generated/client";
 import { ledgerGuardExtension } from "./ledger-guard";
 import { withOrgScope, type OrgScopeContext } from "./tenancy";
 

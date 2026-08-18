@@ -18,7 +18,7 @@
 //     extension was supposed to cover it. USER_SELECT (U-DB-11) is the fix.
 
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
-import { Prisma, PrismaClient } from "./generated/client";
+import { Prisma, PrismaClient } from "../generated/client";
 import { withOrgScope, OrgScopeViolationError } from "./tenancy";
 import { USER_SELECT } from "./user-select";
 

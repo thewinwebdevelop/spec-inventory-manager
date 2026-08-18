@@ -11,7 +11,7 @@
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
 import { describe, expect, it } from "vitest";
-import { Prisma } from "./generated/client";
+import { Prisma } from "../generated/client";
 
 const MIGRATIONS = join(__dirname, "..", "prisma", "migrations");
 const EXPAND = readFileSync(

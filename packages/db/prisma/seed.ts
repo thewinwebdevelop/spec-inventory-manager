@@ -13,7 +13,7 @@
 // Idempotent by construction: `upsert` keyed on the unique `PlanDefinition.key` column,
 // so running this script any number of times converges on exactly these 4 rows (no
 // duplicates, no unique-constraint error, no drift once values here are correct).
-import { PrismaClient, type Prisma } from "../src/generated/client";
+import { PrismaClient, type Prisma } from "../generated/client";
 
 export interface PlanSeedRow {
   key: string;

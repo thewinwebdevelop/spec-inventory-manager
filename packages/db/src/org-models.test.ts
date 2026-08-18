@@ -12,7 +12,7 @@
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
 import { describe, expect, it } from "vitest";
-import { Prisma } from "./generated/client";
+import { Prisma } from "../generated/client";
 import {
   isOrgScopedModel,
   ORGANIZATION_MODEL,

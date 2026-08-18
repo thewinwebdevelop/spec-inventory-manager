@@ -10,7 +10,7 @@
 // callback, services must still reach model accessors on `tx`. If
 // `OrgLockTxOf<T>` ever collapses to `unknown`/`never`, every §5 service breaks
 // at once with an error that points at the service, not at this helper.
-import { PrismaClient } from "./generated/client";
+import { PrismaClient } from "../generated/client";
 import { ledgerGuardExtension } from "./ledger-guard";
 import { runInOrgLockTransaction, lockCurrentOrganization } from "./org-lock";
 import { withOrgScope, type OrgScopeContext } from "./tenancy";
