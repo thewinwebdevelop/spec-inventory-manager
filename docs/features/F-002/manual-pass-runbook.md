@@ -10,15 +10,12 @@
 
 ## 0. ยกสแตกขึ้นมาในเครื่อง
 
-✅ **อัปเดต 2026-08-18:** `pnpm --filter api dev` และ `start` **ใช้ได้แล้ว** — script ถูกแก้ให้บูตไฟล์ที่ compile แล้วผ่าน `tsx`
-(ชุดเดียวกับที่ CI รันเขียว) และมีเทสต์ `run-scripts.test.ts` กันไม่ให้กลับไปพังอีก
-· ด้านล่างคือ**สาเหตุ**ที่ยังอยู่ (packaging — B-10 ครึ่งหลัง) เก็บไว้เพราะมันอธิบายว่าทำไม `node dist/main.js` ตรง ๆ ยังใช้ไม่ได้:
+✅ **อัปเดต 2026-08-19 (B-10 ปิดครบ):** `pnpm --filter api start` = `node dist/main.js` **ใช้ได้ตรง ๆ แล้ว**
+ไม่ต้องมี TypeScript loader ในเส้นทางบูตอีก · `@omnistock/config` และ `@omnistock/db` ship `dist/` เหมือน `core-domain`
+· เทสต์ `run-scripts.test.ts` เฝ้าไว้ทั้งสองชั้น (ห้าม loader ใน boot path · ทุก package ที่โหลด runtime ต้องมี `main` ลงท้าย `.js`)
+· **CI ก็รันคำสั่งเดียวกันนี้แล้ว** ไม่ใช่คำสั่งที่มีอยู่แค่ในไฟล์ workflow
 
-- `node dist/main.js` (`start`) ตายที่ `@omnistock/config` เพราะ package นั้นส่ง TypeScript source มาให้ Node ตรง ๆ
-- `tsx src/main.ts` (`dev`) บูตขึ้น แล้ว **ทุก constructor parameter ที่ inject เป็น `undefined`** เพราะ esbuild
-  ไม่ปล่อย `design:paramtypes` ให้ DI ของ Nest อ่าน — request แรกตายที่ `Cannot read properties of undefined (reading 'checkIp')`
-
-ชุดที่ **ใช้ได้จริง** (คือชุดที่ job `e2e-web` รันแล้วเขียวทุกวัน · ตอนนี้ `pnpm --filter api start` ก็คือคำสั่งเดียวกันแล้ว):
+ชุดที่ **ใช้ได้จริง** (คือชุดที่ job `e2e-web` รันแล้วเขียวทุกวัน — คำสั่งเดียวกันเป๊ะ):
 
 ```bash
 # 1. Postgres + Redis
@@ -37,8 +34,8 @@ pnpm --filter @omnistock/db exec prisma generate
 pnpm --filter @omnistock/db exec prisma migrate deploy
 pnpm --filter @omnistock/db exec prisma db seed
 
-# 4. API (คอนโซลที่ 1) — ต้องเป็น `tsx` + ไฟล์ที่ compile แล้ว ดูเหตุผลด้านบน
-pnpm --filter api exec tsx dist/main.js
+# 4. API (คอนโซลที่ 1)
+pnpm --filter api start
 
 # 5. web (คอนโซลที่ 2)
 pnpm --filter web exec next start -p 3001
