@@ -2146,3 +2146,13 @@ build ครั้งแรกที่ไม่ใส่ `types` **ผ่าน
 · **mutation แล้ว**: คืน `config.main` เป็น `src/index.ts` ⇒ แดงพร้อมชื่อ package
 
 api 680 tests เขียว · db/config/core-domain/contracts เขียว · typecheck+lint สะอาด
+
+**ผลข้างเคียงของ B-10 ที่ CI จับได้ (และเป็นบทเรียนของ monorepo):** `db-migrate` แดง
+`Failed to resolve entry for package "@omnistock/config"`
+
+package ที่ emit `dist/` ทำให้ **consumer ต้อง build ก่อนรัน** — `turbo test` ประกาศ `dependsOn: ["build"]` ไว้แล้ว
+แต่ job นี้เรียก `pnpm --filter … run <script>` ตรง ๆ **ข้าม dependency graph ของ turbo ไป**
+⇒ เลนที่ขับด้วย turbo เขียวหมด (node-ci) · เลนที่ขับ script ตรงแดง · **e2e-web/mobile-e2e เขียวเพราะมี `turbo build` อยู่แล้ว**
+
+แก้: เพิ่มขั้น `pnpm turbo build --filter=@omnistock/db` ใน job นั้นก่อน `verify:ac`/test พร้อมเหตุผลกำกับ
+· **reproduce ในเครื่องก่อนแก้**: ลบ `dist` ทั้งสอง package ⇒ ได้ error ตัวเดียวกันเป๊ะ ⇒ build แล้วเทสต์ผ่าน 161 ตัว
