@@ -163,12 +163,15 @@ class _InviteMemberScreenState extends ConsumerState<InviteMemberScreen> {
                             role: role,
                             // D-028/C-1: only an Owner can create another
                             // Owner. Disabled and explained, not hidden.
-                            disabled: role.key == 'owner' && !_iAmOwner,
+                            //
+                            // ★ B-9: `grantsOwnership`, from the server, not
+                            // `key == 'owner'`. The slug is for translation.
+                            disabled: role.grantsOwnership && !_iAmOwner,
                           ),
                       ],
                     ),
                   ),
-                  if (items.any((r) => r.key == 'owner') && !_iAmOwner)
+                  if (items.any((r) => r.grantsOwnership) && !_iAmOwner)
                     Padding(
                       padding: const EdgeInsets.only(top: AppSpacing.s2),
                       child: Text(
@@ -204,9 +207,17 @@ class _InviteMemberScreenState extends ConsumerState<InviteMemberScreen> {
     );
   }
 
+  /// Does the chosen role deserve the shorter-TTL warning (§8)?
+  ///
+  /// ★ B-9 for the ownership half — that is `grantsOwnership`, from the server.
+  /// The `admin` half stays on `key`, and deliberately: the contract publishes
+  /// no "is this an admin" bit, so a slug is all there is. It is display-only
+  /// (which sentence to show), never a permission decision, and the deadline
+  /// the screen prints always comes from the server's `expiresAt`.
   bool _isElevated(List<RoleRow> roles) {
     final selected = roles.where((r) => r.id == _roleId).firstOrNull;
-    return selected?.key == 'owner' || selected?.key == 'admin';
+    if (selected == null) return false;
+    return selected.grantsOwnership || selected.key == 'admin';
   }
 }
 

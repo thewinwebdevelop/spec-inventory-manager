@@ -117,7 +117,10 @@ class FakeOrgScoped implements OrgScoped {
 }
 
 const threeRoles = [
-  RoleRow(id: 'rol_owner', name: 'Owner', key: 'owner'),
+  // ★ B-9 — `grantsOwnership` is what the screens read; `key` is translation
+  // only. Set from the server's derivation, which for the system roles means
+  // the Owner row and nothing else.
+  RoleRow(id: 'rol_owner', name: 'Owner', key: 'owner', grantsOwnership: true),
   RoleRow(id: 'rol_admin', name: 'Admin', key: 'admin'),
   RoleRow(id: 'rol_staff', name: 'Staff', key: 'staff'),
 ];

@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:mobile/core/error/api_failure.dart';
 import 'package:mobile/features/org/application/org_providers.dart';
+import 'package:mobile/features/org/domain/entities/org_entities.dart';
 import 'package:mobile/features/org/presentation/screens/invite_link_screen.dart';
 import 'package:mobile/features/org/presentation/screens/invite_member_screen.dart';
 
@@ -61,6 +62,28 @@ void main() {
       ),
     );
     expect(ownerTile.enabled, isFalse);
+  });
+
+  testWidgets('★ B-9 · the flag decides, not the slug — a Staff role keyed "owner" stays offerable',
+      (tester) async {
+    // I-45's trick, from the client's side. The three screens that used to ask
+    // `key == 'owner'` were right about the system roles and wrong in
+    // principle: F-003 mints roles with no key, and a key can be edited in the
+    // database to say anything. If this case ever fails, the shortcut is back.
+    final trap = [
+      const RoleRow(id: 'rol_owner', name: 'Owner', key: 'owner', grantsOwnership: true),
+      // Keyed "owner", grants nothing.
+      const RoleRow(id: 'rol_trap', name: 'พนักงาน', key: 'owner'),
+    ];
+    await _pump(tester, FakeOrgScoped(roles: trap), asOwner: false);
+
+    final tiles = tester
+        .widgetList<RadioListTile<String>>(find.byType(RadioListTile<String>))
+        .toList();
+    // Two options; exactly one of them — the real Owner row — is closed to a
+    // non-Owner. `enabled` is nullable and null means "default", i.e. enabled.
+    expect(tiles.where((t) => (t.enabled ?? true) == false), hasLength(1));
+    expect(tiles.where((t) => (t.enabled ?? true) == true), hasLength(1));
   });
 
   testWidgets('an Owner may pick Owner', (tester) async {

@@ -5,9 +5,18 @@
  *
  * Two fields, and the role picker is the interesting one: an Admin must not be
  * able to OFFER the Owner role, because granting `full_access` is granting
- * ownership (C-1/D-028). That filtering is `assignableRoles`, tested
- * separately — the server refuses it regardless, so this is about not showing
- * a button that produces a 403.
+ * ownership (C-1/D-028). `assignableRoles` answers who may hand out what, and
+ * the server refuses regardless — so this is about not offering a button that
+ * produces a 403.
+ *
+ * ★ B-9 — SHOWN AND DISABLED, not filtered out. §8's rule, the one mobile's
+ * invite screen has followed all along: hiding the option leaves an Admin
+ * wondering why the thing they were told to do is missing, while greying it
+ * with the reason answers the question they would otherwise ask the owner over
+ * chat. Web filtered instead, and until B-9 the difference was invisible —
+ * `ownerRoleIds` was empty for a non-Owner, so the filter removed nothing and
+ * the Owner option was quietly offerable. Now the server says which role grants
+ * ownership and both platforms behave the same way.
  *
  * On success the caller receives the raw token exactly once and shows S8. This
  * component never stores it.
@@ -44,7 +53,10 @@ export function InviteDialog({
   const [fieldError, setFieldError] = useState<{ email?: string; role?: string }>({});
   const [banner, setBanner] = useState<string | null>(null);
 
-  const offerable = assignableRoles(roles.data?.items ?? [], org.capabilities, ownerRoleIds);
+  const all = roles.data?.items ?? [];
+  // The same rule as before, read as "may I hand this out?" per row instead of
+  // as a filter — so the row can be rendered and closed rather than removed.
+  const assignable = new Set(assignableRoles(all, org.capabilities, ownerRoleIds).map((r) => r.id));
 
   const submit = () => {
     setFieldError({});
@@ -106,18 +118,24 @@ export function InviteDialog({
 
       <fieldset>
         <legend className="text-body-sm">{inviteFormTh.roleLabel}</legend>
-        {offerable.map((role) => (
-          <label key={role.id} className="block">
-            <input
-              type="radio"
-              name="roleId"
-              checked={roleId === role.id}
-              onChange={() => setRoleId(role.id)}
-              disabled={create.isPending}
-            />
-            {roleLabel(role.key, role.name)}
-          </label>
-        ))}
+        {all.map((role) => {
+          const closed = !assignable.has(role.id);
+          return (
+            <label key={role.id} className="block">
+              <input
+                type="radio"
+                name="roleId"
+                checked={roleId === role.id}
+                onChange={() => setRoleId(role.id)}
+                disabled={create.isPending || closed}
+              />
+              {roleLabel(role.key, role.name)}
+              {closed && (
+                <span className="text-body-sm"> {inviteFormTh.ownerOnlyHelper}</span>
+              )}
+            </label>
+          );
+        })}
         {fieldError.role && (
           <p role="alert" className="text-body-sm text-danger-text">
             {fieldError.role}

@@ -187,7 +187,16 @@ class OrgScopedImpl implements OrgScoped {
       final page = await _organizations.listOrgRoles(orgId: _orgId);
       final items = page.data?.items.toList() ?? const <wire.RoleRow>[];
       return items
-          .map((r) => RoleRow(id: r.id, name: r.name, key: r.key))
+          .map(
+            (r) => RoleRow(
+              id: r.id,
+              name: r.name,
+              key: r.key,
+              // Optional on the wire (contract-evolution): absent means the
+              // server does not publish it, which is not the same as "no".
+              grantsOwnership: r.grantsOwnership ?? false,
+            ),
+          )
           .toList(growable: false);
     } on DioException catch (e) {
       throw _asFailure(e);

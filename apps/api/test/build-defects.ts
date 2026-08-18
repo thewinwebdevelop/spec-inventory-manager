@@ -169,18 +169,32 @@ export const BUILD_DEFECTS: readonly BuildDefect[] = Object.freeze([
   },
   {
     finding: "B-9",
-    title: "no client can identify the Owner role unless the viewer is one (§3.6 publishes no capabilities)",
-    tier: "none",
+    title: "no client could identify the Owner role unless the viewer was one (§3.6 published no capabilities)",
+    tier: "smoke",
     foundBy: "writing S9's role picker against §10.1",
     owner: "backend-api",
-    noTest:
-      "OPEN, and structurally unfixable on the client: ownership is a capability and roles are " +
-      "an open set (F-003), so `ownerRoleIds` can only ever hold a role the viewer holds. §10.1 " +
-      "wants the Owner option shown-but-disabled for an Admin, and S7's invite filter has the " +
-      "same hole. Proposed: a `grantsOwnership` flag on the roles list. The safety property does " +
-      "not depend on it — the server refuses and both dialogs carry the 403 copy. The current " +
-      "behaviour is pinned in MembersScreen.actions.test.tsx so the day the flag lands, it fails " +
-      "and says what to change.",
+    partial:
+      "CLOSED by publishing ONE derived bit, `grantsOwnership`, not the capability list — §3.6's " +
+      "refusal to publish `capabilities` stands, and the reason it gives (a client would compute " +
+      "permissions from it) still holds. The bit is derived server-side with core-domain's " +
+      "`isOwnerRole`, the same function `toMemberRow` uses, so the system has one answer to \"is " +
+      "this ownership\". OPTIONAL in the contract per contract-evolution: a client newer than its " +
+      "server must still parse the list, and absent means \"not said\" rather than \"no\". " +
+      "It also closed a divergence it had been hiding: web's S7 FILTERED the Owner option while " +
+      "mobile showed it disabled per §8 — with an empty owner set the filter removed nothing, so " +
+      "nobody could see the difference. Both now show and disable, with mobile's approved helper " +
+      "sentence reused verbatim on web.",
+    pins: [
+      { file: "apps/api/src/orgs/roles.service.test.ts", must: ["I-45", "grantsOwnership"] },
+      {
+        file: "apps/web/src/features/org/components/MembersScreen.actions.test.tsx",
+        must: ["grantsOwnership", "DISABLED"],
+      },
+      {
+        file: "apps/mobile/test/features/org/presentation/invite_member_screen_test.dart",
+        must: ["grantsOwnership", "B-9"],
+      },
+    ],
   },
   {
     finding: "B-10",

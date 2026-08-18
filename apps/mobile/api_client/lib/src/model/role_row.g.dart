@@ -14,13 +14,19 @@ class _$RoleRow extends RoleRow {
   @override
   final String? key;
   @override
+  final bool? grantsOwnership;
+  @override
   final bool isSystem;
 
   factory _$RoleRow([void Function(RoleRowBuilder)? updates]) =>
       (RoleRowBuilder()..update(updates))._build();
 
   _$RoleRow._(
-      {required this.id, required this.name, this.key, required this.isSystem})
+      {required this.id,
+      required this.name,
+      this.key,
+      this.grantsOwnership,
+      required this.isSystem})
       : super._();
   @override
   RoleRow rebuild(void Function(RoleRowBuilder) updates) =>
@@ -36,6 +42,7 @@ class _$RoleRow extends RoleRow {
         id == other.id &&
         name == other.name &&
         key == other.key &&
+        grantsOwnership == other.grantsOwnership &&
         isSystem == other.isSystem;
   }
 
@@ -45,6 +52,7 @@ class _$RoleRow extends RoleRow {
     _$hash = $jc(_$hash, id.hashCode);
     _$hash = $jc(_$hash, name.hashCode);
     _$hash = $jc(_$hash, key.hashCode);
+    _$hash = $jc(_$hash, grantsOwnership.hashCode);
     _$hash = $jc(_$hash, isSystem.hashCode);
     _$hash = $jf(_$hash);
     return _$hash;
@@ -56,6 +64,7 @@ class _$RoleRow extends RoleRow {
           ..add('id', id)
           ..add('name', name)
           ..add('key', key)
+          ..add('grantsOwnership', grantsOwnership)
           ..add('isSystem', isSystem))
         .toString();
   }
@@ -76,6 +85,11 @@ class RoleRowBuilder implements Builder<RoleRow, RoleRowBuilder> {
   String? get key => _$this._key;
   set key(String? key) => _$this._key = key;
 
+  bool? _grantsOwnership;
+  bool? get grantsOwnership => _$this._grantsOwnership;
+  set grantsOwnership(bool? grantsOwnership) =>
+      _$this._grantsOwnership = grantsOwnership;
+
   bool? _isSystem;
   bool? get isSystem => _$this._isSystem;
   set isSystem(bool? isSystem) => _$this._isSystem = isSystem;
@@ -90,6 +104,7 @@ class RoleRowBuilder implements Builder<RoleRow, RoleRowBuilder> {
       _id = $v.id;
       _name = $v.name;
       _key = $v.key;
+      _grantsOwnership = $v.grantsOwnership;
       _isSystem = $v.isSystem;
       _$v = null;
     }
@@ -115,6 +130,7 @@ class RoleRowBuilder implements Builder<RoleRow, RoleRowBuilder> {
           id: BuiltValueNullFieldError.checkNotNull(id, r'RoleRow', 'id'),
           name: BuiltValueNullFieldError.checkNotNull(name, r'RoleRow', 'name'),
           key: key,
+          grantsOwnership: grantsOwnership,
           isSystem: BuiltValueNullFieldError.checkNotNull(
               isSystem, r'RoleRow', 'isSystem'),
         );

@@ -133,11 +133,32 @@ class InvitationRow {
 ///
 /// `capabilities` is deliberately absent here too — §3.6 does not publish it.
 class RoleRow {
-  const RoleRow({required this.id, required this.name, required this.key});
+  const RoleRow({
+    required this.id,
+    required this.name,
+    required this.key,
+    this.grantsOwnership = false,
+  });
 
   final String id;
   final String name;
+
+  /// ⛔ Display slug ONLY (ux Q4). Never a permission input — see
+  /// [grantsOwnership].
   final String? key;
+
+  /// ★ B-9 — does granting this role grant ownership?
+  ///
+  /// Comes from the server, derived there from `capabilities`. Defaults to
+  /// `false` because the contract field is optional: a build newer than the
+  /// server it talks to must parse the list, and "the server did not say" is
+  /// not "yes".
+  ///
+  /// This replaced `key == 'owner'` on three screens' worth of decisions. That
+  /// shortcut was right for the three system roles and wrong in principle —
+  /// F-003 lets people mint roles with no key at all, and I-45 flips a Staff
+  /// role's key to `owner` in the database to prove the two can disagree.
+  final bool grantsOwnership;
 }
 
 /// What `POST /organizations` hands back — complete enough to enter the new

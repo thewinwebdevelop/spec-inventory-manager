@@ -237,6 +237,13 @@ export const inviteFormTh = {
   emailLabel: "อีเมลของคนที่จะเชิญ",
   emailPlaceholder: "เช่น malee@shop.com",
   roleLabel: "สิทธิ์ในร้านนี้",
+  /**
+   * ★ B-9 — verbatim from mobile's `inviteOwnerDisabledHelper` (§8), not a new
+   * sentence. The two platforms are answering the same question and had no
+   * business answering it in different words; web could not ask it at all
+   * before the server published `grantsOwnership`.
+   */
+  ownerOnlyHelper: "เฉพาะเจ้าของร้านเท่านั้นที่ตั้งเจ้าของร้านคนใหม่ได้",
   submit: "สร้างลิงก์คำเชิญ",
   submitLoading: "กำลังสร้างลิงก์...",
   cancel: "ยกเลิก",

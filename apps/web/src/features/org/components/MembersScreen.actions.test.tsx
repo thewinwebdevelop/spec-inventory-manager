@@ -33,9 +33,11 @@ vi.mock("../api/use-member-mutations", () => ({
 }));
 
 const ROLES = [
-  { id: "rol_owner", name: "Owner", key: "owner" },
-  { id: "rol_admin", name: "Admin", key: "admin" },
-  { id: "rol_staff", name: "Staff", key: "staff" },
+  // ★ B-9 — `grantsOwnership` comes from the server, derived from capabilities.
+  // Deliberately NOT aligned with `key` in the impostor case below.
+  { id: "rol_owner", name: "Owner", key: "owner", grantsOwnership: true },
+  { id: "rol_admin", name: "Admin", key: "admin", grantsOwnership: false },
+  { id: "rol_staff", name: "Staff", key: "staff", grantsOwnership: false },
 ];
 
 const ME = {
@@ -65,6 +67,11 @@ const MALEE = {
 
 const rolesRefetch = vi.fn();
 
+/** Swappable so one case can hand in I-45's key-vs-capability impostor. */
+let rolesData: { items: { id: string; name: string; key: string; grantsOwnership: boolean }[] } = {
+  items: [],
+};
+
 vi.mock("../api/use-members", () => ({
   useMembers: () => ({
     data: { items: [ME, MALEE], nextCursor: null },
@@ -78,7 +85,7 @@ vi.mock("../api/use-members", () => ({
     isError: false,
     refetch: vi.fn(),
   }),
-  useRoles: () => ({ data: { items: ROLES }, isLoading: false, isError: false, refetch: rolesRefetch }),
+  useRoles: () => ({ data: rolesData, isLoading: false, isError: false, refetch: rolesRefetch }),
 }));
 
 import { MembersScreen } from "./MembersScreen";
@@ -119,6 +126,7 @@ function rowOf(email: string): HTMLElement {
 }
 
 beforeEach(() => {
+  rolesData = { items: ROLES };
   changeRoleMutate.mockClear();
   removeMutate.mockClear();
   leaveMutate.mockClear();
@@ -219,21 +227,20 @@ describe("S9 · เปลี่ยนสิทธิ์ (§10.1)", () => {
     expect(within(dialog).getByRole("radio", { name: /เจ้าของร้าน/ })).toBeEnabled();
   });
 
-  it("⚠️ an Admin gets the Owner option ENABLED — the client cannot tell which role it is", async () => {
-    // NOT the behaviour §10.1 asks for, and the gap is in the contract rather
-    // than here. The rule is that ownership is a CAPABILITY, never a role key
-    // (F-003 lets people mint roles), and `GET /orgs/{orgId}/roles` publishes
-    // no capabilities (§3.6). So `ownerRoleIds` can only ever contain a role
-    // the viewer holds themselves — for an Admin it is empty, and no amount
-    // of client code can identify the Owner role to grey it out.
+  it("★ an Admin sees the Owner option DISABLED, with the reason next to it (B-9)", async () => {
+    // This case used to assert the opposite, and its comment promised it would
+    // fail the day §3.6 grew a `grantsOwnership` flag. That day is today.
     //
-    // The same hole is already in S7's invite dialog, whose `assignableRoles`
-    // filter therefore filters nothing for an Admin.
+    // Before: `ownerRoleIds` could only ever hold a role the VIEWER held, so
+    // for an Admin it was empty and no client code could identify the Owner
+    // option to grey out — §10.1 was unimplementable and S7's filter filtered
+    // nothing. Now the server says which role grants ownership, still without
+    // publishing `capabilities`.
     //
-    // Pinned as it IS rather than as it should be, so the day §3.6 grows a
-    // `grantsOwnership` flag (filed for backend-api) this case fails and says
-    // what to change. The safety property does not depend on it: the server
-    // refuses with `403 FORBIDDEN`, and the dialog has that copy verbatim.
+    // The safety property never depended on this: the server refuses an
+    // over-privileged grant regardless (C-1/D-028), and the dialog carries the
+    // 403 copy. What changes is that the Admin is told WHY instead of being
+    // handed a button that fails.
     const admin: ActiveOrg = { ...owner, capabilities: new Set(["manage_members"]) };
     renderScreen(admin);
     await userEvent.click(
@@ -241,8 +248,30 @@ describe("S9 · เปลี่ยนสิทธิ์ (§10.1)", () => {
     );
     const dialog = screen.getByRole("dialog", { name: CHANGE_ROLE_COPY.title("malee@shop.com") });
 
-    expect(within(dialog).getByRole("radio", { name: /เจ้าของร้าน/ })).toBeEnabled();
-    expect(within(dialog).queryByText(CHANGE_ROLE_COPY.ownerOnlyHelper)).toBeNull();
+    expect(within(dialog).getByRole("radio", { name: /เจ้าของร้าน/ })).toBeDisabled();
+    expect(within(dialog).getByText(CHANGE_ROLE_COPY.ownerOnlyHelper)).toBeInTheDocument();
+  });
+
+  it("★ a role whose KEY says owner but whose flag says no is offerable", async () => {
+    // The client trusts the flag, not the slug — so a Staff role with
+    // `key: "owner"` (I-45's database trick) must NOT be treated as ownership.
+    // If this ever fails, somebody has reintroduced the key shortcut on the
+    // client after the server spent a test proving it wrong.
+    const impostorRoles = [
+      { id: "rol_owner", name: "Owner", key: "owner", grantsOwnership: true },
+      { id: "rol_trap", name: "Staff", key: "owner", grantsOwnership: false },
+    ];
+    rolesData = { items: impostorRoles };
+    const admin: ActiveOrg = { ...owner, capabilities: new Set(["manage_members"]) };
+    renderScreen(admin);
+    await userEvent.click(
+      within(rowOf("malee@shop.com")).getByRole("button", { name: membersTh.changeRole }),
+    );
+    const dialog = screen.getByRole("dialog", { name: CHANGE_ROLE_COPY.title("malee@shop.com") });
+
+    const options = within(dialog).getAllByRole("radio");
+    // Two roles, one disabled (the real Owner) and one not (the impostor).
+    expect(options.filter((o) => (o as HTMLInputElement).disabled)).toHaveLength(1);
   });
 
   it("★ warns BEFORE the press when the change would demote an Owner", async () => {

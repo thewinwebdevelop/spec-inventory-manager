@@ -73,19 +73,31 @@ export function MembersScreen() {
   const cancel = useCancelInvitation();
 
   /**
-   * Which role ids grant ownership — derived from CAPABILITIES, never from
-   * `key === "owner"`. `GET /orgs/{orgId}/roles` deliberately does not publish
-   * `capabilities` (§3.6), so the only role we can classify for certain is the
-   * caller's own. Everything else is decided server-side, which is why the
-   * invite dialog's filter is UX and the API's `canAssignRole` is the rule.
+   * Which role ids grant ownership — from the SERVER's answer, never from
+   * `key === "owner"`.
+   *
+   * ★ B-9. `GET /orgs/{orgId}/roles` still does not publish `capabilities`
+   * (§3.6, and rightly), but it now publishes one derived bit per role:
+   * `grantsOwnership`. Before that, this set could only ever contain the
+   * caller's OWN role — so for an Admin it was empty, §10.1's "show the Owner
+   * option disabled, with the reason" was unimplementable, and S7's filter
+   * filtered nothing.
+   *
+   * The viewer's own role stays in the set as a FALLBACK, for a client newer
+   * than its server: `grantsOwnership` is optional in the contract precisely so
+   * that case parses, and absent means "this server does not say" rather than
+   * "no role grants ownership".
    */
   const ownerRoleIds = useMemo(() => {
     const ids = new Set<string>();
+    for (const role of roles.data?.items ?? []) {
+      if (role.grantsOwnership === true) ids.add(role.id);
+    }
     if (isOwner(org.capabilities) && org.profile.myMembership.roleId) {
       ids.add(org.profile.myMembership.roleId);
     }
     return ids;
-  }, [org.capabilities, org.profile.myMembership.roleId]);
+  }, [roles.data?.items, org.capabilities, org.profile.myMembership.roleId]);
 
   const pending = invitations.data?.items ?? [];
   const memberRows = members.data?.items ?? [];
