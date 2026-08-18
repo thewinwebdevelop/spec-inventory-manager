@@ -2016,3 +2016,18 @@ $ tsx  dist/main.js        → Invalid environment variables: DATABASE_URL is re
 **ครึ่งหลังยังเปิด และไม่ใช่ของผม:** `config` · `contracts` · `db` ยัง ship TypeScript source (`"main": "src/index.ts"`)
 ขณะที่ `core-domain` · `connectors` ship `dist/index.js` แล้ว ⇒ ตราบใดที่ยังไม่ทำให้เหมือนกัน `node dist/main.js` ตรง ๆ จะใช้ไม่ได้
 และ `tsx` จะเป็น runtime dependency ต่อไป — **packaging decision ของ devops + backend-api**
+
+### ปิดรูใน guard ที่ผมเขียนเอง: เลน E2E ทั้งสองมี "พื้น" แล้ว (2026-08-18)
+
+**ปัญหาของ guard เดิม (ผมเขียนเอง):** ทั้งสองเลนถามแค่ *"มีเคสรันไหม"*
+- browser: `expected < 1` ⇒ **ลบไฟล์ spec ทิ้ง 5 ไฟล์จาก 26 เคส ก็ยังเขียว**
+- mobile: `grep "All tests passed"` ⇒ **เหลือเคสเดียวก็พิมพ์ข้อความนี้เหมือนกัน**
+
+"อย่างน้อยหนึ่ง" เป็นคำถามที่ถูกสำหรับ suite ที่อาจว่างได้จริง ๆ · **แต่ผิดสำหรับเลนที่มีหน้าที่ครอบ §12.1 ทั้ง 14 แถว**
+
+**แก้:** ใส่พื้นเป็นตัวเลขที่ workflow ส่งเข้าไป — `assert-playwright-ran.mjs <report> 26` และเลน mobile parse `+N` ท้าย log เทียบกับ 3
+· เพิ่มเคสแล้วต้องยกพื้น · **ลดพื้น = การแก้ที่มองเห็นได้ใน diff และต้องอธิบายตัวเองในรีวิว** ซึ่งคือประเด็นทั้งหมด
+· วิธีเดียวกับที่เลน vitest ใช้อยู่แล้ว (`--require file=N`)
+
+**verify ทั้งสองทางในเครื่อง:** report 26 เคส ⇒ ผ่าน · report 21 เคส ⇒ **แดงพร้อมบอกว่าหายไปกี่เคส** ·
+log ที่มี `+3` ⇒ ผ่าน · log ที่มี `+1` ⇒ ตกพื้น

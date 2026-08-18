@@ -562,6 +562,14 @@ jobs:
             free -m > /tmp/mem.txt 2>&1 || true
             adb logcat -d -t 400 > /tmp/logcat.txt 2>&1 || true
             grep -q "All tests passed" /tmp/mobile-e2e.log || { echo "::error::the mobile integration suite did not report a pass"; exit 1; }
+            # …and it passed the RIGHT NUMBER of cases. "All tests passed" is
+            # also what a suite of one prints, so on its own it would stay green
+            # after somebody deleted two of E-10's three cases. Flutter's
+            # expanded reporter ends with `+N`, so N is the count. Raise the
+            # floor when cases are added; lowering it is a visible edit.
+            passed=$(grep -oE '\+[0-9]+' /tmp/mobile-e2e.log | tail -1 | tr -d '+')
+            echo "mobile integration: ${passed:-0} passing case(s) (floor 3)"
+            [ "${passed:-0}" -ge 3 ] || { echo "::error::the mobile lane passed ${passed:-0} case(s), floor is 3 — a case was deleted, renamed or skipped"; exit 1; }
       # ⚠️ Collected BEFORE the emulator is torn down (the lines above run
       # inside the action's script), because the question these answer cannot
       # be asked afterwards: two runs ended with three tests reporting "did not
@@ -737,7 +745,10 @@ jobs:
             echo "::error::no Playwright JSON report — the suite did not run"
             exit 1
           fi
-          node tool/ci/assert-playwright-ran.mjs apps/web/playwright-results.json
+          # The floor is the case count §12.1 currently buys us. Raise it when
+          # rows are added; lowering it is a visible edit that has to justify
+          # itself in review, which is the point.
+          node tool/ci/assert-playwright-ran.mjs apps/web/playwright-results.json 26
       - name: upload the Playwright report on failure
         if: failure()
         uses: actions/upload-artifact@v4

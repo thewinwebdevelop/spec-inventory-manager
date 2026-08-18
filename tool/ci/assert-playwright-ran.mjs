@@ -11,12 +11,26 @@
  * the HTML report keeps its data in a packed payload, so the count was always
  * zero. A guard that reddens a green suite is worse than no guard: the next
  * person deletes it, and the real gap it was watching reopens silently.
+ *
+ * ⚠️ AND WHY THERE IS A FLOOR. The first version only asked for "at least one"
+ * — which meant that after the lane grew to 26 cases, deleting five spec files
+ * would still have been green. "At least one" is the right question for a
+ * suite that might legitimately be empty; it is the wrong question for a lane
+ * whose whole job is covering §12.1's fourteen rows. The floor is passed in by
+ * the workflow so that adding cases and raising it is one visible edit, the
+ * same discipline the vitest lanes already use with `--require file=N`.
  */
 import { readFileSync } from "node:fs";
 
-const [, , reportPath] = process.argv;
+const [, , reportPath, minExpectedArg] = process.argv;
 if (!reportPath) {
-  console.error("usage: assert-playwright-ran.mjs <playwright-results.json>");
+  console.error("usage: assert-playwright-ran.mjs <playwright-results.json> [min-expected]");
+  process.exit(2);
+}
+
+const minExpected = Number(minExpectedArg ?? 1);
+if (!Number.isInteger(minExpected) || minExpected < 1) {
+  console.error(`::error::min-expected must be a positive integer, got "${minExpectedArg}"`);
   process.exit(2);
 }
 
@@ -47,6 +61,16 @@ if (expected < 1) {
   process.exit(1);
 }
 
+if (expected < minExpected) {
+  console.error(
+    `::error::the browser lane passed ${expected} case(s) but the floor is ${minExpected}. ` +
+      "Cases do not disappear by accident: a spec file was deleted, renamed out of the " +
+      "`testDir`, or skipped. If the removal is intended, lower the floor in the workflow " +
+      "in the same commit — that edit is the review.",
+  );
+  process.exit(1);
+}
+
 // Not a second opinion on pass/fail — the runner's own exit code owns that.
 // This only refuses the shape where a run "succeeds" having proven nothing.
-console.log(`the browser lane ran ${expected} passing case(s).`);
+console.log(`the browser lane ran ${expected} passing case(s) (floor ${minExpected}).`);
