@@ -2031,3 +2031,14 @@ $ tsx  dist/main.js        → Invalid environment variables: DATABASE_URL is re
 
 **verify ทั้งสองทางในเครื่อง:** report 26 เคส ⇒ ผ่าน · report 21 เคส ⇒ **แดงพร้อมบอกว่าหายไปกี่เคส** ·
 log ที่มี `+3` ⇒ ผ่าน · log ที่มี `+1` ⇒ ตกพื้น
+
+**แก้ตามทันที (2026-08-18):** พื้นของเลน mobile แดงในรอบแรก **ทั้งที่ suite ผ่านครบ 3 เคส** —
+log บอกตรง ๆ ว่า `mobile integration: 0 passing case(s)`
+
+สาเหตุ: `android-emulator-runner` รัน **ทีละบรรทัดเป็น `sh -c` คนละตัว** ⇒ ตัวแปร `passed=$(...)` ที่ตั้งบรรทัดหนึ่ง **หายไปในบรรทัดถัดไป**
+```
+[command]/usr/bin/sh -c passed=$(grep …)
+[command]/usr/bin/sh -c echo "mobile integration: ${passed:-0} …"   ← คนละ shell แล้ว
+```
+· **นี่คือครั้งที่สอง**ที่ execution model ของ action ตัวนี้ทำให้เสียรอบ CI (ครั้งแรกคือ `\` ต่อบรรทัด) ⇒ เขียนกฎไว้ในไฟล์เลย: **step ที่ต้องใช้ shell state ต้องเป็นคำสั่งเดียว**
+· แก้เป็นบรรทัดเดียวคั่นด้วย `;` แล้ว **simulate ด้วย `sh -c` ในเครื่องทั้งสองทางก่อน push**: log `+3` ⇒ 3 ผ่านพื้น · log `+1` ⇒ 1 ตกพื้น
