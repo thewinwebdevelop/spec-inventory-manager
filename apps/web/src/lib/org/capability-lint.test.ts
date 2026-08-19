@@ -51,10 +51,20 @@ const MEMBERSHIP = /\b(\w*(?:apabilities|Caps|caps))\.(has|contains|includes)\(\
  */
 const FULL_ACCESS_ARGUMENT = /FULL_ACCESS|fullAccessCapability|['"]full_access['"]/;
 
-/** The one place per platform that may implement the rule. */
+/**
+ * The one place per platform that may implement the rule.
+ *
+ * ⚠️ Mobile's moved. It lived in `session_state.dart` until the M-07 security
+ * review pointed out that file imports `package:flutter/foundation.dart`, so a
+ * `domain/` file importing the rule was pulling Flutter in transitively — the
+ * boundary gate only inspects DIRECT imports and could not see it. The rule is
+ * now in a Flutter-free `capabilities.dart`, and this list had to follow: for
+ * one run the guard failed the build on the very file that implements the
+ * thing it protects, which is the guard being stale rather than right.
+ */
 const ALLOWED = Object.freeze([
   "apps/web/src/lib/org/capability.ts",
-  "apps/mobile/lib/core/session/session_state.dart",
+  "apps/mobile/lib/core/session/capabilities.dart",
 ]);
 
 export interface Offence {

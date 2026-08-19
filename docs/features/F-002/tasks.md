@@ -2255,3 +2255,14 @@ reviewer ชี้ว่าเคสนี้ **declare อะไรไม่เ
 5. **reveal ⇒ ได้เลขเต็มจริง** ← success path ที่ไม่เคยมีใครยิง
 6. **หลัง reveal แล้ว `GET` ยังคงมีแค่ mask** — ถ้าวันหนึ่ง reveal ไป "อุ่น" profile response ทุกจอที่โชว์ร้านจะเริ่มรั่ว
 7. reveal ครั้งที่สอง = request ใหม่ (ไม่มี cache ที่ไหนในสาย)
+
+**CI จับ guard ของตัวเองสองตัวที่ผิด (ไม่ใช่ product พัง) — 2026-08-19**
+
+1. **capability tripwire แดงใส่ไฟล์ที่ implement กฎนั้นเอง** — เพราะกฎย้ายไป `core/session/capabilities.dart` (ผลจาก Low #9 ของรีวิว) แต่ allow-list ยังชี้ `session_state.dart`
+   ⇒ **guard เก่า ไม่ใช่ guard ถูก** · แก้ allow-list ให้ตามกฎไป
+2. **`I-C-01` แดงด้วย "SQLSTATE leaked to the client: ... not to contain '40001'"** ทั้งที่ body สะอาด
+   · assertion เดิมสแกน **substring** ทั้งก้อน ⇒ **cuid2 ยาว ๆ มีโอกาสมีเลข 5 ตัวนั้นอยู่ข้างในโดยบังเอิญ**
+   · เป็นบั๊กชนิดเดียวกับ "3454" ใน E-14 เป๊ะ ⇒ เปลี่ยนเป็น match แบบ **token boundary** + `leaksSqlstate()` ที่ export ออกมาให้ SELF-CHECK ทดสอบทั้งสองทาง
+   (`"code 40001"` ⇒ จับได้ · `"cmsz40001dm4s001g"` ⇒ ไม่จับ)
+
+**ทั้งสองตัวคือ guard ที่ทำให้ suite เขียวกลายเป็นแดง** ซึ่งผมเขียนเตือนตัวเองไว้เองว่าอันตรายกว่าไม่มี guard — คนถัดไปจะลบทิ้ง

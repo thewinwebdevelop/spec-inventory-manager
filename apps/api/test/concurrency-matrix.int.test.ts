@@ -76,6 +76,14 @@ const LOCK_ROUNDS = 3;
 /** SQLSTATEs that must never appear — in output or on the wire (§8 rule 2). */
 const FORBIDDEN_SQLSTATES = ["40P01", "40001"] as const;
 
+/**
+ * Token-boundary match, exported so the self-check below can exercise both
+ * directions rather than trusting the regex by reading it.
+ */
+export function leaksSqlstate(wire: string, sqlstate: string): boolean {
+  return new RegExp(`(^|[^0-9A-Za-z])${sqlstate}([^0-9A-Za-z]|$)`).test(wire);
+}
+
 d("F-002 concurrency matrix (test-plan §8)", () => {
   let app: TestApp;
   let prisma: PrismaClient;
@@ -166,6 +174,16 @@ d("F-002 concurrency matrix (test-plan §8)", () => {
     }
   });
 
+  it("SELF-CHECK: a SQLSTATE is caught as a token and ignored inside an id", () => {
+    // Both directions, because the first version of this rule failed a run
+    // whose bodies were clean: it matched five digits that happened to sit
+    // inside a cuid.
+    expect(leaksSqlstate('{"error":{"message":"code 40001"}}', "40001")).toBe(true);
+    expect(leaksSqlstate('{"code":"40001"}', "40001")).toBe(true);
+    expect(leaksSqlstate('{"userId":"cmsz40001dm4s001g"}', "40001")).toBe(false);
+    expect(leaksSqlstate('{"userId":"x40P01y"}', "40P01")).toBe(false);
+  });
+
   // ── plumbing ─────────────────────────────────────────────────────────────
 
   /**
@@ -177,9 +195,20 @@ d("F-002 concurrency matrix (test-plan §8)", () => {
     fired.push({ caseId, status: res.status, body: res.body });
     expect(res.status, `${caseId}: ${JSON.stringify(res.body)}`).toBeLessThan(500);
     // The database's vocabulary never reaches a caller, whatever happened.
+    //
+    // ⚠️ MATCHED ON TOKEN BOUNDARIES, not as a substring. The plain
+    // `toContain("40001")` failed a run whose bodies were perfectly clean: the
+    // ids in them are cuid2, alphanumeric, and long, so five digits eventually
+    // turn up inside one by chance. A guard that reddens a green suite gets
+    // deleted by the next person, and this file exists to catch a real leak —
+    // a SQLSTATE arrives as its own token ("40001", "code 40001"), never
+    // buried inside an identifier.
     const wire = JSON.stringify(res.body ?? {});
     for (const sqlstate of [...FORBIDDEN_SQLSTATES, "55P03", "P2028", "P2010"]) {
-      expect(wire, `${caseId}: SQLSTATE leaked to the client`).not.toContain(sqlstate);
+      expect(
+        leaksSqlstate(wire, sqlstate),
+        `${caseId}: SQLSTATE ${sqlstate} leaked to the client — ${wire.slice(0, 300)}`,
+      ).toBe(false);
     }
     return res;
   }
