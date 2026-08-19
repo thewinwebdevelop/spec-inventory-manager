@@ -19,7 +19,7 @@
 /// audited reveal and is the correct price.
 library;
 
-import '../../../core/session/session_state.dart';
+import '../../../core/session/capabilities.dart';
 
 const String manageOrgSettingsCapability = 'manage_org_settings';
 
@@ -47,10 +47,17 @@ class RevealShown extends RevealState {
 
 /// The last attempt failed. Any previously shown number is gone with the state
 /// that held it.
+///
+/// Carries the FAILURE, not a message: the screen owns copy, and the review
+/// found the previous version storing `runtimeType.toString()` and rendering
+/// one sentence for everything — so a spent 20/hour quota read exactly like a
+/// declaration that had been removed, and the user's next move ("try again")
+/// was wrong in one of those cases. `null` is "we do not know", which the
+/// generic sentence is honest about.
 class RevealError extends RevealState {
-  const RevealError(this.message);
+  const RevealError(this.failure);
 
-  final String? message;
+  final Object? failure;
 }
 
 /// Does pressing the button now fire a request?

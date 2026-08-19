@@ -2196,3 +2196,48 @@ package ที่ emit `dist/` ทำให้ **consumer ต้อง build ก
 ⇒ ยก `hasCapability(Set, String)` ขึ้นไปไว้ที่ `core/session` เป็น implementation เดียว · `ActiveOrg.can` และ `taxCardView` เรียกตัวเดียวกัน
 
 **นี่คือเหตุผลทั้งหมดที่ guard เชิงโครงสร้างคุ้มกว่าเทสต์ที่ assert พฤติกรรม:** เทสต์ 24 ตัวของ M-07 เขียวหมดทั้งที่มีสำเนาที่สองอยู่ในนั้น — เพราะสำเนานั้น *ทำงานถูก* วันนี้ · สิ่งที่ผิดคือ**การมีอยู่ของมัน** และมีแค่ guard ที่อ่านโครงสร้างเท่านั้นที่เห็น
+
+## security review ของ M-07 (user สั่ง 2026-08-19) — **เจอ Critical จริง 1 + High 3**
+
+reviewer ไม่ได้อ่านเฉย ๆ — **เขียน probe 7 ตัวยิงใส่จอจริงเพื่อหักล้างข้ออ้างของผมทั้ง 6 ข้อ** แล้วลบทิ้ง · ทุกบรรทัด "Evidence" คือ output จริง
+
+| ระดับ | เรื่อง | สถานะ |
+|---|---|---|
+| **Critical** | **เลขที่เปิดดูแล้ว อยู่ข้ามจอ ข้ามร้าน และข้าม session** | ✅ แก้ที่ราก |
+| High | reveal ที่ลอยอยู่ **มาถึงตอนแอปอยู่เบื้องหลัง → ถูกวาด** | ✅ epoch |
+| High | `press()` catch แค่ `ApiFailure` ⇒ อย่างอื่นทำจอค้าง loading ถาวร | ✅ catch-all |
+| High | **capability set ที่จอใช้ ว่างเปล่าในแอปจริง** ⇒ เจ้าของร้านเห็น tier read-only | ✅ อ่านจาก response |
+| Medium | เทสต์ "leaving the screen forgets it" เรียกเมธอดที่ production ไม่เคยเรียก | ✅ เขียนใหม่ |
+| Medium | เทสต์ integration ชื่อ "round trip" ไม่เคย reveal เลข | 🟠 filed |
+| Medium | คลิปบอร์ด replicate ข้ามเครื่อง (Android 13 preview · iOS Universal Clipboard) | 🟠 ลด surface + filed |
+| Low ×2 | error copy แยก 429/404 ไม่ได้ · domain ไม่ pure จริง (import Flutter ทางอ้อม) | ✅ ทั้งคู่ |
+
+### Critical: หลักฐานที่ทำให้เถียงไม่ได้
+
+```
+หลังปิดจอ:        state=RevealShown visible=0105560123454
+เข้าจอใหม่:        เลขเต็มถูกวาดอีกครั้ง · revealCalls=1  ← ไม่มี request ใหม่ = ไม่มี audit event
+switchOrg(org_2): เลขของร้าน A ยังอยู่บนการ์ดของร้าน B
+sessionExpired → คนอื่นล็อกอิน: เลขบัตรประชาชนของคนก่อนหน้า อยู่บนเฟรมแรก
+```
+
+**"ทุกการเปิดดูถูกบันทึก" ของ §3.16 เป็นเท็จบนมือถือ** — audit log รายงานน้อยกว่าความจริง
+
+### การแก้: **Riverpod ปฏิเสธ 3 ครั้ง แล้วผมถึงเข้าใจว่ามันกำลังบอกอะไร**
+
+1. เรียก notifier ใน `dispose` ⇒ notify defunct element ⇒ throw
+2. `ref.invalidate` ใน `dispose` ⇒ พังทั้งไฟล์
+3. reset ใน `initState` ⇒ *"Tried to modify a provider while the widget tree was building"*
+
+⇒ **state ที่เป็นความลับและมีอายุเท่าจอ ไม่ควรอยู่ใน container ที่อายุยืนกว่าจอ**
+ย้ายไปไว้ใน `State` ของจอเอง (`TaxRevealSession` — plain class ให้ยังเทสต์ได้โดยไม่ต้องมี widget)
+⇒ **"ออกจากจอแล้วเลขหาย" กลายเป็นข้อเท็จจริงเรื่องที่เก็บ ไม่ใช่กฎที่ใครต้องจำไปทำ**
+· **mutation แล้ว**: ทำให้ session อยู่รอดข้ามจอ (static) ⇒ เคส "coming back never inherits" แดงทันที
+
+**เทสต์ 12 ตัวของ session + 9 ของจอ + 7 ของ domain** · mobile 427 เขียว · analyze/boundary สะอาด
+
+### 🟠 ที่ยังเปิดค้าง (ส่งต่อ ไม่ปิดเอง)
+
+- **คลิปบอร์ด**: ลด surface แล้ว (เลือกได้เฉพาะแถวเลขภาษี ไม่ใช่ทั้ง 4 แถว) · การ mark `EXTRA_IS_SENSITIVE` (Android 13+) และ `localOnly`+`expirationDate` (iOS) ต้องเขียน native ทั้งสองฝั่ง ⇒ **@frontend + @devops**
+- **integration test ชื่อ "round trip" ยังไม่ reveal จริง** ⇒ @qa (ต้องประกาศ tax profile ผ่าน API ก่อนแล้วอ่านกลับ)
+- **คำถามที่ reviewer ส่งต่อ**: mobile ควรมี auto-hide เมื่อไม่ได้ใช้งานไหม (เว็บไม่มี) → @ux/@product · M-07 manual ควรเพิ่ม 3 ขั้น (ออก-กลับเข้า · สลับร้าน · ออกจากระบบแล้วคนอื่นเข้า) → @qa

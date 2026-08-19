@@ -189,6 +189,7 @@ class OrgProfileView {
     required this.id,
     required this.name,
     required this.taxProfileComplete,
+    this.capabilities = const {},
     this.entityType,
     this.taxIdMasked,
     this.vatRegistered,
@@ -198,6 +199,16 @@ class OrgProfileView {
   final String id;
   final String name;
   final bool taxProfileComplete;
+
+  /// ★ What THIS member may do in this shop, as the server reports it on this
+  /// response (`myMembership.capabilities`, required by the contract).
+  ///
+  /// Carried because the tax card's tier depends on it and the session's copy
+  /// is not populated by the picker or the switcher — the review found a real
+  /// Owner getting the read-only tier because of it. Reading it here also
+  /// means a role change is reflected on the next load rather than at the next
+  /// sign-in.
+  final Set<String> capabilities;
   final String? entityType;
 
   /// e.g. `•••••••••3454`. The server sends this only to a member who may see

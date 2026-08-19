@@ -58,6 +58,7 @@ class FakeOrgScoped implements OrgScoped {
     this.revealed,
     this.profileFailure,
     this.revealFailure,
+    this.revealThrows,
   });
 
   /// One entry per call — so a test can make page 2 fail after page 1 worked.
@@ -79,6 +80,11 @@ class FakeOrgScoped implements OrgScoped {
   final RevealedTaxId? revealed;
   final ApiFailure? profileFailure;
   final ApiFailure? revealFailure;
+
+  /// Anything that is NOT an `ApiFailure` — a deserialisation error, say. The
+  /// review used exactly this to find a `press()` that caught only the typed
+  /// family and left the screen stuck in `loading` forever.
+  final Object? revealThrows;
   int revealCalls = 0;
   int profileCalls = 0;
 
@@ -149,6 +155,7 @@ class FakeOrgScoped implements OrgScoped {
   Future<RevealedTaxId> revealTaxId() async {
     revealCalls++;
     if (delay != Duration.zero) await Future<void>.delayed(delay);
+    if (revealThrows != null) throw revealThrows!;
     if (revealFailure != null) throw revealFailure!;
     return revealed ??
         RevealedTaxId(taxId: '0105560123454', revealedAt: DateTime(2026, 8, 19));

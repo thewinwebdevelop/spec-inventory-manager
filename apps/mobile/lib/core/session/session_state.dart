@@ -17,21 +17,9 @@ library;
 
 import 'package:flutter/foundation.dart' show immutable;
 
-/// The capability that IS ownership (D-028/C-1), and a WILDCARD for every
-/// other capability. It lives here, in core, because both meanings are read
-/// outside the invite screen that first needed it.
-const String fullAccessCapability = 'full_access';
+export 'capabilities.dart' show fullAccessCapability, hasCapability;
 
-/// ★ The rule, in one place: `full_access` answers every question.
-///
-/// A free function as well as [ActiveOrg.can] because not every caller holds
-/// an `ActiveOrg` — `features/org/domain/tax_reveal.dart` is pure and takes a
-/// plain `Set<String>`. When it was written it re-implemented this line, and
-/// the capability tripwire in the web lane (which scans BOTH trees) failed the
-/// build over it. That is the guard doing precisely its job: a second copy of
-/// an authorization rule is how two answers to one question start.
-bool hasCapability(Set<String> capabilities, String required) =>
-    capabilities.contains(fullAccessCapability) || capabilities.contains(required);
+import 'capabilities.dart';
 
 /// What the caller may DO in a shop, cached after login/switch.
 ///

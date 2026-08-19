@@ -214,6 +214,9 @@ class OrgScopedImpl implements OrgScoped {
         id: body.id,
         name: body.name,
         taxProfileComplete: body.taxProfileComplete,
+        // The member's own capabilities, which this response carries and the
+        // previous mapping dropped.
+        capabilities: body.myMembership.capabilities.toSet(),
         entityType: tax?.entityType?.name,
         taxIdMasked: tax?.taxIdMasked,
         vatRegistered: tax?.vatRegistered,
