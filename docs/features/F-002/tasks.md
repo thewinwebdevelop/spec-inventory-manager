@@ -2206,10 +2206,10 @@ reviewer ไม่ได้อ่านเฉย ๆ — **เขียน probe
 | **Critical** | **เลขที่เปิดดูแล้ว อยู่ข้ามจอ ข้ามร้าน และข้าม session** | ✅ แก้ที่ราก |
 | High | reveal ที่ลอยอยู่ **มาถึงตอนแอปอยู่เบื้องหลัง → ถูกวาด** | ✅ epoch |
 | High | `press()` catch แค่ `ApiFailure` ⇒ อย่างอื่นทำจอค้าง loading ถาวร | ✅ catch-all |
-| High | **capability set ที่จอใช้ ว่างเปล่าในแอปจริง** ⇒ เจ้าของร้านเห็น tier read-only | ✅ อ่านจาก response |
+| High | **capability set ที่จอใช้ ว่างเปล่าในแอปจริง** ⇒ เจ้าของร้านเห็น tier read-only | ✅ **ทั้งสองครึ่ง** (การ์ดภาษี → อ่านจาก response · ทั้งแอป → เข้าร้านแล้วถามเซิร์ฟเวอร์) |
 | Medium | เทสต์ "leaving the screen forgets it" เรียกเมธอดที่ production ไม่เคยเรียก | ✅ เขียนใหม่ |
-| Medium | เทสต์ integration ชื่อ "round trip" ไม่เคย reveal เลข | 🟠 filed |
-| Medium | คลิปบอร์ด replicate ข้ามเครื่อง (Android 13 preview · iOS Universal Clipboard) | 🟠 ลด surface + filed |
+| Medium | เทสต์ integration ชื่อ "round trip" ไม่เคย reveal เลข | ✅ round trip จริงบน emulator |
+| Medium | คลิปบอร์ด replicate ข้ามเครื่อง (Android 13 preview · iOS Universal Clipboard) | ✅ ลด surface + mark native ทั้งสองฝั่ง |
 | Low ×2 | error copy แยก 429/404 ไม่ได้ · domain ไม่ pure จริง (import Flutter ทางอ้อม) | ✅ ทั้งคู่ |
 
 ### Critical: หลักฐานที่ทำให้เถียงไม่ได้
@@ -2238,9 +2238,11 @@ sessionExpired → คนอื่นล็อกอิน: เลขบัต�
 
 ### 🟠 ที่ยังเปิดค้าง (ส่งต่อ ไม่ปิดเอง)
 
-- **คลิปบอร์ด**: ลด surface แล้ว (เลือกได้เฉพาะแถวเลขภาษี ไม่ใช่ทั้ง 4 แถว) · การ mark `EXTRA_IS_SENSITIVE` (Android 13+) และ `localOnly`+`expirationDate` (iOS) ต้องเขียน native ทั้งสองฝั่ง ⇒ **@frontend + @devops**
-- **integration test ชื่อ "round trip" ยังไม่ reveal จริง** ⇒ @qa (ต้องประกาศ tax profile ผ่าน API ก่อนแล้วอ่านกลับ)
-- **คำถามที่ reviewer ส่งต่อ**: mobile ควรมี auto-hide เมื่อไม่ได้ใช้งานไหม (เว็บไม่มี) → @ux/@product · M-07 manual ควรเพิ่ม 3 ขั้น (ออก-กลับเข้า · สลับร้าน · ออกจากระบบแล้วคนอื่นเข้า) → @qa
+> ตัดออกแล้ว 3 ข้อ — ทั้งสามข้อ**ผมทำเองได้และทำแล้ว** (คลิปบอร์ด native ทั้งสองฝั่ง · round trip จริงบน emulator · M-07ข/ค เข้า runbook)
+> เหลือเฉพาะข้อที่**เจ้าของไม่ใช่ผม** ซึ่งเป็นเหตุผลเดียวที่ยังเปิดอยู่:
+
+- **auto-hide เมื่อไม่ได้ใช้งาน**: mobile ควรซ่อนเลขเองไหมเมื่อทิ้งจอไว้เฉย ๆ (เว็บไม่มี) — เป็นการตัดสินใจเรื่อง**ประสบการณ์ ไม่ใช่ความปลอดภัย** (ออกจากจอ/พับแอป/สลับร้าน/ออกจากระบบ ปิดหมดแล้ว) ⇒ **@ux + @product**
+- **`myMembership.capabilities` เป็นแหล่งเดียวของ client ใช่ไหม**: `GET /orgs/{orgId}` เป็นทางเดียวที่ client รู้ว่าตัวเอง "เสนออะไรได้" เพราะ §3.5 ตั้งใจไม่ส่ง capabilities ใน `/me/organizations` ⇒ **@backend-api** ยืนยันว่านี่คือสัญญาที่ตั้งใจ ไม่ใช่ผลข้างเคียง
 
 ### integration test ที่ชื่อ "round trip" — ตอนนี้ round trip จริงแล้ว (2026-08-19)
 
@@ -2311,3 +2313,14 @@ mobile 430 tests เขียว · analyze/boundary สะอาด
 เทสต์ 4 เคส · **mutation แล้ว**: เอาการเรียก learn ออก ⇒ แดง · mobile 434 เขียว
 
 **คำถามที่ reviewer ส่งให้ backend-api ยังเปิดอยู่:** `GET /orgs/{orgId}` → `myMembership.capabilities` เป็นแหล่งเดียวที่ตั้งใจให้ client ใช้ตัดสินว่าจะ "เสนออะไร" ใช่ไหม (เพราะ `/me/organizations` ตั้งใจไม่ส่ง capabilities)
+
+### เก็บของที่รีวิวเจอเข้า pack ให้มันไม่หายไปกับ log (2026-08-19)
+
+สิ่งที่รีวิวเจอ 2 ข้อใหญ่ยังอยู่ใน**ร้อยแก้วของไฟล์นี้เท่านั้น** ⇒ ไม่มี gate ไหนดูแลมัน ⇒ ลบเทสต์ทิ้งวันหน้าก็ไม่มีใครรู้
+⇒ ใส่เข้า `build-defects.ts` เป็น **B-12** (เลขที่เปิดดูแล้วอยู่ข้ามจอ/ข้ามร้าน/ข้าม session) และ **B-13** (เข้าร้านด้วย capability ว่าง)
+
+**ทำไมอยู่ pack นี้ ไม่ใช่ pack §9:** §9 คือ 41 ข้อที่**ทำนายจากเอกสาร**ก่อนมีของ · pack นี้คือข้อที่**เจอตอนรันของจริง**
+· รีวิวเขียน probe 7 ตัวยิงจอที่ build แล้ว ไม่ได้อ่านเฉย ๆ ⇒ ลายเซ็นเดียวกับทุกแถวในนี้: **มี suite เขียวทับอยู่ตอนนั้น**
+
+pin ที่ **พฤติกรรม** ไม่ใช่ถ้อยคำ (บทเรียนจาก B-7): `never inherits the number` · `backgrounding drops the number` · `after dispose` · `learns what this member may do` · `has LEFT`
+⇒ build pack **13 แถว** · gate 6/6 เขียว

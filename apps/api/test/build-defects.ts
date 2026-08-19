@@ -222,4 +222,48 @@ export const BUILD_DEFECTS: readonly BuildDefect[] = Object.freeze([
       { file: "apps/api/test/run-scripts.test.ts", must: ["design:paramtypes", "RUNTIME_PACKAGES"] },
     ],
   },
+  // ── found by the M-07 security review, which ran probes rather than reading ──
+  //
+  // These belong in THIS list rather than the §9 review pack, and the
+  // distinction is the whole point of the file: the §9 findings were predicted
+  // from documents before anything existed. These two were found by driving
+  // the built screen — the reviewer wrote seven throwaway probes to refute the
+  // six claims I had made about it, and two of them held. Same signature as
+  // every other row here: a green suite was sitting on top at the time.
+  {
+    finding: "B-12",
+    title:
+      "a revealed tax id outlived the screen, the shop and the session — so §3.16's \"every reveal is logged\" was false on mobile",
+    tier: "smoke",
+    foundBy:
+      "security-review probes against the real screen: re-entry repainted the number with revealCalls=1 (no request ⇒ no audit event), switchOrg carried it onto another shop's card, and sign-out → a different user showed the previous person's national ID on the first frame",
+    pins: [
+      // The fix was structural — the secret now lives in the screen's own
+      // `State`, so "leaving forgets it" is a fact about storage rather than a
+      // rule somebody has to remember. These name the behaviours that would
+      // have to be deleted for that to come undone.
+      {
+        file: "apps/mobile/test/features/org/presentation/org_profile_screen_test.dart",
+        must: ["never inherits the number"],
+      },
+      {
+        file: "apps/mobile/test/features/org/application/tax_reveal_session_test.dart",
+        must: ["backgrounding drops the number", "after dispose"],
+      },
+    ],
+  },
+  {
+    finding: "B-13",
+    title:
+      "every entry point but create-shop entered a shop with an EMPTY capability set — a real Owner was offered nothing",
+    tier: "smoke",
+    foundBy:
+      "the same review, reading the call sites: `/me/organizations` publishes no capabilities by design (§3.5), so the picker and the switcher had nothing to pass",
+    pins: [
+      {
+        file: "apps/mobile/test/features/org/application/enter_organization_test.dart",
+        must: ["learns what this member may do", "has LEFT"],
+      },
+    ],
+  },
 ]);
