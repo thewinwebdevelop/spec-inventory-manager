@@ -2382,3 +2382,7 @@ mobile **435 เขียว** · analyze/boundary สะอาด
 **บทเรียนของผมเองในรอบนี้:** push สองครั้งของผม**ไปยกเลิกเลน emulator ของรอบก่อนทั้งคู่** (`cancel-in-progress`)
 · เลนที่ช้าที่สุดและเป็นเลนเดียวที่รันแอปจริงบนเครื่องจริง คือเลนที่โดนตัดทุกครั้งเพราะผม push ถี่กว่ารอบ CI จะจบ
 ⇒ ต่อจากนี้: **ถือ commit ไว้จน emulator lane จบก่อน แล้วค่อย push**
+
+**ยืนยัน: [run 32280764919](https://github.com/thewinwebdevelop/spec-inventory-manager/actions/runs/32280764919) เขียวครบ 9/9**
+· `e2e-web` **2 นาที 54 วินาที** (จาก 68 นาทีที่ค้าง) — `playwright: expected=26 unexpected=0 flaky=0 skipped=0` · `browser lane ran 26 passing case(s) (floor 26)`
+· `mobile-e2e` 10 นาที 47 วินาที — `mobile integration: 4 passing case(s) (floor 4)` · ทุก job จบต่ำกว่าขอบที่ตั้งไว้มาก (สูงสุด mobile-e2e 10:47 จากขอบ 45)
