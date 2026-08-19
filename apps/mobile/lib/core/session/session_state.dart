@@ -22,6 +22,17 @@ import 'package:flutter/foundation.dart' show immutable;
 /// outside the invite screen that first needed it.
 const String fullAccessCapability = 'full_access';
 
+/// ★ The rule, in one place: `full_access` answers every question.
+///
+/// A free function as well as [ActiveOrg.can] because not every caller holds
+/// an `ActiveOrg` — `features/org/domain/tax_reveal.dart` is pure and takes a
+/// plain `Set<String>`. When it was written it re-implemented this line, and
+/// the capability tripwire in the web lane (which scans BOTH trees) failed the
+/// build over it. That is the guard doing precisely its job: a second copy of
+/// an authorization rule is how two answers to one question start.
+bool hasCapability(Set<String> capabilities, String required) =>
+    capabilities.contains(fullAccessCapability) || capabilities.contains(required);
+
 /// What the caller may DO in a shop, cached after login/switch.
 ///
 /// `capabilities` is RBAC (F-003) and `entitlements` is the plan tier (F-007).
@@ -59,8 +70,7 @@ class ActiveOrg {
   /// had the same line, and it cost the Owner their own members menu, the tax
   /// declaration, the reveal button and the rename affordance (tasks.md,
   /// 2026-08-16). Same rule as core-domain's `hasCapability`.
-  bool can(String capability) =>
-      capabilities.contains(fullAccessCapability) || capabilities.contains(capability);
+  bool can(String capability) => hasCapability(capabilities, capability);
 }
 
 @immutable

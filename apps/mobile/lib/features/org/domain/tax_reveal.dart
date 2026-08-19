@@ -116,10 +116,11 @@ TaxCardView taxCardView({
   bool? vatRegistered,
   String? branchCode,
 }) {
-  // ★ `full_access` is a wildcard — the same rule as `ActiveOrg.can`, and the
-  // bug that cost the Owner their own menus on both platforms.
-  final canEdit = capabilities.contains(fullAccessCapability) ||
-      capabilities.contains(manageOrgSettingsCapability);
+  // ★ `hasCapability`, not two `contains` calls — `full_access` is a wildcard,
+  // and the rule has exactly one implementation (`core/session`). The first
+  // version of this line spelled the rule out again and the capability
+  // tripwire rejected it, which is what that guard is for.
+  final canEdit = hasCapability(capabilities, manageOrgSettingsCapability);
 
   if (!complete) return TaxCardUndeclared(canEdit: canEdit);
   if (!canEdit) return TaxCardSummary(vatRegistered: vatRegistered);
