@@ -79,8 +79,9 @@ fvm flutter run --dart-define=API_BASE_URL=http://<LAN-IP-ของเครื�
 เทสต์พิสูจน์ได้แค่ว่า *เราสั่ง* `FLAG_SECURE` และ *เราทิ้งค่า* ตอนแอปออกจาก foreground —
 **พิสูจน์ไม่ได้ว่า OS ทำตาม** · คนถือเครื่องเท่านั้นที่เห็นภาพจริงใน app switcher
 
-> ⚠️ **M-07 เป็น ★ task และยังขาด security-reviewer pass** (บังคับตาม WEB_TEAM §3.6 + checklist ของ skill `client-security`)
-> ผมเรียก agent เองไม่ได้ — ต้องให้ผู้ใช้สั่ง หรือให้ reviewer เข้ามาดูก่อน merge
+> ✅ **security-reviewer pass ของ ★ M-07 ทำแล้ว** (ผู้ใช้สั่ง 2026-08-19 — WEB_TEAM §3.6 + checklist ของ skill `client-security`)
+> **เจอ Critical 1 + High 3** และแก้ครบแล้ว — เลขที่เปิดดูเคยอยู่ข้ามจอ/ข้ามร้าน/ข้าม session ⇒ **นั่นคือที่มาของ M-07ข ทั้ง 3 ขั้นด้านบน**
+> ⇒ อย่าข้าม M-07ข: มันคือ 3 ทางที่ **probe ของ reviewer เคยเจอว่าพังจริง** ไม่ใช่รายการเผื่อไว้ · ผลเต็มอยู่ใน `tasks.md`
 
 ---
 

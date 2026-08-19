@@ -2343,3 +2343,22 @@ pin ที่ **พฤติกรรม** ไม่ใช่ถ้อยคำ 
 · **mutation แล้ว**: เอา `ref.read` กลับไปไว้หลัง `await` ⇒ **แดงทันที** (อีก 4 เคสยังเขียว = เคสเก่าพิสูจน์เรื่องนี้ไม่ได้จริง ๆ)
 
 mobile **435 เขียว** · analyze/boundary สะอาด
+
+## Quality gate — หลักฐานรอบใหม่ (แทนของ 2026-08-17 ที่ตัวเลขเก่าไปแล้ว) — 2026-08-19
+
+ของเดิมเขียนไว้ก่อน browser lane เต็ม · ก่อนจอภาษี mobile · ก่อน security review · ก่อน B-7..B-13
+**qa ยังเป็นเจ้าของ verdict — นี่คือหลักฐาน ไม่ใช่คำตัดสิน**
+
+| Gate | ผล | หลักฐาน (เปลี่ยนจากรอบก่อนตรงไหน) |
+|---|---|---|
+| **A** Requirement | ✅ pass | ไม่เปลี่ยน — Gate 1 เคาะแล้ว · platform=both · size=full · **ยกเว้นข้อเดียว: จอภาษี mobile เป็นสโคปที่ผู้ใช้สั่งเพิ่มเอง 2026-08-19** (§13 ข้อ 3 เคยเลื่อนไว้) |
+| **B** Design | ✅ pass | เดิม + **security review ฉบับที่ 4 (M-07, ผู้ใช้สั่ง)** — ★ task ครบตาม WEB_TEAM §3.6 แล้ว |
+| **C** Domain & Data | ✅ pass | ไม่เปลี่ยน · money/stock = N/A (F-002 ไม่แตะ) · cross-tenant 5 persona · **+ `grantsOwnership` เป็น additive (oasdiff เขียว)** |
+| **D** Experience | ✅ pass | **B-7/B-8 ปิดแล้ว** (ไม่ใช่ "ข้อสังเกตเปิดค้าง" อีกต่อไป) · **+ จอภาษี mobile ครบ 4 states + tier ตาม capability** |
+| **E** Quality | ⚠️ **แดง 1 ช่องเท่าเดิม** | **§12.1 ครบ 14/14 แล้ว** (E-01..E-14 · browser 26 · emulator 4 · E-11 static) · web **331** · mobile **435** · api unit **680** (+int 210 ใน CI) · tripwire **6 ตัว** (G-15 · capability · copy-lint · boolean-enum · run-scripts · build-pack) · pack: §9 41 ข้อ + build **13 ข้อ** · **ไม่มี `.skip/xit`** · **แดง: manual §12.2 — งานคน** |
+| **F** Release | ⏸️ ยังไม่เริ่ม | เหมือนเดิม — version/CHANGELOG/rollback/RETRO เป็นของ release + PM |
+
+**diff hygiene:** commit ตั้งแต่ `main` ถึงตอนนี้ **120 ตัว** · ที่แตะ protected path มีตัวเดียวคือ `3570f2d` (Gate 2 design ที่ผู้ใช้อนุมัติ+สั่ง commit เอง) · **ไม่มี commit ของช่วง build เลยที่แตะ**
+
+**VERDICT: ยัง NOT DONE — เหลือข้อเดียวเท่าเดิม คือ manual §12.2** (M-01..M-07ค) ซึ่ง §17.6 บังคับให้ทำก่อนตัดสิน
+ที่เปลี่ยนคือ**ราคาของช่องแดงนั้นลดลง**: runbook พร้อม · M-07ข/ค ระบุชัดว่าต้องทำอะไรเพราะ probe เคยเจอว่าพังตรงไหน
