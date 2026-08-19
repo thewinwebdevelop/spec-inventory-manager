@@ -4,6 +4,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../../../core/error/api_failure.dart';
 import '../../../../core/l10n/l10n.dart';
 import '../../../../core/security/screenshot_guard.dart';
+import '../../../../core/security/sensitive_clipboard.dart';
 import '../../../../core/theme/app_theme.dart';
 import '../../../../core/ui/error_banner.dart';
 import '../../../../core/ui/skeleton.dart';
@@ -320,7 +321,28 @@ class _Row extends StatelessWidget {
           // an owner reading it out to an accountant should not have to
           // transcribe thirteen digits by eye.
           if (selectable)
-            SelectableText(value, style: AppTypography.bodyMd)
+            SelectableText(
+              value,
+              style: AppTypography.bodyMd,
+              // ★ The menu's Copy goes through `SensitiveClipboard`, not
+              // Flutter's default. The default puts a national ID on the
+              // ordinary clipboard, which Android 13+ shows a preview of —
+              // outside the FLAG_SECURE window this screen holds — and which
+              // iOS replicates to the person's other devices.
+              contextMenuBuilder: (context, editableTextState) =>
+                  AdaptiveTextSelectionToolbar.buttonItems(
+                anchors: editableTextState.contextMenuAnchors,
+                buttonItems: [
+                  ContextMenuButtonItem(
+                    type: ContextMenuButtonType.copy,
+                    onPressed: () {
+                      SensitiveClipboard.copy(value);
+                      editableTextState.hideToolbar();
+                    },
+                  ),
+                ],
+              ),
+            )
           else
             Text(value, style: AppTypography.bodyMd),
         ],

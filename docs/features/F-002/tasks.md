@@ -2273,3 +2273,22 @@ reviewer ชี้ว่าเคสนี้ **declare อะไรไม่เ
           mobile integration: 4 passing case(s) (floor 4)
 ```
 success path ของ `POST …/tax-profile/reveal` **ถูกยิงกับ server จริงเป็นครั้งแรก** — deserialise ผ่าน · profile ยังคงมีแค่ mask หลัง reveal
+
+### ปิดข้อสุดท้ายของรีวิว: clipboard ที่ไม่เดินทางข้ามเครื่อง (2026-08-19)
+
+reviewer จัดเป็น **residual risk ให้ตัดสิน ไม่ใช่ defect ให้ลบ** — เพราะ "คัดลอกได้" คือข้อกำหนดของ M-07 (ข) เอง
+· ปัญหาคือคลิปบอร์ดปกติพาเลขออกไปไกลกว่าที่แอปคุมได้: **Android 13+ เด้ง preview ของค่าที่คัดลอก ซึ่งอยู่นอกหน้าต่างที่ `FLAG_SECURE` คุม** และ sync ไป Chromebook · **iOS ส่งต่อไปเครื่อง Apple อื่นของคนเดียวกันผ่าน Universal Clipboard และอยู่ยาว**
+
+**เก็บการคัดลอกไว้ แต่ทำให้มัน mark ตัวเอง** (ทำตามที่ reviewer เสนอ):
+- Android: `ClipDescription.EXTRA_IS_SENSITIVE` ⇒ ระบบไม่โชว์ preview (13+ · ต่ำกว่านั้นแพลตฟอร์มไม่มีอะไรให้ใช้ — เขียนไว้ตรง ๆ)
+- iOS: `localOnly: true` (ไม่ไป Universal Clipboard) + `expirationDate` 120 วิ (ระบบล้างให้ ไม่ค้างข้ามวัน)
+- Dart: เมนู Copy ของ `SelectableText` ถูก override ให้วิ่งผ่านช่องนี้ **ไม่ใช่คลิปบอร์ดปกติของ Flutter** · โครงเดียวกับ `ScreenshotGuard` ของ F-001 (first-party MethodChannel ไม่ลาก plugin เข้ามาเพื่อ 1 เมธอด)
+
+**fallback ที่ไม่โกหก:** ไม่มี native handler (เช่นใน `flutter test`) ⇒ คัดลอกด้วยคลิปบอร์ดปกติ **แล้ว return `false`**
+· ไม่คัดลอกเลย = ฟีเจอร์พังเงียบ · คัดลอกแล้วอ้างว่าปลอดภัย = แย่กว่า ⇒ ทำอย่างแรกแล้ว**บอกความจริง** · เทสต์ 3 เคสยืนยันทั้งสองทาง
+
+**เพิ่มขั้นตอน manual ตามที่ reviewer ขอ:**
+- **M-07ข** — ทำ 3 ทางที่ probe เคยเจอว่าพัง ซ้ำด้วยมือ: ออกจากจอแล้วเข้าใหม่ · สลับร้าน · ออกจากระบบแล้วให้อีกคนล็อกอิน
+- **M-07ค** — ดู clipboard preview บน Android 13+ ว่าไม่โชว์เลข · และเช็คว่าเลขไม่โผล่บนเครื่อง Apple อื่นของคนเดียวกัน
+
+mobile 430 tests เขียว · analyze/boundary สะอาด
