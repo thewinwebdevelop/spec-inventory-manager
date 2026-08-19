@@ -17,6 +17,9 @@ jobs:
   # AC2 (build covers all workspaces), lint (real TS lint), typecheck, test — Node only.
   node-ci:
     runs-on: ubuntu-latest
+    # Bounded so a hung step is a RESULT, not a six-hour absence (the
+    # default). Sized well above what this job actually takes.
+    timeout-minutes: 20
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
@@ -40,6 +43,9 @@ jobs:
   # AC4/AC5/AC6/AC7/AC8 — one ephemeral Postgres, empty → migrated → introspected → trigger-armed (§3).
   db-migrate:
     runs-on: ubuntu-latest
+    # Bounded so a hung step is a RESULT, not a six-hour absence (the
+    # default). Sized well above what this job actually takes.
+    timeout-minutes: 15
     services:
       postgres:
         image: postgres:16
@@ -130,6 +136,9 @@ jobs:
   # is live, not decorative.
   depcruise:
     runs-on: ubuntu-latest
+    # Bounded so a hung step is a RESULT, not a six-hour absence (the
+    # default). Sized well above what this job actually takes.
+    timeout-minutes: 15
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
@@ -152,6 +161,9 @@ jobs:
   # merge-base version via oasdiff (Docker image — no install/new npm dep).
   oasdiff:
     runs-on: ubuntu-latest
+    # Bounded so a hung step is a RESULT, not a six-hour absence (the
+    # default). Sized well above what this job actually takes.
+    timeout-minutes: 15
     steps:
       # fetch-depth: 0 so `git merge-base` + the base-branch ref are available.
       - uses: actions/checkout@v4
@@ -167,6 +179,9 @@ jobs:
   # the generated api_client package is excluded from analyze (analysis_options).
   flutter-ci:
     runs-on: ubuntu-latest
+    # Bounded so a hung step is a RESULT, not a six-hour absence (the
+    # default). Sized well above what this job actually takes.
+    timeout-minutes: 20
     steps:
       - uses: actions/checkout@v4
       - uses: subosito/flutter-action@v2
@@ -199,6 +214,9 @@ jobs:
   # runs build_runner (T-000-09 fix); flutter-action provides it.
   contracts-drift:
     runs-on: ubuntu-latest
+    # Bounded so a hung step is a RESULT, not a six-hour absence (the
+    # default). Sized well above what this job actually takes.
+    timeout-minutes: 20
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
@@ -237,6 +255,9 @@ jobs:
   # filename filter or a self-skipped suite must all be RED here, not a notice.
   integration-api:
     runs-on: ubuntu-latest
+    # Bounded so a hung step is a RESULT, not a six-hour absence (the
+    # default). Sized well above what this job actually takes.
+    timeout-minutes: 25
     services:
       postgres:
         image: postgres:16
@@ -441,6 +462,9 @@ jobs:
   # them.
   mobile-e2e:
     runs-on: ubuntu-latest
+    # Bounded so a hung step is a RESULT, not a six-hour absence (the
+    # default). Sized well above what this job actually takes.
+    timeout-minutes: 45
     services:
       postgres:
         image: postgres:16
@@ -605,6 +629,9 @@ jobs:
 
   e2e-web:
     runs-on: ubuntu-latest
+    # Bounded so a hung step is a RESULT, not a six-hour absence (the
+    # default). Sized well above what this job actually takes.
+    timeout-minutes: 30
     # ★ T-002-Q5 — this lane used to boot the web server alone and ask it for
     # `GET /`. Every row of test-plan §12.1 crosses the whole stack (signup,
     # provisioning, the org header), so a browser suite against a web server
@@ -726,8 +753,33 @@ jobs:
           echo "::error::apps/web never answered 200 on / within 30s"
           cat /tmp/web.log || true
           exit 1
+      # ★ Bounded, and retried — this step hung twice in a row on 2026-08-19,
+      # for 68 minutes and 26 minutes, on two consecutive commits, while the
+      # same step took well under a minute on every earlier run. Nothing in the
+      # repo changed; the browser download stalls.
+      #
+      # Two separate problems, and the timeout is the important one: with no
+      # `timeout-minutes` anywhere in this file, a stalled download runs to
+      # GitHub's six-hour default. So the lane does not report — not red, not
+      # green, just absent — and the only signal is somebody noticing a spinner
+      # an hour later. A bounded step is a RESULT.
+      #
+      # The retry is the cheap half: a stall is transient, and three bounded
+      # attempts turn most of them into a pass instead of a rerun somebody has
+      # to request by hand.
       - name: install Playwright browsers
-        run: pnpm --filter web exec playwright install --with-deps chromium
+        timeout-minutes: 12
+        run: |
+          for attempt in 1 2 3; do
+            if timeout 220 pnpm --filter web exec playwright install --with-deps chromium; then
+              echo "playwright browsers installed (attempt $attempt)"
+              exit 0
+            fi
+            echo "::warning::playwright install stalled or failed (attempt $attempt/3) — retrying"
+            sleep 5
+          done
+          echo "::error::playwright install did not finish in 3 bounded attempts"
+          exit 1
       # ★ The conditional that used to wrap the two steps above is GONE. It read
       # "run the suite if apps/web declares test:e2e", which meant this job was
       # green for months on a repo that had no browser suite at all — the exact
