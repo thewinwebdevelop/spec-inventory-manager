@@ -2266,3 +2266,10 @@ reviewer ชี้ว่าเคสนี้ **declare อะไรไม่เ
    (`"code 40001"` ⇒ จับได้ · `"cmsz40001dm4s001g"` ⇒ ไม่จับ)
 
 **ทั้งสองตัวคือ guard ที่ทำให้ suite เขียวกลายเป็นแดง** ซึ่งผมเขียนเตือนตัวเองไว้เองว่าอันตรายกว่าไม่มี guard — คนถัดไปจะลบทิ้ง
+
+✅ **ยืนยันบน emulator จริง** ([run 32211552086](https://github.com/thewinwebdevelop/spec-inventory-manager/actions/runs/32211552086) — เขียวครบ 9 job):
+```
+00:05 +2: ★ M-07 · the tax id round trip against the real API
+          mobile integration: 4 passing case(s) (floor 4)
+```
+success path ของ `POST …/tax-profile/reveal` **ถูกยิงกับ server จริงเป็นครั้งแรก** — deserialise ผ่าน · profile ยังคงมีแค่ mask หลัง reveal
