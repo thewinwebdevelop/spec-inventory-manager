@@ -172,13 +172,23 @@ void main() {
   });
 
   testWidgets('★ M-07 · the tax id round trip against the real API', (tester) async {
-    // The half of M-07 a machine can check: that `GET /orgs/{id}` never carries
-    // the number and `POST …/tax-profile/reveal` does, on a real device against
-    // a real server. What stays manual is the part a person has to look at —
-    // the app-switcher thumbnail, and whether the digits are readable and
-    // copyable on a phone in a shop.
+    // ⚠️ THIS CASE USED TO BE NAMED A ROUND TRIP AND NEVER REVEALED A NUMBER.
+    // The security review caught that: it declared nothing, so the success
+    // path — deserialising `taxId`/`revealedAt`, and the property that the
+    // profile endpoint STILL only carries a mask afterwards — was unproven
+    // against the real server. That success path is exactly where a
+    // deserialisation error would have stranded the screen in `loading`.
+    //
+    // It now declares a tax profile, reveals it, and checks both directions.
+    // What stays manual is what a person has to look at: the app-switcher
+    // thumbnail, and whether thirteen digits are readable and copyable in
+    // somebody's hand.
+    const validTaxId = '0105560123454'; // mod-11 checksum, weights 13…2
+    final api = Dio(BaseOptions(baseUrl: baseUrl, validateStatus: (_) => true));
+
     final container = bootApp();
-    await signUpAndSignIn(container, freshEmail('m-tax'));
+    final email = freshEmail('m-tax');
+    await signUpAndSignIn(container, email);
 
     final org = await container.read(orgDirectoryProvider).createOrganization(
           name: 'ร้านภาษีมือถือ ${DateTime.now().millisecondsSinceEpoch}',
@@ -187,21 +197,75 @@ void main() {
           ActiveOrg(orgId: org.id, name: org.name, capabilities: const {'full_access'}),
         );
 
-    // A fresh shop has no declaration, and the profile says so without any
-    // digits anywhere in it.
-    final profile = await container.read(orgScopedRepositoryProvider).getOrganization();
-    expect(profile.taxProfileComplete, isFalse);
-    expect(profile.taxIdMasked, isNull);
+    // ── before anything is declared ──────────────────────────────────────
+    final before = await container.read(orgScopedRepositoryProvider).getOrganization();
+    expect(before.taxProfileComplete, isFalse);
+    expect(before.taxIdMasked, isNull);
 
-    // ★ Reveal on an undeclared shop is a 404, not an empty string — the
-    // client must not paint "—" as if it were a number.
-    Object? failure;
+    // ★ Revealing an undeclared shop fails loudly — the client must not paint
+    // "—" as though it were a number.
+    Object? undeclaredFailure;
     try {
       await container.read(orgScopedRepositoryProvider).revealTaxId();
     } catch (e) {
-      failure = e;
+      undeclaredFailure = e;
     }
-    expect(failure, isNotNull, reason: 'revealing a shop with no tax profile should fail loudly');
+    expect(undeclaredFailure, isNotNull, reason: 'reveal on a shop with no declaration');
+
+    // ── declare it, through the API ──────────────────────────────────────
+    // Mobile has no tax form (§13 item 3, and M-07's screen is read-only), so
+    // the declaration goes the way it goes in real life: somebody does it on
+    // the web. Saying so beats pretending the phone can.
+    final auth = await api.post<Map<String, dynamic>>(
+      '/auth/login',
+      data: {'email': email, 'password': password, 'tokenTransport': 'body'},
+    );
+    expect(auth.statusCode, 200, reason: 'the API refused the login: ${auth.data}');
+    final headers = {
+      'Authorization': 'Bearer ${(auth.data!['accessToken'] as String)}',
+      'X-Organization-Id': org.id,
+    };
+
+    final declared = await api.put<Map<String, dynamic>>(
+      '/orgs/${org.id}/tax-profile',
+      data: {
+        'entityType': 'personal', // the case where the TIN IS a national ID
+        'taxId': validTaxId,
+        'vatRegistered': false,
+      },
+      options: Options(headers: headers),
+    );
+    expect(declared.statusCode, 200, reason: 'declaring the profile failed: ${declared.data}');
+    // ★ Even the WRITE does not echo it back (contract §3.3).
+    expect(declared.data.toString(), isNot(contains(validTaxId)));
+
+    // ── the profile now says "declared", still with no digits ────────────
+    final after = await container.read(orgScopedRepositoryProvider).getOrganization();
+    expect(after.taxProfileComplete, isTrue);
+    expect(after.taxIdMasked, isNotNull);
+    expect(
+      after.taxIdMasked,
+      isNot(contains(validTaxId)),
+      reason: 'the mask must not contain the whole number',
+    );
+    expect(after.capabilities, contains('full_access'),
+        reason: 'the tier is decided from this field — it was dropped once already');
+
+    // ── and the ONE endpoint that may say it, does ───────────────────────
+    final revealed = await container.read(orgScopedRepositoryProvider).revealTaxId();
+    expect(revealed.taxId, validTaxId, reason: 'the success path nobody had exercised');
+    expect(revealed.revealedAt, isA<DateTime>());
+
+    // ★ …and asking again does not change what the profile endpoint carries.
+    // If a reveal ever "warmed" the profile response, every screen showing the
+    // shop would start leaking the number.
+    final stillMasked = await container.read(orgScopedRepositoryProvider).getOrganization();
+    expect(stillMasked.taxIdMasked, isNot(equals(validTaxId)));
+
+    // A second look is a second request — nothing is cached anywhere in the
+    // chain, which is what makes the audit trail mean anything.
+    final again = await container.read(orgScopedRepositoryProvider).revealTaxId();
+    expect(again.taxId, validTaxId);
   });
 
   testWidgets('★ E-10 · removed mid-session: the shop goes, the session stays', (tester) async {

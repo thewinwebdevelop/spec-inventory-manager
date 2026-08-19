@@ -73,6 +73,8 @@ export const BUILD_DEFECTS: readonly BuildDefect[] = Object.freeze([
     pins: [
       { file: "apps/mobile/test/app/bootstrap_test.dart", must: ["UnimplementedError"] },
       { file: "apps/mobile/integration_test/org_flow_test.dart", must: ["buildAppOverrides"] },
+      // The M-07 round trip, after the review pointed out it revealed nothing.
+      { file: "apps/mobile/integration_test/org_flow_test.dart", must: ["validTaxId"] },
     ],
   },
   {

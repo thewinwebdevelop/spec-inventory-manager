@@ -2241,3 +2241,17 @@ sessionExpired → คนอื่นล็อกอิน: เลขบัต�
 - **คลิปบอร์ด**: ลด surface แล้ว (เลือกได้เฉพาะแถวเลขภาษี ไม่ใช่ทั้ง 4 แถว) · การ mark `EXTRA_IS_SENSITIVE` (Android 13+) และ `localOnly`+`expirationDate` (iOS) ต้องเขียน native ทั้งสองฝั่ง ⇒ **@frontend + @devops**
 - **integration test ชื่อ "round trip" ยังไม่ reveal จริง** ⇒ @qa (ต้องประกาศ tax profile ผ่าน API ก่อนแล้วอ่านกลับ)
 - **คำถามที่ reviewer ส่งต่อ**: mobile ควรมี auto-hide เมื่อไม่ได้ใช้งานไหม (เว็บไม่มี) → @ux/@product · M-07 manual ควรเพิ่ม 3 ขั้น (ออก-กลับเข้า · สลับร้าน · ออกจากระบบแล้วคนอื่นเข้า) → @qa
+
+### integration test ที่ชื่อ "round trip" — ตอนนี้ round trip จริงแล้ว (2026-08-19)
+
+reviewer ชี้ว่าเคสนี้ **declare อะไรไม่เคยเลย** ⇒ success path (deserialise `taxId`/`revealedAt`) **ไม่เคยถูกยิงกับ server จริง**
+· ซึ่งคือเส้นทางเดียวกับที่ High #3 บอกว่าถ้าพังจะทำให้จอค้าง `loading` ถาวร
+
+เคสใหม่เดินครบวง:
+1. ร้านใหม่ ⇒ `taxProfileComplete: false` · ไม่มี mask · **reveal ต้องพังดัง ๆ**
+2. **ประกาศผ่าน API** (`PUT …/tax-profile`, `entityType: personal` = เคสที่เลขนี้คือเลขบัตรประชาชน) — mobile ไม่มีฟอร์ม จึงทำแบบที่เกิดขึ้นจริง คือคนไปทำบนเว็บ
+3. **response ของ PUT เองก็ต้องไม่ echo เลขกลับมา** (§3.3)
+4. `GET /orgs/{id}` ⇒ `taxProfileComplete: true` · มี mask · **mask ต้องไม่มีเลขเต็มอยู่ข้างใน** · และมี `capabilities` (ฟิลด์ที่เคยถูก map ตกไปจนเจ้าของร้านเห็น tier ผิด)
+5. **reveal ⇒ ได้เลขเต็มจริง** ← success path ที่ไม่เคยมีใครยิง
+6. **หลัง reveal แล้ว `GET` ยังคงมีแค่ mask** — ถ้าวันหนึ่ง reveal ไป "อุ่น" profile response ทุกจอที่โชว์ร้านจะเริ่มรั่ว
+7. reveal ครั้งที่สอง = request ใหม่ (ไม่มี cache ที่ไหนในสาย)
