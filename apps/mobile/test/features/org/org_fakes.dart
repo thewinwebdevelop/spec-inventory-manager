@@ -54,6 +54,10 @@ class FakeOrgScoped implements OrgScoped {
     this.createInvitationFailure,
     this.issued,
     this.delay = Duration.zero,
+    this.profile,
+    this.revealed,
+    this.profileFailure,
+    this.revealFailure,
   });
 
   /// One entry per call — so a test can make page 2 fail after page 1 worked.
@@ -67,6 +71,16 @@ class FakeOrgScoped implements OrgScoped {
   final ApiFailure? createInvitationFailure;
   final IssuedInvite? issued;
   final Duration delay;
+
+  // ★ M-07 — the tax card's two calls. `revealCalls` is counted because the
+  // rule under test is "every look is a fresh, audited request": a screen that
+  // cached the number would show it twice for one call here.
+  final OrgProfileView? profile;
+  final RevealedTaxId? revealed;
+  final ApiFailure? profileFailure;
+  final ApiFailure? revealFailure;
+  int revealCalls = 0;
+  int profileCalls = 0;
 
   int memberCalls = 0;
   int invitationCalls = 0;
@@ -114,6 +128,32 @@ class FakeOrgScoped implements OrgScoped {
           expiresAt: DateTime.utc(2026, 8, 9, 7, 30),
         );
   }
+  @override
+  Future<OrgProfileView> getOrganization() async {
+    profileCalls++;
+    if (delay != Duration.zero) await Future<void>.delayed(delay);
+    if (profileFailure != null) throw profileFailure!;
+    return profile ??
+        const OrgProfileView(
+          id: 'org_1',
+          name: 'ร้านหอมกรุ่นเบเกอรี่',
+          taxProfileComplete: true,
+          entityType: 'personal',
+          taxIdMasked: '•••••••••3454',
+          vatRegistered: false,
+          branchCode: '00000',
+        );
+  }
+
+  @override
+  Future<RevealedTaxId> revealTaxId() async {
+    revealCalls++;
+    if (delay != Duration.zero) await Future<void>.delayed(delay);
+    if (revealFailure != null) throw revealFailure!;
+    return revealed ??
+        RevealedTaxId(taxId: '0105560123454', revealedAt: DateTime(2026, 8, 19));
+  }
+
 }
 
 const threeRoles = [

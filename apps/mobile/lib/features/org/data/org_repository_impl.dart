@@ -204,6 +204,43 @@ class OrgScopedImpl implements OrgScoped {
   }
 
   @override
+  Future<OrgProfileView> getOrganization() async {
+    try {
+      final res = await _organizations.getOrganization(orgId: _orgId);
+      final body = res.data;
+      if (body == null) throw const ServerFailure();
+      final tax = body.taxProfile;
+      return OrgProfileView(
+        id: body.id,
+        name: body.name,
+        taxProfileComplete: body.taxProfileComplete,
+        entityType: tax?.entityType?.name,
+        taxIdMasked: tax?.taxIdMasked,
+        vatRegistered: tax?.vatRegistered,
+        branchCode: tax?.branchCode,
+      );
+    } on DioException catch (e) {
+      throw _asFailure(e);
+    }
+  }
+
+  /// ★ The full tax id. Mapped straight through and NOT stored anywhere in
+  /// this class — no field, no cache, no memo. The caller holds it in screen
+  /// state and drops it; anything kept here would outlive the screen that
+  /// asked for it, which is the property §3.16 is built around.
+  @override
+  Future<RevealedTaxId> revealTaxId() async {
+    try {
+      final res = await _organizations.revealTaxId(orgId: _orgId);
+      final body = res.data;
+      if (body == null) throw const ServerFailure();
+      return RevealedTaxId(taxId: body.taxId, revealedAt: body.revealedAt);
+    } on DioException catch (e) {
+      throw _asFailure(e);
+    }
+  }
+
+  @override
   Future<IssuedInvite> createInvitation({
     required String email,
     required String roleId,

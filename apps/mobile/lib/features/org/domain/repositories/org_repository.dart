@@ -33,6 +33,17 @@ abstract interface class OrgScoped {
   /// `GET /orgs/{orgId}/roles`.
   Future<List<RoleRow>> listRoles();
 
+  /// `GET /orgs/{orgId}` — the shop's profile, for the tax card (§3.4).
+  Future<OrgProfileView> getOrganization();
+
+  /// ★ `POST /orgs/{orgId}/tax-profile/reveal` (§3.16) — the only response in
+  /// the system that carries a full tax id.
+  ///
+  /// A method, never a cached getter: every call is rate-limited (20/hour) and
+  /// writes an audit event, and the caller is expected to drop the result the
+  /// moment the number leaves the screen.
+  Future<RevealedTaxId> revealTaxId();
+
   /// `POST /orgs/{orgId}/invitations` — returns the invite URL ONCE.
   ///
   /// The raw token is returned and never stored: the server keeps only its

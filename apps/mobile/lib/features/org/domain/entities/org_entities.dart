@@ -176,3 +176,45 @@ class CreatedOrganization {
   /// The CREATOR's capabilities in the new shop — they are its Owner.
   final Set<String> capabilities;
 }
+
+/// ★ M-07 — `GET /orgs/{orgId}` as the tax card needs it.
+///
+/// Deliberately NOT a copy of the whole wire object: this feature reads the
+/// shop's name, whether a tax profile is declared, and the MASKED number. The
+/// full number is never part of any profile response — it has one endpoint of
+/// its own (§3.16) — so there is no field here that could accidentally carry
+/// it, whatever the server starts sending.
+class OrgProfileView {
+  const OrgProfileView({
+    required this.id,
+    required this.name,
+    required this.taxProfileComplete,
+    this.entityType,
+    this.taxIdMasked,
+    this.vatRegistered,
+    this.branchCode,
+  });
+
+  final String id;
+  final String name;
+  final bool taxProfileComplete;
+  final String? entityType;
+
+  /// e.g. `•••••••••3454`. The server sends this only to a member who may see
+  /// the details; for everyone else it is absent (AC-7.4).
+  final String? taxIdMasked;
+  final bool? vatRegistered;
+  final String? branchCode;
+}
+
+/// The one-shot result of `POST /orgs/{orgId}/tax-profile/reveal`.
+///
+/// Held in screen state and dropped on hide/background — never stored, never
+/// logged. The class exists so the repository has something to return; nothing
+/// caches it.
+class RevealedTaxId {
+  const RevealedTaxId({required this.taxId, required this.revealedAt});
+
+  final String taxId;
+  final DateTime revealedAt;
+}

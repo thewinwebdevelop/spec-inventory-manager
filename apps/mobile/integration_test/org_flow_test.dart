@@ -171,6 +171,39 @@ void main() {
     expect(find.textContaining('@omnistock.test'), findsWidgets);
   });
 
+  testWidgets('★ M-07 · the tax id round trip against the real API', (tester) async {
+    // The half of M-07 a machine can check: that `GET /orgs/{id}` never carries
+    // the number and `POST …/tax-profile/reveal` does, on a real device against
+    // a real server. What stays manual is the part a person has to look at —
+    // the app-switcher thumbnail, and whether the digits are readable and
+    // copyable on a phone in a shop.
+    final container = bootApp();
+    await signUpAndSignIn(container, freshEmail('m-tax'));
+
+    final org = await container.read(orgDirectoryProvider).createOrganization(
+          name: 'ร้านภาษีมือถือ ${DateTime.now().millisecondsSinceEpoch}',
+        );
+    container.read(sessionControllerProvider.notifier).switchOrg(
+          ActiveOrg(orgId: org.id, name: org.name, capabilities: const {'full_access'}),
+        );
+
+    // A fresh shop has no declaration, and the profile says so without any
+    // digits anywhere in it.
+    final profile = await container.read(orgScopedRepositoryProvider).getOrganization();
+    expect(profile.taxProfileComplete, isFalse);
+    expect(profile.taxIdMasked, isNull);
+
+    // ★ Reveal on an undeclared shop is a 404, not an empty string — the
+    // client must not paint "—" as if it were a number.
+    Object? failure;
+    try {
+      await container.read(orgScopedRepositoryProvider).revealTaxId();
+    } catch (e) {
+      failure = e;
+    }
+    expect(failure, isNotNull, reason: 'revealing a shop with no tax profile should fail loudly');
+  });
+
   testWidgets('★ E-10 · removed mid-session: the shop goes, the session stays', (tester) async {
     // AC-5.1/AC-5.2 on mobile.
     //

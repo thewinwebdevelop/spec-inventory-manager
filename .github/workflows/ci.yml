@@ -577,7 +577,8 @@ jobs:
             # also what a suite of one prints, so on its own it would stay green
             # after somebody deleted two of E-10's three cases. Flutter's
             # expanded reporter ends with `+N`, so N is the count. Raise the
-            # floor when cases are added; lowering it is a visible edit.
+            # floor when cases are added (3 → 4 when M-07's round trip landed);
+            # lowering it is a visible edit.
             #
             # ⚠️ ONE LINE, and this is the SECOND time this action's execution
             # model has cost a run. It runs every line as its own `sh -c`, so a
@@ -586,7 +587,7 @@ jobs:
             # suite that had just passed all three. (The first time was the
             # backslash continuation above.) If a step needs shell state, it
             # has to be one command.
-            passed=$(grep -oE '\+[0-9]+' /tmp/mobile-e2e.log | tail -1 | tr -d '+'); echo "mobile integration: ${passed:-0} passing case(s) (floor 3)"; [ "${passed:-0}" -ge 3 ] || { echo "::error::the mobile lane passed ${passed:-0} case(s), floor is 3 — a case was deleted, renamed or skipped"; exit 1; }
+            passed=$(grep -oE '\+[0-9]+' /tmp/mobile-e2e.log | tail -1 | tr -d '+'); echo "mobile integration: ${passed:-0} passing case(s) (floor 4)"; [ "${passed:-0}" -ge 4 ] || { echo "::error::the mobile lane passed ${passed:-0} case(s), floor is 4 — a case was deleted, renamed or skipped"; exit 1; }
       # ⚠️ Collected BEFORE the emulator is torn down (the lines above run
       # inside the action's script), because the question these answer cannot
       # be asked afterwards: two runs ended with three tests reporting "did not

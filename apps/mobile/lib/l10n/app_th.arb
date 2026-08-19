@@ -137,12 +137,10 @@
       }
     }
   },
-
   "actionRetry": "ลองใหม่",
   "@actionRetry": {
     "description": "Generic retry action. `ErrorBanner` still carries its own hard-coded default (a pre-F-002 debt); new call sites use this key."
   },
-
   "orgCreateTitle": "สร้างร้านใหม่",
   "orgCreateNameLabel": "ชื่อร้าน",
   "orgCreateNamePlaceholder": "เช่น ร้านหอมกรุ่นเบเกอรี่",
@@ -171,7 +169,6 @@
       }
     }
   },
-
   "membersTitle": "สมาชิก",
   "membersInviteCta": "เชิญสมาชิก",
   "membersPendingSection": "คำเชิญที่รอตอบรับ ({count})",
@@ -216,7 +213,6 @@
   },
   "invitationShowArchived": "ดูคำเชิญที่หมดอายุ/ยกเลิกแล้ว",
   "invitationHideArchived": "ซ่อนคำเชิญที่หมดอายุ/ยกเลิกแล้ว",
-
   "inviteExpiresAt": "ลิงก์ใช้ได้ถึง {dateTime} ({remaining})",
   "@inviteExpiresAt": {
     "description": "ux-wireframe §1.4/§9.1. BOTH parts are derived from the response's expiresAt — never from a hard-coded TTL, which changes with the invited role (D-028/I-7) and restarts on every reissue (D-027).",
@@ -254,14 +250,12 @@
     }
   },
   "remainingExpired": "หมดอายุแล้ว",
-
   "backupOwnerNudgeBody": "ตอนนี้ร้านนี้มีเจ้าของร้านคนเดียวคือคุณ — ถ้าวันหนึ่งคุณเข้าระบบไม่ได้ จะไม่มีใครในร้านช่วยตั้งรหัสผ่านใหม่ให้ได้ แนะนำให้ตั้งคนที่คุณไว้ใจอีก 1 คนเป็นเจ้าของร้านไว้",
   "@backupOwnerNudgeBody": {
     "description": "D-030. Tone is info, not warning: nothing is wrong right now. Never use อันตราย/เสี่ยง/ข้อมูลจะหาย, and never a red warning icon."
   },
   "backupOwnerNudgeCta": "เชิญเจ้าของร้านอีกคน",
   "backupOwnerNudgeDismiss": "ไว้ทีหลัง",
-
   "inviteTitle": "เชิญสมาชิก",
   "inviteEmailLabel": "อีเมลของคนที่จะเชิญ",
   "inviteEmailPlaceholder": "เช่น malee@shop.com",
@@ -292,7 +286,6 @@
   "inviteErrorForbidden": "คุณไม่มีสิทธิ์เชิญสมาชิกด้วยสิทธิ์ระดับนี้ — เฉพาะเจ้าของร้านเท่านั้นที่ตั้งเจ้าของร้านคนใหม่ได้",
   "inviteErrorThrottled": "เชิญสมาชิกถี่เกินไป กรุณารอสักครู่แล้วลองใหม่",
   "inviteErrorGeneric": "สร้างคำเชิญไม่สำเร็จ กรุณาลองใหม่อีกครั้ง",
-
   "inviteLinkTitle": "ลิงก์คำเชิญพร้อมแล้ว",
   "inviteLinkOnceWarning": "ลิงก์นี้แสดงครั้งเดียว — ปิดหน้านี้แล้วจะดูซ้ำไม่ได้ ถ้าทำหาย ให้ออกลิงก์ใหม่จากหน้าสมาชิก",
   "@inviteLinkOnceWarning": {
@@ -309,5 +302,32 @@
   "inviteLinkCopy": "คัดลอกลิงก์",
   "inviteLinkCopied": "คัดลอกลิงก์แล้ว",
   "inviteLinkDone": "เสร็จสิ้น",
-  "inviteLinkSemantics": "คัดลอกลิงก์คำเชิญ"
+  "inviteLinkSemantics": "คัดลอกลิงก์คำเชิญ",
+  "orgProfileTitle": "ข้อมูลร้าน",
+  "taxTitle": "ข้อมูลผู้เสียภาษี",
+  "taxEntityTypeLabel": "ประเภท",
+  "taxEntityPersonal": "บุคคลธรรมดา",
+  "taxEntityCompany": "นิติบุคคล",
+  "taxIdLabel": "เลขผู้เสียภาษี",
+  "taxVatLabel": "VAT",
+  "taxVatYes": "จดทะเบียน VAT",
+  "taxVatNo": "ไม่ได้จดทะเบียน VAT",
+  "taxBranchLabel": "รหัสสาขา",
+  "taxBranchHeadOffice": "00000 (สำนักงานใหญ่)",
+  "taxReveal": "แสดงเลขเต็ม",
+  "taxHide": "ซ่อนเลข",
+  "taxRevealLoading": "กำลังขอเลข...",
+  "taxRevealNotice": "การกดดูเลขเต็มถูกบันทึกไว้เพื่อความปลอดภัยของร้าน",
+  "taxUndeclaredReadOnly": "ร้านนี้ยังไม่ได้ประกาศข้อมูลผู้เสียภาษี",
+  "taxDeclaredReadOnlyHint": "รายละเอียดเปิดให้เฉพาะผู้ที่ดูแลข้อมูลร้าน",
+  "taxRevealError": "ขอดูเลขเต็มไม่สำเร็จ กรุณาลองใหม่อีกครั้ง",
+  "taxLoadError": "โหลดข้อมูลร้านไม่สำเร็จ",
+  "taxEditOnWebHint": "แก้ไขข้อมูลผู้เสียภาษีได้ที่เว็บ",
+  "taxHiddenOnResumeHint": "เลขเต็มจะถูกซ่อนอัตโนมัติเมื่อสลับออกจากแอป",
+  "@taxEditOnWebHint": {
+    "description": "Mobile-only: F-002 has no tax form on the phone, so the reader is told where the form is instead of being left at a dead end."
+  },
+  "@taxHiddenOnResumeHint": {
+    "description": "Mobile-only: the number is dropped when the app backgrounds (M-07). Said BEFORE it happens, so the disappearance is not read as a bug."
+  }
 }

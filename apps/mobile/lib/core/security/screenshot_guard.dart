@@ -99,6 +99,17 @@ class ScreenshotGuardScope {
     };
   }
 
+  /// Test-only view of the ref count.
+  ///
+  /// ★ M-07 added this. The native call is a `MethodChannel` that no-ops under
+  /// `flutter test`, so "is the guard on?" was unobservable — and the tax card
+  /// needs it observable, because the rule it implements ("hold the guard while
+  /// a national ID is on screen, release it after") is exactly the kind that
+  /// rots silently. Reading a counter is a poor substitute for asserting on
+  /// the OS flag, and it is the best a widget test can do; the real thing is
+  /// M-07's manual check on a device.
+  static int get debugRefCount => _refCount;
+
   /// Test-only reset — `flutter test` runs multiple widget tests in the same
   /// isolate, so the static ref count must not leak between tests.
   static void resetForTest() {

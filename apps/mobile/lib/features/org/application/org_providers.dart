@@ -44,6 +44,15 @@ final myOrganizationsProvider = FutureProvider.autoDispose<List<MyOrganization>>
 /// they are paginated and each owns its own error, which a `FutureProvider`
 /// cannot express (ux-wireframe §7).
 
+/// ★ M-07 — the shop's profile, for the tax card.
+///
+/// `autoDispose`: leaving the screen throws the profile away, which matters
+/// less than it does for the revealed number (this holds only the MASKED
+/// value) but keeps the two on the same footing.
+final orgProfileProvider = FutureProvider.autoDispose<OrgProfileView>((ref) async {
+  return ref.watch(orgScopedRepositoryProvider).getOrganization();
+});
+
 final rolesProvider = FutureProvider.autoDispose<List<RoleRow>>((ref) async {
   return ref.watch(orgScopedRepositoryProvider).listRoles();
 });
