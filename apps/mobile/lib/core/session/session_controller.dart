@@ -27,6 +27,33 @@ class SessionController extends StateNotifier<SessionState> {
     state = current.copyWith(active: org);
   }
 
+  /// ★ What this member may do in the ACTIVE shop, as the server reports it.
+  ///
+  /// Entering a shop from the picker or the switcher cannot know this: the
+  /// contract deliberately keeps capabilities off `/me/organizations` (§3.5),
+  /// so the list those screens read has shop names and roles and nothing about
+  /// permission. Until the M-07 security review, nobody filled the gap — every
+  /// entry point except create-shop left the set EMPTY, and every screen that
+  /// gates on it therefore treated a real Owner as having no rights. It failed
+  /// closed, which is why it went unnoticed.
+  ///
+  /// Ignored when it does not match the shop that is open now: a slow response
+  /// for shop A must not grant its capabilities inside shop B.
+  void capabilitiesLearned({required String orgId, required Set<String> capabilities}) {
+    final current = state;
+    if (current is! SessionAuthed) return;
+    final active = current.active;
+    if (active == null || active.orgId != orgId) return;
+    state = current.copyWith(
+      active: ActiveOrg(
+        orgId: active.orgId,
+        name: active.name,
+        capabilities: capabilities,
+        entitlements: active.entitlements,
+      ),
+    );
+  }
+
   /// `403 ORG_ACCESS_DENIED` — no longer an active member of THIS shop.
   ///
   /// Drops the shop, keeps the session (D-027: a session is not tied to a

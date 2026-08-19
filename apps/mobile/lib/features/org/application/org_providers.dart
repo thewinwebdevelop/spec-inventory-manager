@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../../core/session/session_controller.dart';
@@ -68,14 +70,43 @@ final rolesProvider = FutureProvider.autoDispose<List<RoleRow>>((ref) async {
 /// Keyed by shop id: dismissing it for one shop says nothing about another.
 final backupOwnerNudgeDismissedProvider = StateProvider<Set<String>>((ref) => const {});
 
-/// Entering a shop from the picker.
+/// Entering a shop from the picker or the switcher.
 ///
 /// Writes the session ONCE; every provider downstream of `activeOrgIdProvider`
-/// rebuilds off that single write (mobile.md §3.2). Capabilities come from the
-/// membership the picker already holds — a shop the caller is an active member
-/// of always has them.
+/// rebuilds off that single write (mobile.md §3.2).
+///
+/// ★ Then it asks the server what this member may do, because the caller
+/// cannot know: `/me/organizations` deliberately publishes no capabilities
+/// (§3.5), so the picker and the switcher had nothing to pass and every screen
+/// that gates on capabilities saw an empty set — a real Owner offered no Owner
+/// role, no tax details, no rename. Found by the M-07 security review, which
+/// also named the second screen still reading that empty set.
+///
+/// The fetch is deliberately NOT awaited by the caller: entering a shop should
+/// not wait on a round trip, and the screens gate closed until it lands, which
+/// is the safe direction. `capabilitiesLearned` ignores an answer for a shop
+/// the user has already left.
 void enterOrganization(WidgetRef ref, MyOrganization org, {Set<String> capabilities = const {}}) {
   ref.read(sessionControllerProvider.notifier).switchOrg(
         ActiveOrg(orgId: org.id, name: org.name, capabilities: capabilities),
       );
+  if (capabilities.isEmpty) unawaited(learnCapabilities(ref));
+}
+
+/// Reads `GET /orgs/{orgId}` for `myMembership.capabilities` and tells the
+/// session. Errors are swallowed on purpose: failing to LEARN a capability
+/// leaves the UI offering less, never more, and the server refuses regardless.
+Future<void> learnCapabilities(WidgetRef ref) async {
+  final orgId = ref.read(activeOrgIdProvider);
+  if (orgId == null) return;
+  try {
+    final profile = await ref.read(orgScopedRepositoryProvider).getOrganization();
+    ref.read(sessionControllerProvider.notifier).capabilitiesLearned(
+          orgId: orgId,
+          capabilities: profile.capabilities,
+        );
+  } catch (_) {
+    // Nothing to do and nothing to say: the screens stay closed, and every
+    // action they hide is refused by the server anyway.
+  }
 }
