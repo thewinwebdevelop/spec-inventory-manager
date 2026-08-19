@@ -120,6 +120,35 @@ void main() {
     );
   });
 
+  testWidgets('★★ the answer still lands after the screen that asked is GONE', (tester) async {
+    // The case the first version of this fix would have failed, silently.
+    //
+    // Entering a shop is precisely what replaces the picker, and the switcher
+    // closes itself — so the widget whose `ref` started the request is nearly
+    // always disposed before the response arrives. A `WidgetRef` touched after
+    // that throws, the throw lands in `learnCapabilities`'s catch, and the app
+    // is back to an empty capability set with nothing in the log to say so.
+    final scoped = FakeOrgScoped(
+      profile: _ownerProfile,
+      delay: const Duration(milliseconds: 40),
+    );
+    final container = signedIn(scoped);
+    final ref = await _refIn(tester, container);
+
+    enterOrganization(ref, shop);
+    // The picker goes away, exactly as navigating into the shop would do.
+    await tester.pumpWidget(
+      UncontrolledProviderScope(container: container, child: const SizedBox.shrink()),
+    );
+    await tester.pumpAndSettle(const Duration(milliseconds: 100));
+
+    expect(
+      container.read(activeOrgProvider)?.capabilities,
+      contains('full_access'),
+      reason: 'the answer was dropped because the screen that asked had closed',
+    );
+  });
+
   testWidgets('a failure to learn leaves the UI offering LESS, never more', (tester) async {
     final container = signedIn(FakeOrgScoped(profileFailure: const NetworkFailure()));
     final ref = await _refIn(tester, container);

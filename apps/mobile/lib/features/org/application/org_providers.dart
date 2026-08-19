@@ -99,12 +99,26 @@ void enterOrganization(WidgetRef ref, MyOrganization org, {Set<String> capabilit
 Future<void> learnCapabilities(WidgetRef ref) async {
   final orgId = ref.read(activeOrgIdProvider);
   if (orgId == null) return;
+  // ★ Everything comes off `ref` BEFORE the await, and nothing after it.
+  //
+  // The screen that started this is usually gone by the time the answer
+  // arrives — entering a shop is exactly the thing that replaces the picker,
+  // and the switcher closes itself. A `WidgetRef` used after its widget is
+  // disposed throws, and the throw would land in the catch below, so the fix
+  // would have failed the same silent, fail-closed way as the bug it fixes:
+  // capabilities never learned, screens never opened, nothing in the log.
+  // These two objects outlive the widget (they belong to the container).
+  //
+  // Both reads are INSIDE the try, and before the await. Entering a shop must
+  // not throw because a background lookup could not be assembled — the picker
+  // does not depend on the org repository for anything else, and its tests
+  // rightly do not wire one. Whether the app wires it at all is B-4's
+  // question, and `bootstrap_test.dart` is where that is pinned.
   try {
-    final profile = await ref.read(orgScopedRepositoryProvider).getOrganization();
-    ref.read(sessionControllerProvider.notifier).capabilitiesLearned(
-          orgId: orgId,
-          capabilities: profile.capabilities,
-        );
+    final session = ref.read(sessionControllerProvider.notifier);
+    final repository = ref.read(orgScopedRepositoryProvider);
+    final profile = await repository.getOrganization();
+    session.capabilitiesLearned(orgId: orgId, capabilities: profile.capabilities);
   } catch (_) {
     // Nothing to do and nothing to say: the screens stay closed, and every
     // action they hide is refused by the server anyway.
