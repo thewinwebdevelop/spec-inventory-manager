@@ -81,18 +81,22 @@ void main() {
     expect(scoped.profileCalls, 1);
   });
 
-  testWidgets('creating a shop does NOT re-ask — the 201 already said', (tester) async {
-    // `POST /organizations` answers with the capabilities, so spending a second
-    // request would be asking a question already answered (ux Q5).
+  testWidgets('★ nobody gets to skip asking — there is one source', (tester) async {
+    // This case used to assert the opposite: that creating a shop need not ask
+    // "because the 201 already said". It does not say. `POST /organizations`
+    // returns `membership.roleKey` and no capability list, and the client was
+    // filling the gap with a literal `{'full_access'}` of its own invention —
+    // correct against today's server, asserted by nothing, and wrong in the
+    // permissive direction the day the two diverge.
     final scoped = FakeOrgScoped(profile: _ownerProfile);
     final container = signedIn(scoped);
     final ref = await _refIn(tester, container);
 
-    enterOrganization(ref, shop, capabilities: const {'full_access'});
+    enterOrganization(ref, shop);
     await tester.pumpAndSettle();
 
     expect(container.read(activeOrgProvider)?.capabilities, contains('full_access'));
-    expect(scoped.profileCalls, 0);
+    expect(scoped.profileCalls, 1, reason: 'the server is the only thing that knows');
   });
 
   testWidgets('★ a late answer for a shop the user has LEFT is ignored', (tester) async {

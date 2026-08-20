@@ -161,20 +161,27 @@ class RoleRow {
   final bool grantsOwnership;
 }
 
-/// What `POST /organizations` hands back — complete enough to enter the new
-/// shop without a second round trip (ux Q5).
+/// What `POST /organizations` hands back — enough to enter the new shop
+/// without refetching the shop LIST (ux Q5).
+///
+/// ★ What it does NOT carry is `capabilities`, and this used to say otherwise.
+/// The client filled the field with a literal `{'full_access'}` under a comment
+/// claiming "the response says so". The response says no such thing: the `201`
+/// carries `membership.roleKey: "owner"` and no capability list at all. The
+/// value happened to match what the server provisions today, so nothing broke
+/// — it was a client asserting an authorization fact of its own invention, in
+/// a codebase whose golden rule is that ownership is a capability and never a
+/// role key. Had the two ever diverged it would have failed OPEN: offering
+/// Owner actions to somebody who is not one, which the server would refuse
+/// while the screen kept promising.
+///
+/// So the creator's capabilities are now learned the same way everybody else's
+/// are — by asking. One source, and it is the server.
 class CreatedOrganization {
-  const CreatedOrganization({
-    required this.id,
-    required this.name,
-    required this.capabilities,
-  });
+  const CreatedOrganization({required this.id, required this.name});
 
   final String id;
   final String name;
-
-  /// The CREATOR's capabilities in the new shop — they are its Owner.
-  final Set<String> capabilities;
 }
 
 /// ★ M-07 — `GET /orgs/{orgId}` as the tax card needs it.

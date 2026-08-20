@@ -44,10 +44,43 @@ void main() {
       expect(created!.id, 'org_new');
       expect(container.read(activeOrgIdProvider), 'org_new');
       expect(container.read(activeOrgProvider)?.name, 'ร้านหอมกรุ่นเบเกอรี่');
-      // The creator is the Owner, and this is the one moment the client
-      // learns capabilities without a second request (ux Q5).
-      expect(container.read(activeOrgProvider)?.capabilities, contains('full_access'));
+      // Capabilities are NOT part of that promise, and this line used to claim
+      // they were: "the creator is the Owner, and this is the one moment the
+      // client learns capabilities without a second request". The `201` sends
+      // `membership.roleKey` and no capability list — the set being asserted
+      // here was a literal the client had written for itself.
+      expect(container.read(activeOrgProvider)?.capabilities, isEmpty);
     });
+  });
+
+  test('★ …and the creator’s capabilities are ASKED FOR, not assumed', () async {
+    // The `201` never said. Entering a new shop asks the same way entering any
+    // other shop does, so there is one answer to "what may I do here" and the
+    // server is the one giving it.
+    final scoped = FakeOrgScoped(
+      profile: const OrgProfileView(
+        id: 'org_new',
+        name: 'ร้านหอมกรุ่นเบเกอรี่',
+        taxProfileComplete: false,
+        capabilities: {'full_access'},
+      ),
+    );
+    final container = ProviderContainer(
+      overrides: [
+        orgDirectoryProvider.overrideWithValue(FakeOrgDirectory()),
+        orgScopedRepositoryProvider.overrideWithValue(scoped),
+      ],
+    );
+    addTearDown(container.dispose);
+    container.read(sessionControllerProvider.notifier).signedIn(orgs: const []);
+    final sub = container.listen(createOrgControllerProvider, (_, __) {});
+    addTearDown(sub.close);
+
+    await container.read(createOrgControllerProvider.notifier).submit('ร้านหอมกรุ่นเบเกอรี่');
+    await Future<void>.delayed(Duration.zero);
+
+    expect(scoped.profileCalls, 1);
+    expect(container.read(activeOrgProvider)?.capabilities, contains('full_access'));
   });
 
   test('★ the shop list is invalidated so the switcher cannot miss the new shop', () async {

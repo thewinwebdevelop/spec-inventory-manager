@@ -86,41 +86,79 @@ final backupOwnerNudgeDismissedProvider = StateProvider<Set<String>>((ref) => co
 /// not wait on a round trip, and the screens gate closed until it lands, which
 /// is the safe direction. `capabilitiesLearned` ignores an answer for a shop
 /// the user has already left.
-void enterOrganization(WidgetRef ref, MyOrganization org, {Set<String> capabilities = const {}}) {
+void enterOrganization(WidgetRef ref, MyOrganization org) {
   ref.read(sessionControllerProvider.notifier).switchOrg(
-        ActiveOrg(orgId: org.id, name: org.name, capabilities: capabilities),
+        ActiveOrg(orgId: org.id, name: org.name, capabilities: const {}),
       );
-  if (capabilities.isEmpty) unawaited(learnCapabilities(ref));
+  unawaited(learnCapabilities(ref));
 }
 
-/// Reads `GET /orgs/{orgId}` for `myMembership.capabilities` and tells the
-/// session. Errors are swallowed on purpose: failing to LEARN a capability
-/// leaves the UI offering less, never more, and the server refuses regardless.
-Future<void> learnCapabilities(WidgetRef ref) async {
-  final orgId = ref.read(activeOrgIdProvider);
-  if (orgId == null) return;
-  // ★ Everything comes off `ref` BEFORE the await, and nothing after it.
-  //
-  // The screen that started this is usually gone by the time the answer
-  // arrives — entering a shop is exactly the thing that replaces the picker,
-  // and the switcher closes itself. A `WidgetRef` used after its widget is
-  // disposed throws, and the throw would land in the catch below, so the fix
-  // would have failed the same silent, fail-closed way as the bug it fixes:
-  // capabilities never learned, screens never opened, nothing in the log.
-  // These two objects outlive the widget (they belong to the container).
-  //
-  // Both reads are INSIDE the try, and before the await. Entering a shop must
-  // not throw because a background lookup could not be assembled — the picker
-  // does not depend on the org repository for anything else, and its tests
-  // rightly do not wire one. Whether the app wires it at all is B-4's
-  // question, and `bootstrap_test.dart` is where that is pinned.
+/// The lookup itself, with everything it needs ALREADY RESOLVED.
+///
+/// ★ The parameter list is the guard. The first version of this took a
+/// `WidgetRef` and used it after the await — and the widget that owns that ref
+/// is gone by then, because entering a shop is the very thing that replaces
+/// the picker and closes the switcher. Riverpod throws on a disposed ref, the
+/// throw landed in the catch below, and the fix failed in the exact shape of
+/// the bug it fixed: quiet, fail-closed, nothing in the log.
+///
+/// Taking objects instead of a ref makes that mistake unavailable rather than
+/// forbidden. [session] and [repository] outlive any widget — they belong to
+/// the container — and every caller resolves them synchronously.
+///
+/// Errors are swallowed on purpose: failing to LEARN a capability leaves the
+/// UI offering less, never more, and the server refuses regardless.
+Future<void> learnCapabilitiesWith({
+  required SessionController session,
+  required OrgScoped repository,
+  required String orgId,
+}) async {
   try {
-    final session = ref.read(sessionControllerProvider.notifier);
-    final repository = ref.read(orgScopedRepositoryProvider);
     final profile = await repository.getOrganization();
     session.capabilitiesLearned(orgId: orgId, capabilities: profile.capabilities);
   } catch (_) {
     // Nothing to do and nothing to say: the screens stay closed, and every
     // action they hide is refused by the server anyway.
+  }
+}
+
+/// The `WidgetRef` adapter — resolves, then hands off. Nothing awaits inside.
+///
+/// The reads sit in a try because entering a shop must not throw just because
+/// a background lookup could not be assembled: the picker does not use the org
+/// repository for anything else, and its own tests rightly wire none. Whether
+/// the APP wires one is B-4's question, pinned in `bootstrap_test.dart`.
+Future<void> learnCapabilities(WidgetRef ref) async {
+  final orgId = ref.read(activeOrgIdProvider);
+  if (orgId == null) return;
+  final resolved = _resolve(ref.read);
+  if (resolved == null) return;
+  return learnCapabilitiesWith(
+    session: resolved.$1,
+    repository: resolved.$2,
+    orgId: orgId,
+  );
+}
+
+/// The provider-`Ref` adapter, for controllers (`WidgetRef` and `Ref` share no
+/// supertype, so the resolution step exists once per flavour).
+Future<void> learnCapabilitiesFromRef(Ref ref) async {
+  final orgId = ref.read(activeOrgIdProvider);
+  if (orgId == null) return;
+  final resolved = _resolve(ref.read);
+  if (resolved == null) return;
+  return learnCapabilitiesWith(
+    session: resolved.$1,
+    repository: resolved.$2,
+    orgId: orgId,
+  );
+}
+
+/// Null when the graph cannot supply them — see [learnCapabilities].
+(SessionController, OrgScoped)? _resolve(T Function<T>(ProviderListenable<T>) read) {
+  try {
+    return (read(sessionControllerProvider.notifier), read(orgScopedRepositoryProvider));
+  } catch (_) {
+    return null;
   }
 }

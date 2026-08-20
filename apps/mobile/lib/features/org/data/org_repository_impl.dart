@@ -79,11 +79,10 @@ class OrgDirectoryImpl implements OrgDirectory {
         ),
       );
       final body = res.data!;
-      return CreatedOrganization(
-        id: body.organization.id,
-        name: body.organization.name,
-        capabilities: const {'full_access'},
-      );
+      // No capabilities here on purpose: the `201` does not carry them (it
+      // carries `membership.roleKey`), and inventing the set is what this
+      // client used to do. See CreatedOrganization.
+      return CreatedOrganization(id: body.organization.id, name: body.organization.name);
     } on DioException catch (e) {
       throw _asFailure(e);
     }

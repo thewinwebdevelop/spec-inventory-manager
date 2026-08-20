@@ -2386,3 +2386,30 @@ mobile **435 เขียว** · analyze/boundary สะอาด
 **ยืนยัน: [run 32280764919](https://github.com/thewinwebdevelop/spec-inventory-manager/actions/runs/32280764919) เขียวครบ 9/9**
 · `e2e-web` **2 นาที 54 วินาที** (จาก 68 นาทีที่ค้าง) — `playwright: expected=26 unexpected=0 flaky=0 skipped=0` · `browser lane ran 26 passing case(s) (floor 26)`
 · `mobile-e2e` 10 นาที 47 วินาที — `mobile integration: 4 passing case(s) (floor 4)` · ทุก job จบต่ำกว่าขอบที่ตั้งไว้มาก (สูงสุด mobile-e2e 10:47 จากขอบ 45)
+
+### client ที่ **แต่งสิทธิ์ให้ตัวเอง**: `capabilities: const {'full_access'}` (2026-08-20)
+
+ไล่ดูว่าเว็บมีรูเดียวกับมือถือไหม (**ไม่มี** — เว็บอ่าน `profile.myMembership.capabilities` จาก layout ตลอด) แล้วไปเจอของที่หนักกว่า:
+
+`org_repository_impl.dart` เขียน `capabilities: const {'full_access'}` ลงไปตรง ๆ ใต้คอมเมนต์ที่บอกว่า *"the response says so"*
+**response ไม่ได้บอก** — `201` ของ `POST /organizations` ส่ง `membership.roleKey: "owner"` มา **ไม่มี capability list เลย** (ยืนยันที่ `components/orgs.yaml#NewOrganizationMembership`)
+
+⇒ **client ยืนยันข้อเท็จจริงเรื่องสิทธิ์ที่ server ไม่เคยพูด** ในโปรเจกต์ที่มีกฎทองว่า *ownership เป็น capability ไม่ใช่ชื่อ/คีย์ของ role* และมี tripwire คุมเรื่องนี้อยู่แล้ว
+· ค่ามัน**ตรงกับที่ server ให้วันนี้** (`org-provisioning.ts` → Owner ถือ `[CAPABILITY_FULL_ACCESS]`) ⇒ ไม่มีอะไรพัง
+· แต่วันที่สองฝั่งไม่ตรงกัน มันจะ **fail OPEN** — เสนอสิ่งที่คนคนนั้นทำไม่ได้ · server ปฏิเสธ แต่**จอโกหก**
+· และที่แสบกว่า: เส้นทางเดียวที่ผม**ยกเว้นไม่ให้ถาม server** คือเส้นที่ capability ถูกกุขึ้นมา
+
+**แก้:** ตัดของกุทิ้ง · สร้างร้านใหม่ก็**ถามเหมือนทางเข้าอื่นทุกทาง** ⇒ *"ที่นี่ฉันทำอะไรได้"* มีคำตอบเดียว และคนตอบคือ server
+· ไม่ await เหมือนเดิม (คนอยู่ในร้านใหม่แล้วระหว่างคำตอบเดินทาง) · ต้นทุน 1 request ต่อการสร้างร้าน ซึ่งเป็นงานที่นาน ๆ ทำที
+
+**ทำให้ "อ่านก่อน await" เป็นเรื่องของ signature ไม่ใช่เรื่องที่ต้องจำ:**
+`learnCapabilitiesWith({session, repository, orgId})` รับ**ของที่ resolve แล้ว** ⇒ ข้างในไม่มี `ref` ให้แตะหลัง await **แม้จะอยากแตะ**
+· `WidgetRef`/`Ref` ไม่มี supertype ร่วม จึงมี adapter อย่างละตัว ทำหน้าที่ resolve อย่างเดียว
+
+เทสต์: เคสเก่าที่ assert ว่า "creating a shop does NOT re-ask — the 201 already said" **เป็นคำกล่าวอ้างที่ผิด** ⇒ พลิกเป็น `★ nobody gets to skip asking`
+· เคสใหม่ใน controller: `profileCalls == 1` · **mutation แล้ว** — ถอด `learnCapabilitiesFromRef` ⇒ แดง
+· เคสเดิม "the new shop is ACTIVE before submit returns" ตอนนี้ assert `capabilities` เป็น **ว่าง** ทันทีหลัง submit ⇒ ถ้าใครใส่ค่ากลับเข้าไป จะแดง
+
+mobile **436 เขียว** · analyze/boundary สะอาด
+
+**ส่งต่อ @backend-api (คู่กับคำถามเดิม):** ถ้าอยากได้เจตนาของ ux Q5 กลับมาเต็ม ๆ (เข้าร้านใหม่โดยไม่ต้อง round trip เลย) ทางที่ถูกคือ **เพิ่ม `capabilities` เข้า `201`** แบบ optional ตาม contract-evolution — ไม่ใช่ให้ client เดาจาก `roleKey`

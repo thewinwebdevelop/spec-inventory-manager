@@ -39,7 +39,7 @@ class FakeOrgDirectory implements OrgDirectory {
     await Future<void>.delayed(delay);
     if (createFailure != null) throw createFailure!;
     return created ??
-        CreatedOrganization(id: 'org_new', name: name, capabilities: const {'full_access'});
+        CreatedOrganization(id: 'org_new', name: name);
   }
 }
 

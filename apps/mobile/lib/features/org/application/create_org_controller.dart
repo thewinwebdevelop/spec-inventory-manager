@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../../core/error/api_failure.dart';
@@ -57,16 +59,17 @@ class CreateOrgController extends AutoDisposeNotifier<CreateOrgState> {
       final created = await ref.read(orgDirectoryProvider).createOrganization(name: name);
       if (_disposed) return created;
 
-      ref.read(sessionControllerProvider.notifier).switchOrg(
-            ActiveOrg(
-              orgId: created.id,
-              name: created.name,
-              // The creator is the new shop's Owner — the response says so,
-              // and this is the one moment the client learns capabilities
-              // without a `GET /orgs/{orgId}` (M-3's gap everywhere else).
-              capabilities: created.capabilities,
-            ),
-          );
+      final session = ref.read(sessionControllerProvider.notifier);
+      session.switchOrg(ActiveOrg(orgId: created.id, name: created.name, capabilities: const {}));
+      // ★ …and then ask, like every other way into a shop.
+      //
+      // This used to pass a capability set the CLIENT made up: the `201` does
+      // not carry one, and the code filled in `{'full_access'}` because the
+      // creator "is the Owner". True today, asserted by nobody — the contract
+      // sends `roleKey`, and deciding ownership from a role key is the thing
+      // this project has a tripwire against. Not awaited, same as the picker:
+      // the person is already in their new shop while the answer travels.
+      unawaited(learnCapabilitiesFromRef(ref));
       // The switcher must not be able to show a stale list that lacks the
       // shop the person is now standing in.
       ref.invalidate(myOrganizationsProvider);
