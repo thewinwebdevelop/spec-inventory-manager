@@ -14,6 +14,15 @@ library;
 /// other capability.
 const String fullAccessCapability = 'full_access';
 
+/// The other capability F-002's screens ask about. It lived in
+/// `features/org/domain/tax_reveal.dart` — a per-feature copy of a name the
+/// server owns, which is the same shape as the wildcard bug even when the
+/// value is right. Names live with the rule.
+const String manageOrgSettingsCapability = 'manage_org_settings';
+
+/// F-001 defines this one; it is here for the same reason.
+const String manageMembersCapability = 'manage_members';
+
 /// ★ The rule, in one place: `full_access` answers every question.
 ///
 /// A system Owner's role carries `full_access` and nothing else, so a plain

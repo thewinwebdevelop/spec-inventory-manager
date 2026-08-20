@@ -22,8 +22,27 @@
  * here, in one function over a handful of strings, is cheaper than a second
  * implementation of the rule.
  */
-import { hasCapability } from "@omnistock/core-domain";
+import {
+  hasCapability,
+  CAPABILITY_FULL_ACCESS,
+  CAPABILITY_MANAGE_MEMBERS,
+  CAPABILITY_MANAGE_ORG_SETTINGS,
+} from "@omnistock/core-domain";
 
 export function can(capabilities: ReadonlySet<string>, capability: string): boolean {
   return hasCapability([...capabilities], capability);
 }
+
+/**
+ * The NAMES, from the same place as the rule.
+ *
+ * They were declared five separate times across the two client trees —
+ * `CAPABILITY_FULL_ACCESS` twice on web alone — each a hand-typed copy of a
+ * string the server defines and this app already depends on. Identical values,
+ * so nothing was broken; a second copy of a capability fact is simply how the
+ * wildcard bug reached six call sites, and the argument against it does not
+ * get weaker because this instance happened to agree.
+ *
+ * The guard in `capability-lint.test.ts` now fails on a sixth copy.
+ */
+export { CAPABILITY_FULL_ACCESS, CAPABILITY_MANAGE_MEMBERS, CAPABILITY_MANAGE_ORG_SETTINGS };

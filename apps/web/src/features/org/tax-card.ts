@@ -16,12 +16,16 @@
  *    `taxProfileComplete` is the only answer to that question.
  */
 import type { components } from "@omnistock/contracts";
-import { can } from "../../lib/org/capability";
+import {
+  can,
+  CAPABILITY_FULL_ACCESS,
+  CAPABILITY_MANAGE_ORG_SETTINGS,
+} from "../../lib/org/capability";
 
 export type OrgProfile = components["schemas"]["OrgProfile"];
 
 /** api-spec §3.3 — the capability that unlocks the tax details. */
-export const CAPABILITY_MANAGE_ORG_SETTINGS = "manage_org_settings";
+export { CAPABILITY_FULL_ACCESS, CAPABILITY_MANAGE_ORG_SETTINGS };
 
 export type TaxCardView =
   /** No declaration yet. `canEdit` decides between the two copies §5 lists. */
@@ -78,8 +82,6 @@ export interface OnboardingItems {
   readonly inviteBackupOwner: boolean;
 }
 
-/** `full_access` is what identifies an Owner (never `roleName`/`roleKey`). */
-export const CAPABILITY_FULL_ACCESS = "full_access";
 
 export function onboardingItems(
   profile: OrgProfile,

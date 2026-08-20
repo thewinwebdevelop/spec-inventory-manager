@@ -2413,3 +2413,32 @@ mobile **435 เขียว** · analyze/boundary สะอาด
 mobile **436 เขียว** · analyze/boundary สะอาด
 
 **ส่งต่อ @backend-api (คู่กับคำถามเดิม):** ถ้าอยากได้เจตนาของ ux Q5 กลับมาเต็ม ๆ (เข้าร้านใหม่โดยไม่ต้อง round trip เลย) ทางที่ถูกคือ **เพิ่ม `capabilities` เข้า `201`** แบบ optional ตาม contract-evolution — ไม่ใช่ให้ client เดาจาก `roleKey`
+
+### guard ฝั่ง **เขียน** ของกฎเดิม — และมันไปเจออีก 4 สำเนาที่ยังไม่มีใครเห็น (2026-08-20)
+
+capability tripwire เดิมคุมแค่ฝั่ง**ถาม** (`caps.contains(X)`) ⇒ เขียวมาตลอดหลายสัปดาห์ทับ client ที่**กุ capability ขึ้นมาเอง**
+⇒ เพิ่มฝั่ง**เขียน**: ชื่อ capability เป็น literal ได้**เฉพาะที่ที่กฎอยู่** ที่เหลือ import เอา
+
+**สแกนแล้วเจอ 5 จุด ไม่ใช่ 1:**
+
+| ที่ | อะไร |
+|---|---|
+| `org_repository_impl.dart` | `capabilities: const {'full_access'}` — **ของกุ** (ตัวที่ตั้งใจไปจับ) |
+| `member-actions.ts` | `CAPABILITY_FULL_ACCESS` + `CAPABILITY_MANAGE_MEMBERS` |
+| `tax-card.ts` | `CAPABILITY_FULL_ACCESS` **(ประกาศซ้ำตัวที่ 2 บนเว็บ)** + `CAPABILITY_MANAGE_ORG_SETTINGS` |
+| `AppShell.tsx` | `CAPABILITY_MANAGE_MEMBERS` **(ซ้ำตัวที่ 2)** |
+| `tax_reveal.dart` | `manageOrgSettingsCapability` อยู่ใน feature แทนที่จะอยู่กับกฎ |
+
+4 ตัวหลัง**ค่าถูกหมด** ⇒ ไม่มีอะไรพัง · แต่มันคือ **"สำเนาที่สอง" รูปเดียวกับที่ทำให้บั๊ก wildcard ไปโผล่ 6 ที่**
+· และเว็บ **import `hasCapability` จาก core-domain อยู่แล้ว** — ซึ่ง export ชื่อพวกนี้มาให้ครบ ⇒ พิมพ์เองทำไม
+
+**รวมศูนย์:** เว็บ → `lib/org/capability.ts` re-export จาก core-domain (ที่เดียวทั้งกฎและชื่อ) · มือถือ → ย้ายเข้า `core/session/capabilities.dart`
+(มือถือ import core-domain ไม่ได้เพราะเป็น TS — เป็นการซ้ำข้ามภาษาที่ยอมรับกันอยู่แล้วเหมือน `hasCapability` · guard จึง pin "ที่เดียวต่อแพลตฟอร์ม")
+
+**mutation ที่แรงที่สุดเท่าที่ทำได้:** เอาบั๊กจริงใส่กลับเข้าไป ⇒ guard **แดงพร้อมชี้ชื่อไฟล์ตรงตัว**
+```
+apps/mobile/lib/features/org/data/org_repository_impl.dart: 'full_access'
+```
++ SELF-CHECK สองทาง (ไฟล์ที่นิยามชื่อ ✓ · คอมเมนต์ที่พูดถึงชื่อ ✓ ไม่ทริป)
+
+web **333** · mobile **436** · lint/analyze/boundary สะอาด · tripwire เชิงโครงสร้างเป็น **7 ตัว**

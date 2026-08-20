@@ -20,7 +20,9 @@ import { orgTh } from "../i18n";
 import { OrgSwitcher } from "./OrgSwitcher";
 
 /** api-spec §3.3 — the capability the members screen requires. */
-export const CAPABILITY_MANAGE_MEMBERS = "manage_members";
+import { CAPABILITY_MANAGE_MEMBERS } from "../../../lib/org/capability";
+
+export { CAPABILITY_MANAGE_MEMBERS };
 
 /**
  * Account security stays at the ROOT, not under `/o/[orgId]`.

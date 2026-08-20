@@ -20,10 +20,11 @@
  * `"owner"` in the database precisely to prove nothing reads it.
  */
 
-/** api-spec §3.3 — the capability that identifies an Owner. */
-export const CAPABILITY_FULL_ACCESS = "full_access";
-/** The capability the members screen itself requires. */
-export const CAPABILITY_MANAGE_MEMBERS = "manage_members";
+// The names come from `lib/org/capability.ts`, which re-exports core-domain's
+// — one place per platform for both the rule and the strings it is asked about.
+import { CAPABILITY_FULL_ACCESS, CAPABILITY_MANAGE_MEMBERS } from "../../lib/org/capability";
+
+export { CAPABILITY_FULL_ACCESS, CAPABILITY_MANAGE_MEMBERS };
 
 export interface MemberActionInput {
   /** The viewer's capabilities in THIS shop (`myMembership.capabilities`). */

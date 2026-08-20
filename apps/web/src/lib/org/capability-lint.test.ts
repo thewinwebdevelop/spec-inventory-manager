@@ -67,6 +67,29 @@ const ALLOWED = Object.freeze([
   "apps/mobile/lib/core/session/capabilities.dart",
 ]);
 
+/**
+ * ★ The WRITE side of the same rule — added 2026-08-20, after the read-side
+ * guard above had been green for weeks over a client that was making
+ * capabilities up.
+ *
+ * `org_repository_impl.dart` filled the creator's capability set with a literal
+ * `{'full_access'}`, under a comment claiming the `201` said so. It does not:
+ * `POST /organizations` returns `membership.roleKey` and no capability list.
+ * The value matched what the server provisions, so nothing failed — a client
+ * had simply written down an authorization fact nobody told it, in a codebase
+ * whose golden rule is that ownership is a capability and never a role key.
+ *
+ * The scan found four more copies while it was at it: `CAPABILITY_FULL_ACCESS`
+ * declared TWICE in the web tree, `CAPABILITY_MANAGE_MEMBERS` twice,
+ * `manage_org_settings` once inside a feature on mobile. All correct, all
+ * hand-typed, and every one of them the same shape as the second copy that put
+ * the wildcard bug in six places.
+ *
+ * So: a capability NAME may appear as a literal only where the rule lives.
+ * Everywhere else, import it.
+ */
+const CAPABILITY_LITERAL = /['"](full_access|manage_members|manage_org_settings)['"]/g;
+
 export interface Offence {
   readonly file: string;
   readonly snippet: string;
@@ -80,6 +103,18 @@ export function findOffences(files: readonly { path: string; source: string }[])
     const code = stripComments(source);
     for (const match of code.matchAll(MEMBERSHIP)) {
       if (FULL_ACCESS_ARGUMENT.test(match[3])) continue;
+      offences.push({ file: path, snippet: match[0] });
+    }
+  }
+  return offences;
+}
+
+/** Every capability name written as a literal outside the sanctioned files. */
+export function findLiterals(files: readonly { path: string; source: string }[]): Offence[] {
+  const offences: Offence[] = [];
+  for (const { path, source } of files) {
+    if (ALLOWED.includes(path)) continue;
+    for (const match of stripComments(source).matchAll(CAPABILITY_LITERAL)) {
       offences.push({ file: path, snippet: match[0] });
     }
   }
@@ -161,6 +196,33 @@ describe("★ capability questions go through the shared rule, never Set members
     expect(
       offences.map((o) => `${o.file}: ${o.snippet}`),
       "use `can(capabilities, X)` (web) or `ActiveOrg.can` (mobile) — `full_access` is a wildcard",
+    ).toEqual([]);
+  });
+
+  it("★ no source file writes a capability NAME of its own", () => {
+    const offences = findLiterals(files);
+    expect(
+      offences.map((o) => `${o.file}: ${o.snippet}`),
+      "import the name — a hand-typed capability string is a second copy of a server fact",
+    ).toEqual([]);
+  });
+
+  it("SELF-CHECK: the literal scan catches the defect it was written for", () => {
+    // The line that shipped, and the two shapes that must not trip: the file
+    // that defines the names, and prose that quotes one.
+    expect(
+      findLiterals([
+        { path: "x.dart", source: "capabilities: const {'full_access'}," },
+      ]),
+      "the scan would not have caught the client that invented a capability set",
+    ).toHaveLength(1);
+
+    expect(
+      findLiterals([
+        { path: "apps/web/src/lib/org/capability.ts", source: 'export const X = "full_access";' },
+        { path: "y.ts", source: '// the code filled in "full_access" and should not have' },
+        { path: "z.dart", source: "/// a comment naming 'manage_members' is prose" },
+      ]),
     ).toEqual([]);
   });
 

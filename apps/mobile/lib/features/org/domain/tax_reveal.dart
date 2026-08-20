@@ -21,7 +21,7 @@ library;
 
 import '../../../core/session/capabilities.dart';
 
-const String manageOrgSettingsCapability = 'manage_org_settings';
+export '../../../core/session/capabilities.dart' show manageOrgSettingsCapability;
 
 sealed class RevealState {
   const RevealState();
