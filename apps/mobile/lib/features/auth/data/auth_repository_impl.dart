@@ -21,9 +21,16 @@ import 'token_store.dart';
 /// client-security. Mirrors the shape of `apps/web/src/lib/auth-client.ts`
 /// (same retry-once/session-expired semantics) but the transport is BODY,
 /// not cookie (D-019's cookie-path fix is web-only — see api-spec §0 item 2
-/// + ux-wireframe §8): mobile always omits `tokenTransport` (server default
-/// `"body"`) and stores the plaintext refresh token in the OS
-/// keychain/keystore via [TokenStore], never in a cookie.
+/// + ux-wireframe §8): mobile DECLARES `tokenTransport: "body"` and stores
+/// the plaintext refresh token in the OS keychain/keystore via [TokenStore],
+/// never in a cookie.
+///
+/// ⚠️ This said "mobile always omits `tokenTransport` (server default)" —
+/// twice, here and on [login] — while the code three lines down has always
+/// sent it. Sending it is the right half of the disagreement: where a refresh
+/// token goes is a security decision, and web states its own choice the same
+/// way. The server does default absent to `"body"`, so nothing was broken;
+/// the documentation simply described a different client.
 ///
 /// Consumes the GENERATED [AuthApi] client only — no hand-reshaping of
 /// request/response types (frontend does not decide API/data shape). This
@@ -131,8 +138,9 @@ class AuthRepositoryImpl implements AuthRepository {
     }
   }
 
-  /// US-2. Mobile ALWAYS uses body transport (omit `tokenTransport`, server
-  /// default `"body"`, api-spec §0 item 2) — never declares `"cookie"`.
+  /// US-2. Mobile ALWAYS uses body transport and SAYS SO (api-spec §0 item 2)
+  /// — never declares `"cookie"`. The server would default absent to `"body"`
+  /// anyway; a security-relevant choice is worth stating rather than inheriting.
   /// On success, the access token goes to memory and the refresh token to
   /// the OS keychain/keystore (client-security skill).
   @override

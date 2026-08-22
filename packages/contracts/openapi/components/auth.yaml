@@ -56,10 +56,12 @@ LoginRequest:
       enum:
         - cookie
         - body
-      default: body
+      # ⛔ No `default:` — it made this REQUIRED in the generated TS type, so
+      # "mobile omits" was something no generated client could do.
       description: >
         Refresh-token delivery channel (api-spec §0). Web sends "cookie";
-        mobile omits or sends "body".
+        mobile omits it or sends "body", and the SERVER treats absent as
+        "body".
 
 RefreshRequest:
   type: object

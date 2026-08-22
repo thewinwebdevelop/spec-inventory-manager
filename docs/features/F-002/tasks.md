@@ -2442,3 +2442,38 @@ apps/mobile/lib/features/org/data/org_repository_impl.dart: 'full_access'
 + SELF-CHECK สองทาง (ไฟล์ที่นิยามชื่อ ✓ · คอมเมนต์ที่พูดถึงชื่อ ✓ ไม่ทริป)
 
 web **333** · mobile **436** · lint/analyze/boundary สะอาด · tripwire เชิงโครงสร้างเป็น **7 ตัว**
+
+## audit ตามข้อ 2: **หา "ข้อเท็จจริงที่โค้ด/เอกสารอ้าง แต่ไม่มีใครรองรับ"** (2026-08-22)
+
+วิธี: ไล่จากชั้น data ของ client (ที่ที่คำตอบของ server ถูกแปลงเป็น entity) แล้ว**เปิด contract ดูจริงทุกข้ออ้าง** ไม่เชื่อคอมเมนต์
+
+### เจอ: `default:` บน request field ทำให้ client **ถูกบังคับให้ส่ง** — และ default ของ server กลายเป็นของตาย
+
+`CreateOrganizationRequest.timezone` ไม่ได้อยู่ใน `required:` และมี `default: Asia/Bangkok`
+· `openapi-typescript` ปั๊มออกมาเป็น **`timezone: string` (required)** ขณะที่ `deviceId` ซึ่ง optional และ**ไม่มี default** ออกมาเป็น `deviceId?:`
+· `dart-dio` ปล่อยให้ nullable แต่**อัดค่าไว้ใน `_defaults` ของ builder**
+
+⇒ **สองฝั่ง generate ออกมาไม่เหมือนกันจาก schema เดียวกัน** และ **default ฝั่ง server แตะไม่ถึงจากทั้งคู่** — เปลี่ยนเมื่อไหร่ก็ไม่ถึงผู้ใช้จนกว่าจะ rebuild
+
+`LoginRequest.tokenTransport` เป็นรูปเดียวกัน ใต้ description ที่เขียนว่า *"mobile omits or sends body"* — **การ omit คือสิ่งที่ generated type ห้ามทำ**
+
+**และมันเป็นกับดักของ contract-evolution:** skill เขียนว่า request field ใหม่ต้อง optional · แต่ field ใหม่ที่**มี default** จะผ่าน `oasdiff` เป็น additive แล้ว**ทำให้ TS client ทุกตัว compile ไม่ผ่าน**
+
+> `default:` คือคำอธิบายว่า **server ทำอะไรเมื่อ field หายไป** ⇒ ที่ของมันคือ `description:` ที่ไม่มี generator ตัวไหนเอาไปทำอะไร
+
+**แก้:** ถอด `default:` ทั้งสองที่ ย้ายความหมายไปอยู่ใน `description:` · regen ทั้ง TS และ Dart ⇒ TS เป็น `timezone?:`/`tokenTransport?:` · Dart `_defaults` ว่างแล้ว
+· **guard ใหม่ใน `generator-hostile-shapes.test.ts`** (ไฟล์ที่มีไว้สำหรับ class นี้อยู่แล้วจาก B-5): ไล่ `$ref` จาก `requestBody:` แบบ transitive แล้วห้าม `default:` ในนั้น
+· non-vacuity: ต้องเจอ request schema ≥12 ตัวและต้องมี `CreateOrganizationRequest`/`LoginRequest` · SELF-CHECK: default บน **response** schema ต้องไม่ทริป (ถูกต้อง — server เป็นคนเติมให้จริง)
+· **ตอนเปิด guard ครั้งแรกมันจับได้ 2 ตัวพอดี ไม่มากไม่น้อย**
+
+### เจอด้วย: คอมเมนต์ที่บอกตรงข้ามกับโค้ด **2 ที่ในไฟล์เดียวกัน**
+
+`auth_repository_impl.dart` เขียนว่า *"mobile always omits `tokenTransport` (server default)"* ทั้งที่บรรทัดถัดมา **ส่ง** `LoginRequestTokenTransportEnum.body` มาตลอด
+⇒ เลือกข้าง**ส่ง** (ถูกกว่า): refresh token จะไปทางไหน เป็นการตัดสินใจเชิงความปลอดภัย ควรพูดออกมา ไม่ใช่ไปรับมรดกจาก default — เว็บก็ประกาศ `"cookie"` ของตัวเองแบบเดียวกัน · แก้คอมเมนต์ทั้งสองที่
+
+### ผลข้างเคียงที่ดี: เส้นทาง "ไม่ส่ง timezone" **ไม่เคยถูกเดินมาก่อนเลย**
+
+server รองรับอยู่แล้วและมี unit test ครบ (`validateNewOrganization` — absent/null/invalid) แต่**ไม่มี client ตัวไหนเคยไม่ส่ง** เพราะ generator บังคับ
+⇒ ตอนนี้ทั้ง browser lane และ emulator lane สร้างร้านโดยไม่ส่ง timezone ⇒ **เส้นที่เทสต์ไว้กลายเป็นเส้นจริง**
+
+web **333** · mobile **436** · api **680** · contracts **8** เขียวหมด

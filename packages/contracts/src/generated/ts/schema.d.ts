@@ -733,11 +733,10 @@ export interface components {
             /** @description Client session label (arch §4). Not a security boundary. */
             deviceId?: string;
             /**
-             * @description Refresh-token delivery channel (api-spec §0). Web sends "cookie"; mobile omits or sends "body".
-             * @default body
+             * @description Refresh-token delivery channel (api-spec §0). Web sends "cookie"; mobile omits it or sends "body", and the SERVER treats absent as "body".
              * @enum {string}
              */
-            tokenTransport: "cookie" | "body";
+            tokenTransport?: "cookie" | "body";
         };
         TokenResponse: {
             /** @description HS256 JWT access token (Bearer). 15-minute TTL. */
@@ -788,11 +787,8 @@ export interface components {
         CreateOrganizationRequest: {
             /** @description Not unique — two shops may share a name. */
             name: string;
-            /**
-             * @description Optional IANA zone; defaults to Asia/Bangkok.
-             * @default Asia/Bangkok
-             */
-            timezone: string;
+            /** @description Optional IANA zone. Omit it and the SERVER applies Asia/Bangkok (architecture §6) — stated here rather than as `default:` so the generators leave the field optional. */
+            timezone?: string;
         };
         NewOrganization: {
             id: string;

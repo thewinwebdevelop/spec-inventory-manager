@@ -1665,9 +1665,8 @@ components:
           enum:
             - cookie
             - body
-          default: body
           description: |
-            Refresh-token delivery channel (api-spec §0). Web sends "cookie"; mobile omits or sends "body".
+            Refresh-token delivery channel (api-spec §0). Web sends "cookie"; mobile omits it or sends "body", and the SERVER treats absent as "body".
     TokenResponse:
       type: object
       required:
@@ -1792,8 +1791,8 @@ components:
           description: Not unique — two shops may share a name.
         timezone:
           type: string
-          default: Asia/Bangkok
-          description: Optional IANA zone; defaults to Asia/Bangkok.
+          description: |
+            Optional IANA zone. Omit it and the SERVER applies Asia/Bangkok (architecture §6) — stated here rather than as `default:` so the generators leave the field optional.
     NewOrganization:
       type: object
       required:

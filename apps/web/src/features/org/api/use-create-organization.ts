@@ -29,11 +29,13 @@ export function useCreateOrganization(): UseMutationResult<CreatedOrganization, 
     mutationFn: (name: string) =>
       unwrap(
         client.POST("/organizations", {
-          // `timezone` is required by the generated request type but the API
-          // defaults it (api-spec §3.1) — S2 deliberately does not ask, so we
-          // send the documented default rather than adding a field the
-          // wireframe says not to show.
-          body: { name, timezone: "Asia/Bangkok" },
+          // No `timezone`: the server applies Asia/Bangkok when it is absent
+          // (api-spec §3.1) and S2 deliberately does not ask. It used to be
+          // sent because the generated type made it REQUIRED — a `default:`
+          // on an optional request property, which openapi-typescript turns
+          // into a mandatory field. The contract now states the default in
+          // prose, so the server owns it and both clients stopped pinning it.
+          body: { name },
         }),
       ),
     onSuccess: (created) => {

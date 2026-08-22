@@ -69,13 +69,11 @@ class OrgDirectoryImpl implements OrgDirectory {
     try {
       final res = await _api.createOrganization(
         createOrganizationRequest: wire.CreateOrganizationRequest(
-          (b) => b
-            ..name = name
-            // The API defaults this, and S2 deliberately does not ask
-            // (ux-wireframe §3: no timezone/currency/plan questions). Sending
-            // the documented default keeps the request explicit without
-            // adding a field the screen is told not to show.
-            ..timezone = 'Asia/Bangkok',
+          // No `..timezone`: the server applies Asia/Bangkok when it is
+          // absent and S2 does not ask (ux-wireframe §3). This line and the
+          // generated builder's `_defaults` both used to pin the value, so
+          // the server's default was unreachable from either client.
+          (b) => b..name = name,
         ),
       );
       final body = res.data!;

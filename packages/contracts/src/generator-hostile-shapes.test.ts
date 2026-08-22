@@ -84,6 +84,110 @@ export function findBooleanEnums(yaml: string): BooleanEnum[] {
   return found;
 }
 
+// ── The second one, found by audit rather than by an outage ──────────────
+// `default:` on an OPTIONAL property of a REQUEST body.
+//
+// `CreateOrganizationRequest.timezone` is not in `required:` and carries
+// `default: Asia/Bangkok`. `openapi-typescript` emits it as `timezone: string`
+// — REQUIRED — while `deviceId`, optional with no default, stays `deviceId?:`.
+// `dart-dio` keeps it nullable but bakes the value into the generated builder's
+// `_defaults`.
+//
+// So the two clients disagree about a field neither of them can omit, and the
+// SERVER's default becomes unreachable: it can never change for a client that
+// is compelled to send the old value. `LoginRequest.tokenTransport` has the
+// same shape, under a description that says "mobile omits or sends body" —
+// omitting is exactly what the generated type forbids.
+//
+// It is also a contract-evolution trap. `contract-evolution` says new request
+// fields must be optional; adding one WITH a default passes `oasdiff` as
+// additive and breaks every TypeScript client's compile.
+//
+// A default is a statement about what the SERVER does when the field is
+// absent. It belongs in `description:`, where no generator will act on it.
+
+export interface RequestDefault {
+  readonly schema: string;
+  readonly line: number;
+  readonly snippet: string;
+}
+
+/** Schema names reachable from a `requestBody:`, following `$ref` transitively. */
+export function requestSchemaNames(yaml: string): string[] {
+  const lines = yaml.split("\n");
+  const seeds = new Set<string>();
+
+  for (let i = 0; i < lines.length; i++) {
+    const match = /^(\s*)requestBody:\s*$/.exec(lines[i]);
+    if (!match) continue;
+    const indent = match[1].length;
+    for (let j = i + 1; j < lines.length; j++) {
+      if (lines[j].trim() === "") continue;
+      const lineIndent = lines[j].length - lines[j].trimStart().length;
+      if (lineIndent <= indent) break;
+      const ref = /\$ref:\s*['"]?#\/components\/schemas\/(\w+)/.exec(lines[j]);
+      if (ref) seeds.add(ref[1]);
+    }
+  }
+
+  // A request schema may compose others; a default one level down reaches the
+  // generated request type just the same.
+  const blocks = schemaBlocks(yaml);
+  const seen = new Set<string>();
+  const queue = [...seeds];
+  while (queue.length > 0) {
+    const name = queue.pop() as string;
+    if (seen.has(name)) continue;
+    seen.add(name);
+    for (const line of blocks.get(name) ?? []) {
+      const ref = /\$ref:\s*['"]?#\/components\/schemas\/(\w+)/.exec(line);
+      if (ref && !seen.has(ref[1])) queue.push(ref[1]);
+    }
+  }
+  return [...seen].sort();
+}
+
+/** `components.schemas.<Name>` → its lines, as `[lineNumber, text]` pairs flattened. */
+function schemaBlocks(yaml: string): Map<string, string[]> {
+  const lines = yaml.split("\n");
+  const out = new Map<string, string[]>();
+  const start = lines.findIndex((l) => /^\s{2}schemas:\s*$/.test(l));
+  if (start < 0) return out;
+
+  let current: string | null = null;
+  for (let i = start + 1; i < lines.length; i++) {
+    const line = lines[i];
+    if (line.trim() === "") continue;
+    const indent = line.length - line.trimStart().length;
+    if (indent <= 2 && line.trim() !== "") break; // left `components:`
+    const header = /^\s{4}(\w+):\s*$/.exec(line);
+    if (header) {
+      current = header[1];
+      out.set(current, []);
+      continue;
+    }
+    if (current) out.get(current)?.push(`${i + 1} ${line}`);
+  }
+  return out;
+}
+
+/** Every `default:` inside a schema a request body can reach. */
+export function findRequestDefaults(yaml: string): RequestDefault[] {
+  const names = new Set(requestSchemaNames(yaml));
+  const blocks = schemaBlocks(yaml);
+  const found: RequestDefault[] = [];
+  for (const name of names) {
+    for (const entry of blocks.get(name) ?? []) {
+      const at = entry.indexOf(" ");
+      const text = entry.slice(at + 1);
+      if (/^\s*default:/.test(text)) {
+        found.push({ schema: name, line: Number(entry.slice(0, at)), snippet: text.trim() });
+      }
+    }
+  }
+  return found;
+}
+
 describe("★ shapes that generate a broken client", () => {
   const bundle = readFileSync(BUNDLE, "utf8");
 
@@ -121,6 +225,63 @@ describe("★ shapes that generate a broken client", () => {
         ].join("\n"),
       ),
     ).toHaveLength(0);
+  });
+
+  it("the request-body scan reaches the real request schemas", () => {
+    // A scan that resolved nothing would pass the ban below forever, which is
+    // the failure mode this whole file exists to avoid.
+    const names = requestSchemaNames(bundle);
+    expect(names.length).toBeGreaterThanOrEqual(12);
+    expect(names).toContain("CreateOrganizationRequest");
+    expect(names).toContain("LoginRequest");
+    // …and it is not simply every schema in the document.
+    expect(names).not.toContain("MemberRow");
+  });
+
+  it("SELF-CHECK: the default scan finds the shape, and spares a response", () => {
+    const doc = [
+      "paths:",
+      "  /organizations:",
+      "    post:",
+      "      requestBody:",
+      "        content:",
+      "          application/json:",
+      "            schema:",
+      "              $ref: '#/components/schemas/CreateOrganizationRequest'",
+      "components:",
+      "  schemas:",
+      "    CreateOrganizationRequest:",
+      "      properties:",
+      "        timezone:",
+      "          type: string",
+      "          default: Asia/Bangkok",
+      "    MemberRow:",
+      "      properties:",
+      "        status:",
+      "          type: string",
+      "          default: active",
+    ].join("\n");
+
+    const found = findRequestDefaults(doc);
+    expect(found.map((f) => f.schema), "the scan misses the shape it exists for").toEqual([
+      "CreateOrganizationRequest",
+    ]);
+
+    // A default on a RESPONSE schema is harmless — the server fills it in, and
+    // that is precisely what `openapi-typescript` assumes when it marks the
+    // property required. Only requests suffer.
+    expect(findRequestDefaults(doc).some((f) => f.schema === "MemberRow")).toBe(false);
+  });
+
+  it("★ no request field carries a `default` — the generators make it mandatory", () => {
+    const offenders = findRequestDefaults(bundle);
+    expect(
+      offenders.map((o) => `${o.schema} (openapi.yaml:${o.line}) — ${o.snippet}`),
+      "`openapi-typescript` emits an optional property WITH a default as REQUIRED, and dart-dio " +
+        "bakes the value into the generated builder. The server's default then becomes " +
+        "unreachable, and adding such a field later passes oasdiff as additive while breaking " +
+        "every TypeScript client's compile. Say it in `description:` instead.",
+    ).toEqual([]);
   });
 
   it("★ no boolean carries an `enum` — it is a comment that dart-dio reads as a type", () => {

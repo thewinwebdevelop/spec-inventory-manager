@@ -12,14 +12,14 @@ part 'create_organization_request.g.dart';
 ///
 /// Properties:
 /// * [name] - Not unique — two shops may share a name.
-/// * [timezone] - Optional IANA zone; defaults to Asia/Bangkok.
+/// * [timezone] - Optional IANA zone. Omit it and the SERVER applies Asia/Bangkok (architecture §6) — stated here rather than as `default:` so the generators leave the field optional. 
 @BuiltValue()
 abstract class CreateOrganizationRequest implements Built<CreateOrganizationRequest, CreateOrganizationRequestBuilder> {
   /// Not unique — two shops may share a name.
   @BuiltValueField(wireName: r'name')
   String get name;
 
-  /// Optional IANA zone; defaults to Asia/Bangkok.
+  /// Optional IANA zone. Omit it and the SERVER applies Asia/Bangkok (architecture §6) — stated here rather than as `default:` so the generators leave the field optional. 
   @BuiltValueField(wireName: r'timezone')
   String? get timezone;
 
@@ -28,8 +28,7 @@ abstract class CreateOrganizationRequest implements Built<CreateOrganizationRequ
   factory CreateOrganizationRequest([void updates(CreateOrganizationRequestBuilder b)]) = _$CreateOrganizationRequest;
 
   @BuiltValueHook(initializeBuilder: true)
-  static void _defaults(CreateOrganizationRequestBuilder b) => b
-      ..timezone = 'Asia/Bangkok';
+  static void _defaults(CreateOrganizationRequestBuilder b) => b;
 
   @BuiltValueSerializer(custom: true)
   static Serializer<CreateOrganizationRequest> get serializer => _$CreateOrganizationRequestSerializer();

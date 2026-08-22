@@ -229,8 +229,15 @@ CreateOrganizationRequest:
       description: Not unique — two shops may share a name.
     timezone:
       type: string
-      default: Asia/Bangkok
-      description: Optional IANA zone; defaults to Asia/Bangkok.
+      # ⛔ No `default:` here — see `generator-hostile-shapes.test.ts`. An
+      # optional REQUEST property with a default is emitted as REQUIRED by
+      # openapi-typescript and pre-filled by dart-dio's builder, so the
+      # server's default becomes unreachable and clients must send a value
+      # they were told they could omit.
+      description: >
+        Optional IANA zone. Omit it and the SERVER applies Asia/Bangkok
+        (architecture §6) — stated here rather than as `default:` so the
+        generators leave the field optional.
   # ⛔ No `planKey`, `currency` or `id`: the plan is resolved server-side from
   # the env seam (architecture §6.2) and the currency is fixed by D-013.
   # Accepting either would let a caller grant itself a tier.
