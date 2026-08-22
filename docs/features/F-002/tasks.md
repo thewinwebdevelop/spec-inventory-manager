@@ -2491,3 +2491,26 @@ web **333** · mobile **436** · api **680** · contracts **8** เขียว�
 `OrgMyMembership.capabilities` เป็น **`required`** และ description เขียนไว้ตรงตัวว่า *"What the client may OFFER. Not enforcement — the server refuses the call regardless"*
 ⇒ **นี่คือสัญญาที่ตั้งใจ ไม่ใช่ผลข้างเคียง** — การที่ mobile ไปอ่าน `GET /orgs/{id}` เพื่อรู้ว่าตัวเองเสนออะไรได้ คือการใช้ field ตามที่มันถูกออกแบบมา
 ⇒ **เหลือให้ @backend-api ตัดสินข้อเดียว:** จะใส่ `capabilities` เพิ่มใน `201` ของ `POST /organizations` ไหม เพื่อให้เจตนา ux Q5 (เข้าร้านใหม่โดยไม่ต้อง round trip) กลับมาเต็ม — additive ตาม contract-evolution
+
+### audit ต่อ: **error code ที่ client แตกสาขาใช้ แต่ contract ไม่เคยประกาศ — 5 ตัว** (2026-08-22)
+
+skill `contract-evolution` เขียนไว้เองว่า *"Error codes are contract too — clients branch on them"*
+· และทั้งสอง client ก็ทำแบบนั้นจริง: `err.code === "EMAIL_TAKEN"` บนเว็บ · `case 'PASSWORD_TOO_SHORT':` บนมือถือ — เพื่อเลือกว่าคนจะได้อ่านประโยคไหน
+
+**ตรวจแล้ว: 15 code ที่ client แตกสาขา · 5 ตัวไม่มีอยู่ใน OpenAPI เลยสักที่**
+
+`EMAIL_INVALID` · `EMAIL_TAKEN` · `PASSWORD_BREACHED` · `PASSWORD_TOO_LONG` · `PASSWORD_TOO_SHORT` (ทั้งหมดเป็นผิว signup/เปลี่ยนรหัสของ F-001)
+
+⇒ มันมีอยู่ใน source ของ server และใน `switch` ของ client สองตัว · **ไม่มีอยู่ในข้อตกลงระหว่างกัน**
+⇒ เปลี่ยนชื่อสักตัว: `oasdiff` เงียบ · `contracts-drift` เงียบ · unit suite ทุกตัวเขียว (เพราะแต่ละฝั่ง**สอดคล้องกับตัวเอง**) · แล้วทั้งสองแอป**ตกไปใช้ข้อความรวม ๆ ทั้งที่มีคำเฉพาะเตรียมไว้แล้ว**
+
+**guard ใหม่ `error-code-coverage.test.ts` — และมันไม่ได้แก้ 5 ตัวนั้น**
+เอกสารของ `/auth/*` เป็น contract ของ **@backend-api** และเป็นผิวที่ ship แล้ว ⇒ ไม่ใช่ของผมตัดสิน
+สิ่งที่ guard ทำคือ **หยุดไม่ให้หนี้โต**: ตัวที่ 6 ทำ build แดง · 5 ตัวเดิมอยู่ใน `UNDOCUMENTED` พร้อมชื่อเจ้าของ
+
+**mutation 2 ทาง (guard ที่เน่าไม่ได้ทั้งขึ้นและลง):**
+- เพิ่ม code ที่ 6 ที่ไม่มีในเอกสาร ⇒ **แดง**
+- เอา code ในลิสต์ไปเขียนลงเอกสาร ⇒ เทสต์ *"the debt list is honest"* **แดง** บังคับให้ลบออกจากลิสต์
+⇒ ลิสต์หนี้จะไม่กลายเป็นรายการค้างที่ไม่มีใครกล้าแตะ
+
+**งานที่ส่งต่อ @backend-api:** เขียน 5 response นี้ลง `paths/auth-signup.yaml` + `auth-change-password.yaml` — **additive ล้วน** ไม่แตะพฤติกรรม (server ส่ง code พวกนี้อยู่แล้ว)
