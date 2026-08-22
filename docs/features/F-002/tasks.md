@@ -2477,3 +2477,17 @@ server รองรับอยู่แล้วและมี unit test ค�
 ⇒ ตอนนี้ทั้ง browser lane และ emulator lane สร้างร้านโดยไม่ส่ง timezone ⇒ **เส้นที่เทสต์ไว้กลายเป็นเส้นจริง**
 
 web **333** · mobile **436** · api **680** · contracts **8** เขียวหมด
+
+### audit รอบเดียวกัน: ข้ออ้างที่ **ตรวจแล้วจริง** (เขียนไว้ด้วย ไม่ใช่รายงานแต่ที่เจอผิด)
+
+| ข้ออ้าง | ผล |
+|---|---|
+| contract: *"server GUARANTEES จำนวนเต็ม ≥ 1 … และมี unit test pin ไว้"* (`retryAfter`) | ✅ จริง — `Math.max(1, Math.ceil(...))` + เทสต์ `/^[1-9]\d*$/` |
+| `use-org-mutations.ts`: *"ฟอร์มส่งทุก field เสมอ ไม่ส่ง diff"* + branchCode ไม่ต้องส่งถ้าว่าง | ✅ จริง — server บังคับแค่ 3 ตัว (`entityType`/`taxId`/`vatRegistered`) · `branchCode` validate เฉพาะเมื่อส่งมา |
+| `RoleRow.grantsOwnership ?? false` | ✅ ถูก — ยุบไปทาง**ปิด** และคอมเมนต์เขียนเหตุผลไว้ตรง ("server ไม่ได้พูด" ≠ "ใช่") ตรงข้ามกับเคส tri-state ที่ยุบไปทางที่ contract ห้าม |
+
+### และคำถามที่ผมส่งให้ @backend-api — **contract ตอบไว้อยู่แล้วครึ่งหนึ่ง**
+
+`OrgMyMembership.capabilities` เป็น **`required`** และ description เขียนไว้ตรงตัวว่า *"What the client may OFFER. Not enforcement — the server refuses the call regardless"*
+⇒ **นี่คือสัญญาที่ตั้งใจ ไม่ใช่ผลข้างเคียง** — การที่ mobile ไปอ่าน `GET /orgs/{id}` เพื่อรู้ว่าตัวเองเสนออะไรได้ คือการใช้ field ตามที่มันถูกออกแบบมา
+⇒ **เหลือให้ @backend-api ตัดสินข้อเดียว:** จะใส่ `capabilities` เพิ่มใน `201` ของ `POST /organizations` ไหม เพื่อให้เจตนา ux Q5 (เข้าร้านใหม่โดยไม่ต้อง round trip) กลับมาเต็ม — additive ตาม contract-evolution
