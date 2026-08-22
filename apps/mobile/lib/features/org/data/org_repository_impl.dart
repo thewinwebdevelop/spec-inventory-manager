@@ -167,7 +167,7 @@ class OrgScopedImpl implements OrgScoped {
                 status: i.status.name,
                 expiresAt: i.expiresAt,
                 acceptedAt: i.acceptedAt,
-                acceptedUserCreatedAfterInvite: i.acceptedUserCreatedAfterInvite ?? false,
+                acceptedUserCreatedAfterInvite: i.acceptedUserCreatedAfterInvite,
               ),
             )
             .toList(growable: false),

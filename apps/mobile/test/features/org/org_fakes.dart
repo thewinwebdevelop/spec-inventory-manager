@@ -200,7 +200,7 @@ InvitationRow invitation({
   String roleName = 'Admin',
   DateTime? expiresAt,
   DateTime? acceptedAt,
-  bool acceptedUserCreatedAfterInvite = false,
+  bool? acceptedUserCreatedAfterInvite,
 }) {
   return InvitationRow(
     id: id,

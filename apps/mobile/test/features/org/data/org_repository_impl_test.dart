@@ -211,9 +211,15 @@ void main() {
       expect(page.items.single.status, 'pending');
       expect(page.items.single.isPending, isTrue);
       expect(page.items.single.expiresAt, DateTime.parse('2020-01-01T00:00:00.000Z'));
-      // A missing flag is false, not null — D-028/I-7's note is either shown
-      // or it is not.
-      expect(page.items.single.acceptedUserCreatedAfterInvite, isFalse);
+      // ★ `null` SURVIVES the mapping. This asserted `isFalse`, defended by a
+      // comment saying the note "is either shown or it is not" — true of the
+      // rendering, and the rendering is the screen's job (`== true`). The
+      // contract calls this exact conversion out in words: `null` is "nobody
+      // has accepted yet", and *"we do not know yet is not no"*. An entity
+      // that answers `false` to "was the account created after the link?"
+      // when nobody has accepted is answering a question the server declined
+      // to answer.
+      expect(page.items.single.acceptedUserCreatedAfterInvite, isNull);
       // More pages exist, and the caller is told so.
       expect(page.isComplete, isFalse);
       expect(page.nextCursor, 'cur_2');

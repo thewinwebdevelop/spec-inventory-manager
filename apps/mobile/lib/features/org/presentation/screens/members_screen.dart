@@ -272,7 +272,7 @@ class _InvitationTile extends StatelessWidget {
           // it on a cancelled invitation would advertise a dead link's
           // deadline.
           if (invitation.isPending) Text(formatExpiryLine(t, invitation.expiresAt)),
-          if (invitation.acceptedUserCreatedAfterInvite)
+          if (invitation.acceptedUserCreatedAfterInvite == true)
             Text(
               t.invitationAcceptedAfterInviteNote,
               style: AppTypography.bodySm.copyWith(color: context.appColors.textMuted),

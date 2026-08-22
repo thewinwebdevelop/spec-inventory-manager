@@ -103,7 +103,7 @@ class InvitationRow {
     required this.status,
     required this.expiresAt,
     this.acceptedAt,
-    this.acceptedUserCreatedAfterInvite = false,
+    this.acceptedUserCreatedAfterInvite,
   });
 
   final String id;
@@ -124,7 +124,16 @@ class InvitationRow {
 
   /// D-028/I-7 — the account that accepted was created after the link was
   /// issued. A quiet ⓘ note, never an accusation.
-  final bool acceptedUserCreatedAfterInvite;
+  ///
+  /// ★ THREE states, not two. `null` is "nobody has accepted yet", and the
+  /// contract says so in as many words: *"we do not know yet is not no"*.
+  /// This was a `bool` defaulting to `false`, with the repository writing
+  /// `?? false` — the client erasing a distinction the server took care to
+  /// send. Nothing looked wrong, because "not accepted yet" and "no flag"
+  /// happen to render the same; the next person wanting to show "ยังไม่มีใครรับ"
+  /// separately would have found the answer already thrown away. Web keeps it
+  /// (`=== true`); mobile now does too.
+  final bool? acceptedUserCreatedAfterInvite;
 
   bool get isPending => status == 'pending';
 }
