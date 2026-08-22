@@ -6,7 +6,7 @@
     "build": "next build",
     "lint": "eslint \"src/**/*.{ts,tsx}\"",
     "typecheck": "tsc -p tsconfig.json --noEmit",
-    "test": "vitest run --passWithNoTests",
+    "test": "vitest run",
     "dev": "next dev",
     "test:e2e": "playwright test"
   },

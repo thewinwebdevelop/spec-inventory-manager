@@ -2514,3 +2514,26 @@ skill `contract-evolution` เขียนไว้เองว่า *"Error co
 ⇒ ลิสต์หนี้จะไม่กลายเป็นรายการค้างที่ไม่มีใครกล้าแตะ
 
 **งานที่ส่งต่อ @backend-api:** เขียน 5 response นี้ลง `paths/auth-signup.yaml` + `auth-change-password.yaml` — **additive ล้วน** ไม่แตะพฤติกรรม (server ส่ง code พวกนี้อยู่แล้ว)
+
+### audit ปิดท้าย: `--passWithNoTests` อยู่บน 2 workspace ที่ **มีเทสต์จริง**
+
+ไล่ test script ทุก workspace:
+
+| workspace | ไฟล์เทสต์ | flag | ประเมิน |
+|---|---|---|---|
+| `web` | **41** | `--passWithNoTests` | 🔴 อันตราย |
+| `@omnistock/contracts` | **3** (guard เชิงโครงสร้างทั้งหมด) | `--passWithNoTests` | 🔴 อันตราย |
+| `connectors` · `back-office` | 0 | `--passWithNoTests` | ✅ ถูกต้อง (ยังไม่มีของ) |
+
+⇒ ถ้า glob พัง / โฟลเดอร์ถูกย้าย / ไฟล์ถูกลบ ⇒ **เลนนั้นเขียวโดยรัน 0 เทสต์** — คือ *"เขียวเพราะไม่เคยรัน"* ที่ I-37 มีไว้จับ นั่งอยู่ใน 2 workspace ที่มีเทสต์เยอะที่สุดกับ workspace ที่เก็บ guard ทั้งหมด
+
+**แก้:** ถอด flag ออกจากสองตัวนั้น (คงไว้ที่ 0 เทสต์จริง ๆ ซึ่งเป็นเจตนา)
+· ยืนยันแล้ว: `vitest run --dir src/does-not-exist` ⇒ `No test files found, exiting with code 1`
+· web 333 · contracts 12 ยังเขียวปกติ
+
+### ผลลบที่ตรวจแล้ว (เขียนไว้ด้วย)
+
+**สแกนหาเทสต์ที่ไม่มี assertion เลยทั้งรีโป: ไม่มีเลยสักตัว**
+· รอบแรกเจอ 22 ตัว **เป็น false positive ทั้งหมด** เพราะ scanner ไม่รู้จัก assertion helper กลาง (`assertErrorEnvelope`, `expectProblem` ฯลฯ)
+· ตรวจซ้ำโดยนับ helper ด้วย ⇒ เหลือ 2 ตัว · เปิดอ่านทั้งสอง ⇒ มี `expect` ครบ (scanner จับขอบเขต body พลาด)
+⇒ **รายงานเป็นผลลบที่เชื่อถือได้ ไม่ใช่ "ไม่ได้ตรวจ"**
