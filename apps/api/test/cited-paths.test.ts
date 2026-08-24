@@ -76,8 +76,24 @@ const NOT_YET_BUILT: ReadonlyMap<string, string> = new Map([
  * A build log describing where a file was in July is not wrong; rewriting it
  * would falsify the record. Kept explicit so the next person can tell an
  * archived reference from a broken one.
+ *
+ * ⚠️ This list exempts PROSE ONLY. A `.md` may name a moved file — that is what
+ * a log is for, and the entry describing the very fix below quotes both old
+ * paths in order to say they were wrong. A CODE comment may not: it is
+ * navigation, someone follows it, and the whole reason this guard exists is
+ * that two native files pointed at a Dart path that had moved. So a dead
+ * citation from a `.kt`, `.swift`, `.ts` or `.dart` file fails whatever is on
+ * this list.
+ *
+ * (Found by the guard failing CI on the tasks.md entry I wrote to describe its
+ * own first fix — after I had run the suite locally and before I wrote the
+ * prose. Green locally, red everywhere else, for the usual reason.)
  */
+const PROSE = /\.md$/;
+
 const HISTORICAL: ReadonlySet<string> = new Set([
+  "apps/mobile/lib/auth/screenshot_guard.dart",
+  "packages/db/tenancy.ts",
   "apps/mobile/lib/auth/auth_client.dart",
   "apps/mobile/lib/auth/auth_flow.dart",
   "apps/mobile/lib/i18n/auth_th.dart",
@@ -165,9 +181,13 @@ describe("★ a cited path points at a file that is there", () => {
   });
 
   it("★ no dead citation outside the two declared lists", () => {
-    const unexplained = dead.filter(
-      (d) => !NOT_YET_BUILT.has(d.path) && !HISTORICAL.has(d.path),
-    );
+    const unexplained = dead.filter((d) => {
+      if (NOT_YET_BUILT.has(d.path)) return false;
+      // The history exemption is for prose. Code that names a moved file is
+      // the defect itself.
+      if (HISTORICAL.has(d.path)) return d.citedBy.some((f) => !PROSE.test(f));
+      return true;
+    });
     expect(
       unexplained.map((d) => `${d.path}  ← ${d.citedBy.join(", ")}`),
       "a doc or comment names a file that is not there. Fix the path, or declare it in " +
