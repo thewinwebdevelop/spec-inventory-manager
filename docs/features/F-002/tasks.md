@@ -2600,3 +2600,25 @@ packages/db/tenancy.ts                      ← docs/features/F-002/tasks.md
 ⇒ `HISTORICAL` ยกเว้นให้**ร้อยแก้วเท่านั้น** · ยืนยันด้วย mutation ซ้ำ: เอาคอมเมนต์ native เก่ากลับมา ⇒ **ยังแดงเหมือนเดิม** ทั้งที่ path นั้นอยู่ในลิสต์แล้ว
 
 > guard นี้แก้ตัวเอง 3 ครั้งก่อนจะนิ่ง (prefix กำกวม · fixture ของตัวเอง · ร้อยแก้ว vs โค้ด) — ตรงกับที่เคยเขียนเตือนตัวเองไว้ว่า **guard ที่ทำให้ tree สะอาดกลายเป็นแดง อันตรายกว่าไม่มี guard** เพราะคนถัดไปจะลบทิ้ง
+
+### audit (ข) ต่อ: **ค่าคงที่/gate ที่เอกสารเอ่ยชื่อ มีอยู่จริงไหม**
+
+สแกน identifier ตัวพิมพ์ใหญ่ที่ถูกอ้างใน backtick ทั่ว `docs/` ⇒ **114 ตัว · 14 ตัวไม่มีอยู่ใน source เลย**
+
+ไล่ทีละตัว — **ที่เป็นปัญหาจริงมีตัวเดียว**:
+
+| ตัว | ผล |
+|---|---|
+| `ENTITLEMENT_REQUIRED` · `INSUFFICIENT_STOCK` · `NEEDS_REAUTH` · `IN_PROGRESS` · `SEQUENCE` | ✅ target design ของ F-007/F-011/sync — เอกสาร architecture เขียนอนาคตไว้ ถูกต้อง |
+| `SERIALIZABLE` | ✅ เอกสารเอ่ยชื่อ**เพื่อบอกว่าไม่เอา** ("แพงเกินกว่าที่ปัญหานี้สมควรได้") |
+| `REFRESH_REUSE_DETECTED` | ✅ เอกสารตอบตัวเองในวงเล็บ: *"Decision: return generic `401 INVALID_REFRESH` to the client, log the reuse distinctly server-side"* ⇒ **ตั้งใจไม่ส่งออก wire** |
+| `TURBO_TEAM` · `TURBO_TOKEN` · `DB_TARGETS` · `ORG_PROFILE` · `ERR_MODULE_NOT_FOUND` · `INTERNET` | ✅ ชื่อ env/CI/ร้อยแก้ว ไม่ใช่ export |
+
+**และตรวจครึ่งที่สำคัญกว่าของ `REFRESH_REUSE_DETECTED` ต่อ** — เอกสารบอกว่า "revoke ทั้ง family + emit `auth.refresh.reuse_detected`"
+⇒ **ทำจริงครบ**: `refresh-token.service.ts:239` emit จริง · อยู่ใน union · และมี **int test 5 เคส**ครอบทั้งสองทาง (ในหน้าต่างผ่อนผัน 60 วิ ⇒ **ไม่** emit · นอกหน้าต่าง ⇒ emit)
+⇒ ต่างจาก M-07 ที่ *"ทุกการเปิดดูถูกบันทึก"* เป็นเท็จบนมือถือ — อันนี้**ข้ออ้างแรงและของจริงตรงตามนั้น**
+
+### ที่รายงานอย่างเดียว (แก้ไม่ได้ — protected path)
+
+`apps/api/CLAUDE.md` พูดถึง `APP_ROLE` สองแบบในไฟล์เดียว: **บรรทัด 8** เขียนเหมือนมีแล้ว (*"deploy เดียว, split-ready ผ่าน `APP_ROLE`"*) · **บรรทัด 61** อยู่ในตาราง "target patterns ที่ยังไม่มีของจริง" ผูกกับ F-021/F-023
+⇒ ไม่ใช่บั๊ก แต่คนอ่านบรรทัด 8 อย่างเดียวจะเข้าใจว่า worker split ใช้ได้แล้ว ⇒ **@devops/PM** ตัดสิน (protected path ผมแตะไม่ได้)
