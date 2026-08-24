@@ -2537,3 +2537,44 @@ skill `contract-evolution` เขียนไว้เองว่า *"Error co
 · รอบแรกเจอ 22 ตัว **เป็น false positive ทั้งหมด** เพราะ scanner ไม่รู้จัก assertion helper กลาง (`assertErrorEnvelope`, `expectProblem` ฯลฯ)
 · ตรวจซ้ำโดยนับ helper ด้วย ⇒ เหลือ 2 ตัว · เปิดอ่านทั้งสอง ⇒ มี `expect` ครบ (scanner จับขอบเขต body พลาด)
 ⇒ **รายงานเป็นผลลบที่เชื่อถือได้ ไม่ใช่ "ไม่ได้ตรวจ"**
+
+## audit (ข): **เอกสารอ้าง property ของโค้ด** (2026-08-25)
+
+สแกน path ที่ถูกอ้างใน backtick ทั่ว `docs/` + โค้ด · **รอบแรก scanner ขึ้น 116 ตัว เป็น false positive เกือบหมด** เพราะร้อยแก้วเขียน path แบบ relative ต่อ workspace (`test/orgs.e2e.int.test.ts` = `apps/api/test/…`)
+⇒ จำกัดเหลือเฉพาะ path ที่**ระบุ workspace ของตัวเอง** ⇒ เหลือ **16 ตัว** ที่ resolve ไม่ได้จริง
+
+### ที่คุ้มที่สุดอยู่ใน **โค้ด ไม่ใช่เอกสาร**
+
+`MainActivity.kt` และ `AppDelegate.swift` ต่างชี้ไปที่ `apps/mobile/lib/auth/screenshot_guard.dart` — ไฟล์ที่ **D-023 ย้ายไป `lib/core/security/` แล้ว**
+
+> **ไม่มีอะไรผูกสองปลายของ MethodChannel ไว้เลยนอกจากชื่อ channel กับคอมเมนต์นั้น** — ไม่มี compiler ตรวจคู่นี้
+> ⇒ คอมเมนต์คือแผนที่ทั้งหมด และมันชี้ไปที่ความว่างเปล่า
+
+· แก้ทั้งสองฝั่ง · และ **channel ตัวที่สอง (`sensitive_clipboard` ที่ผมเพิ่มเอง) ไม่เคยมีป้ายบอกทางเลย** ⇒ เติมให้ครบทั้ง Kotlin/Swift
+
+### เอกสารที่อ้างผิด (แก้แล้ว 3)
+
+| ที่ | อ้างว่า | จริง |
+|---|---|---|
+| `docs/features/F-002/architecture.md` แถว 6 | `ORG_LOCK_REQUIRED_OPERATIONS` export จาก `apps/api/src/common/authz/org-lock-operations.ts` | อยู่ที่ **`packages/db/src/org-lock.ts`** ข้าง `lockCurrentOrganization` · **แต่ grep gate ที่บรรทัดนั้นสัญญาไว้ มีจริง** (`org-lock-callsites.test.ts`) |
+| `docs/architecture/backend.md` | `packages/db/tenancy.ts` | `packages/db/src/tenancy.ts` |
+| `docs/features/F-000/architecture.md` | generator output = `../src/generated/client` | **`../generated/client`** — **ผมเองเป็นคนย้ายตอน B-10** แล้วไม่ได้ตามไปแก้เอกสาร |
+
+### ที่ยัง**ค้างและเป็นของคนอื่น**
+
+`docs/features/F-002/architecture.md` แถว 4 ระบุ **`TOKEN_RESPONSE_ALLOWLIST`** เป็น export ที่เทสต์ import ได้ — **ไม่มีอยู่จริงใน production**
+· และ `apps/api/test/assertions.kit.ts:36` **รู้ตัวและเขียนไว้ตรง ๆ**: *"Until `TOKEN_RESPONSE_ALLOWLIST` exists in production, a caller opts in per assertion with `allowFields`"*
+⇒ โค้ดซื่อสัตย์กว่าเอกสาร ⇒ **@backend-api** ตัดสินว่าจะสร้าง export นั้น หรือจะแก้เอกสารให้ตรงกับที่ทำจริง
+
+### guard: `apps/api/test/cited-paths.test.ts`
+
+path ใน backtick = **คำสัญญาว่าไฟล์อยู่ตรงนั้น** · ไม่มีอะไร compile ประโยค ⇒ มันเน่าเงียบ ๆ ทุกครั้งที่ refactor (D-023 · M-07 · B-10 — สามครั้งแล้ว)
+
+**ขอบเขตแคบโดยตั้งใจ:** เฉพาะ prefix ที่**เป็น workspace-relative ไม่ได้** (`apps/` `packages/` `docs/` `.github/`)
+· **ผมเรียนข้อนี้จากการรันครั้งแรกของ guard เอง** — มันจับ `tool/check_boundaries.dart` ซึ่ง*ถูกแล้ว*ในบริบทของ `apps/mobile/` · prefix ที่มีอยู่สองระดับ (`tool/`, `infra/`) แบกกฎนี้ไม่ไหว ⇒ ตัดออก
+· และมันจับ **fixture ใน self-check ของตัวเอง** ⇒ ต้องข้ามไฟล์ตัวเอง (คอมเมนต์ถูกอ่านเป็นโค้ด — บั๊กเดียวกับ `stripComments` ของ capability lint)
+
+**สองลิสต์ที่ประกาศไว้ชัด** — `NOT_YET_BUILT` (ออกแบบแล้วยังไม่สร้าง · เป็น inventory ในตัว) และ `HISTORICAL` (log ที่บันทึกว่าไฟล์เคยอยู่ไหน — **แก้ log = ปลอมบันทึก**)
+**mutation สองทาง:** เอาคอมเมนต์ native เก่ากลับมา ⇒ แดงพร้อมชื่อไฟล์ · ใส่ path ที่มีอยู่จริงลงลิสต์ ⇒ เทสต์ *"both lists are honest"* แดง
+
+api **684** เขียว · lint/typecheck สะอาด

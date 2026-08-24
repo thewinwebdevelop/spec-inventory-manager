@@ -2,7 +2,7 @@ import Flutter
 import UIKit
 
 /// T-001-17 ★ (L-5, client-security skill): backs
-/// `apps/mobile/lib/auth/screenshot_guard.dart`'s `omnistock/screenshot_guard`
+/// `apps/mobile/lib/core/security/screenshot_guard.dart`'s `omnistock/screenshot_guard`
 /// MethodChannel. iOS has no OS-level API to block screenshots/screen
 /// recording (unlike Android's `FLAG_SECURE`) — the mitigation available on
 /// this platform is covering the view with an opaque overlay right before
@@ -64,10 +64,16 @@ import UIKit
         }
       }
 
-      // ★ M-07 (client-security): a national ID copied here must not travel to
-      // the person's other Apple devices. `localOnly` keeps it off Universal
-      // Clipboard; the expiry means the system clears it rather than holding
-      // it indefinitely, which is the ordinary pasteboard's behaviour.
+      // ★ M-07 (client-security): backs
+      // `apps/mobile/lib/core/security/sensitive_clipboard.dart`. A national ID
+      // copied here must not travel to the person's other Apple devices.
+      // `localOnly` keeps it off Universal Clipboard; the expiry means the
+      // system clears it rather than holding it indefinitely, which is the
+      // ordinary pasteboard's behaviour.
+      //
+      // Named explicitly because nothing compiles the pair — the channel name
+      // is the only link. The screenshot-guard comment above had gone stale
+      // against a moved file, which is exactly what that costs.
       let clipboard = FlutterMethodChannel(
         name: "omnistock/sensitive_clipboard",
         binaryMessenger: controller.binaryMessenger
