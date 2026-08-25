@@ -2622,3 +2622,29 @@ packages/db/tenancy.ts                      ← docs/features/F-002/tasks.md
 
 `apps/api/CLAUDE.md` พูดถึง `APP_ROLE` สองแบบในไฟล์เดียว: **บรรทัด 8** เขียนเหมือนมีแล้ว (*"deploy เดียว, split-ready ผ่าน `APP_ROLE`"*) · **บรรทัด 61** อยู่ในตาราง "target patterns ที่ยังไม่มีของจริง" ผูกกับ F-021/F-023
 ⇒ ไม่ใช่บั๊ก แต่คนอ่านบรรทัด 8 อย่างเดียวจะเข้าใจว่า worker split ใช้ได้แล้ว ⇒ **@devops/PM** ตัดสิน (protected path ผมแตะไม่ได้)
+
+## Gate F — ของเตรียมให้ `release` + PM (user สั่ง 2026-08-25)
+
+**เจ้าภาพคือ `release` ผมเตรียมให้ ไม่ได้ตัดสิน** ⇒ `docs/features/F-002/release-gate-f.md` + `CHANGELOG.md` + retro ใน `docs/RETRO.md`
+
+**สถานะ go/no-go: 🔴 NO-GO** — และ**ไม่มีข้อไหนแปลว่ามีอะไรพัง**
+· qa ยังไม่ออก verdict (เหลือ manual §12.2 9 ข้อ ซึ่ง §17.6 บังคับ) · **ไม่มี deploy target ใน Phase 0 จึงไม่มี environment ให้ประกาศว่าพร้อม**
+
+**หัวใจของ rollback plan อยู่ที่ migration ตัวเดียว:** `f002_drop_invitation_token` ทำ `DROP COLUMN "token"`
+⇒ ย้อนโค้ดกลับไปก่อน F-002 **หลัง**จากตัวนี้รันแล้ว ⇒ คอลัมน์ถูกสร้างคืนแบบ **ว่างและ NULLABLE** ⇒ **คำเชิญที่ค้างอยู่ตายทั้งหมดแบบไม่พังดัง**
+⇒ ลำดับที่ปลอดภัยคือ migrate(expand) → deploy → **หยุดที่ dogfood 1 รอบ** → ค่อยรัน contract
+· ระหว่างนั้น rollback = revert deploy เฉย ๆ (schema เป็น superset) — **นี่คือ rollback ที่ควรใช้ 99% ของกรณี**
+· migration ทั้ง 3 ตัว**เขียน SQL ย้อนกลับไว้ในคอมเมนต์ของตัวเองอยู่แล้ว** — เป็นของที่ backend-api ทำไว้ดีตั้งแต่แรก
+
+### ระหว่างเตรียม: **ผมลอกความเสี่ยงเก่ามาใส่โดยไม่ตรวจ แล้วมันไม่จริงแล้ว**
+
+ร่างแรกเขียนว่า *"Kotlin/Swift ไม่เคยถูก compile ใน CI"* — ลอกมาจาก `forward-commitments.md` ตรง ๆ
+ไปเปิด log ของ `mobile-e2e` จริง:
+```
+Running Gradle task 'assembleDebug'...        254.9s
+✓ Built build/app/outputs/flutter-apk/app-debug.apk
+```
+⇒ **Android compile ทุกรอบ CI แล้ว** เพราะ integration test ต้องมี APK จริงถึงจะรันได้ ⇒ ครึ่ง Android **ปิดไปแล้วโดยเลน E-10 ซึ่งมาเพื่อเหตุผลอื่นทั้งหมด**
+⇒ **ที่ยังเสี่ยงจริงคือ iOS เท่านั้น** (ไม่มี mac runner) — `AppDelegate.swift` ยัง ship โดยไม่มีใคร build ⇒ **@devops** ลดขอบเขต forward-commitment แถวนั้นเหลือ iOS
+
+> เป็นบทเรียนเดียวกับ audit ทั้งสองรอบ ในที่ที่ผมไม่ได้ระวัง: **เอกสารบอกอะไร ไปดูของจริงก่อนเชื่อ** แม้เอกสารนั้นจะเป็นของทีมเราเอง
