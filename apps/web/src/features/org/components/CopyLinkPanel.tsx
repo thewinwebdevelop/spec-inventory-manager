@@ -28,6 +28,7 @@ import {
 import { copyLinkTh } from "../i18n";
 import { formatExpiry } from "../expiry";
 import { Button } from "../../../components/ui/Button";
+import { DialogShell } from "../../../components/ui/DialogShell";
 import { useToast } from "../../../components/providers/ToastProvider";
 
 export function CopyLinkPanel({
@@ -62,48 +63,45 @@ export function CopyLinkPanel({
   };
 
   return (
-    <div
-      role="dialog"
-      aria-label={copyLinkTh.title}
-      className="space-y-3 rounded-card border border-border-default bg-surface p-card-padding shadow-card"
-    >
-      <h3 className="m-0 text-heading-sm">{copyLinkTh.title}</h3>
-      <p className="m-0 text-body-sm text-text-muted">{copyLinkTh.description(state.email)}</p>
+    <DialogShell label={copyLinkTh.title} onClose={onClose}>
+        <h3 className="m-0 text-heading-sm">{copyLinkTh.title}</h3>
+        <p className="m-0 text-body-sm text-text-muted">{copyLinkTh.description(state.email)}</p>
 
-      {/* Read-only rather than disabled: the user must be able to select it by
-          hand when the clipboard is unavailable. */}
-      <input
-        readOnly
-        value={url}
-        aria-label={copyLinkTh.title}
-        className="w-full rounded-button border border-border-default bg-surface-muted p-3 font-mono text-body-sm"
-      />
+        {/* Read-only rather than disabled: the user must be able to select it by
+            hand when the clipboard is unavailable. */}
+        <input
+          readOnly
+          value={url}
+          aria-label={copyLinkTh.title}
+          className="w-full rounded-button border border-border-default bg-surface-muted p-3 font-mono text-body-sm"
+        />
 
-      <Button onClick={() => void copy()} fullWidth>
-        {state.copied ? copyLinkTh.copied : copyLinkTh.copy}
-      </Button>
-      {copyFailed && (
-        <p role="alert" className="text-body-sm text-danger-text">
-          {copyLinkTh.copyFailed}
+        <Button onClick={() => void copy()} fullWidth>
+          {state.copied ? copyLinkTh.copied : copyLinkTh.copy}
+        </Button>
+        {copyFailed && (
+          <p role="alert" className="text-body-sm text-danger-text">
+            {copyLinkTh.copyFailed}
+          </p>
+        )}
+
+        {/* Read from `expiresAt`. D-027 forbids printing "7 days": the TTL
+            depends on the role and is recomputed on every reissue. */}
+        <p className="m-0 text-body-sm text-text-muted">{formatExpiry(state.expiresAt)}</p>
+
+        {/* Warning tone, and ABOVE the close button — that placement is the
+            reason §9.1 could drop the confirm dialog. */}
+        <p
+          role="note"
+          className="rounded-card border border-warning-border bg-warning-bg p-4 text-body-sm text-warning-text"
+        >
+          {copyLinkTh.onceOnly}
         </p>
-      )}
 
-      {/* Read from `expiresAt`. D-027 forbids printing "7 days": the TTL
-          depends on the role and is recomputed on every reissue. */}
-      <p className="m-0 text-body-sm text-text-muted">{formatExpiry(state.expiresAt)}</p>
-
-      {/* Warning tone, and ABOVE the close button — that placement is the
-          reason §9.1 could drop the confirm dialog. */}
-      <p
-        role="note"
-        className="rounded-card border border-warning-border bg-warning-bg p-4 text-body-sm text-warning-text"
-      >
-        {copyLinkTh.onceOnly}
-      </p>
-
-      <Button variant={closeButtonVariant(state)} onClick={onClose}>
-        {copyLinkTh.close}
-      </Button>
-    </div>
+        <Button variant={closeButtonVariant(state)} onClick={onClose}>
+          {copyLinkTh.close}
+        </Button>
+    
+    </DialogShell>
   );
 }

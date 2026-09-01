@@ -29,6 +29,7 @@ import { useActiveOrg } from "../../../lib/org/org-context";
 import { toApiFailure } from "../../../lib/api/error";
 import { inviteFormTh, roleLabel } from "../i18n";
 import { Button } from "../../../components/ui/Button";
+import { DialogShell } from "../../../components/ui/DialogShell";
 import { TextField } from "../../../components/ui/TextField";
 import { RadioCardGroup } from "../../../components/ui/RadioCardGroup";
 import { ErrorBanner } from "../../../components/ui/ErrorBanner";
@@ -103,57 +104,58 @@ export function InviteDialog({
   };
 
   return (
-    <div role="dialog" aria-label={inviteFormTh.title} className="space-y-3 rounded-card border border-border-default bg-surface p-card-padding shadow-card">
-      <h3 className="text-heading-sm">{inviteFormTh.title}</h3>
-      {banner && <ErrorBanner message={banner} />}
+    <DialogShell label={inviteFormTh.title} onClose={onClose}>
+        <h3 className="text-heading-sm">{inviteFormTh.title}</h3>
+        {banner && <ErrorBanner message={banner} />}
 
-      <TextField
-        label={inviteFormTh.emailLabel}
-        value={email}
-        onChange={setEmail}
-        type="email"
-        placeholder={inviteFormTh.emailPlaceholder}
-        disabled={create.isPending}
-        errorText={fieldError.email}
-      />
-
-      {/* B-9: the Owner row is SHOWN and disabled with the reason, never
-          filtered away — `RadioCardGroup` has a slot for exactly that. */}
-      <RadioCardGroup
-        name="roleId"
-        legend={inviteFormTh.roleLabel}
-        value={roleId}
-        onChange={setRoleId}
-        options={all.map((role) => {
-          const closed = !assignable.has(role.id);
-          return {
-            value: role.id,
-            label: roleLabel(role.key, role.name),
-            disabled: create.isPending || closed,
-            disabledReason: closed ? inviteFormTh.ownerOnlyHelper : undefined,
-          };
-        })}
-      />
-      {fieldError.role && (
-        <p role="alert" className="m-0 text-body-sm text-danger-text">
-          {fieldError.role}
-        </p>
-      )}
-
-      {/* `.dialog .acts` — one right-aligned row, `space.3` between. */}
-      <div className="flex flex-wrap justify-end gap-3 pt-2">
-        <Button
-          onClick={submit}
+        <TextField
+          label={inviteFormTh.emailLabel}
+          value={email}
+          onChange={setEmail}
+          type="email"
+          placeholder={inviteFormTh.emailPlaceholder}
           disabled={create.isPending}
-          loading={create.isPending}
-          loadingLabel={inviteFormTh.submitLoading}
-        >
-          {inviteFormTh.submit}
-        </Button>
-        <Button variant="secondary" onClick={onClose} disabled={create.isPending}>
-          {inviteFormTh.cancel}
-        </Button>
-      </div>
-    </div>
+          errorText={fieldError.email}
+        />
+
+        {/* B-9: the Owner row is SHOWN and disabled with the reason, never
+            filtered away — `RadioCardGroup` has a slot for exactly that. */}
+        <RadioCardGroup
+          name="roleId"
+          legend={inviteFormTh.roleLabel}
+          value={roleId}
+          onChange={setRoleId}
+          options={all.map((role) => {
+            const closed = !assignable.has(role.id);
+            return {
+              value: role.id,
+              label: roleLabel(role.key, role.name),
+              disabled: create.isPending || closed,
+              disabledReason: closed ? inviteFormTh.ownerOnlyHelper : undefined,
+            };
+          })}
+        />
+        {fieldError.role && (
+          <p role="alert" className="m-0 text-body-sm text-danger-text">
+            {fieldError.role}
+          </p>
+        )}
+
+        {/* `.dialog .acts` — one right-aligned row, `space.3` between. */}
+        <div className="flex flex-wrap justify-end gap-3 pt-2">
+          <Button
+            onClick={submit}
+            disabled={create.isPending}
+            loading={create.isPending}
+            loadingLabel={inviteFormTh.submitLoading}
+          >
+            {inviteFormTh.submit}
+          </Button>
+          <Button variant="secondary" onClick={onClose} disabled={create.isPending}>
+            {inviteFormTh.cancel}
+          </Button>
+        </div>
+    
+    </DialogShell>
   );
 }

@@ -26,6 +26,7 @@ import type { OrgProfile } from "../tax-card";
 import { taxFormTh } from "../i18n";
 import { toApiFailure } from "../../../lib/api/error";
 import { Button } from "../../../components/ui/Button";
+import { DialogShell } from "../../../components/ui/DialogShell";
 import { TextField } from "../../../components/ui/TextField";
 import { RadioCardGroup } from "../../../components/ui/RadioCardGroup";
 import { ErrorBanner } from "../../../components/ui/ErrorBanner";
@@ -108,99 +109,100 @@ export function TaxProfileDialog({
   };
 
   return (
-    <div role="dialog" aria-label={taxFormTh.title} className="space-y-3 rounded-card border border-border-default bg-surface p-card-padding shadow-card">
-      <h3 className="m-0 text-heading-sm">{taxFormTh.title}</h3>
+    <DialogShell label={taxFormTh.title} onClose={onClose}>
+        <h3 className="m-0 text-heading-sm">{taxFormTh.title}</h3>
 
-      {banner && <ErrorBanner message={banner} />}
+        {banner && <ErrorBanner message={banner} />}
 
-      <RadioCardGroup
-        name="entityType"
-        legend={taxFormTh.entityLabel}
-        value={entityType}
-        onChange={(next) => setEntityType(next as typeof entityType)}
-        options={[
-          { value: "personal", label: taxFormTh.personal },
-          { value: "company", label: taxFormTh.company },
-        ]}
-      />
+        <RadioCardGroup
+          name="entityType"
+          legend={taxFormTh.entityLabel}
+          value={entityType}
+          onChange={(next) => setEntityType(next as typeof entityType)}
+          options={[
+            { value: "personal", label: taxFormTh.personal },
+            { value: "company", label: taxFormTh.company },
+          ]}
+        />
 
-      {/* Visible WHILE the number is being typed, not after — for a personal
-          taxpayer these 13 digits are a national ID. */}
-      {entityType === "personal" && (
-        <p className="m-0 text-body-sm text-text-muted">{taxFormTh.personalHelper}</p>
-      )}
+        {/* Visible WHILE the number is being typed, not after — for a personal
+            taxpayer these 13 digits are a national ID. */}
+        {entityType === "personal" && (
+          <p className="m-0 text-body-sm text-text-muted">{taxFormTh.personalHelper}</p>
+        )}
 
-      <TextField
-        label={taxFormTh.taxIdLabel}
-        value={taxId}
-        onChange={setTaxId}
-        disabled={reveal.isPending || save.isPending}
-        errorText={fieldError.taxId}
-        // Never offer to remember a tax id / national ID (§6 a11y note).
-        autoComplete="off"
-      />
-      {revealUnavailable && (
-        <p className="m-0 text-body-sm text-text-muted">{taxFormTh.revealUnavailable}</p>
-      )}
+        <TextField
+          label={taxFormTh.taxIdLabel}
+          value={taxId}
+          onChange={setTaxId}
+          disabled={reveal.isPending || save.isPending}
+          errorText={fieldError.taxId}
+          // Never offer to remember a tax id / national ID (§6 a11y note).
+          autoComplete="off"
+        />
+        {revealUnavailable && (
+          <p className="m-0 text-body-sm text-text-muted">{taxFormTh.revealUnavailable}</p>
+        )}
 
-      <RadioCardGroup
-        name="vat"
-        legend={taxFormTh.vatLabel}
-        value={vatRegistered ? "yes" : "no"}
-        onChange={(next) => setVatRegistered(next === "yes")}
-        options={[
-          { value: "yes", label: taxFormTh.vatYes },
-          { value: "no", label: taxFormTh.vatNo },
-        ]}
-      />
+        <RadioCardGroup
+          name="vat"
+          legend={taxFormTh.vatLabel}
+          value={vatRegistered ? "yes" : "no"}
+          onChange={(next) => setVatRegistered(next === "yes")}
+          options={[
+            { value: "yes", label: taxFormTh.vatYes },
+            { value: "no", label: taxFormTh.vatNo },
+          ]}
+        />
 
-      {/* §6: a personal taxpayer has no branch code — hide it, do not disable. */}
-      {entityType === "company" && (
-        <>
-          <TextField
-            label={taxFormTh.branchLabel}
-            value={branchCode}
-            onChange={setBranchCode}
+        {/* §6: a personal taxpayer has no branch code — hide it, do not disable. */}
+        {entityType === "company" && (
+          <>
+            <TextField
+              label={taxFormTh.branchLabel}
+              value={branchCode}
+              onChange={setBranchCode}
+              disabled={save.isPending}
+              errorText={fieldError.branchCode}
+              autoComplete="off"
+            />
+            <p className="m-0 text-body-sm text-text-muted">{taxFormTh.branchHelper}</p>
+          </>
+        )}
+
+        <p className="m-0 text-body-sm text-text-muted">{taxFormTh.privacyNote}</p>
+
+        {confirming && (
+          <div
+            role="alertdialog"
+            aria-label={taxFormTh.overwriteConfirm.title}
+            className="rounded-card border border-warning-border bg-warning-bg p-4 text-warning-text"
+          >
+            <p className="m-0 font-semibold">{taxFormTh.overwriteConfirm.title}</p>
+            <p className="m-0 mt-1 text-body-sm">{taxFormTh.overwriteConfirm.body}</p>
+          </div>
+        )}
+
+        {/* The mockup's `.dialog .acts`: one row, right-aligned, `space.3`
+            between. They were two block-level buttons stacked full width. */}
+        <div className="flex flex-wrap justify-end gap-3 pt-2">
+          <Button
+            variant="secondary"
+            onClick={confirming ? () => setConfirming(false) : onClose}
             disabled={save.isPending}
-            errorText={fieldError.branchCode}
-            autoComplete="off"
-          />
-          <p className="m-0 text-body-sm text-text-muted">{taxFormTh.branchHelper}</p>
-        </>
-      )}
-
-      <p className="m-0 text-body-sm text-text-muted">{taxFormTh.privacyNote}</p>
-
-      {confirming && (
-        <div
-          role="alertdialog"
-          aria-label={taxFormTh.overwriteConfirm.title}
-          className="rounded-card border border-warning-border bg-warning-bg p-4 text-warning-text"
-        >
-          <p className="m-0 font-semibold">{taxFormTh.overwriteConfirm.title}</p>
-          <p className="m-0 mt-1 text-body-sm">{taxFormTh.overwriteConfirm.body}</p>
+          >
+            {taxFormTh.cancel}
+          </Button>
+          <Button
+            onClick={submit}
+            disabled={save.isPending}
+            loading={save.isPending}
+            loadingLabel={taxFormTh.saveLoading}
+          >
+            {confirming ? taxFormTh.overwriteConfirm.confirm : taxFormTh.save}
+          </Button>
         </div>
-      )}
-
-      {/* The mockup's `.dialog .acts`: one row, right-aligned, `space.3`
-          between. They were two block-level buttons stacked full width. */}
-      <div className="flex flex-wrap justify-end gap-3 pt-2">
-        <Button
-          variant="secondary"
-          onClick={confirming ? () => setConfirming(false) : onClose}
-          disabled={save.isPending}
-        >
-          {taxFormTh.cancel}
-        </Button>
-        <Button
-          onClick={submit}
-          disabled={save.isPending}
-          loading={save.isPending}
-          loadingLabel={taxFormTh.saveLoading}
-        >
-          {confirming ? taxFormTh.overwriteConfirm.confirm : taxFormTh.save}
-        </Button>
-      </div>
-    </div>
+    
+    </DialogShell>
   );
 }

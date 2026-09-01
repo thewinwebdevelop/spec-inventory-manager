@@ -21,6 +21,7 @@ import { can } from "../../../lib/org/capability";
 import { CAPABILITY_MANAGE_MEMBERS } from "../member-actions";
 import { useToast } from "../../../components/providers/ToastProvider";
 import { Button } from "../../../components/ui/Button";
+import { DialogShell } from "../../../components/ui/DialogShell";
 import { ErrorBanner } from "../../../components/ui/ErrorBanner";
 import { membersTh } from "../i18n";
 
@@ -68,34 +69,31 @@ export function LeaveOrgDialog({ onClose }: { onClose: () => void }) {
   };
 
   return (
-    <div
-      role="alertdialog"
-      aria-label={LEAVE_ORG_DIALOG_COPY.title(org.name)}
-      className="space-y-3 rounded-card border border-border-default bg-surface p-card-padding shadow-card"
-    >
-      <h3 className="text-heading-sm">{LEAVE_ORG_DIALOG_COPY.title(org.name)}</h3>
-      <p className="text-body-sm">{LEAVE_ORG_DIALOG_COPY.body}</p>
+    <DialogShell label={LEAVE_ORG_DIALOG_COPY.title(org.name)} onClose={onClose} role="alertdialog">
+        <h3 className="text-heading-sm">{LEAVE_ORG_DIALOG_COPY.title(org.name)}</h3>
+        <p className="text-body-sm">{LEAVE_ORG_DIALOG_COPY.body}</p>
 
-      {message && <ErrorBanner message={message} />}
-      {offerMembersLink && (
-        <Link href={`/o/${org.orgId}/settings/members`}>{LEAVE_ORG_DIALOG_COPY.goToMembers}</Link>
-      )}
+        {message && <ErrorBanner message={message} />}
+        {offerMembersLink && (
+          <Link href={`/o/${org.orgId}/settings/members`}>{LEAVE_ORG_DIALOG_COPY.goToMembers}</Link>
+        )}
 
-      {/* `.dialog .acts` — one right-aligned row, `space.3` between. */}
-      <div className="flex flex-wrap justify-end gap-3 pt-2">
-        <Button variant="secondary" onClick={onClose} disabled={leave.isPending}>
-          {LEAVE_ORG_DIALOG_COPY.cancel}
-        </Button>
-        <Button
-          variant="destructive"
-          onClick={submit}
-          disabled={leave.isPending}
-          loading={leave.isPending}
-          loadingLabel={membersTh.leaveOrg}
-        >
-          {LEAVE_ORG_DIALOG_COPY.confirm}
-        </Button>
-      </div>
-    </div>
+        {/* `.dialog .acts` — one right-aligned row, `space.3` between. */}
+        <div className="flex flex-wrap justify-end gap-3 pt-2">
+          <Button variant="secondary" onClick={onClose} disabled={leave.isPending}>
+            {LEAVE_ORG_DIALOG_COPY.cancel}
+          </Button>
+          <Button
+            variant="destructive"
+            onClick={submit}
+            disabled={leave.isPending}
+            loading={leave.isPending}
+            loadingLabel={membersTh.leaveOrg}
+          >
+            {LEAVE_ORG_DIALOG_COPY.confirm}
+          </Button>
+        </div>
+    
+    </DialogShell>
   );
 }

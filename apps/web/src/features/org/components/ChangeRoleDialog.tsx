@@ -27,6 +27,7 @@ import { toApiFailure } from "../../../lib/api/error";
 import { roleLabel } from "../i18n";
 import { useToast } from "../../../components/providers/ToastProvider";
 import { Button } from "../../../components/ui/Button";
+import { DialogShell } from "../../../components/ui/DialogShell";
 import { ErrorBanner } from "../../../components/ui/ErrorBanner";
 import { RadioCardGroup } from "../../../components/ui/RadioCardGroup";
 
@@ -126,50 +127,47 @@ export function ChangeRoleDialog({
   };
 
   return (
-    <div
-      role="dialog"
-      aria-label={CHANGE_ROLE_COPY.title(member.email)}
-      className="space-y-3 rounded-card border border-border-default bg-surface p-card-padding shadow-card"
-    >
-      <h3 className="text-heading-sm">{CHANGE_ROLE_COPY.title(member.email)}</h3>
-      {banner && <ErrorBanner message={banner} />}
+    <DialogShell label={CHANGE_ROLE_COPY.title(member.email)} onClose={onClose}>
+        <h3 className="text-heading-sm">{CHANGE_ROLE_COPY.title(member.email)}</h3>
+        {banner && <ErrorBanner message={banner} />}
 
-      <RadioCardGroup
-        name="changeRoleId"
-        legend={CHANGE_ROLE_COPY.title(member.email)}
-        value={roleId}
-        onChange={setRoleId}
-        options={offered.map((role) => {
-          const isOwnerOption = ownerRoleIds.has(role.id);
-          const closed = isOwnerOption && !iAmOwner;
-          return {
-            value: role.id,
-            label: roleLabel(role.key, role.name),
-            description:
-              role.id === member.roleId ? CHANGE_ROLE_COPY.currentTag : undefined,
-            disabled: change.isPending || closed,
-            disabledReason: closed ? CHANGE_ROLE_COPY.ownerOnlyHelper : undefined,
-          };
-        })}
-      />
+        <RadioCardGroup
+          name="changeRoleId"
+          legend={CHANGE_ROLE_COPY.title(member.email)}
+          value={roleId}
+          onChange={setRoleId}
+          options={offered.map((role) => {
+            const isOwnerOption = ownerRoleIds.has(role.id);
+            const closed = isOwnerOption && !iAmOwner;
+            return {
+              value: role.id,
+              label: roleLabel(role.key, role.name),
+              description:
+                role.id === member.roleId ? CHANGE_ROLE_COPY.currentTag : undefined,
+              disabled: change.isPending || closed,
+              disabledReason: closed ? CHANGE_ROLE_COPY.ownerOnlyHelper : undefined,
+            };
+          })}
+        />
 
-      {/* Before the press, never as an error afterwards (§10.1). */}
-      {demotingAnOwner && <p className="text-body-sm">{CHANGE_ROLE_COPY.lastOwnerWarning}</p>}
+        {/* Before the press, never as an error afterwards (§10.1). */}
+        {demotingAnOwner && <p className="text-body-sm">{CHANGE_ROLE_COPY.lastOwnerWarning}</p>}
 
-      {/* `.dialog .acts` — one right-aligned row, `space.3` between. */}
-      <div className="flex flex-wrap justify-end gap-3 pt-2">
-        <Button
-          onClick={submit}
-          disabled={change.isPending || unchanged}
-          loading={change.isPending}
-          loadingLabel={CHANGE_ROLE_COPY.submitLoading}
-        >
-          {CHANGE_ROLE_COPY.submit}
-        </Button>
-        <Button variant="secondary" onClick={onClose} disabled={change.isPending}>
-          {CHANGE_ROLE_COPY.cancel}
-        </Button>
-      </div>
-    </div>
+        {/* `.dialog .acts` — one right-aligned row, `space.3` between. */}
+        <div className="flex flex-wrap justify-end gap-3 pt-2">
+          <Button
+            onClick={submit}
+            disabled={change.isPending || unchanged}
+            loading={change.isPending}
+            loadingLabel={CHANGE_ROLE_COPY.submitLoading}
+          >
+            {CHANGE_ROLE_COPY.submit}
+          </Button>
+          <Button variant="secondary" onClick={onClose} disabled={change.isPending}>
+            {CHANGE_ROLE_COPY.cancel}
+          </Button>
+        </div>
+    
+    </DialogShell>
   );
 }

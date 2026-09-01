@@ -19,6 +19,7 @@ import { useRemoveMember } from "../api/use-member-mutations";
 import { toApiFailure } from "../../../lib/api/error";
 import { useToast } from "../../../components/providers/ToastProvider";
 import { Button } from "../../../components/ui/Button";
+import { DialogShell } from "../../../components/ui/DialogShell";
 import { ErrorBanner } from "../../../components/ui/ErrorBanner";
 
 /** Verbatim from ux-wireframe §10.2. */
@@ -100,36 +101,33 @@ export function RemoveMemberDialog({
   };
 
   return (
-    <div
-      role="alertdialog"
-      aria-label={REMOVE_MEMBER_COPY.title(member.email)}
-      className="space-y-3 rounded-card border border-border-default bg-surface p-card-padding shadow-card"
-    >
-      <h3 className="text-heading-sm">{REMOVE_MEMBER_COPY.title(member.email)}</h3>
-      {banner && <ErrorBanner message={banner} />}
+    <DialogShell label={REMOVE_MEMBER_COPY.title(member.email)} onClose={onClose} role="alertdialog">
+        <h3 className="text-heading-sm">{REMOVE_MEMBER_COPY.title(member.email)}</h3>
+        {banner && <ErrorBanner message={banner} />}
 
-      <ul>
-        {REMOVE_MEMBER_COPY.consequences.map((line) => (
-          <li key={line} className="text-body-sm">
-            {line}
-          </li>
-        ))}
-      </ul>
+        <ul>
+          {REMOVE_MEMBER_COPY.consequences.map((line) => (
+            <li key={line} className="text-body-sm">
+              {line}
+            </li>
+          ))}
+        </ul>
 
-      {/* `.dialog .acts` — one right-aligned row, `space.3` between. */}
-      <div className="flex flex-wrap justify-end gap-3 pt-2">
-        <Button ref={cancelRef} variant="secondary" onClick={onClose} disabled={remove.isPending}>
-          {REMOVE_MEMBER_COPY.cancel}
-        </Button>
-        <Button
-          variant="destructive"
-          onClick={submit}
-          disabled={remove.isPending}
-          loading={remove.isPending}
-        >
-          {REMOVE_MEMBER_COPY.confirm}
-        </Button>
-      </div>
-    </div>
+        {/* `.dialog .acts` — one right-aligned row, `space.3` between. */}
+        <div className="flex flex-wrap justify-end gap-3 pt-2">
+          <Button ref={cancelRef} variant="secondary" onClick={onClose} disabled={remove.isPending}>
+            {REMOVE_MEMBER_COPY.cancel}
+          </Button>
+          <Button
+            variant="destructive"
+            onClick={submit}
+            disabled={remove.isPending}
+            loading={remove.isPending}
+          >
+            {REMOVE_MEMBER_COPY.confirm}
+          </Button>
+        </div>
+    
+    </DialogShell>
   );
 }
