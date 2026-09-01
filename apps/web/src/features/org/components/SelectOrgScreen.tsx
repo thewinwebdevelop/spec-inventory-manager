@@ -18,6 +18,8 @@ import { errorsTh } from "../../../i18n/errors";
 import { ErrorBanner } from "../../../components/ui/ErrorBanner";
 import { SkeletonRow } from "../../../components/ui/Skeleton";
 import { Button } from "../../../components/ui/Button";
+import { SectionCard } from "../../../components/ui/SectionCard";
+import { ListRow, Avatar } from "../../../components/ui/ListRow";
 
 export const CREATE_ORG_PATH = "/orgs/new";
 
@@ -46,30 +48,45 @@ export function SelectOrgScreen() {
 
       {items.length > 0 && (
         <>
-          <p className="mb-4 text-body-sm">{orgTh.selectOrg.subtitle(items.length)}</p>
-          <ul className="mb-6 list-none p-0">
-            {items.map((item) => (
-              <li key={item.organization.id}>
-                <Link
-                  href={`/o/${item.organization.id}`}
-                  className="flex min-h-[var(--size-list-row-min-h)] items-center justify-between gap-3 rounded-card border border-border p-4 no-underline"
-                >
-                  <span>{item.organization.name}</span>
-                  <span className="text-body-sm">
-                    {roleLabel(item.membership.roleKey, item.membership.roleName)}
-                  </span>
-                </Link>
-              </li>
-            ))}
-          </ul>
+          <p className="m-0 mb-3 text-body-sm text-text-muted">
+            {orgTh.selectOrg.subtitle(items.length)}
+          </p>
+          {/* One card holding `ListRow`s — each shop had been its own bordered
+              box with `border-border`, a class that does not exist (the token
+              is `border-border-default`), so the "border" was Tailwind's
+              default grey. */}
+          <SectionCard className="mb-3 p-0">
+            <ul className="m-0 list-none p-0">
+              {items.map((item) => (
+                <li key={item.organization.id}>
+                  <Link href={`/o/${item.organization.id}`} className="block no-underline">
+                    <ListRow
+                      avatar={<Avatar>{item.organization.name.trim().charAt(0)}</Avatar>}
+                      main={<span className="text-text">{item.organization.name}</span>}
+                      right={
+                        <span className="text-body-sm text-text-muted">
+                          {roleLabel(item.membership.roleKey, item.membership.roleName)}
+                        </span>
+                      }
+                    />
+                  </Link>
+                </li>
+              ))}
+            </ul>
+          </SectionCard>
           {query.data?.nextCursor && (
             // The cap is 50 shops per user, so this is reachable but rare.
             // Paging itself lands with the list screens that need it (F-010's
             // DataTable); until then the button is honest about there being
             // more rather than silently truncating.
-            <p className="text-body-sm">{orgTh.selectOrg.loadMore}</p>
+            <p className="m-0 mb-3 text-body-sm text-text-muted">{orgTh.selectOrg.loadMore}</p>
           )}
-          <Link href={CREATE_ORG_PATH}>{orgTh.selectOrg.createShop}</Link>
+          <Link
+            href={CREATE_ORG_PATH}
+            className="inline-flex min-h-[var(--size-tap-target-min)] items-center justify-center rounded-button border border-border-default bg-surface px-4 py-3 text-button-md text-text no-underline hover:bg-surface-muted"
+          >
+            {orgTh.selectOrg.createShop}
+          </Link>
         </>
       )}
     </main>

@@ -25,6 +25,8 @@ import {
 import { orgProfileTh } from "../i18n";
 import { toApiFailure } from "../../../lib/api/error";
 import { Button } from "../../../components/ui/Button";
+import { SectionCard } from "../../../components/ui/SectionCard";
+import { DataRow } from "../../../components/ui/DataRow";
 import { ThrottleBanner } from "../../../components/ui/ThrottleBanner";
 import { useThrottleCountdown } from "../../../hooks/use-throttle-countdown";
 
@@ -84,12 +86,24 @@ export function TaxProfileCard({
   const shown = visibleTaxId(reveal);
 
   return (
-    <section className="space-y-3 rounded-card border border-border-default bg-surface p-card-padding shadow-card">
-      <h2 className="text-heading-sm">{orgProfileTh.tax.title}</h2>
-
+    /* `SectionCard` owns the header row, so "แก้ไข" sits at the top RIGHT the
+       way it does on the shop card above — it had been a block button dropped
+       under the heading, on its own line, left-aligned. */
+    <SectionCard
+      title={orgProfileTh.tax.title}
+      action={
+        /* Reaching the `details` tier IS the edit right — `taxCardView`
+           only returns it to a caller with `manage_org_settings`. */
+        view.kind === "details" ? (
+          <Button variant="secondary" size="sm" onClick={onEdit}>
+            {orgProfileTh.fields.edit}
+          </Button>
+        ) : undefined
+      }
+    >
       {view.kind === "undeclared" && (
-        <div>
-          <p className="text-body-sm">
+        <div className="space-y-3">
+          <p className="m-0 text-body-sm text-text-muted">
             {view.canEdit
               ? orgProfileTh.tax.undeclaredCanEdit
               : orgProfileTh.tax.undeclaredReadOnly}
@@ -103,74 +117,79 @@ export function TaxProfileCard({
       )}
 
       {view.kind === "summary" && (
-        <div>
+        <div className="space-y-2">
           {/* No digits reach this branch — see tax-card.ts. */}
-          <p className="text-body-sm">{orgProfileTh.tax.declaredReadOnly(view.vatRegistered)}</p>
-          <p className="text-body-sm">{orgProfileTh.tax.declaredReadOnlyHint}</p>
+          <p className="m-0 text-body-sm">{orgProfileTh.tax.declaredReadOnly(view.vatRegistered)}</p>
+          <p className="m-0 text-body-sm text-text-muted">{orgProfileTh.tax.declaredReadOnlyHint}</p>
         </div>
       )}
 
       {view.kind === "details" && (
         <div>
-          <Button variant="secondary" onClick={onEdit}>
-            {orgProfileTh.fields.edit}
-          </Button>
+          {/* Label left, value right, a rule between — the same `DataRow` the
+              shop card uses. This was a bare `<dl>`: label and value on
+              alternating full-width lines with no column and no divider, so
+              four facts read as eight unrelated ones. */}
+          <DataRow label={orgProfileTh.tax.entityTypeLabel}>
+            {view.entityType ? orgProfileTh.tax.entity[view.entityType] : "—"}
+          </DataRow>
 
-          <dl className="mt-3">
-            <dt className="text-body-sm">{orgProfileTh.tax.entityTypeLabel}</dt>
-            <dd>
-              {view.entityType ? orgProfileTh.tax.entity[view.entityType] : "—"}
-            </dd>
+          <DataRow label={orgProfileTh.tax.taxIdLabel}>
+            <span className="tabular-nums">{shown ?? view.taxIdMasked ?? "—"}</span>
+          </DataRow>
 
-            <dt className="text-body-sm">{orgProfileTh.tax.taxIdLabel}</dt>
-            <dd className="tabular-nums">{shown ?? view.taxIdMasked ?? "—"}</dd>
+          <DataRow label={orgProfileTh.tax.vatLabel}>
+            {view.vatRegistered === null
+              ? "—"
+              : view.vatRegistered
+                ? orgProfileTh.tax.vatYes
+                : orgProfileTh.tax.vatNo}
+          </DataRow>
 
-            <dt className="text-body-sm">{orgProfileTh.tax.vatLabel}</dt>
-            <dd>
-              {view.vatRegistered === null
-                ? "—"
-                : view.vatRegistered
-                  ? orgProfileTh.tax.vatYes
-                  : orgProfileTh.tax.vatNo}
-            </dd>
-
-            <dt className="text-body-sm">{orgProfileTh.tax.branchLabel}</dt>
-            <dd className="tabular-nums">
+          <DataRow label={orgProfileTh.tax.branchLabel}>
+            <span className="tabular-nums">
               {view.branchCode === "00000"
                 ? orgProfileTh.tax.branchHeadOffice
                 : (view.branchCode ?? "—")}
-            </dd>
-          </dl>
+            </span>
+          </DataRow>
 
-          {throttle.isActive ? (
-            <>
-              <ThrottleBanner remainingSeconds={throttle.remainingSeconds} />
-              {/* §5: say what the user CAN still do — never a dead end. */}
-              <p className="text-body-sm">{orgProfileTh.tax.revealError.throttledHint}</p>
-            </>
-          ) : (
-            <>
-              <Button
-                variant="secondary"
-                onClick={press}
-                disabled={reveal.status === "loading"}
-                loading={reveal.status === "loading"}
-                loadingLabel={orgProfileTh.tax.revealLoading}
-              >
-                {shown ? orgProfileTh.tax.hide : orgProfileTh.tax.reveal}
-              </Button>
-              {/* Before the press, not after — §5: "บอกก่อนกด ไม่ใช่แอบเก็บ". */}
-              <p className="text-body-sm">{orgProfileTh.tax.revealNotice}</p>
-            </>
-          )}
+          <div className="mt-4 space-y-2">
+            {throttle.isActive ? (
+              <>
+                <ThrottleBanner remainingSeconds={throttle.remainingSeconds} />
+                {/* §5: say what the user CAN still do — never a dead end. */}
+                <p className="m-0 text-body-sm text-text-muted">
+                  {orgProfileTh.tax.revealError.throttledHint}
+                </p>
+              </>
+            ) : (
+              <>
+                <Button
+                  variant="secondary"
+                  size="sm"
+                  onClick={press}
+                  disabled={reveal.status === "loading"}
+                  loading={reveal.status === "loading"}
+                  loadingLabel={orgProfileTh.tax.revealLoading}
+                >
+                  {shown ? orgProfileTh.tax.hide : orgProfileTh.tax.reveal}
+                </Button>
+                {/* Before the press, not after — §5: "บอกก่อนกด ไม่ใช่แอบเก็บ". */}
+                <p className="m-0 text-body-sm text-text-muted">
+                  {orgProfileTh.tax.revealNotice}
+                </p>
+              </>
+            )}
 
-          {revealError && (
-            <p role="alert" className="text-body-sm text-danger-text">
-              {revealError}
-            </p>
-          )}
+            {revealError && (
+              <p role="alert" className="m-0 text-body-sm text-danger-text">
+                {revealError}
+              </p>
+            )}
+          </div>
         </div>
       )}
-    </section>
+    </SectionCard>
   );
 }
