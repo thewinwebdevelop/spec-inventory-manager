@@ -27,15 +27,30 @@ export function OrgSwitcher() {
   const items = activeOrganizations(query.data);
 
   return (
-    <details className="mb-4">
-      <summary className="cursor-pointer rounded-card border border-border-default p-3">
-        <span className="font-semibold">{active.name}</span>
-        <span className="block text-body-sm">
+    <details className="group">
+      {/* The mockup's switcher is a CONTROL — bordered, with the shop's initial
+          and a chevron that turns — not a paragraph you discover is clickable.
+          `list-none` removes the native disclosure triangle, which was the
+          only affordance it had. */}
+      <summary className="flex min-h-[var(--size-tap-target-min)] cursor-pointer list-none items-center gap-2.5 rounded-button border border-border-default bg-surface px-2.5 py-2 [&::-webkit-details-marker]:hidden">
+        <span
+          aria-hidden="true"
+          className="flex h-7 w-7 flex-none items-center justify-center rounded-badge bg-surface-muted text-label-sm font-semibold text-text-muted"
+        >
+          {active.name.trim().charAt(0)}
+        </span>
+        <span className="min-w-0 flex-1">
+        <span className="block truncate font-semibold">{active.name}</span>
+        <span className="block text-body-sm text-text-muted">
           {roleLabel(active.roleKey, active.roleName)}
+        </span>
+        </span>
+        <span aria-hidden="true" className="flex-none text-text-muted transition-transform group-open:rotate-180">
+          ▾
         </span>
       </summary>
 
-      <div className="mt-2 rounded-card border border-border-default p-2">
+      <div className="mt-2 rounded-card border border-border-default bg-surface p-2 shadow-card">
         <p className="px-2 text-body-sm">{orgTh.shell.switcher.label}</p>
 
         {query.isError ? (

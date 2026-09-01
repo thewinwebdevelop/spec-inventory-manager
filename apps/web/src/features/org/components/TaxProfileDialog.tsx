@@ -107,7 +107,7 @@ export function TaxProfileDialog({
   };
 
   return (
-    <div role="dialog" aria-label={taxFormTh.title} className="rounded-card border border-border-default p-4">
+    <div role="dialog" aria-label={taxFormTh.title} className="space-y-3 rounded-card border border-border-default bg-surface p-card-padding shadow-card">
       <h3 className="text-heading-sm">{taxFormTh.title}</h3>
 
       {banner && <ErrorBanner message={banner} />}

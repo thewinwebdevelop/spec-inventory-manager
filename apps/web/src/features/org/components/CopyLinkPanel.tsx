@@ -65,10 +65,10 @@ export function CopyLinkPanel({
     <div
       role="dialog"
       aria-label={copyLinkTh.title}
-      className="rounded-card border border-border-default p-4"
+      className="space-y-3 rounded-card border border-border-default bg-surface p-card-padding shadow-card"
     >
-      <h3 className="text-heading-sm">{copyLinkTh.title}</h3>
-      <p className="text-body-sm">{copyLinkTh.description(state.email)}</p>
+      <h3 className="m-0 text-heading-sm">{copyLinkTh.title}</h3>
+      <p className="m-0 text-body-sm text-text-muted">{copyLinkTh.description(state.email)}</p>
 
       {/* Read-only rather than disabled: the user must be able to select it by
           hand when the clipboard is unavailable. */}
@@ -76,7 +76,7 @@ export function CopyLinkPanel({
         readOnly
         value={url}
         aria-label={copyLinkTh.title}
-        className="w-full rounded-card border border-border-default p-2 font-mono text-body-sm"
+        className="w-full rounded-button border border-border-default bg-surface-muted p-3 font-mono text-body-sm"
       />
 
       <Button onClick={() => void copy()} fullWidth>
@@ -90,13 +90,13 @@ export function CopyLinkPanel({
 
       {/* Read from `expiresAt`. D-027 forbids printing "7 days": the TTL
           depends on the role and is recomputed on every reissue. */}
-      <p className="text-body-sm">{formatExpiry(state.expiresAt)}</p>
+      <p className="m-0 text-body-sm text-text-muted">{formatExpiry(state.expiresAt)}</p>
 
       {/* Warning tone, and ABOVE the close button — that placement is the
           reason §9.1 could drop the confirm dialog. */}
       <p
         role="note"
-        className="rounded-card border border-warning-border bg-warning-bg p-3 text-body-sm text-warning-text"
+        className="rounded-card border border-warning-border bg-warning-bg p-4 text-body-sm text-warning-text"
       >
         {copyLinkTh.onceOnly}
       </p>

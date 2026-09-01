@@ -7,6 +7,10 @@ import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 vi.mock("next/navigation", () => ({
   useRouter: () => ({ replace: vi.fn(), push: vi.fn() }),
   useSearchParams: () => new URLSearchParams(),
+  // The sidebar reads the current path to mark the active row (the mockup's
+  // `.navi.on`). Landed on `/o/{orgId}`, which is the route entering a shop
+  // actually lands on.
+  usePathname: () => "/o/org_1",
 }));
 
 import { AppShell, CAPABILITY_MANAGE_MEMBERS } from "./AppShell";

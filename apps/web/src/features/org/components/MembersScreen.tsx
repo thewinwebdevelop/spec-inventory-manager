@@ -25,6 +25,9 @@ import { useActiveOrg } from "../../../lib/org/org-context";
 import { toApiFailure, failureMessage } from "../../../lib/api/error";
 import { useToast } from "../../../components/providers/ToastProvider";
 import { Button } from "../../../components/ui/Button";
+import { SectionCard } from "../../../components/ui/SectionCard";
+import { ListRow, Avatar } from "../../../components/ui/ListRow";
+import { Badge } from "../../../components/ui/Badge";
 import { ConfirmDialog } from "../../../components/ui/ConfirmDialog";
 import { ErrorBanner } from "../../../components/ui/ErrorBanner";
 import { SkeletonRow } from "../../../components/ui/Skeleton";
@@ -103,37 +106,47 @@ export function MembersScreen() {
   const memberRows = members.data?.items ?? [];
 
   return (
-    <main className="p-6">
-      <div className="flex items-center justify-between">
-        <h1 className="text-heading-md">{membersTh.title}</h1>
+    <main className="flex flex-col gap-4 p-card-padding">
+      <div className="flex flex-wrap items-center justify-between gap-3">
+        <h1 className="m-0 text-heading-md">{membersTh.title}</h1>
         <Button onClick={() => setInviting(true)}>{membersTh.invite}</Button>
       </div>
 
       {/* §7: the whole section disappears when there is nothing outstanding —
           an empty "0 invitations" heading is clutter, not information. */}
       {pending.length > 0 && (
-        <section className="mb-6">
-          <h2 className="text-heading-sm">{membersTh.pendingSection(pending.length)}</h2>
-          <ul className="list-none p-0">
+        <SectionCard
+          title={membersTh.pendingSection(pending.length)}
+          /* `p-0` so the rows reach the card's edges the way the mockup draws
+             them; the header and any non-row children pay their own padding. */
+          className="p-0 [&>div:first-child]:px-4 [&>div:first-child]:pt-4"
+        >
+          <ul className="m-0 list-none p-0">
             {pending.map((invitation) => (
-              <li key={invitation.id} className="rounded-card border border-border-default p-3">
-                <span>{invitation.email}</span>{" "}
-                <span className="text-body-sm">
-                  {roleLabel(invitation.roleKey, invitation.roleName)}
-                </span>
-                <p className="text-body-sm">{formatExpiry(invitation.expiresAt)}</p>
-
-                {/* D-028/I-7 — a soft flag, never an accusation. */}
-                {invitation.acceptedUserCreatedAfterInvite === true && (
-                  <p role="note" className="text-body-sm text-warning-text">
-                    {membersTh.acceptedAfterInviteFlag}
-                  </p>
-                )}
-
-                {invitation.status === "pending" && (
-                  <>
-                    <Button
+              <li key={invitation.id}>
+                <ListRow
+                  avatar={<Avatar>{invitation.email.trim().charAt(0).toUpperCase()}</Avatar>}
+                  main={
+                    <>
+                      <span className="truncate">{invitation.email}</span>
+                      <Badge tone="neutral">
+                        {roleLabel(invitation.roleKey, invitation.roleName)}
+                      </Badge>
+                      {/* D-028/I-7 — a soft flag, never an accusation. */}
+                      {invitation.acceptedUserCreatedAfterInvite === true && (
+                        <Badge tone="warning" >
+                          <span role="note">{membersTh.acceptedAfterInviteFlag}</span>
+                        </Badge>
+                      )}
+                    </>
+                  }
+                  sub={formatExpiry(invitation.expiresAt)}
+                  right={
+                    invitation.status === "pending" && (
+                      <>
+                        <Button
                       variant="secondary"
+                      size="sm"
                       disabled={reissue.isPending}
                       onClick={() =>
                         setConfirming({
@@ -146,8 +159,9 @@ export function MembersScreen() {
                     >
                       {membersTh.reissue}
                     </Button>
-                    <Button
+                        <Button
                       variant="secondary"
+                      size="sm"
                       disabled={cancel.isPending}
                       onClick={() =>
                         setConfirming({
@@ -159,26 +173,32 @@ export function MembersScreen() {
                       }
                     >
                       {membersTh.cancelInvitation}
-                    </Button>
-                  </>
-                )}
+                        </Button>
+                      </>
+                    )
+                  }
+                />
               </li>
             ))}
           </ul>
-        </section>
+        </SectionCard>
       )}
 
       {invitationStatus === "pending" && (
-        <button type="button" className="underline" onClick={() => setInvitationStatus("all")}>
-          {membersTh.showHistoricInvitations}
-        </button>
+        <div>
+          <Button variant="tertiary" onClick={() => setInvitationStatus("all")}>
+            {membersTh.showHistoricInvitations}
+          </Button>
+        </div>
       )}
 
-      <section className="mt-6">
-        <h2 className="text-heading-sm">{membersTh.membersSection(memberRows.length)}</h2>
+      <SectionCard
+        title={membersTh.membersSection(memberRows.length)}
+        className="p-0 [&>div:first-child]:px-4 [&>div:first-child]:pt-4"
+      >
 
         {members.isPending && (
-          <div role="status" aria-label="กำลังโหลด">
+          <div role="status" aria-label="กำลังโหลด" className="p-4">
             <SkeletonRow />
             <SkeletonRow />
             <SkeletonRow />
@@ -186,11 +206,13 @@ export function MembersScreen() {
         )}
 
         {members.isError && (
+          <div className="p-4">
           <ErrorBanner
             message={membersTh.error}
             onRetry={() => void members.refetch()}
             retryLabel={errorsTh.retry}
           />
+          </div>
         )}
 
         <ul className="list-none p-0">
@@ -205,24 +227,27 @@ export function MembersScreen() {
               targetStatus: member.status,
             });
             return (
-              <li
-                key={member.userId}
-                className={`rounded-card border border-border-default p-3 ${
-                  member.status === "active" ? "" : "opacity-60"
-                }`}
-              >
-                <span>{member.email}</span>
-                {member.isMe && <span className="ml-1">{membersTh.you}</span>}{" "}
-                <span className="text-body-sm">{roleLabel(member.roleKey, member.roleName)}</span>{" "}
-                <span className="text-body-sm">
-                  {member.status === "active" ? membersTh.statusActive : membersTh.statusRevoked}
-                </span>
-
-                {/* §7 — an Admin looking at an Owner gets the sentence, not a
-                    disabled item, so they learn why rather than wonder. */}
-                {actions.ownerOnlyNotice && (
-                  <p className="text-body-sm opacity-70">{membersTh.ownerOnlyNotice}</p>
-                )}
+              <li key={member.userId}>
+                <ListRow
+                  dimmed={member.status !== "active"}
+                  avatar={<Avatar>{member.email.trim().charAt(0).toUpperCase()}</Avatar>}
+                  main={
+                    <>
+                      <span className="truncate">{member.email}</span>
+                      {member.isMe && <Badge tone="current">{membersTh.you}</Badge>}
+                      <Badge tone="neutral">{roleLabel(member.roleKey, member.roleName)}</Badge>
+                      <Badge tone={member.status === "active" ? "success" : "neutral"}>
+                        {member.status === "active"
+                          ? membersTh.statusActive
+                          : membersTh.statusRevoked}
+                      </Badge>
+                    </>
+                  }
+                  /* §7 — an Admin looking at an Owner gets the sentence, not a
+                     disabled item, so they learn why rather than wonder. */
+                  sub={actions.ownerOnlyNotice ? membersTh.ownerOnlyNotice : undefined}
+                  right={
+                    <>
                 {/* W-17 closed. These were `<span>`s: the actions §7 offers
                     were rendered as words, so every one of S9/S10 was
                     unreachable and the five mutation hooks W5 wrote had no
@@ -231,6 +256,7 @@ export function MembersScreen() {
                 {actions.changeRole && (
                   <Button
                     variant="secondary"
+                    size="sm"
                     onClick={() =>
                       setActing({
                         kind: "change-role",
@@ -247,6 +273,7 @@ export function MembersScreen() {
                 {actions.removeFromOrg && (
                   <Button
                     variant="secondary"
+                    size="sm"
                     onClick={() =>
                       setActing({ kind: "remove", userId: member.userId, email: member.email })
                     }
@@ -256,21 +283,26 @@ export function MembersScreen() {
                 )}
                 {/* S10.3 entry (ข) — the same dialog S4's link opens (D-029). */}
                 {actions.leaveOrg && (
-                  <Button variant="secondary" onClick={() => setActing({ kind: "leave" })}>
+                  <Button variant="secondary" size="sm" onClick={() => setActing({ kind: "leave" })}>
                     {membersTh.leaveOrg}
                   </Button>
                 )}
+                    </>
+                  }
+                />
               </li>
             );
           })}
         </ul>
+      </SectionCard>
 
-        {memberStatus === "active" && (
-          <button type="button" className="underline" onClick={() => setMemberStatus("all")}>
+      {memberStatus === "active" && (
+        <div>
+          <Button variant="tertiary" onClick={() => setMemberStatus("all")}>
             {membersTh.showRevokedMembers}
-          </button>
-        )}
-      </section>
+          </Button>
+        </div>
+      )}
 
       {inviting && (
         <InviteDialog

@@ -82,23 +82,23 @@ export function InviteScreen() {
 
   if (joined) {
     return (
-      <main className="mx-auto w-full max-w-[var(--size-dialog-max-w)] p-card-padding">
-        <h1 className="text-heading-md">{inviteScreenTh.joinedTitle(joined.orgName)}</h1>
-        <p className="text-body-sm">{inviteScreenTh.joinedRole(joined.roleName)}</p>
+      <main className="mx-auto my-8 flex w-full max-w-[var(--size-dialog-max-w)] flex-col gap-3 rounded-card border border-border-default bg-surface p-card-padding shadow-card">
+        <h1 className="m-0 text-heading-md">{inviteScreenTh.joinedTitle(joined.orgName)}</h1>
+        <p className="m-0 text-body-sm text-text-muted">{inviteScreenTh.joinedRole(joined.roleName)}</p>
         <Link href={`/o/${joined.orgId}`}>
           <Button>{inviteScreenTh.enterOrg}</Button>
         </Link>
-        <p className="text-body-sm">{inviteScreenTh.mobileHint}</p>
+        <p className="m-0 text-body-sm text-text-muted">{inviteScreenTh.mobileHint}</p>
       </main>
     );
   }
 
   if (error) {
     return (
-      <main className="mx-auto w-full max-w-[var(--size-dialog-max-w)] p-card-padding">
+      <main className="mx-auto my-8 flex w-full max-w-[var(--size-dialog-max-w)] flex-col gap-3 rounded-card border border-border-default bg-surface p-card-padding shadow-card">
         {throttle.isActive && <ThrottleBanner remainingSeconds={throttle.remainingSeconds} />}
-        <h1 className="text-heading-md">{error.title}</h1>
-        <p className="text-body-sm">{error.body}</p>
+        <h1 className="m-0 text-heading-md">{error.title}</h1>
+        <p className="m-0 text-body-sm text-text-muted">{error.body}</p>
         <InviteNextStepButton step={error.next} onRetry={() => token && load(token)} />
       </main>
     );
@@ -106,7 +106,7 @@ export function InviteScreen() {
 
   if (!ready || preview.isPending || !previewed) {
     return (
-      <main className="mx-auto w-full max-w-[var(--size-dialog-max-w)] p-card-padding" role="status" aria-label="กำลังโหลด">
+      <main className="mx-auto my-8 flex w-full max-w-[var(--size-dialog-max-w)] flex-col gap-3 rounded-card border border-border-default bg-surface p-card-padding shadow-card" role="status" aria-label="กำลังโหลด">
         <SkeletonRow />
         <SkeletonRow />
         <SkeletonRow />
@@ -115,14 +115,14 @@ export function InviteScreen() {
   }
 
   return (
-    <main className="mx-auto w-full max-w-[var(--size-dialog-max-w)] p-card-padding">
-      <h1 className="text-heading-md">{inviteScreenTh.title}</h1>
-      <p className="text-heading-sm">{previewed.organizationName}</p>
+    <main className="mx-auto my-8 flex w-full max-w-[var(--size-dialog-max-w)] flex-col gap-3 rounded-card border border-border-default bg-surface p-card-padding shadow-card">
+      <h1 className="m-0 text-heading-md">{inviteScreenTh.title}</h1>
+      <p className="m-0 text-heading-sm">{previewed.organizationName}</p>
       <p>{inviteScreenTh.invitedAs(roleLabel(previewed.roleKey, previewed.roleName))}</p>
       {/* Masked, never the address: this page is reachable by anyone holding
           the link, account or not (api-spec §3.14). */}
-      <p className="text-body-sm">{inviteScreenTh.issuedTo(previewed.emailMasked)}</p>
-      <p className="text-body-sm">{formatExpiry(previewed.expiresAt)}</p>
+      <p className="m-0 text-body-sm text-text-muted">{inviteScreenTh.issuedTo(previewed.emailMasked)}</p>
+      <p className="m-0 text-body-sm text-text-muted">{formatExpiry(previewed.expiresAt)}</p>
 
       {isSignedIn(state) ? (
         <Button
@@ -152,7 +152,7 @@ export function InviteScreen() {
           <Link href="/signup">
             <Button variant="secondary">{inviteScreenTh.signup}</Button>
           </Link>
-          <p className="text-body-sm">{inviteScreenTh.sameEmailOnly}</p>
+          <p className="m-0 text-body-sm text-text-muted">{inviteScreenTh.sameEmailOnly}</p>
         </>
       )}
     </main>

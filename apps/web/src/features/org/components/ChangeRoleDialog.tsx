@@ -128,7 +128,7 @@ export function ChangeRoleDialog({
     <div
       role="dialog"
       aria-label={CHANGE_ROLE_COPY.title(member.email)}
-      className="rounded-card border border-border-default p-4"
+      className="space-y-3 rounded-card border border-border-default bg-surface p-card-padding shadow-card"
     >
       <h3 className="text-heading-sm">{CHANGE_ROLE_COPY.title(member.email)}</h3>
       {banner && <ErrorBanner message={banner} />}

@@ -14,8 +14,9 @@
  * lands on a `ForbiddenPanel` rather than on nothing.
  */
 import type { ReactNode } from "react";
-import Link from "next/link";
+import { usePathname } from "next/navigation";
 import { useActiveOrg, useCan } from "../../../lib/org/org-context";
+import { NavItem } from "../../../components/ui/NavItem";
 import { orgTh } from "../i18n";
 import { OrgSwitcher } from "./OrgSwitcher";
 
@@ -42,30 +43,54 @@ export const SECURITY_PATH = "/settings/security";
 
 export function AppShell({ children }: { children: ReactNode }) {
   const { orgId } = useActiveOrg();
+  const pathname = usePathname();
   // §4 answers Q13 explicitly: HIDE it, do not disable it — a disabled entry
   // just raises a question the user cannot resolve.
   const canManageMembers = useCan(CAPABILITY_MANAGE_MEMBERS);
 
+  const orgProfilePath = `/o/${orgId}/settings/org`;
+  const membersPath = `/o/${orgId}/settings/members`;
+  // `/o/{orgId}` renders the SAME screen as `/o/{orgId}/settings/org` (S4 is
+  // the shop home in Phase 0, until F-030's dashboard). Comparing the path to
+  // the settings route alone left the sidebar with nothing highlighted on the
+  // route people actually land on after entering a shop.
+  const onOrgProfile = pathname === orgProfilePath || pathname === `/o/${orgId}`;
+
   return (
-    <div className="flex min-h-screen flex-col md:flex-row">
-      <nav aria-label="เมนูของร้าน" className="border-border-default p-4 md:w-64 md:border-r">
-        <p className="mb-4 font-semibold">OmniStock</p>
+    <div className="flex min-h-screen flex-col bg-bg md:flex-row">
+      {/* `size.sidebar.w` (240px) — a token that existed in design-system.md
+          and in no stylesheet until 2026-09-01, so this was `md:w-64` (256px)
+          picked from Tailwind's scale instead. */}
+      <nav
+        aria-label="เมนูของร้าน"
+        className="flex flex-col gap-2 border-border-default bg-surface p-card-padding md:w-[var(--size-sidebar-w)] md:border-r"
+      >
+        <p className="m-0 mb-2 text-heading-sm">OmniStock</p>
         <OrgSwitcher />
-        <ul className="list-none p-0">
+        {/* The mockup's `.navi` rows: 44px tall, and the CURRENT one carries a
+            `surface.muted` background. Colour alone was not enough to see
+            where you are — which is the sidebar's entire job. */}
+        <ul className="m-0 mt-2 flex list-none flex-col gap-1 p-0">
           <li>
-            <Link href={`/o/${orgId}/settings/org`}>{orgTh.shell.nav.orgProfile}</Link>
+            <NavItem href={orgProfilePath} active={onOrgProfile}>
+              {orgTh.shell.nav.orgProfile}
+            </NavItem>
           </li>
           {canManageMembers && (
             <li>
-              <Link href={`/o/${orgId}/settings/members`}>{orgTh.shell.nav.members}</Link>
+              <NavItem href={membersPath} active={pathname === membersPath}>
+                {orgTh.shell.nav.members}
+              </NavItem>
             </li>
           )}
           <li>
-            <Link href={SECURITY_PATH}>{orgTh.shell.nav.security}</Link>
+            <NavItem href={SECURITY_PATH} active={pathname === SECURITY_PATH}>
+              {orgTh.shell.nav.security}
+            </NavItem>
           </li>
         </ul>
       </nav>
-      <div className="flex-1">{children}</div>
+      <div className="min-w-0 flex-1">{children}</div>
     </div>
   );
 }

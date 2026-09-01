@@ -41,7 +41,7 @@ export function RenameOrgDialog({
   };
 
   return (
-    <div role="dialog" aria-label={orgProfileTh.rename.title} className="rounded-card border border-border-default p-4">
+    <div role="dialog" aria-label={orgProfileTh.rename.title} className="space-y-3 rounded-card border border-border-default bg-surface p-card-padding shadow-card">
       <h3 className="text-heading-sm">{orgProfileTh.rename.title}</h3>
       <TextField
         label={orgProfileTh.fields.name}

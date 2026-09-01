@@ -17,6 +17,10 @@ import { can } from "../../../lib/org/capability";
 import { orgKey } from "../../../lib/org/org-keys";
 import { onboardingItems, CAPABILITY_MANAGE_ORG_SETTINGS } from "../tax-card";
 import { orgProfileTh } from "../i18n";
+import { SectionCard } from "../../../components/ui/SectionCard";
+import { DataRow } from "../../../components/ui/DataRow";
+import { Banner } from "../../../components/ui/Banner";
+import { Button } from "../../../components/ui/Button";
 import { TaxProfileCard } from "./TaxProfileCard";
 import { TaxProfileDialog } from "./TaxProfileDialog";
 import { RenameOrgDialog } from "./RenameOrgDialog";
@@ -41,13 +45,15 @@ export function OrgProfileScreen() {
     void queryClient.invalidateQueries({ queryKey: orgKey(org.orgId, "profile") });
 
   return (
-    <main className="p-6">
-      <h1 className="text-heading-md">{orgProfileTh.title}</h1>
+    <main className="flex flex-col gap-4 p-card-padding">
+      <h1 className="m-0 text-heading-md">{orgProfileTh.title}</h1>
 
       {onboarding && (
-        <section className="mb-4 rounded-card border border-border-default p-4">
-          <h2 className="text-heading-sm">{orgProfileTh.onboarding.title}</h2>
-          <ul className="list-none p-0">
+        /* The mockup makes this a tone-`info` Banner: it is guidance, not a
+           status, and not a section of the shop's data. */
+        <Banner tone="info">
+          <p className="m-0 mb-2 text-heading-sm">{orgProfileTh.onboarding.title}</p>
+          <ul className="m-0 flex list-none flex-col gap-2 p-0">
             {onboarding.inviteTeam && (
               <li>
                 {orgProfileTh.onboarding.inviteTeam.text}{" "}
@@ -59,7 +65,11 @@ export function OrgProfileScreen() {
             {onboarding.declareTax && (
               <li>
                 {orgProfileTh.onboarding.declareTax.text}{" "}
-                <button type="button" className="underline" onClick={() => setEditingTax(true)}>
+                <button
+                  type="button"
+                  className="border-0 bg-transparent p-0 font-semibold text-primary underline-offset-2 hover:underline"
+                  onClick={() => setEditingTax(true)}
+                >
                   {orgProfileTh.onboarding.declareTax.cta}
                 </button>
               </li>
@@ -76,42 +86,43 @@ export function OrgProfileScreen() {
               </li>
             )}
           </ul>
-        </section>
+        </Banner>
       )}
 
-      <section className="mb-4 rounded-card border border-border-default p-4">
-        <dl>
-          <dt className="text-body-sm">{orgProfileTh.fields.name}</dt>
-          <dd>
-            {org.name}{" "}
-            {canEditSettings && (
-              <button type="button" className="underline" onClick={() => setRenaming(true)}>
+      <SectionCard>
+        <DataRow
+          label={orgProfileTh.fields.name}
+          action={
+            canEditSettings && (
+              <Button variant="secondary" size="sm" onClick={() => setRenaming(true)}>
                 {orgProfileTh.fields.edit}
-              </button>
-            )}
-          </dd>
+              </Button>
+            )
+          }
+        >
+          {org.name}
+        </DataRow>
 
-          <dt className="text-body-sm">{orgProfileTh.fields.localeLabel}</dt>
-          {/* Fixed THB + Asia/Bangkok in Phase 0 (D-013) — displayed, not editable. */}
-          <dd>{orgProfileTh.fields.localeValue}</dd>
+        {/* Fixed THB + Asia/Bangkok in Phase 0 (D-013) — displayed, not editable. */}
+        <DataRow label={orgProfileTh.fields.localeLabel}>
+          {orgProfileTh.fields.localeValue}
+        </DataRow>
 
-          <dt className="text-body-sm">{orgProfileTh.fields.team}</dt>
-          <dd>
-            {/* `counts` is a total, never a list — a Staff member seeing "4
-                คน" is not a PDPA problem; seeing WHO would be (D-028). */}
-            {canManageMembers ? (
-              <Link href={`/o/${org.orgId}/settings/members`}>
-                {orgProfileTh.fields.teamValue(
-                  org.profile.counts.activeMembers,
-                  org.profile.counts.pendingInvitations,
-                )}
-              </Link>
-            ) : (
-              orgProfileTh.fields.teamValue(org.profile.counts.activeMembers, 0)
-            )}
-          </dd>
-        </dl>
-      </section>
+        <DataRow label={orgProfileTh.fields.team}>
+          {/* `counts` is a total, never a list — a Staff member seeing "4 คน"
+              is not a PDPA problem; seeing WHO would be (D-028). */}
+          {canManageMembers ? (
+            <Link className="font-semibold text-primary no-underline hover:underline" href={`/o/${org.orgId}/settings/members`}>
+              {orgProfileTh.fields.teamValue(
+                org.profile.counts.activeMembers,
+                org.profile.counts.pendingInvitations,
+              )}
+            </Link>
+          ) : (
+            orgProfileTh.fields.teamValue(org.profile.counts.activeMembers, 0)
+          )}
+        </DataRow>
+      </SectionCard>
 
       <TaxProfileCard
         profile={org.profile}
@@ -127,9 +138,11 @@ export function OrgProfileScreen() {
           at the members screen would send a Staff member to a 403 for an
           action they are entitled to take. The confirm (§10.3) opens right
           here; `?leave=1` still works as a deep link into it. */}
-      <button type="button" className="text-body-sm underline" onClick={() => setLeaving(true)}>
-        {orgProfileTh.leaveOrg}
-      </button>
+      <div className="mt-2">
+        <Button variant="tertiary" onClick={() => setLeaving(true)}>
+          {orgProfileTh.leaveOrg}
+        </Button>
+      </div>
 
       {leaving && <LeaveOrgDialog onClose={() => setLeaving(false)} />}
       {renaming && <RenameOrgDialog currentName={org.name} onClose={() => setRenaming(false)} />}

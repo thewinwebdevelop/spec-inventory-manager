@@ -71,7 +71,7 @@ export function LeaveOrgDialog({ onClose }: { onClose: () => void }) {
     <div
       role="alertdialog"
       aria-label={LEAVE_ORG_DIALOG_COPY.title(org.name)}
-      className="rounded-card border border-border-default p-4"
+      className="space-y-3 rounded-card border border-border-default bg-surface p-card-padding shadow-card"
     >
       <h3 className="text-heading-sm">{LEAVE_ORG_DIALOG_COPY.title(org.name)}</h3>
       <p className="text-body-sm">{LEAVE_ORG_DIALOG_COPY.body}</p>

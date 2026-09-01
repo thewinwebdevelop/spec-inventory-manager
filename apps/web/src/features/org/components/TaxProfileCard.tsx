@@ -84,7 +84,7 @@ export function TaxProfileCard({
   const shown = visibleTaxId(reveal);
 
   return (
-    <section className="mb-4 rounded-card border border-border-default p-4">
+    <section className="space-y-3 rounded-card border border-border-default bg-surface p-card-padding shadow-card">
       <h2 className="text-heading-sm">{orgProfileTh.tax.title}</h2>
 
       {view.kind === "undeclared" && (
