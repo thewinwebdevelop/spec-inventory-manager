@@ -112,11 +112,17 @@ export function MembersScreen() {
         <Button onClick={() => setInviting(true)}>{membersTh.invite}</Button>
       </div>
 
-      {/* §7: the whole section disappears when there is nothing outstanding —
-          an empty "0 invitations" heading is clutter, not information. */}
+      {/* §7: the section disappears when there is nothing OUTSTANDING — an
+          empty "0 invitations" heading is clutter. But once the filter has
+          been widened on purpose, hiding it is how the screen used to answer
+          a deliberate question with a blank page. */}
       {pending.length > 0 && (
         <SectionCard
-          title={membersTh.pendingSection(pending.length)}
+          title={
+            invitationStatus === "all"
+              ? membersTh.allInvitationsSection(pending.length)
+              : membersTh.pendingSection(pending.length)
+          }
           /* `p-0` so the rows reach the card's edges the way the mockup draws
              them; the header and any non-row children pay their own padding. */
           className="p-0 [&>div:first-child]:px-4 [&>div:first-child]:pt-4"
@@ -184,16 +190,35 @@ export function MembersScreen() {
         </SectionCard>
       )}
 
-      {invitationStatus === "pending" && (
-        <div>
-          <Button variant="tertiary" onClick={() => setInvitationStatus("all")}>
-            {membersTh.showHistoricInvitations}
-          </Button>
-        </div>
-      )}
+      {/* ★ A TOGGLE, both ways. This used to render only while the filter was
+          `pending`, so pressing it removed the only control that could undo
+          it — and with no expired or cancelled invitations to reveal, the
+          section stayed hidden too and the press appeared to do nothing at
+          all. Reported from the running app, 2026-09-01. */}
+      <div className="flex flex-wrap items-center gap-3">
+        <Button
+          variant="tertiary"
+          onClick={() =>
+            setInvitationStatus(invitationStatus === "pending" ? "all" : "pending")
+          }
+        >
+          {invitationStatus === "pending"
+            ? membersTh.showHistoricInvitations
+            : membersTh.showPendingInvitationsOnly}
+        </Button>
+        {invitationStatus === "all" && pending.length === 0 && !invitations.isPending && (
+          <span className="text-body-sm text-text-muted">
+            {membersTh.emptyHistoricInvitations}
+          </span>
+        )}
+      </div>
 
       <SectionCard
-        title={membersTh.membersSection(memberRows.length)}
+        title={
+          memberStatus === "all"
+            ? membersTh.allMembersSection(memberRows.length)
+            : membersTh.membersSection(memberRows.length)
+        }
         className="p-0 [&>div:first-child]:px-4 [&>div:first-child]:pt-4"
       >
 
@@ -296,13 +321,23 @@ export function MembersScreen() {
         </ul>
       </SectionCard>
 
-      {memberStatus === "active" && (
-        <div>
-          <Button variant="tertiary" onClick={() => setMemberStatus("all")}>
-            {membersTh.showRevokedMembers}
-          </Button>
-        </div>
-      )}
+      <div className="flex flex-wrap items-center gap-3">
+        <Button
+          variant="tertiary"
+          onClick={() => setMemberStatus(memberStatus === "active" ? "all" : "active")}
+        >
+          {memberStatus === "active"
+            ? membersTh.showRevokedMembers
+            : membersTh.showActiveMembersOnly}
+        </Button>
+        {memberStatus === "all" &&
+          !members.isPending &&
+          memberRows.every((m) => m.status === "active") && (
+            <span className="text-body-sm text-text-muted">
+              {membersTh.emptyRevokedMembers}
+            </span>
+          )}
+      </div>
 
       {inviting && (
         <InviteDialog

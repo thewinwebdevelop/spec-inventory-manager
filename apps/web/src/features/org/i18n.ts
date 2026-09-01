@@ -220,6 +220,24 @@ export const membersTh = {
   membersSection: (n: number) => `สมาชิกในร้าน (${n})`,
   showHistoricInvitations: "ดูคำเชิญที่หมดอายุ/ยกเลิกแล้ว",
   showRevokedMembers: "แสดงสมาชิกที่ถูกถอดออกแล้ว",
+  /**
+   * ⚠️ COPY GAP (2026-09-01) — both filters were ONE-WAY. The button unmounted
+   * itself on click and there was no way back to the default view, so a person
+   * who pressed either one was stuck with it for the rest of the session.
+   * ux-wireframe §7 gives the "show more" wording and no "show less", because
+   * the toggle was never built as a toggle. Raise with ux to confirm.
+   */
+  showPendingInvitationsOnly: "ดูเฉพาะคำเชิญที่รอตอบรับ",
+  showActiveMembersOnly: "ดูเฉพาะสมาชิกที่ใช้งานอยู่",
+  /** Headings follow the FILTER — the old one said "รอตอบรับ (n)" over a list
+   *  that included cancelled and expired rows once the filter was widened. */
+  allInvitationsSection: (n: number) => `คำเชิญทั้งหมด (${n})`,
+  allMembersSection: (n: number) => `สมาชิกทั้งหมด (${n})`,
+  /** ⚠️ COPY GAP — with the widened filter and still nothing to show, the
+   *  screen previously rendered NOTHING at all: the section is hidden when the
+   *  list is empty, and the button had removed itself. */
+  emptyHistoricInvitations: "ไม่มีคำเชิญที่หมดอายุหรือถูกยกเลิก",
+  emptyRevokedMembers: "ไม่มีสมาชิกที่ถูกถอดออก",
   you: "(คุณ)",
   statusActive: "ใช้งานอยู่",
   statusRevoked: "ถูกถอดแล้ว",

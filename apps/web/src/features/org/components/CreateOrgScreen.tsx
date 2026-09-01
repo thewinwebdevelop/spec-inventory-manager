@@ -16,6 +16,7 @@ import { toCreateOrgError, type CreateOrgError } from "../create-org-error";
 import { orgTh } from "../i18n";
 import { errorsTh } from "../../../i18n/errors";
 import { Button } from "../../../components/ui/Button";
+import { Icon } from "../../../components/ui/Icon";
 import { TextField } from "../../../components/ui/TextField";
 import { ErrorBanner } from "../../../components/ui/ErrorBanner";
 import { ThrottleBanner } from "../../../components/ui/ThrottleBanner";
@@ -53,7 +54,14 @@ export function CreateOrgScreen() {
 
   return (
     <main className="mx-auto w-full max-w-[var(--size-dialog-max-w)] p-card-padding">
-      <Link href={SELECT_ORG_PATH}>{orgTh.createOrg.back}</Link>
+      {/* 18px as a bare inline link — measured. `icon.back` + a 44px control. */}
+      <Link
+        href={SELECT_ORG_PATH}
+        className="inline-flex min-h-[var(--size-tap-target-min)] items-center gap-2 self-start rounded-button px-2 text-button-sm text-primary no-underline hover:bg-surface-muted"
+      >
+        <Icon role="back" size="sm" />
+        {orgTh.createOrg.back}
+      </Link>
       <h1 className="text-heading-md">{orgTh.createOrg.title}</h1>
 
       {throttle.isActive && <ThrottleBanner remainingSeconds={throttle.remainingSeconds} />}

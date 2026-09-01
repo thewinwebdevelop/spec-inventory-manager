@@ -9,7 +9,7 @@
  * fetching it again.
  */
 import { useState } from "react";
-import { useSearchParams } from "next/navigation";
+import { useRouter, useSearchParams } from "next/navigation";
 import { useQueryClient } from "@tanstack/react-query";
 import Link from "next/link";
 import { useActiveOrg } from "../../../lib/org/org-context";
@@ -20,6 +20,7 @@ import { orgProfileTh } from "../i18n";
 import { SectionCard } from "../../../components/ui/SectionCard";
 import { DataRow } from "../../../components/ui/DataRow";
 import { Banner } from "../../../components/ui/Banner";
+import { Icon } from "../../../components/ui/Icon";
 import { Button } from "../../../components/ui/Button";
 import { TaxProfileCard } from "./TaxProfileCard";
 import { TaxProfileDialog } from "./TaxProfileDialog";
@@ -29,6 +30,7 @@ import { CAPABILITY_MANAGE_MEMBERS } from "./AppShell";
 
 export function OrgProfileScreen() {
   const org = useActiveOrg();
+  const router = useRouter();
   const queryClient = useQueryClient();
   const [editingTax, setEditingTax] = useState(false);
   const [renaming, setRenaming] = useState(false);
@@ -51,39 +53,50 @@ export function OrgProfileScreen() {
       {onboarding && (
         /* The mockup makes this a tone-`info` Banner: it is guidance, not a
            status, and not a section of the shop's data. */
-        <Banner tone="info">
-          <p className="m-0 mb-2 text-heading-sm">{orgProfileTh.onboarding.title}</p>
-          <ul className="m-0 flex list-none flex-col gap-2 p-0">
-            {onboarding.inviteTeam && (
-              <li>
-                {orgProfileTh.onboarding.inviteTeam.text}{" "}
-                <Link href={`/o/${org.orgId}/settings/members`}>
-                  {orgProfileTh.onboarding.inviteTeam.cta}
-                </Link>
-              </li>
-            )}
-            {onboarding.declareTax && (
-              <li>
-                {orgProfileTh.onboarding.declareTax.text}{" "}
-                <button
-                  type="button"
-                  className="border-0 bg-transparent p-0 font-semibold text-primary underline-offset-2 hover:underline"
-                  onClick={() => setEditingTax(true)}
+        <Banner
+          tone="info"
+          icon={<Icon role="info" size="md" />}
+          /* ★ §8.4 item 2, measured: the three CTAs were links INSIDE the
+             sentences at 17–18px tall. "ทุกอย่างที่กดได้สูง ≥ 44px ไม่มีข้อยกเว้น"
+             cannot be met by a link mid-sentence, and the mockup does not ask
+             it to — `.banner .acts` is a row of controls BELOW the text. */
+          actions={
+            <>
+              {onboarding.inviteTeam && (
+                <Button
+                  variant="tertiary"
+                  onClick={() => router.push(`/o/${org.orgId}/settings/members`)}
                 >
+                  {orgProfileTh.onboarding.inviteTeam.cta}
+                </Button>
+              )}
+              {onboarding.declareTax && (
+                <Button variant="tertiary" onClick={() => setEditingTax(true)}>
                   {orgProfileTh.onboarding.declareTax.cta}
-                </button>
-              </li>
-            )}
-            {onboarding.inviteBackupOwner && (
-              <li>
-                {orgProfileTh.onboarding.backupOwner.text}{" "}
-                {/* §5: opens S7 with the Owner role preselected. W5 reads
-                    `?role=owner`; until then the link still lands correctly on
-                    the members screen. */}
-                <Link href={`/o/${org.orgId}/settings/members?invite=1&role=owner`}>
+                </Button>
+              )}
+              {onboarding.inviteBackupOwner && (
+                /* §5: opens S7 with the Owner role preselected. W5 reads
+                   `?role=owner`; until then it still lands on the members
+                   screen correctly. */
+                <Button
+                  variant="tertiary"
+                  onClick={() =>
+                    router.push(`/o/${org.orgId}/settings/members?invite=1&role=owner`)
+                  }
+                >
                   {orgProfileTh.onboarding.backupOwner.cta}
-                </Link>
-              </li>
+                </Button>
+              )}
+            </>
+          }
+        >
+          <p className="m-0 mb-2 text-heading-sm">{orgProfileTh.onboarding.title}</p>
+          <ul className="m-0 flex list-none flex-col gap-1 p-0">
+            {onboarding.inviteTeam && <li>{orgProfileTh.onboarding.inviteTeam.text}</li>}
+            {onboarding.declareTax && <li>{orgProfileTh.onboarding.declareTax.text}</li>}
+            {onboarding.inviteBackupOwner && (
+              <li>{orgProfileTh.onboarding.backupOwner.text}</li>
             )}
           </ul>
         </Banner>
@@ -112,11 +125,15 @@ export function OrgProfileScreen() {
           {/* `counts` is a total, never a list — a Staff member seeing "4 คน"
               is not a PDPA problem; seeing WHO would be (D-028). */}
           {canManageMembers ? (
-            <Link className="font-semibold text-primary no-underline hover:underline" href={`/o/${org.orgId}/settings/members`}>
+            <Link
+              className="inline-flex min-h-[var(--size-tap-target-min)] items-center gap-1 font-semibold text-primary no-underline hover:underline"
+              href={`/o/${org.orgId}/settings/members`}
+            >
               {orgProfileTh.fields.teamValue(
                 org.profile.counts.activeMembers,
                 org.profile.counts.pendingInvitations,
               )}
+              <Icon role="chevron-right" size="sm" />
             </Link>
           ) : (
             orgProfileTh.fields.teamValue(org.profile.counts.activeMembers, 0)

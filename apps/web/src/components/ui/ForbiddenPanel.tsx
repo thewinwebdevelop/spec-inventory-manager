@@ -11,6 +11,7 @@
  */
 import Link from "next/link";
 import { Button } from "./Button";
+import { Icon } from "./Icon";
 
 export const FORBIDDEN_PANEL_COPY = {
   title: "หน้านี้เปิดให้เฉพาะผู้ที่ดูแลทีมงาน",
@@ -21,7 +22,7 @@ export const FORBIDDEN_PANEL_COPY = {
 export function ForbiddenPanel({ orgId }: { orgId: string }) {
   return (
     <section role="alert" className="p-6 text-center">
-      <p aria-hidden="true">🔒</p>
+      <Icon role="lock" size="xl" className="mx-auto text-text-muted" />
       <h2 className="text-heading-sm">{FORBIDDEN_PANEL_COPY.title}</h2>
       <p className="text-body-sm">{FORBIDDEN_PANEL_COPY.body}</p>
       <Link href={`/o/${orgId}`}>

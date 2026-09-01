@@ -19,6 +19,7 @@ import { usePathname } from "next/navigation";
 import { useActiveOrg, useCan } from "../../../lib/org/org-context";
 import { NavItem } from "../../../components/ui/NavItem";
 import { IconButton } from "../../../components/ui/IconButton";
+import { Icon } from "../../../components/ui/Icon";
 import { orgTh } from "../i18n";
 import { OrgSwitcher } from "./OrgSwitcher";
 
@@ -80,7 +81,7 @@ export function AppShell({ children }: { children: ReactNode }) {
           aria-expanded={navOpen}
           onClick={() => setNavOpen((open) => !open)}
         >
-          <span aria-hidden="true">{navOpen ? "✕" : "☰"}</span>
+          <Icon role={navOpen ? "close" : "menu"} size="lg" />
         </IconButton>
         <span className="text-heading-sm">OmniStock</span>
       </div>

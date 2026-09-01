@@ -18,6 +18,7 @@
 import Link from "next/link";
 import { useMyOrganizations, activeOrganizations } from "../api/use-my-organizations";
 import { useActiveOrg } from "../../../lib/org/org-context";
+import { Icon } from "../../../components/ui/Icon";
 import { orgTh, roleLabel } from "../i18n";
 import { CREATE_ORG_PATH } from "./SelectOrgScreen";
 
@@ -53,9 +54,11 @@ export function OrgSwitcher() {
           {roleLabel(active.roleKey, active.roleName)}
         </span>
         </span>
-        <span aria-hidden="true" className="flex-none text-text-muted transition-transform group-open:rotate-180">
-          ▾
-        </span>
+        <Icon
+          role="chevron-down"
+          size="sm"
+          className="text-text-muted transition-transform group-open:rotate-180"
+        />
       </summary>
 
       <div className="absolute left-0 top-[calc(100%+6px)] z-40 w-[290px] rounded-card border border-border-default bg-surface p-1.5 shadow-dialog">
@@ -81,8 +84,10 @@ export function OrgSwitcher() {
                   >
                     {/* `.ck` — a 20px slot that is always there, so the names
                         line up whether or not a row is the current one. */}
-                    <span aria-hidden="true" className="flex w-5 flex-none items-center text-primary">
-                      {isCurrent ? "✓" : ""}
+                    {/* `.ck` — the slot is always 20px wide so the names line
+                        up whether or not a row is the current one. */}
+                    <span className="flex w-5 flex-none items-center text-primary">
+                      {isCurrent && <Icon role="check" size="sm" />}
                     </span>
                     <span className="min-w-0 flex-1 truncate">
                       {item.organization.name}
@@ -110,8 +115,8 @@ export function OrgSwitcher() {
           href={CREATE_ORG_PATH}
           className="flex min-h-[var(--size-list-row-min-h)] items-center gap-2.5 rounded-button px-2.5 py-2 text-text no-underline hover:bg-surface-muted"
         >
-          <span aria-hidden="true" className="flex w-5 flex-none items-center text-primary">
-            +
+          <span className="flex w-5 flex-none items-center text-primary">
+            <Icon role="plus" size="sm" />
           </span>
           <span className="flex-1">{orgTh.shell.switcher.createShop}</span>
         </Link>
