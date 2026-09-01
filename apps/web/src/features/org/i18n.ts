@@ -62,6 +62,16 @@ export const orgTh = {
       createShop: "สร้างร้านใหม่",
     },
     nav: {
+      /**
+       * ⚠️ COPY GAP — `ux` owns Thai copy and neither ux-wireframe §4 nor ui.md
+       * §2.2 gives wording for the §8.2 drawer toggle, because the drawer had
+       * never been built. These two are the plainest labels that say what the
+       * control does; they are accessible NAMES on an icon-only button, so
+       * shipping it unlabelled was not an option. Raise with ux to confirm or
+       * replace.
+       */
+      showMenu: "เปิดเมนู",
+      hideMenu: "ปิดเมนู",
       orgProfile: "ข้อมูลร้าน",
       members: "สมาชิก",
       security: "ความปลอดภัย",

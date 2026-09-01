@@ -27,7 +27,15 @@ export function OrgSwitcher() {
   const items = activeOrganizations(query.data);
 
   return (
-    <details className="group">
+    /**
+     * ★ `relative` + an ABSOLUTE panel — the mockup's `.orgwrap`/`.dd`.
+     *
+     * The panel was in normal flow, so opening the switcher pushed the whole
+     * nav down the page instead of floating over it. The mockup is explicit:
+     * `position:absolute; top:calc(100% + 6px); width:290px;
+     *  box-shadow:var(--shadow-dialog); z-index:40`.
+     */
+    <details className="group relative">
       {/* The mockup's switcher is a CONTROL — bordered, with the shop's initial
           and a chevron that turns — not a paragraph you discover is clickable.
           `list-none` removes the native disclosure triangle, which was the
@@ -50,8 +58,8 @@ export function OrgSwitcher() {
         </span>
       </summary>
 
-      <div className="mt-2 rounded-card border border-border-default bg-surface p-2 shadow-card">
-        <p className="px-2 text-body-sm">{orgTh.shell.switcher.label}</p>
+      <div className="absolute left-0 top-[calc(100%+6px)] z-40 w-[290px] rounded-card border border-border-default bg-surface p-1.5 shadow-dialog">
+        <p className="m-0 px-2 py-1 text-body-sm text-text-muted">{orgTh.shell.switcher.label}</p>
 
         {query.isError ? (
           <div className="p-2 text-body-sm">
@@ -61,7 +69,7 @@ export function OrgSwitcher() {
             </button>
           </div>
         ) : (
-          <ul className="list-none p-0">
+          <ul className="m-0 list-none p-0">
             {items.map((item) => {
               const isCurrent = item.organization.id === active.orgId;
               return (
@@ -69,16 +77,23 @@ export function OrgSwitcher() {
                   <Link
                     href={`/o/${item.organization.id}`}
                     aria-current={isCurrent ? "true" : undefined}
-                    className="flex items-center justify-between gap-3 p-2 no-underline"
+                    className="flex min-h-[var(--size-list-row-min-h)] items-center gap-2.5 rounded-button px-2.5 py-2 no-underline hover:bg-surface-muted"
                   >
-                    <span>
+                    {/* `.ck` — a 20px slot that is always there, so the names
+                        line up whether or not a row is the current one. */}
+                    <span aria-hidden="true" className="flex w-5 flex-none items-center text-primary">
+                      {isCurrent ? "✓" : ""}
+                    </span>
+                    <span className="min-w-0 flex-1 truncate">
                       {item.organization.name}
                       {/* The text half of "not colour alone". */}
                       {isCurrent && (
-                        <span className="ml-2 text-body-sm">({orgTh.shell.switcher.current})</span>
+                        <span className="ml-2 text-body-sm text-text-muted">
+                          ({orgTh.shell.switcher.current})
+                        </span>
                       )}
                     </span>
-                    <span className="text-body-sm">
+                    <span className="flex-none text-body-sm text-text-muted">
                       {roleLabel(item.membership.roleKey, item.membership.roleName)}
                     </span>
                   </Link>
@@ -88,8 +103,17 @@ export function OrgSwitcher() {
           </ul>
         )}
 
-        <Link href={CREATE_ORG_PATH} className="block p-2">
-          {orgTh.shell.switcher.createShop}
+        {/* `.sep` then the create row — the mockup separates "which shop" from
+            "make a new one", because they are different kinds of action. */}
+        <div className="mx-1 my-1.5 h-px bg-border-default" />
+        <Link
+          href={CREATE_ORG_PATH}
+          className="flex min-h-[var(--size-list-row-min-h)] items-center gap-2.5 rounded-button px-2.5 py-2 no-underline hover:bg-surface-muted"
+        >
+          <span aria-hidden="true" className="flex w-5 flex-none items-center text-primary">
+            +
+          </span>
+          <span className="flex-1">{orgTh.shell.switcher.createShop}</span>
         </Link>
       </div>
     </details>

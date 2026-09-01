@@ -14,9 +14,11 @@
  * lands on a `ForbiddenPanel` rather than on nothing.
  */
 import type { ReactNode } from "react";
+import { useEffect, useState } from "react";
 import { usePathname } from "next/navigation";
 import { useActiveOrg, useCan } from "../../../lib/org/org-context";
 import { NavItem } from "../../../components/ui/NavItem";
+import { IconButton } from "../../../components/ui/IconButton";
 import { orgTh } from "../i18n";
 import { OrgSwitcher } from "./OrgSwitcher";
 
@@ -47,6 +49,19 @@ export function AppShell({ children }: { children: ReactNode }) {
   // §4 answers Q13 explicitly: HIDE it, do not disable it — a disabled entry
   // just raises a question the user cannot resolve.
   const canManageMembers = useCan(CAPABILITY_MANAGE_MEMBERS);
+  /**
+   * ★ design-system §8.2: at `md` the sidebar "ยุบเป็น top bar + drawer
+   * (hamburger)". None of that existed — below `md` the nav simply stacked on
+   * top of the page as a full-width block with no way to put it away, and
+   * there was no control to collapse it at any width.
+   *
+   * Open by default so ≥lg keeps §8.2's "sidebar ถาวรซ้าย"; the toggle is what
+   * the drawer needs and what a person on a narrow window reaches for.
+   */
+  const [navOpen, setNavOpen] = useState(true);
+  // Navigating inside the drawer should close it — otherwise the drawer covers
+  // the page you just asked for.
+  useEffect(() => setNavOpen((open) => (window.innerWidth < 1024 ? false : open)), [pathname]);
 
   const orgProfilePath = `/o/${orgId}/settings/org`;
   const membersPath = `/o/${orgId}/settings/members`;
@@ -57,15 +72,28 @@ export function AppShell({ children }: { children: ReactNode }) {
   const onOrgProfile = pathname === orgProfilePath || pathname === `/o/${orgId}`;
 
   return (
-    <div className="flex min-h-screen flex-col bg-bg md:flex-row">
+    <div className="flex min-h-screen flex-col bg-bg lg:flex-row">
+      {/* The `md` top bar (§8.2). Hidden once the sidebar is permanent. */}
+      <div className="flex items-center gap-2 border-b border-border-default bg-surface px-4 py-2 lg:hidden">
+        <IconButton
+          aria-label={navOpen ? orgTh.shell.nav.hideMenu : orgTh.shell.nav.showMenu}
+          aria-expanded={navOpen}
+          onClick={() => setNavOpen((open) => !open)}
+        >
+          <span aria-hidden="true">{navOpen ? "✕" : "☰"}</span>
+        </IconButton>
+        <span className="text-heading-sm">OmniStock</span>
+      </div>
+
       {/* `size.sidebar.w` (240px) — a token that existed in design-system.md
           and in no stylesheet until 2026-09-01, so this was `md:w-64` (256px)
           picked from Tailwind's scale instead. */}
       <nav
         aria-label="เมนูของร้าน"
-        className="flex flex-col gap-2 border-border-default bg-surface p-card-padding md:w-[var(--size-sidebar-w)] md:border-r"
+        hidden={!navOpen}
+        className="flex flex-col gap-2 border-border-default bg-surface p-card-padding lg:w-[var(--size-sidebar-w)] lg:border-r"
       >
-        <p className="m-0 mb-2 text-heading-sm">OmniStock</p>
+        <p className="m-0 mb-2 hidden text-heading-sm lg:block">OmniStock</p>
         <OrgSwitcher />
         {/* The mockup's `.navi` rows: 44px tall, and the CURRENT one carries a
             `surface.muted` background. Colour alone was not enough to see
