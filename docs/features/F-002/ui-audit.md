@@ -76,6 +76,31 @@ ORG=<orgId> node apps/web/tool/ui-audit.mjs
 ✅ token drift มี guard แล้ว: `tokens.contract.test.ts` เทียบตาราง token ใน `design-system.md` กับ `tokens.css` ทุกตัว
 🟠 **ค่าที่ยังไม่มีชื่อใน DS** (ทิ้งเป็น literal ที่เดียวและส่งต่อ ไม่คิดเอง ตาม §6): `150px`/`180px` (คอลัมน์ `DataRow`) · `.62` (แถวถูกถอด) · `640px` · `360px`/`z-100` (Toast) · `90%` (dialog จอแคบ) · `290px` (popover switcher — mockup `.dd`)
 
+## 🔴 sidebar มือถือ **ไม่ใช่ drawer** — user จับได้ (2026-09-01)
+
+§8.2 เขียนว่า *"ยุบเป็น top bar + **drawer** (hamburger)"* และ **drawer แปลว่าลอยทับ** — ของผมทำเป็น disclosure ที่ **ดันเนื้อหาลงไป**
+· ผมสังเกตเห็นเองตอนทำแล้ว แต่ตัดสินใจว่า "ไม่ over-engineer" ⇒ **เลือกความสะดวกทับสเปก**
+
+mockup เขียนไว้ครบอยู่แล้ว:
+```css
+.drawer { position:absolute; inset:0 auto 0 0; width:280px;
+          box-shadow:var(--shadow-dialog); z-index:20 }
+.scrim  { position:absolute; inset:0; background:var(--overlay); z-index:10 }
+.tbar   { height:56px }
+```
+
+**แก้ตามนั้น** + Escape ปิด · แตะ scrim ปิด · ล็อกสกรอลล์หน้าหลังระหว่างเปิด · โฟกัสเข้าปุ่มปิด · กดลิงก์แล้วปิดเอง
+
+**วัดหลังแก้ (ไม่ใช่ดูรูป):**
+| | ค่า |
+|---|---|
+| `drawer.position` / `width` | `absolute` / **280px** |
+| `scrim.background` | `rgba(11,22,20,0.45)` = `color.overlay` |
+| `body.overflow` | `hidden` |
+| **`<main>` top ก่อน/หลังเปิด** | **56px เท่าเดิม** ⇒ **หน้าไม่ถูกดัน** ✅ |
+
+⚠️ **280px ไม่ใช่ `size.sidebar.w` (240px)** — เป็นค่าของ drawer ใน mockup ที่ DS ยังไม่มี token ⇒ ทิ้งเป็น literal + เข้าลิสต์ส่งต่อ @ux
+
 ## บั๊กพฤติกรรมที่เจอรอบนี้
 
 **ตัวกรองในจอสมาชิกเป็นทางเดียว** — "ดูคำเชิญที่หมดอายุ/ยกเลิกแล้ว" และ "แสดงสมาชิกที่ถูกถอดออกแล้ว" ปุ่มจะ **ถอดตัวเองออกตอนกด** และไม่มีทางกลับ

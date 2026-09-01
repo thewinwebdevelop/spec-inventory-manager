@@ -59,10 +59,35 @@ export function AppShell({ children }: { children: ReactNode }) {
    * Open by default so ≥lg keeps §8.2's "sidebar ถาวรซ้าย"; the toggle is what
    * the drawer needs and what a person on a narrow window reaches for.
    */
-  const [navOpen, setNavOpen] = useState(true);
-  // Navigating inside the drawer should close it — otherwise the drawer covers
-  // the page you just asked for.
-  useEffect(() => setNavOpen((open) => (window.innerWidth < 1024 ? false : open)), [pathname]);
+  // ★ A DRAWER, which means it floats OVER the page.
+  //
+  // §8.2 says the nav "ยุบเป็น top bar + drawer (hamburger)" at md, and the
+  // mockup draws exactly that: `.drawer` is `position:absolute; width:280px;
+  // box-shadow: shadow-dialog` above a `.scrim` covering the rest. My first
+  // version was a disclosure — an in-flow block that PUSHED the page down —
+  // which is not a drawer, and the user caught it.
+  //
+  // Closed by default below lg; the permanent sidebar above lg does not use
+  // this state at all.
+  const [drawerOpen, setDrawerOpen] = useState(false);
+  // Navigating from inside the drawer closes it: otherwise it covers the page
+  // you just asked for.
+  useEffect(() => setDrawerOpen(false), [pathname]);
+  // Escape closes it, and the page behind must not scroll while it is open —
+  // both are what makes it read as a layer rather than a section.
+  useEffect(() => {
+    if (!drawerOpen) return;
+    const onKeyDown = (e: KeyboardEvent) => {
+      if (e.key === "Escape") setDrawerOpen(false);
+    };
+    document.addEventListener("keydown", onKeyDown);
+    const previous = document.body.style.overflow;
+    document.body.style.overflow = "hidden";
+    return () => {
+      document.removeEventListener("keydown", onKeyDown);
+      document.body.style.overflow = previous;
+    };
+  }, [drawerOpen]);
 
   const orgProfilePath = `/o/${orgId}/settings/org`;
   const membersPath = `/o/${orgId}/settings/members`;
@@ -72,52 +97,89 @@ export function AppShell({ children }: { children: ReactNode }) {
   // route people actually land on after entering a shop.
   const onOrgProfile = pathname === orgProfilePath || pathname === `/o/${orgId}`;
 
+  const nav = (
+    <>
+      <OrgSwitcher />
+      {/* The mockup's `.navi` rows: 44px tall, and the CURRENT one carries a
+          `surface.muted` background. Colour alone was not enough to see where
+          you are — which is the sidebar's entire job. */}
+      <ul className="m-0 mt-2 flex list-none flex-col gap-1 p-0">
+        <li>
+          <NavItem href={orgProfilePath} active={onOrgProfile}>
+            {orgTh.shell.nav.orgProfile}
+          </NavItem>
+        </li>
+        {canManageMembers && (
+          <li>
+            <NavItem href={membersPath} active={pathname === membersPath}>
+              {orgTh.shell.nav.members}
+            </NavItem>
+          </li>
+        )}
+        <li>
+          <NavItem href={SECURITY_PATH} active={pathname === SECURITY_PATH}>
+            {orgTh.shell.nav.security}
+          </NavItem>
+        </li>
+      </ul>
+    </>
+  );
+
   return (
     <div className="flex min-h-screen flex-col bg-bg lg:flex-row">
-      {/* The `md` top bar (§8.2). Hidden once the sidebar is permanent. */}
-      <div className="flex items-center gap-2 border-b border-border-default bg-surface px-4 py-2 lg:hidden">
+      {/* `.tbar` — 56px, and only below lg where the sidebar is not permanent. */}
+      <div className="flex h-14 items-center gap-1 border-b border-border-default bg-surface px-2 lg:hidden">
         <IconButton
-          aria-label={navOpen ? orgTh.shell.nav.hideMenu : orgTh.shell.nav.showMenu}
-          aria-expanded={navOpen}
-          onClick={() => setNavOpen((open) => !open)}
+          aria-label={orgTh.shell.nav.showMenu}
+          aria-expanded={drawerOpen}
+          onClick={() => setDrawerOpen(true)}
         >
-          <Icon role={navOpen ? "close" : "menu"} size="lg" />
+          <Icon role="menu" size="lg" />
         </IconButton>
         <span className="text-heading-sm">OmniStock</span>
       </div>
 
-      {/* `size.sidebar.w` (240px) — a token that existed in design-system.md
-          and in no stylesheet until 2026-09-01, so this was `md:w-64` (256px)
-          picked from Tailwind's scale instead. */}
+      {drawerOpen && (
+        <div className="fixed inset-0 z-50 lg:hidden">
+          {/* `.scrim` — the page is still visible behind it, which is what
+              tells you the drawer is a layer you can dismiss. */}
+          <div
+            role="presentation"
+            className="absolute inset-0 bg-overlay"
+            onClick={() => setDrawerOpen(false)}
+          />
+          {/* `.drawer` — 280px, `shadow-dialog`, pinned to the left edge.
+              ⚠️ 280px is the mockup's drawer width and is NOT `size.sidebar.w`
+              (240px); design-system.md §1.2 has no token for it, so per §6 it
+              stays a literal here and goes on the list for ux. */}
+          <nav
+            aria-label="เมนูของร้าน"
+            className="absolute inset-y-0 left-0 flex w-[280px] max-w-[85%] flex-col gap-2 overflow-y-auto border-r border-border-default bg-surface p-card-padding shadow-dialog"
+          >
+            <div className="mb-2 flex items-center justify-between gap-2">
+              <span className="text-heading-sm">OmniStock</span>
+              <IconButton
+                aria-label={orgTh.shell.nav.hideMenu}
+                autoFocus
+                onClick={() => setDrawerOpen(false)}
+              >
+                <Icon role="close" size="lg" />
+              </IconButton>
+            </div>
+            {nav}
+          </nav>
+        </div>
+      )}
+
+      {/* The permanent sidebar, ≥lg only. `size.sidebar.w` (240px) — a token
+          that existed in design-system.md and in no stylesheet until
+          2026-09-01, so this was `md:w-64` (256px) off Tailwind's scale. */}
       <nav
         aria-label="เมนูของร้าน"
-        hidden={!navOpen}
-        className="flex flex-col gap-2 border-border-default bg-surface p-card-padding lg:w-[var(--size-sidebar-w)] lg:border-r"
+        className="hidden flex-col gap-2 border-border-default bg-surface p-card-padding lg:flex lg:w-[var(--size-sidebar-w)] lg:border-r"
       >
-        <p className="m-0 mb-2 hidden text-heading-sm lg:block">OmniStock</p>
-        <OrgSwitcher />
-        {/* The mockup's `.navi` rows: 44px tall, and the CURRENT one carries a
-            `surface.muted` background. Colour alone was not enough to see
-            where you are — which is the sidebar's entire job. */}
-        <ul className="m-0 mt-2 flex list-none flex-col gap-1 p-0">
-          <li>
-            <NavItem href={orgProfilePath} active={onOrgProfile}>
-              {orgTh.shell.nav.orgProfile}
-            </NavItem>
-          </li>
-          {canManageMembers && (
-            <li>
-              <NavItem href={membersPath} active={pathname === membersPath}>
-                {orgTh.shell.nav.members}
-              </NavItem>
-            </li>
-          )}
-          <li>
-            <NavItem href={SECURITY_PATH} active={pathname === SECURITY_PATH}>
-              {orgTh.shell.nav.security}
-            </NavItem>
-          </li>
-        </ul>
+        <p className="m-0 mb-2 text-heading-sm">OmniStock</p>
+        {nav}
       </nav>
       <div className="min-w-0 flex-1">{children}</div>
     </div>
