@@ -42,6 +42,9 @@
   --color-success-text: #1f5d3d;
   --color-badge-current-bg: #e7f3ec;
   --color-badge-current-text: #1f5d3d;
+  /* `Badge` variant `neutral` — a neutral status such as "ยกเลิกแล้ว". */
+  --color-badge-neutral-bg: #e7efec;
+  --color-badge-neutral-text: #566b65;
   --color-surface: #ffffff;
   --color-surface-muted: #e7efec;
   --color-bg: #f3f7f5;
@@ -49,6 +52,15 @@
   --color-text-muted: #566b65;
   --color-border-default: #cfdcd7;
   --color-overlay: rgb(11 22 20 / 45%);
+
+  /* `color.info.*` (§1.1) — a SEPARATE role even though the light values equal
+   * surface.muted / border.default / text. design-system.md says so explicitly:
+   * an info Banner is "neutral / here is some information", not a status
+   * colour, and collapsing it onto surface.muted would lose that distinction
+   * the day the two need to diverge. */
+  --color-info-bg: #e7efec;
+  --color-info-border: #cfdcd7;
+  --color-info-text: #112320;
 
   /* 1.2 Typography */
   --font-thai: "Sarabun", "Noto Sans Thai", system-ui, sans-serif;
@@ -77,6 +89,13 @@
   --text-button-md--line-height: 24px;
   --text-button-md--font-weight: 600;
 
+  /* `type.button.sm` (§1.1c-3) — for `size="sm"` and `variant="tertiary"`.
+   * "ตัวอักษรเล็กลง ปุ่มไม่เตี้ยลง": the text shrinks, the 44px tap target
+   * does not. */
+  --text-button-sm: 14px;
+  --text-button-sm--line-height: 20px;
+  --text-button-sm--font-weight: 600;
+
   /* 1.3 Spacing / radius (4pt grid) — Tailwind v4's default `--spacing`
    * multiplier is 4px (`p-1` = 4px), which already matches this grid 1:1
    * (space.1=4px..space.8=32px = p-1..p-8). Named `--spacing-*` keys below
@@ -92,6 +111,27 @@
 
   --size-auth-card-max-w: 400px;
   --size-tap-target-min: 44px;
+
+  /* ⚠️ 480px, and deliberately NOT the same token as the 400px auth card —
+   * design-system.md §1.2 spells that out. Six F-002 screens had `480px`
+   * typed in by hand and `ConfirmDialog` had `400px`, i.e. every confirm
+   * dialog rendered 80px narrower than the design (audit, 2026-09-01). */
+  --size-dialog-max-w: 480px;
+  --size-sidebar-w: 240px;
+  --size-list-row-min-h: 56px;
+
+  /* `size.icon.*` (§1.2). `md` is the default: banner, button, list row. */
+  --size-icon-sm: 16px;
+  --size-icon-md: 20px;
+  --size-icon-lg: 24px;
+  --size-icon-xl: 40px;
+
+  /* `focus.ring.*` (§1.1c-1). The offset is REQUIRED, never 0: the primary
+   * button's background is `color.primary`, the same colour as the ring, so a
+   * 0-offset ring disappears into the button it is meant to mark. */
+  --focus-ring-color: var(--color-primary);
+  --focus-ring-w: 2.5px;
+  --focus-ring-offset: 2px;
 
   /* 1.4 Elevation */
   --shadow-card: 0 1px 3px rgb(16 24 40 / 10%), 0 1px 2px rgb(16 24 40 / 6%);

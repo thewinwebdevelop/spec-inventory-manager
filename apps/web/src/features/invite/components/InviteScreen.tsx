@@ -82,7 +82,7 @@ export function InviteScreen() {
 
   if (joined) {
     return (
-      <main className="mx-auto w-full max-w-[480px] p-6">
+      <main className="mx-auto w-full max-w-[var(--size-dialog-max-w)] p-card-padding">
         <h1 className="text-heading-md">{inviteScreenTh.joinedTitle(joined.orgName)}</h1>
         <p className="text-body-sm">{inviteScreenTh.joinedRole(joined.roleName)}</p>
         <Link href={`/o/${joined.orgId}`}>
@@ -95,7 +95,7 @@ export function InviteScreen() {
 
   if (error) {
     return (
-      <main className="mx-auto w-full max-w-[480px] p-6">
+      <main className="mx-auto w-full max-w-[var(--size-dialog-max-w)] p-card-padding">
         {throttle.isActive && <ThrottleBanner remainingSeconds={throttle.remainingSeconds} />}
         <h1 className="text-heading-md">{error.title}</h1>
         <p className="text-body-sm">{error.body}</p>
@@ -106,7 +106,7 @@ export function InviteScreen() {
 
   if (!ready || preview.isPending || !previewed) {
     return (
-      <main className="mx-auto w-full max-w-[480px] p-6" role="status" aria-label="กำลังโหลด">
+      <main className="mx-auto w-full max-w-[var(--size-dialog-max-w)] p-card-padding" role="status" aria-label="กำลังโหลด">
         <SkeletonRow />
         <SkeletonRow />
         <SkeletonRow />
@@ -115,7 +115,7 @@ export function InviteScreen() {
   }
 
   return (
-    <main className="mx-auto w-full max-w-[480px] p-6">
+    <main className="mx-auto w-full max-w-[var(--size-dialog-max-w)] p-card-padding">
       <h1 className="text-heading-md">{inviteScreenTh.title}</h1>
       <p className="text-heading-sm">{previewed.organizationName}</p>
       <p>{inviteScreenTh.invitedAs(roleLabel(previewed.roleKey, previewed.roleName))}</p>

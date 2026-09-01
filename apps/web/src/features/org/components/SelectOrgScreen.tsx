@@ -27,7 +27,7 @@ export function SelectOrgScreen() {
   const items = activeOrganizations(query.data);
 
   return (
-    <main className="mx-auto w-full max-w-[480px] p-6">
+    <main className="mx-auto w-full max-w-[var(--size-dialog-max-w)] p-card-padding">
       {removed && <RemovedNotice />}
 
       <h1 className="text-heading-md">{orgTh.selectOrg.title}</h1>
@@ -52,7 +52,7 @@ export function SelectOrgScreen() {
               <li key={item.organization.id}>
                 <Link
                   href={`/o/${item.organization.id}`}
-                  className="flex min-h-[56px] items-center justify-between gap-3 rounded-card border border-border p-4 no-underline"
+                  className="flex min-h-[var(--size-list-row-min-h)] items-center justify-between gap-3 rounded-card border border-border p-4 no-underline"
                 >
                   <span>{item.organization.name}</span>
                   <span className="text-body-sm">

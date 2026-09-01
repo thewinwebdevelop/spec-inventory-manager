@@ -75,3 +75,4 @@ apps/web/playwright-report/
 apps/web/playwright-results.json
 apps/web/test-results/
 apps/web/e2e/.auth/
+docker-compose.override.yml

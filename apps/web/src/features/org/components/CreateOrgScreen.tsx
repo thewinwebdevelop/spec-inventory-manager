@@ -52,7 +52,7 @@ export function CreateOrgScreen() {
   const blocked = create.isPending || throttle.isActive;
 
   return (
-    <main className="mx-auto w-full max-w-[480px] p-6">
+    <main className="mx-auto w-full max-w-[var(--size-dialog-max-w)] p-card-padding">
       <Link href={SELECT_ORG_PATH}>{orgTh.createOrg.back}</Link>
       <h1 className="text-heading-md">{orgTh.createOrg.title}</h1>
 
