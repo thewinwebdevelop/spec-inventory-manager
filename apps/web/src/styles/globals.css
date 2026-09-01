@@ -9,24 +9,40 @@
  * countdown per design-system.md §1.2 `type.numeric.tabular`).
  */
 
-body {
-  background: var(--color-bg);
-  color: var(--color-text);
-  font-family: var(--font-thai);
-  font-size: var(--text-body-md);
-  line-height: var(--text-body-md--line-height);
-  /* Thai ascenders/descenders (design-system.md §1.2) need the taller
-   * line-height above; tabular numerals are opted in per-element (see
-   * .tabular-nums) rather than globally, so normal body text keeps natural
-   * proportional figures. */
-}
+/*
+ * ★ IN `@layer base`, and that is the whole point (2026-09-01).
+ *
+ * These rules were unlayered. A cascade layer loses to unlayered CSS no matter
+ * the specificity, and Tailwind v4 puts every utility in `@layer utilities` —
+ * so `a { color: var(--color-primary) }` beat `className="text-text"` on every
+ * link in the app, silently. The sidebar was the visible case: design-system
+ * §1.1c/`.navi` says an INACTIVE nav row is `color.text` and only the ACTIVE
+ * one is `color.primary`, and every row came out teal, so "where am I" was
+ * carried by the background alone.
+ *
+ * Layering them restores the intended reading: these are DEFAULTS, and a
+ * component that names a colour means it.
+ */
+@layer base {
+  body {
+    background: var(--color-bg);
+    color: var(--color-text);
+    font-family: var(--font-thai);
+    font-size: var(--text-body-md);
+    line-height: var(--text-body-md--line-height);
+    /* Thai ascenders/descenders (design-system.md §1.2) need the taller
+     * line-height above; tabular numerals are opted in per-element (see
+     * .tabular-nums) rather than globally, so normal body text keeps natural
+     * proportional figures. */
+  }
 
-a {
-  color: var(--color-primary);
-}
+  a {
+    color: var(--color-primary);
+  }
 
-button {
-  font-family: inherit;
+  button {
+    font-family: inherit;
+  }
 }
 
 .tabular-nums {

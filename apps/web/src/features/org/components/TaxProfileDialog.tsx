@@ -27,6 +27,7 @@ import { taxFormTh } from "../i18n";
 import { toApiFailure } from "../../../lib/api/error";
 import { Button } from "../../../components/ui/Button";
 import { TextField } from "../../../components/ui/TextField";
+import { RadioCardGroup } from "../../../components/ui/RadioCardGroup";
 import { ErrorBanner } from "../../../components/ui/ErrorBanner";
 
 type EntityType = "personal" | "company";
@@ -108,35 +109,26 @@ export function TaxProfileDialog({
 
   return (
     <div role="dialog" aria-label={taxFormTh.title} className="space-y-3 rounded-card border border-border-default bg-surface p-card-padding shadow-card">
-      <h3 className="text-heading-sm">{taxFormTh.title}</h3>
+      <h3 className="m-0 text-heading-sm">{taxFormTh.title}</h3>
 
       {banner && <ErrorBanner message={banner} />}
 
-      <fieldset>
-        <legend className="text-body-sm">{taxFormTh.entityLabel}</legend>
-        <label>
-          <input
-            type="radio"
-            name="entityType"
-            checked={entityType === "personal"}
-            onChange={() => setEntityType("personal")}
-          />
-          {taxFormTh.personal}
-        </label>
-        <label>
-          <input
-            type="radio"
-            name="entityType"
-            checked={entityType === "company"}
-            onChange={() => setEntityType("company")}
-          />
-          {taxFormTh.company}
-        </label>
-      </fieldset>
+      <RadioCardGroup
+        name="entityType"
+        legend={taxFormTh.entityLabel}
+        value={entityType}
+        onChange={(next) => setEntityType(next as typeof entityType)}
+        options={[
+          { value: "personal", label: taxFormTh.personal },
+          { value: "company", label: taxFormTh.company },
+        ]}
+      />
 
       {/* Visible WHILE the number is being typed, not after — for a personal
           taxpayer these 13 digits are a national ID. */}
-      {entityType === "personal" && <p className="text-body-sm">{taxFormTh.personalHelper}</p>}
+      {entityType === "personal" && (
+        <p className="m-0 text-body-sm text-text-muted">{taxFormTh.personalHelper}</p>
+      )}
 
       <TextField
         label={taxFormTh.taxIdLabel}
@@ -147,19 +139,20 @@ export function TaxProfileDialog({
         // Never offer to remember a tax id / national ID (§6 a11y note).
         autoComplete="off"
       />
-      {revealUnavailable && <p className="text-body-sm">{taxFormTh.revealUnavailable}</p>}
+      {revealUnavailable && (
+        <p className="m-0 text-body-sm text-text-muted">{taxFormTh.revealUnavailable}</p>
+      )}
 
-      <fieldset>
-        <legend className="text-body-sm">{taxFormTh.vatLabel}</legend>
-        <label>
-          <input type="radio" name="vat" checked={vatRegistered} onChange={() => setVatRegistered(true)} />
-          {taxFormTh.vatYes}
-        </label>
-        <label>
-          <input type="radio" name="vat" checked={!vatRegistered} onChange={() => setVatRegistered(false)} />
-          {taxFormTh.vatNo}
-        </label>
-      </fieldset>
+      <RadioCardGroup
+        name="vat"
+        legend={taxFormTh.vatLabel}
+        value={vatRegistered ? "yes" : "no"}
+        onChange={(next) => setVatRegistered(next === "yes")}
+        options={[
+          { value: "yes", label: taxFormTh.vatYes },
+          { value: "no", label: taxFormTh.vatNo },
+        ]}
+      />
 
       {/* §6: a personal taxpayer has no branch code — hide it, do not disable. */}
       {entityType === "company" && (
@@ -172,34 +165,42 @@ export function TaxProfileDialog({
             errorText={fieldError.branchCode}
             autoComplete="off"
           />
-          <p className="text-body-sm">{taxFormTh.branchHelper}</p>
+          <p className="m-0 text-body-sm text-text-muted">{taxFormTh.branchHelper}</p>
         </>
       )}
 
-      <p className="text-body-sm">{taxFormTh.privacyNote}</p>
+      <p className="m-0 text-body-sm text-text-muted">{taxFormTh.privacyNote}</p>
 
       {confirming && (
-        <div role="alertdialog" aria-label={taxFormTh.overwriteConfirm.title}>
-          <p>{taxFormTh.overwriteConfirm.title}</p>
-          <p className="text-body-sm">{taxFormTh.overwriteConfirm.body}</p>
+        <div
+          role="alertdialog"
+          aria-label={taxFormTh.overwriteConfirm.title}
+          className="rounded-card border border-warning-border bg-warning-bg p-4 text-warning-text"
+        >
+          <p className="m-0 font-semibold">{taxFormTh.overwriteConfirm.title}</p>
+          <p className="m-0 mt-1 text-body-sm">{taxFormTh.overwriteConfirm.body}</p>
         </div>
       )}
 
-      <Button
-        onClick={submit}
-        disabled={save.isPending}
-        loading={save.isPending}
-        loadingLabel={taxFormTh.saveLoading}
-      >
-        {confirming ? taxFormTh.overwriteConfirm.confirm : taxFormTh.save}
-      </Button>
-      <Button
-        variant="secondary"
-        onClick={confirming ? () => setConfirming(false) : onClose}
-        disabled={save.isPending}
-      >
-        {taxFormTh.cancel}
-      </Button>
+      {/* The mockup's `.dialog .acts`: one row, right-aligned, `space.3`
+          between. They were two block-level buttons stacked full width. */}
+      <div className="flex flex-wrap justify-end gap-3 pt-2">
+        <Button
+          variant="secondary"
+          onClick={confirming ? () => setConfirming(false) : onClose}
+          disabled={save.isPending}
+        >
+          {taxFormTh.cancel}
+        </Button>
+        <Button
+          onClick={submit}
+          disabled={save.isPending}
+          loading={save.isPending}
+          loadingLabel={taxFormTh.saveLoading}
+        >
+          {confirming ? taxFormTh.overwriteConfirm.confirm : taxFormTh.save}
+        </Button>
+      </div>
     </div>
   );
 }

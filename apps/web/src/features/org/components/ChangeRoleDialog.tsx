@@ -28,6 +28,7 @@ import { roleLabel } from "../i18n";
 import { useToast } from "../../../components/providers/ToastProvider";
 import { Button } from "../../../components/ui/Button";
 import { ErrorBanner } from "../../../components/ui/ErrorBanner";
+import { RadioCardGroup } from "../../../components/ui/RadioCardGroup";
 
 /** Verbatim from ux-wireframe §10.1 — `ux` owns every string here. */
 export const CHANGE_ROLE_COPY = {
@@ -133,45 +134,42 @@ export function ChangeRoleDialog({
       <h3 className="text-heading-sm">{CHANGE_ROLE_COPY.title(member.email)}</h3>
       {banner && <ErrorBanner message={banner} />}
 
-      <fieldset>
-        {offered.map((role) => {
+      <RadioCardGroup
+        name="changeRoleId"
+        legend={CHANGE_ROLE_COPY.title(member.email)}
+        value={roleId}
+        onChange={setRoleId}
+        options={offered.map((role) => {
           const isOwnerOption = ownerRoleIds.has(role.id);
-          const disabled = change.isPending || (isOwnerOption && !iAmOwner);
-          return (
-            <label key={role.id} className="block">
-              <input
-                type="radio"
-                name="changeRoleId"
-                checked={roleId === role.id}
-                onChange={() => setRoleId(role.id)}
-                disabled={disabled}
-              />
-              {roleLabel(role.key, role.name)}
-              {role.id === member.roleId && (
-                <span className="text-body-sm"> {CHANGE_ROLE_COPY.currentTag}</span>
-              )}
-              {isOwnerOption && !iAmOwner && (
-                <span className="text-body-sm"> {CHANGE_ROLE_COPY.ownerOnlyHelper}</span>
-              )}
-            </label>
-          );
+          const closed = isOwnerOption && !iAmOwner;
+          return {
+            value: role.id,
+            label: roleLabel(role.key, role.name),
+            description:
+              role.id === member.roleId ? CHANGE_ROLE_COPY.currentTag : undefined,
+            disabled: change.isPending || closed,
+            disabledReason: closed ? CHANGE_ROLE_COPY.ownerOnlyHelper : undefined,
+          };
         })}
-      </fieldset>
+      />
 
       {/* Before the press, never as an error afterwards (§10.1). */}
       {demotingAnOwner && <p className="text-body-sm">{CHANGE_ROLE_COPY.lastOwnerWarning}</p>}
 
-      <Button
-        onClick={submit}
-        disabled={change.isPending || unchanged}
-        loading={change.isPending}
-        loadingLabel={CHANGE_ROLE_COPY.submitLoading}
-      >
-        {CHANGE_ROLE_COPY.submit}
-      </Button>
-      <Button variant="secondary" onClick={onClose} disabled={change.isPending}>
-        {CHANGE_ROLE_COPY.cancel}
-      </Button>
+      {/* `.dialog .acts` — one right-aligned row, `space.3` between. */}
+      <div className="flex flex-wrap justify-end gap-3 pt-2">
+        <Button
+          onClick={submit}
+          disabled={change.isPending || unchanged}
+          loading={change.isPending}
+          loadingLabel={CHANGE_ROLE_COPY.submitLoading}
+        >
+          {CHANGE_ROLE_COPY.submit}
+        </Button>
+        <Button variant="secondary" onClick={onClose} disabled={change.isPending}>
+          {CHANGE_ROLE_COPY.cancel}
+        </Button>
+      </div>
     </div>
   );
 }

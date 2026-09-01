@@ -50,17 +50,20 @@ export function RenameOrgDialog({
         disabled={rename.isPending}
         errorText={error ?? undefined}
       />
-      <Button
-        onClick={submit}
-        disabled={rename.isPending}
-        loading={rename.isPending}
-        loadingLabel={orgProfileTh.rename.save}
-      >
-        {orgProfileTh.rename.save}
-      </Button>
-      <Button variant="secondary" onClick={onClose} disabled={rename.isPending}>
-        {orgProfileTh.rename.cancel}
-      </Button>
+      {/* `.dialog .acts` — one right-aligned row, `space.3` between. */}
+      <div className="flex flex-wrap justify-end gap-3 pt-2">
+        <Button
+          onClick={submit}
+          disabled={rename.isPending}
+          loading={rename.isPending}
+          loadingLabel={orgProfileTh.rename.save}
+        >
+          {orgProfileTh.rename.save}
+        </Button>
+        <Button variant="secondary" onClick={onClose} disabled={rename.isPending}>
+          {orgProfileTh.rename.cancel}
+        </Button>
+      </div>
     </div>
   );
 }

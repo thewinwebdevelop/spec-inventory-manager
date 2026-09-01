@@ -81,18 +81,21 @@ export function LeaveOrgDialog({ onClose }: { onClose: () => void }) {
         <Link href={`/o/${org.orgId}/settings/members`}>{LEAVE_ORG_DIALOG_COPY.goToMembers}</Link>
       )}
 
-      <Button variant="secondary" onClick={onClose} disabled={leave.isPending}>
-        {LEAVE_ORG_DIALOG_COPY.cancel}
-      </Button>
-      <Button
-        variant="destructive"
-        onClick={submit}
-        disabled={leave.isPending}
-        loading={leave.isPending}
-        loadingLabel={membersTh.leaveOrg}
-      >
-        {LEAVE_ORG_DIALOG_COPY.confirm}
-      </Button>
+      {/* `.dialog .acts` — one right-aligned row, `space.3` between. */}
+      <div className="flex flex-wrap justify-end gap-3 pt-2">
+        <Button variant="secondary" onClick={onClose} disabled={leave.isPending}>
+          {LEAVE_ORG_DIALOG_COPY.cancel}
+        </Button>
+        <Button
+          variant="destructive"
+          onClick={submit}
+          disabled={leave.isPending}
+          loading={leave.isPending}
+          loadingLabel={membersTh.leaveOrg}
+        >
+          {LEAVE_ORG_DIALOG_COPY.confirm}
+        </Button>
+      </div>
     </div>
   );
 }

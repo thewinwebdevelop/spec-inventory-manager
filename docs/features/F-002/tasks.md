@@ -2743,3 +2743,27 @@ design-system §8.2 เขียนว่า AppShell nav ที่ **md (768–
 
 **⚠️ copy gap:** ux เป็นเจ้าของ copy ไทย แต่ทั้ง ux-wireframe §4 และ ui.md §2.2 **ไม่มีคำสำหรับปุ่มลิ้นชัก** เพราะไม่เคยมีลิ้นชัก
 ⇒ ใส่ `"เปิดเมนู"` / `"ปิดเมนู"` ไว้ก่อนพร้อมคอมเมนต์ว่าเป็น gap — มันเป็น **accessible name ของปุ่มที่มีแต่ไอคอน** จะ ship แบบไม่มีชื่อไม่ได้ ⇒ **@ux ยืนยันหรือเปลี่ยน**
+
+### user เจอต่ออีก 3 ข้อ — และข้อแรกอธิบาย "ไม่ตรงทั้งหมด" ได้ทั้งก้อน (2026-09-01)
+
+**1 · 🔴 `a { color: primary }` อยู่นอก cascade layer ⇒ ชนะทุก utility ของ Tailwind**
+
+`globals.css` เขียน base rule ไว้แบบ **unlayered** · Tailwind v4 วาง utility ทั้งหมดไว้ใน `@layer utilities`
+· **CSS ที่ไม่อยู่ layer ชนะ CSS ที่อยู่ layer เสมอ ไม่ว่า specificity จะเป็นยังไง**
+⇒ `className="text-text"` บนลิงก์ **แพ้เงียบ ๆ ทุกที่ทั้งแอป**
+
+เห็นชัดที่ sidebar: mockup `.navi` บอกว่าแถวที่**ไม่ active** = `color.text` (เข้ม) · เฉพาะแถว active = `color.primary`
+⇒ ของจริงออกมา**เขียวหมดทุกแถว** ⇒ "อยู่ตรงไหน" เหลือแค่พื้นหลังตัวเดียวที่บอก
+⇒ ย้ายเข้า `@layer base` · วัดหลังแก้: active = `rgb(12,97,85)` + 600 · inactive = `rgb(17,35,32)` ✅
+
+**2 · `RadioCardGroup` / `CopyField` / `EmptyState` ไม่เคยถูกสร้าง**
+
+ui.md §2.1 ระบุ component ใหม่ที่ต้อง contribute เข้า DS **7 ตัว** — ผมสร้างไป 5 ในรอบก่อน · **ที่ขาดคือตัวที่จอ "กรอกข้อมูลผู้เสียภาษี" ใช้พอดี**
+⇒ ฟอร์มภาษี/เชิญ/เปลี่ยนสิทธิ์ ใช้ `<fieldset><label><input type="radio">` เปล่า ๆ **ไม่มี layout เลย**: จุดเนทีฟ 13px · ป้ายติดกับจุด · ไม่มี tap target · ไม่มีที่ให้ประโยค "ทำไมถึงเลือกไม่ได้" ที่สเปกบังคับ
+⇒ สร้าง `RadioCardGroup` ตามสเปก (การ์ด gap `space.2` · ที่เลือก = ขอบ `primary` 2px · disabled = 60% + เหตุผล · **แตะได้ทั้งการ์ด ≥44px**) แล้วใช้ทั้ง 3 จอ · + `CopyField`
+
+**3 · ปุ่มใน dialog เรียงลงมาเป็นบล็อก** ⇒ ครอบด้วย `.dialog .acts` ของ mockup (แถวเดียว ชิดขวา gap `space.3`) ทั้ง 6 dialog
+
+**วัดหลังแก้:** dialog padding `24px` · radio card `min-height 44px` · action row `flex-end gap 12px` ✅
+
+web **341** เขียว

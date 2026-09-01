@@ -30,6 +30,7 @@ import { toApiFailure } from "../../../lib/api/error";
 import { inviteFormTh, roleLabel } from "../i18n";
 import { Button } from "../../../components/ui/Button";
 import { TextField } from "../../../components/ui/TextField";
+import { RadioCardGroup } from "../../../components/ui/RadioCardGroup";
 import { ErrorBanner } from "../../../components/ui/ErrorBanner";
 
 export function InviteDialog({
@@ -116,44 +117,43 @@ export function InviteDialog({
         errorText={fieldError.email}
       />
 
-      <fieldset>
-        <legend className="text-body-sm">{inviteFormTh.roleLabel}</legend>
-        {all.map((role) => {
+      {/* B-9: the Owner row is SHOWN and disabled with the reason, never
+          filtered away — `RadioCardGroup` has a slot for exactly that. */}
+      <RadioCardGroup
+        name="roleId"
+        legend={inviteFormTh.roleLabel}
+        value={roleId}
+        onChange={setRoleId}
+        options={all.map((role) => {
           const closed = !assignable.has(role.id);
-          return (
-            <label key={role.id} className="block">
-              <input
-                type="radio"
-                name="roleId"
-                checked={roleId === role.id}
-                onChange={() => setRoleId(role.id)}
-                disabled={create.isPending || closed}
-              />
-              {roleLabel(role.key, role.name)}
-              {closed && (
-                <span className="text-body-sm"> {inviteFormTh.ownerOnlyHelper}</span>
-              )}
-            </label>
-          );
+          return {
+            value: role.id,
+            label: roleLabel(role.key, role.name),
+            disabled: create.isPending || closed,
+            disabledReason: closed ? inviteFormTh.ownerOnlyHelper : undefined,
+          };
         })}
-        {fieldError.role && (
-          <p role="alert" className="text-body-sm text-danger-text">
-            {fieldError.role}
-          </p>
-        )}
-      </fieldset>
+      />
+      {fieldError.role && (
+        <p role="alert" className="m-0 text-body-sm text-danger-text">
+          {fieldError.role}
+        </p>
+      )}
 
-      <Button
-        onClick={submit}
-        disabled={create.isPending}
-        loading={create.isPending}
-        loadingLabel={inviteFormTh.submitLoading}
-      >
-        {inviteFormTh.submit}
-      </Button>
-      <Button variant="secondary" onClick={onClose} disabled={create.isPending}>
-        {inviteFormTh.cancel}
-      </Button>
+      {/* `.dialog .acts` — one right-aligned row, `space.3` between. */}
+      <div className="flex flex-wrap justify-end gap-3 pt-2">
+        <Button
+          onClick={submit}
+          disabled={create.isPending}
+          loading={create.isPending}
+          loadingLabel={inviteFormTh.submitLoading}
+        >
+          {inviteFormTh.submit}
+        </Button>
+        <Button variant="secondary" onClick={onClose} disabled={create.isPending}>
+          {inviteFormTh.cancel}
+        </Button>
+      </div>
     </div>
   );
 }

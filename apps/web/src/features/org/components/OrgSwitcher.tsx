@@ -77,7 +77,7 @@ export function OrgSwitcher() {
                   <Link
                     href={`/o/${item.organization.id}`}
                     aria-current={isCurrent ? "true" : undefined}
-                    className="flex min-h-[var(--size-list-row-min-h)] items-center gap-2.5 rounded-button px-2.5 py-2 no-underline hover:bg-surface-muted"
+                    className="flex min-h-[var(--size-list-row-min-h)] items-center gap-2.5 rounded-button px-2.5 py-2 text-text no-underline hover:bg-surface-muted"
                   >
                     {/* `.ck` — a 20px slot that is always there, so the names
                         line up whether or not a row is the current one. */}
@@ -108,7 +108,7 @@ export function OrgSwitcher() {
         <div className="mx-1 my-1.5 h-px bg-border-default" />
         <Link
           href={CREATE_ORG_PATH}
-          className="flex min-h-[var(--size-list-row-min-h)] items-center gap-2.5 rounded-button px-2.5 py-2 no-underline hover:bg-surface-muted"
+          className="flex min-h-[var(--size-list-row-min-h)] items-center gap-2.5 rounded-button px-2.5 py-2 text-text no-underline hover:bg-surface-muted"
         >
           <span aria-hidden="true" className="flex w-5 flex-none items-center text-primary">
             +

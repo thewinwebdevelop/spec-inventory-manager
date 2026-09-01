@@ -116,17 +116,20 @@ export function RemoveMemberDialog({
         ))}
       </ul>
 
-      <Button ref={cancelRef} variant="secondary" onClick={onClose} disabled={remove.isPending}>
-        {REMOVE_MEMBER_COPY.cancel}
-      </Button>
-      <Button
-        variant="destructive"
-        onClick={submit}
-        disabled={remove.isPending}
-        loading={remove.isPending}
-      >
-        {REMOVE_MEMBER_COPY.confirm}
-      </Button>
+      {/* `.dialog .acts` — one right-aligned row, `space.3` between. */}
+      <div className="flex flex-wrap justify-end gap-3 pt-2">
+        <Button ref={cancelRef} variant="secondary" onClick={onClose} disabled={remove.isPending}>
+          {REMOVE_MEMBER_COPY.cancel}
+        </Button>
+        <Button
+          variant="destructive"
+          onClick={submit}
+          disabled={remove.isPending}
+          loading={remove.isPending}
+        >
+          {REMOVE_MEMBER_COPY.confirm}
+        </Button>
+      </div>
     </div>
   );
 }
