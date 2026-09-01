@@ -7,6 +7,7 @@ import userEvent from "@testing-library/user-event";
 import { CopyLinkPanel } from "./CopyLinkPanel";
 import { ToastProvider } from "../../../components/providers/ToastProvider";
 import { openInviteLink, INVITE_LINK_CLOSED, type InviteLinkState } from "../invite-link";
+import { Button } from "../../../components/ui/Button";
 import { copyLinkTh } from "../i18n";
 
 const URL_WITH_TOKEN = "https://app.omnistock.co/invite?token=9f2b7c";
@@ -61,11 +62,32 @@ describe("CopyLinkPanel", () => {
     );
   });
 
+  /**
+   * Both of these ask "which VARIANT is this button", so they compare against
+   * what `<Button variant="primary">` actually renders instead of naming a
+   * class. They asserted `bg-primary` until 2026-09-01, when the primary
+   * variant correctly moved onto the `btn.*` tokens (§1.1c: on a dark ground
+   * a link must be light and a button must be deep, so `color.primary` and
+   * `btn.bg` cannot be the same token) — and a test that spells out today's
+   * class name fails on a rename that changed nothing it cares about.
+   */
+  const primaryButtonClass = () => {
+    const { container, unmount } = render(<Button>x</Button>);
+    const cls = (container.querySelector("button") as HTMLButtonElement).className;
+    unmount();
+    return cls;
+  };
+  const looksPrimary = (el: HTMLElement) => {
+    const primary = primaryButtonClass();
+    const bg = primary.split(" ").find((c) => c.startsWith("bg-")) as string;
+    return el.className.includes(bg);
+  };
+
   it("★ the close button is SECONDARY before copying", () => {
     renderPanel();
     const close = screen.getByRole("button", { name: copyLinkTh.close });
     // The primary variant paints with the brand colour; secondary does not.
-    expect(close.className).not.toContain("bg-primary");
+    expect(looksPrimary(close)).toBe(false);
   });
 
   it("★ …and PRIMARY once the link has been copied", () => {
@@ -77,7 +99,7 @@ describe("CopyLinkPanel", () => {
       copied: true,
     };
     renderPanel({ state: copied });
-    expect(screen.getByRole("button", { name: copyLinkTh.close }).className).toContain("bg-primary");
+    expect(looksPrimary(screen.getByRole("button", { name: copyLinkTh.close }))).toBe(true);
   });
 
   it("copying writes the URL and reports it upward", async () => {

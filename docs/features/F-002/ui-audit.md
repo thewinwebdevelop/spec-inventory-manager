@@ -24,6 +24,19 @@ ORG=<orgId> node apps/web/tool/ui-audit.mjs
 
 **ไม่มี horizontal scroll ทั้งสอง breakpoint** (§8.2 *"ทุกจอห้าม body scroll แนวนอน"*)
 
+### รอบเต็ม 2026-09-01 · **5 pass = 3 ความกว้าง × 2 ธีม** (รวม `/invite` ตาม §8.3)
+
+| pass | ผล |
+|---|---|
+| desktop 1280 · light | ✅ 8/8 จอ |
+| tablet 820 · light | ✅ 8/8 |
+| **phone 390 · light** | ✅ 8/8 |
+| **desktop 1280 · dark** | ✅ 8/8 |
+| **phone 390 · dark** | ✅ 8/8 |
+
+· ทุก pass: tap target ≥44px ครบ · ไม่มี horizontal scroll
+· **ขอบเขตมือถือตาม §8.3:** route ที่ต้องล็อกอิน **out of scope** (คนใช้มือถือ → ใช้แอป) ต้องแค่ "ไม่พังยับ" ⇒ วัดว่าไม่มี h-scroll · **`/invite` เท่านั้นที่ต้องดีจริง** เพราะเปิดจากลิงก์ในแชต — ผ่าน
+
 ### ที่แก้จากรอบนี้ (เจอเพราะวัด ไม่ใช่เพราะดู)
 
 | จุด | เดิม | แก้เป็น |
@@ -43,10 +56,20 @@ ORG=<orgId> node apps/web/tool/ui-audit.mjs
 > ⚠️ §1.6.2 ระบุ web = `@phosphor-icons/react` ซึ่งเป็น **dependency ใหม่ = ต้องให้ user อนุมัติ (Gate E)**
 > วันที่อนุมัติ ไฟล์ `Icon.tsx` เปลี่ยนเป็น re-export **แล้วไม่มีจออื่นต้องแก้เลย** — ซึ่งคือเหตุผลทั้งหมดที่ §1.6.2 บังคับให้โค้ดอ้าง role ไม่ใช่ชื่อ vendor
 
-## §8.4 ข้อ 3 · light + dark
+## §8.4 ข้อ 3 · light + dark — ✅ ผ่านแล้ว (2026-09-01)
 
-🔴 **ยังไม่ผ่าน** — `tokens.css` เขียนไว้เองว่า *"Dark theme (§1.1b) + button tokens (§1.1c) land at the web restart"*
-⇒ ธีมมืดยังไม่มีในเว็บเลย เป็น deferral ที่ประกาศไว้ ไม่ใช่ของที่หลุด ⇒ **เจ้าของคือ web restart / @ux**
+เดิม `tokens.css` เขียนไว้เองว่า *"Dark theme (§1.1b) + button tokens (§1.1c) land at the web restart"*
+⇒ **แต่ค่าทั้งชุดถูกสเปกไว้ครบตั้งแต่แรก** — ที่ขาดคือการเอาลงไฟล์ ⇒ ลง §1.1b ครบ + `btn.*` ของ §1.1c
+
+**§1.1c คือจุดที่พลาดง่ายที่สุด และเอกสารเตือนไว้เอง:** `color.primary` กับ `btn.bg` **เท่ากันในธีมสว่าง แต่ต้องต่างกันในธีมมืด**
+· บังคับให้เท่ากัน ⇒ ได้ลิงก์ contrast **1.91:1** (อ่านไม่ออก) หรือปุ่มมิ้นต์พาสเทลที่ D-026 ปฏิเสธไปแล้ว
+⇒ `Button` ย้ายมาใช้ `btn.bg/.fg/.hover` + `shadow.btn` (light = `none` · dark = เงายกตัว)
+
+**วัดจริง:** light `bg=rgb(243,247,245)` (#F3F7F5) · dark `bg=rgb(23,25,24)` (#171918) — ตรง §1.1b
+
+⚠️ **ขอบเขต: `prefers-color-scheme` เท่านั้น** — §1.1b บอกว่าเปิดผ่าน "`prefers-color-scheme` + toggle (`data-theme`)" แต่**เว็บยังไม่มี toggle** (เป็นงานของ web restart)
+· ร่างแรกของผมเขียน `:root[data-theme="dark"]` **ไว้ข้างใน media query** ⇒ จะทำงานเฉพาะตอน OS มืดอยู่แล้ว = selector ที่ดูเหมือนใช้ได้แต่ใช้ไม่ได้
+· **ตัดออก** ดีกว่าปล่อยไว้ให้เข้าใจผิด
 
 ## §8.4 ข้อ 4 · ทุก variant/ขนาด/สถานะ/สี มีชื่อใน design system
 

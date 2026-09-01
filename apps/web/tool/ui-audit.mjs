@@ -52,6 +52,7 @@ const SCREENS = [
   ['S6 สมาชิก', `/o/${ORG}/settings/members`, null],
   ['S7 เชิญสมาชิก', `/o/${ORG}/settings/members`, 'เชิญสมาชิก'],
   ['ความปลอดภัย', '/settings/security', null],
+  ['S11 /invite', '/invite?token=not-a-real-token', null],
 ];
 const AUDIT = () => {
   const bad = []; let n = 0;
@@ -67,18 +68,36 @@ const AUDIT = () => {
     if (r.height < 44) bad.push({ t: (el.textContent || el.getAttribute('aria-label') || el.tagName).trim().slice(0, 26), h: Math.round(r.height) });
   });
   const overflow = document.documentElement.scrollWidth > window.innerWidth + 1;
-  return { n, bad, overflow, sw: document.documentElement.scrollWidth, iw: window.innerWidth };
+  // §8.4 item 3 is about the theme actually CHANGING — a dark pass that paints
+  // the light palette passes every other check while proving nothing.
+  const cs = getComputedStyle(document.body);
+  return { n, bad, overflow, sw: document.documentElement.scrollWidth, iw: window.innerWidth,
+           bg: cs.backgroundColor, fg: cs.color };
 };
+/**
+ * §8.4 item 1 — desktop + tablet, "+ ~390px ถ้าเป็น route ตาม §8.3".
+ * §8.3 puts only PUBLIC routes opened from a chat link (`/invite`) in phone
+ * scope; a logged-in route on a phone is out of scope and only has to not
+ * break badly, which here means no horizontal scroll.
+ * §8.4 item 3 — BOTH themes. `colorScheme` drives `prefers-color-scheme`.
+ */
+const PASSES = [
+  [1280, 'light', 'desktop ≥lg'],
+  [820, 'light', 'tablet md'],
+  [390, 'light', 'phone 390 (§8.3: /invite in scope; rest must merely not break)'],
+  [1280, 'dark', 'desktop ≥lg · DARK'],
+  [390, 'dark', 'phone 390 · DARK'],
+];
 const browser = await chromium.launch();
-const ctx = await browser.newContext({ viewport: { width: 1280, height: 900 } });
-const page = await ctx.newPage();
-await page.goto(`${BASE}/login`);
-await page.fill('input[type=email]', 'owner@omnistock.test');
-await page.fill('input[type=password]', 'dogfood-pass-2026');
-await page.click('button[type=submit]');
-await page.waitForTimeout(2500);
-for (const [w, label] of [[1280, 'desktop ≥lg'], [820, 'tablet md']]) {
-  await page.setViewportSize({ width: w, height: 900 });
+for (const [w, scheme, label] of PASSES) {
+  await clearThrottle();
+  const ctx = await browser.newContext({ viewport: { width: w, height: 900 }, colorScheme: scheme });
+  const page = await ctx.newPage();
+  await page.goto(`${BASE}/login`);
+  await page.fill('input[type=email]', 'owner@omnistock.test');
+  await page.fill('input[type=password]', 'dogfood-pass-2026');
+  await page.click('button[type=submit]');
+  await page.waitForTimeout(2500);
   console.log(`\n===== ${label} (${w}px) =====`);
   for (const [name, path, opener] of SCREENS) {
     await clearThrottle();
@@ -99,9 +118,10 @@ for (const [w, label] of [[1280, 'desktop ≥lg'], [820, 'tablet md']]) {
     const flags = [];
     if (r.bad.length) flags.push(`❌ ${r.bad.length} tap<44`);
     if (r.overflow) flags.push(`❌ h-scroll ${r.sw}>${r.iw}`);
-    console.log(`  ${name.padEnd(18)} targets=${String(r.n).padStart(3)}  ${flags.length ? flags.join(' · ') : '✅'}`);
+    console.log(`  ${name.padEnd(18)} targets=${String(r.n).padStart(3)}  bg=${r.bg.replace(/\s/g, '')}  ${flags.length ? flags.join(' · ') : '✅'}`);
     r.bad.forEach((b) => console.log(`      ↳ ${b.h}px  "${b.t}"`));
   }
+  await ctx.close();
 }
 await browser.close();
 await redis.quit();

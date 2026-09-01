@@ -16,11 +16,15 @@ const buttonVariants = cva(
   {
     variants: {
       variant: {
+        /* §1.1c — the BUTTON tokens, not `color.primary`. In dark those two
+           must differ: a link has to be light on charcoal, a button deep and
+           solid. `shadow-btn` is `none` in light and the lift in dark. */
         primary:
-          "bg-primary text-primary-fg border-primary hover:bg-primary-hover disabled:hover:bg-primary",
+          "bg-btn-bg text-btn-fg border-btn-bg shadow-btn hover:bg-btn-hover disabled:hover:bg-btn-bg",
         secondary:
           "bg-surface text-text border-border-default hover:bg-surface-muted",
-        destructive: "bg-danger text-danger-fg border-danger",
+        destructive:
+          "bg-btn-danger-bg text-btn-fg border-btn-danger-bg shadow-btn hover:bg-btn-danger-hover",
         /**
          * D-031 / design-system.md §1.1c-3. The quietest action there is
          * ("ไว้ทีหลัง", "ออกจากร้านนี้", "ใช้บัญชีอื่น"): no fill, no border,
