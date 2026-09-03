@@ -252,6 +252,31 @@ export const BUILD_DEFECTS: readonly BuildDefect[] = Object.freeze([
       },
     ],
   },
+  // ── open: the decision is somebody else's ────────────────────────────────
+  {
+    finding: "B-14",
+    title:
+      "`/` is still F-000's placeholder, and the routing rule web.md gives for it depends on a concept nothing implements",
+    tier: "none",
+    foundBy:
+      "the user, opening the running app while already signed in and asking whether the auth guard was simply unbuilt",
+    owner: "product (+ backend-api if `defaultOrg` becomes a real field)",
+    noTest:
+      "No test, deliberately: writing one would mean choosing the destination, and that choice is exactly what is open. " +
+      "`docs/architecture/web.md` line 86 says `\"/\" → redirect ตาม SessionState (none→/login · authed→/o/[defaultOrg])`, " +
+      "and `apps/web/src/app/page.tsx` is still T-000-09's placeholder shell — so the domain root shows " +
+      "\"apps/web placeholder shell\" whether or not anybody is signed in. That is the same shape as B-6, where the " +
+      "post-login redirect also still pointed at the F-000 placeholder; B-6 was caught by E-01 because that test walks " +
+      "login→shop as one journey, and nothing walks `/`. " +
+      "The reason it cannot simply be fixed: `defaultOrg` EXISTS NOWHERE ELSE IN THE REPO. Every other match is " +
+      "`DEFAULT_ORG_PLAN_KEY`, which is the plan a NEW SHOP is provisioned on — an unrelated thing. F-002's model has no " +
+      "default shop: a person belongs to zero, one or many, which is the whole reason login lands on `/select-org` and " +
+      "lets the picker decide. So web.md is describing a routing rule built on a field the data model never had. " +
+      "Product decides whether `/` should mirror login and go to `/select-org`, or whether a default shop becomes real " +
+      "(a new field, a new contract surface, and a rule for what happens when it is revoked). " +
+      "NOT the same question as `/login` redirecting an already-authenticated visitor away — no spec asks for that, and " +
+      "`RouteGuard` (apps/web/CLAUDE.md) is capability gating owned by F-003/F-007.",
+  },
   {
     finding: "B-13",
     title:

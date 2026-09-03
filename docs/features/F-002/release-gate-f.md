@@ -108,4 +108,5 @@ Running Gradle task 'assembleDebug'...        254.9s
 | เขียน error code 5 ตัว (`EMAIL_TAKEN` ฯลฯ) ลง OpenAPI · `TOKEN_RESPONSE_ALLOWLIST` จะสร้างหรือแก้เอกสาร · `capabilities` ใน `201` ไหม | backend-api |
 | mobile ควร auto-hide เลขภาษีเมื่อทิ้งจอไว้ไหม | ux + product |
 | ตัวเลข `timeout-minutes` ใน CI · `APP_ROLE` ที่ `apps/api/CLAUDE.md` อธิบายไว้สองแบบ | devops |
-| B-7..B-13 ปิดครบแล้ว — ไม่มีข้อไหนค้าง | — |
+| **B-14 (ใหม่):** `/` ยังเป็น placeholder · web.md สั่งให้ redirect ไป `/o/[defaultOrg]` แต่ **`defaultOrg` ไม่มีในโมเดล** ⇒ ต้องเคาะปลายทางก่อน | **product** |
+| B-7..B-13 ปิดครบแล้ว | — |
