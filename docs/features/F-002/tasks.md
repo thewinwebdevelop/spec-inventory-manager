@@ -145,7 +145,7 @@ verdict: **ready-with-recommendations · ไม่มี Critical** · reviewer 
 | B | **Medium-2** lock/tx contention บน admin-reset ตอนนี้เป็น **500** · §15 แถว 6b บอก `55P03/40P01/P2028` → `409 + details.reason='busy'` "ห้าม 500" | map = **เพิ่ม status ใหม่บน endpoint ที่ ship แล้ว** (contract-evolution) · ไม่ map = ยอมรับ 500 อย่างเป็นทางการ |
 | C | **Medium** `auth.password.admin_reset_blocked_*` สร้าง oracle ซ้ำใน audit UI ของ F-005 — org admin ที่เห็น event จะรู้ทันทีว่า target เป็น Owner | ตัดสินตอนนี้ครั้งเดียว ดีกว่าไปเจอตอน F-005 สร้างจอ |
 
-**หนี้จาก qa (T-002-22):** `hashInvitationToken` ยังไม่มีใน `packages/**` (architecture §12.2 item 2ก) ⇒ 3 invite scenario ของ kit ยัง throw · `RESPONSE_HEADER_POLICY` / `TOKEN_RESPONSE_ALLOWLIST` / `TAX_ID_RESPONSE_ALLOWLIST` ยังไม่ถูก export ⇒ header assertion ยังตรวจไม่ได้ · เจ้าของ: T-002-17/19
+**หนี้จาก qa (T-002-22):** `hashInvitationToken` ยังไม่มีใน `packages/**` (architecture §12.2 item 2ก) ⇒ 3 invite scenario ของ kit ยัง throw · ~~`RESPONSE_HEADER_POLICY` / `TOKEN_RESPONSE_ALLOWLIST` / `TAX_ID_RESPONSE_ALLOWLIST` ยังไม่ถูก export~~ **ปิดครบ 2026-09-05** (สองตัวแรกที่ T-002-17 · `TOKEN_RESPONSE_ALLOWLIST` ที่ release-gate-f §5 — ดู `route-capabilities.ts` + `org-leak.kit.ts`) · เจ้าของ: T-002-17/19
 
 ---
 
@@ -2492,6 +2492,8 @@ web **333** · mobile **436** · api **680** · contracts **8** เขียว�
 ⇒ **นี่คือสัญญาที่ตั้งใจ ไม่ใช่ผลข้างเคียง** — การที่ mobile ไปอ่าน `GET /orgs/{id}` เพื่อรู้ว่าตัวเองเสนออะไรได้ คือการใช้ field ตามที่มันถูกออกแบบมา
 ⇒ **เหลือให้ @backend-api ตัดสินข้อเดียว:** จะใส่ `capabilities` เพิ่มใน `201` ของ `POST /organizations` ไหม เพื่อให้เจตนา ux Q5 (เข้าร้านใหม่โดยไม่ต้อง round trip) กลับมาเต็ม — additive ตาม contract-evolution
 
+> **ตอบแล้ว 2026-09-05 (backend-api): ไม่ใส่** — ไม่ใช่เพราะ breaking (มัน additive จริง) แต่เพราะ `capabilities` ต้องมี**ผู้ publish เจ้าเดียว** คือ `GET /orgs/{orgId}` → `myMembership.capabilities` · ถ้าใส่ที่ `201` ด้วย เส้นทางสร้างร้านจะเป็นทางเดียวที่สิทธิ์มาจากคนละที่กับทางเข้าอื่น และวันที่สองแหล่งไม่ตรงกัน (F-003 แก้ capabilities ของ role ได้) ฝั่ง `201` คือฝั่งที่ fail OPEN — รูปเดียวกับ B-13 เป๊ะ · เหตุผลเต็ม 4 ข้อ + เงื่อนไขที่จะกลับมาทบทวน: **api-spec §3.1ก** · และเขียน ⛔ ไว้ใน `CreatedOrganization.description` ของ contract แล้ว เพื่อให้ client รายถัดไปอ่านเจอก่อนจะเดาเอง
+
 ### audit ต่อ: **error code ที่ client แตกสาขาใช้ แต่ contract ไม่เคยประกาศ — 5 ตัว** (2026-08-22)
 
 skill `contract-evolution` เขียนไว้เองว่า *"Error codes are contract too — clients branch on them"*
@@ -2565,6 +2567,8 @@ skill `contract-evolution` เขียนไว้เองว่า *"Error co
 `docs/features/F-002/architecture.md` แถว 4 ระบุ **`TOKEN_RESPONSE_ALLOWLIST`** เป็น export ที่เทสต์ import ได้ — **ไม่มีอยู่จริงใน production**
 · และ `apps/api/test/assertions.kit.ts:36` **รู้ตัวและเขียนไว้ตรง ๆ**: *"Until `TOKEN_RESPONSE_ALLOWLIST` exists in production, a caller opts in per assertion with `allowFields`"*
 ⇒ โค้ดซื่อสัตย์กว่าเอกสาร ⇒ **@backend-api** ตัดสินว่าจะสร้าง export นั้น หรือจะแก้เอกสารให้ตรงกับที่ทำจริง
+
+> **ตอบแล้ว 2026-09-05 (backend-api): เลือกทางสร้างของจริง** — เพราะฝาแฝดของมันสองตัว (`RESPONSE_HEADER_POLICY`, `TAX_ID_RESPONSE_ALLOWLIST`) มีอยู่แล้วและเทสต์ import ไปใช้จริง · กฎ "มีแค่ 2 เส้นที่คืน token ได้" ถูกเขียนไว้ 3 ที่ (architecture §12.2 item 4 · test-plan I-04 · api-spec §592) ⇒ การแก้เอกสารให้ตรงกับโค้ดแปลว่า**ลบกฎที่ทุกฉบับเห็นตรงกัน**ทิ้ง ไม่ใช่แก้ความไม่ตรง · ตอนนี้อยู่ที่ `apps/api/src/common/authz/route-capabilities.ts` + บังคับใน `apps/api/test/org-leak.kit.ts` (finding `token-on-disallowed-route`, สแกน nested + array, meta-test 4 เคสรวม GREEN สองเส้นที่อนุญาต) · คอมเมนต์ที่ `assertions.kit.ts` แก้ให้ตรงแล้ว
 
 ### guard: `apps/api/test/cited-paths.test.ts`
 
@@ -2929,3 +2933,35 @@ runbook เขียนเองว่า *"พิสูจน์ไม่ได
 หน้า recents ขณะแอปเราอยู่ในนั้น → **exit 1** ⇒ ระบบไม่ยอมให้จับภาพเลย
 
 web **363** เขียว · api **684** · mobile **440** · analyze สะอาด · browser lane **29/29** กับสแตกจริง
+
+### ✅ B-18 ปิด: product เคาะทาง (ก) — ต่อ nav ชั่วคราว แล้ว M-07 เดินจนจบ (2026-09-05)
+
+**คำตัดสินของ user:** ทาง (ก) — F-002 ต่อ navigation ชั่วคราวให้ถึงจอมือถือเลย ไม่รอ F-006
+
+**สิ่งที่ทำ**
+
+| | |
+|---|---|
+| `lib/app/shop_shell.dart` *(ใหม่)* | เปลือก 3 แท็บ: ข้อมูลร้าน · สมาชิก (ซ่อนถ้าไม่มี `manage_members`) · ความปลอดภัย |
+| `lib/app/app.dart` | ปลายทางมาจาก **`SessionState`** ไม่ใช่ enum ส่วนตัวของ widget อีกต่อไป |
+| `org_profile_screen.dart` | AppBar title = `OrgSwitcherTitle` ตาม ux-wireframe §13 ("แตะชื่อร้านบน AppBar → bottom sheet") — widget ตัวนี้ก็ไม่เคยมีคนเรียกเหมือนกัน |
+| `security_screen.dart` | รับ `appBarActions` เพื่อให้เปลือกใส่ปุ่ม **"ออกจากระบบ"** ได้ (มือถือมีปัญหาเดียวกับ B-16 เป๊ะ) |
+
+**ครึ่งที่อันตรายกว่า และเกือบพลาด:** ไม่ใช่แค่ "จอไม่มีคนเรียก" แต่ **`signedIn()` ไม่เคยถูกเรียกจากที่ไหนเลยใน `lib/`**
+⇒ `SessionController` ค้างที่ `SessionUnknown` ตลอดอายุโปรเซส · และ `switchOrg` มี `if (current is! SessionAuthed) return;`
+⇒ **ถ้าต่อแค่จอโดยไม่ต่อ session แตะร้านแล้วจะไม่เกิดอะไรเลย** และ `learnCapabilities` ก็กลืน error ตามดีไซน์ ⇒ แถวตายเงียบ ๆ
+
+**สองข้อที่ตั้งใจ ห้ามใครกลับด้าน (มีเทสต์ยึด + red→green แล้ว):**
+1. **body สร้างเฉพาะแท็บที่เลือก — ไม่ใช้ `IndexedStack`** ⇒ ออกจากแท็บ = `_OrgProfileScreenState` ถูก dispose
+   ซึ่งคือ*ทั้งหมด*ของโมเดลความปลอดภัยการ์ดภาษี (B-12) · `IndexedStack` จะคืน Critical ที่ security review ปิดไปแล้ว
+   ⚠️ ดราฟต์แรกของเทสต์ข้อนี้ใช้ `findsNothing` แล้ว **ผ่านทั้งที่ใช้ `IndexedStack`** (ลูกใน stack ยังอยู่ในทรี แค่ไม่ถูกวาด)
+   — แก้เป็นอ่าน `state.mounted` ซึ่งเป็นสิ่งที่ชื่อเทสต์สัญญาไว้จริง
+2. **แท็บสมาชิก ซ่อน ไม่ใช่ disable** (ux-wireframe §4 ตอบ Q13 ไว้ตรง ๆ) · เช็คด้วย `can()` ไม่ใช่ `contains` — `full_access` เป็น wildcard (B-1)
+
+**capability-lint ของเราจับผมเอง:** `shop_shell.dart` พิมพ์ `'manage_members'` เองแทนที่จะ import `manageMembersCapability` ⇒ เทสต์แดง แก้แล้ว
+
+**ผลของการปิด B-18: M-07 · M-07ข · M-07ค เดินได้จนจบ** — รายละเอียดเต็มใน [manual-pass-results.md](manual-pass-results.md)
+· ที่เด่นสุด: `screencap` **แดง 0 ไบต์ตอนเลขโชว์ / เขียว 165 KB ตอนซ่อน** · การ์ดในหน้า recents **ว่างเปล่าทั้งใบ**
+· clipboard preview ขึ้น `••••••` ขณะที่ control ในแอปเดียวกันขึ้น `CONTROL-TEXT-1234` เต็ม ๆ
+
+mobile **451** เขียว · analyze สะอาด · boundary gate 85 ไฟล์ผ่าน

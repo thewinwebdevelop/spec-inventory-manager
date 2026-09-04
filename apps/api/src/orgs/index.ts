@@ -16,6 +16,8 @@ export {
   responseHeaderPolicyFor,
   TAX_ID_RESPONSE_ALLOWLIST,
   isTaxIdAllowedOnRoute,
+  TOKEN_RESPONSE_ALLOWLIST,
+  isTokenAllowedOnRoute,
   applyResponseHeaders,
   type ResponseHeaderPolicyRow,
   type ResponseSensitivity,

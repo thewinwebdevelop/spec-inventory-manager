@@ -18,7 +18,7 @@ get:
           schema:
             $ref: "../components/auth.yaml#/SessionsResponse"
     "401":
-      description: Missing/invalid access token
+      description: "`UNAUTHENTICATED` — missing/invalid access token"
       content:
         application/json:
           schema:

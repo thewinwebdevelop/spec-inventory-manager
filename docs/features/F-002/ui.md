@@ -175,6 +175,35 @@ signoff: approved   # user 2026-07-29 (หลัง mockup sign-off D-026/D-031)
 | `org.common.expires_at` | ลิงก์ใช้ได้ถึง {datetime} (อีกประมาณ {remaining}) |
 | `org.common.expired` | หมดอายุแล้ว |
 
+**ข้อความสำรอง (fallback) — เพิ่ม 2026-09-05 · เต็ม ๆ ที่ [ux-wireframe §1.5](ux-wireframe.md)**
+
+> ด่านสุดท้ายเมื่อจอไม่ได้ระบุคำของตัวเอง · จอที่รู้ว่าอะไรพัง **ต้องเขียนคำของตัวเองเสมอ**
+> · ของจริง: web `src/i18n/errors.ts` · mobile `failureMessage(t, failure)`
+
+| Key | ข้อความไทย |
+|---|---|
+| `org.common.error.network` | เชื่อมต่อไม่สำเร็จ ตรวจสอบอินเทอร์เน็ตแล้วลองใหม่อีกครั้ง |
+| `org.common.error.server` *(ใหม่)* | ระบบขัดข้องชั่วคราว กรุณาลองใหม่อีกครั้ง |
+| `org.common.error.validation` *(ใหม่)* | ข้อมูลที่กรอกไม่ถูกต้อง กรุณาตรวจสอบแล้วลองใหม่อีกครั้ง |
+| `org.common.error.not_found` *(ใหม่)* | ไม่พบข้อมูลนี้แล้ว — อาจถูกลบหรือเปลี่ยนไป กรุณาโหลดหน้านี้ใหม่ |
+| `org.common.error.conflict` *(ใหม่)* | ทำรายการไม่สำเร็จ เพราะข้อมูลเพิ่งเปลี่ยนไป กรุณาโหลดหน้านี้ใหม่แล้วลองอีกครั้ง |
+
+- ⛔ `org.common.error.server` **ห้ามใช้ประโยคเดียวกับ** `org.common.error.generic` (บั๊ก client) — ใช้คำเดียวกันแล้ว
+  ทั้งผู้ใช้และเราแยกไม่ออกว่าใครพัง
+- `org.common.error.network` **ต้องตรงกันทุกตัวอักษรระหว่าง web กับ mobile** (design-system §1 ห้าม drift) ⇒
+  `errorNetwork` ใน `app_th.arb` ต้องแก้ตามประโยคนี้
+
+**โครงหน้าจอของร้าน (`org.shell.*`) — เพิ่ม 2026-09-05 (drawer §8.2 + B-16)**
+
+| Key | ข้อความไทย |
+|---|---|
+| `org.shell.nav.menu_label` *(ใหม่)* | เมนูของร้าน *(`aria-label` ของ `<nav>`)* |
+| `org.shell.nav.show_menu` *(ใหม่)* | เปิดเมนู *(`aria-label` ของปุ่ม ☰ — กริยานำ เพราะ screen reader อ่านชื่อนี้เดี่ยว ๆ)* |
+| `org.shell.nav.hide_menu` *(ใหม่)* | ปิดเมนู *(`aria-label` ของปุ่ม ✕ ใน drawer)* |
+| `org.shell.nav.org_profile` / `.members` / `.security` | ข้อมูลร้าน · สมาชิก · ความปลอดภัย |
+| `org.shell.nav.logout` | ออกจากระบบ *(เฉพาะ session นี้)* |
+| `org.shell.nav.logout_failed` *(ใหม่)* | ออกจากระบบไม่สำเร็จ ลองใหม่อีกครั้ง *(toast · อยู่ที่เดิม **ห้ามพาไป `/login`**)* |
+
 ### 3.2 เลือกร้าน / สร้างร้าน (`org.select.*`, `org.create.*`)
 
 | Key | ข้อความไทย |
@@ -266,8 +295,10 @@ signoff: approved   # user 2026-07-29 (หลัง mockup sign-off D-026/D-031)
 | `org.members.list_section` | สมาชิกในร้าน ({n}) |
 | `org.members.status.active` | ใช้งานอยู่ |
 | `org.members.status.revoked` | ถูกถอดแล้ว |
+| `org.members.all_section` *(ใหม่)* | สมาชิกทั้งหมด ({n}) *(หัวข้อเปลี่ยนตาม filter — "สมาชิกในร้าน" ค้างอยู่บนลิสต์ที่มีคนถูกถอดปนอยู่ = โกหกเงียบ ๆ)* |
 | `org.members.show_revoked` | แสดงสมาชิกที่ถูกถอดออกแล้ว |
-| `org.members.hide_revoked` | ซ่อนสมาชิกที่ถูกถอดออกแล้ว |
+| `org.members.hide_revoked` | ซ่อนสมาชิกที่ถูกถอดออกแล้ว *(ปุ่มเดียวกัน สลับ 2 ทาง — **ห้ามหายไปหลังกด**)* |
+| `org.members.empty_revoked` *(ใหม่)* | ไม่มีสมาชิกที่ถูกถอดออก *(กดขยายแล้วไม่มีของ ต้องพูดว่าไม่มี — ห้ามให้จอเงียบ)* |
 | `org.members.menu.change_role` | เปลี่ยนสิทธิ์ |
 | `org.members.menu.remove` | ถอดออกจากร้าน |
 | `org.members.menu.leave` | ออกจากร้านนี้ |
@@ -300,7 +331,8 @@ signoff: approved   # user 2026-07-29 (หลัง mockup sign-off D-026/D-031)
 | `org.members.leave.confirm` | ออกจากร้านนี้ |
 | `org.members.leave.success_toast` | คุณออกจากร้าน "{orgName}" แล้ว |
 | `org.members.leave.last_owner` *(ใหม่ · D-029)* | คุณเป็นเจ้าของร้านคนเดียวของร้านนี้ — ตั้งคนอื่นเป็นเจ้าของร้านก่อน แล้วจึงออกจากร้านนี้ได้ |
-| `org.members.leave.last_owner.cta` *(ใหม่)* | ไปหน้าสมาชิก |
+| `org.members.leave.last_owner.cta` *(แก้ 2026-09-05)* | ~~ไปหน้าสมาชิก~~ → **ไปตั้งเจ้าของร้านคนใหม่** *(ใช้เมื่อเปิด dialog จากจอ "ข้อมูลร้าน" เท่านั้น)* |
+| `org.members.leave.last_owner.here` *(ใหม่)* | เลือกคนที่คุณไว้ใจในรายชื่อด้านล่าง แล้วกด "เปลี่ยนสิทธิ์" เป็นเจ้าของร้าน *(ใช้แทนลิงก์ เมื่อ dialog ถูกเปิด **จากจอสมาชิกเอง** — ลิงก์เดิมชี้มาที่หน้าที่ยืนอยู่ กดแล้วไม่เกิดอะไร)* |
 | `org.members.solo_owner.banner` *(ใหม่ · D-030)* | ตอนนี้ร้านนี้มีเจ้าของร้านคนเดียวคือคุณ — ถ้าวันหนึ่งคุณเข้าระบบไม่ได้ จะไม่มีใครในร้านช่วยตั้งรหัสผ่านใหม่ให้ได้ แนะนำให้ตั้งคนที่คุณไว้ใจอีก 1 คนเป็นเจ้าของร้านไว้ |
 | `org.members.solo_owner.cta` *(ใหม่)* | เชิญเจ้าของร้านอีกคน |
 | `org.members.solo_owner.dismiss` *(ใหม่)* | ไว้ทีหลัง |
@@ -348,8 +380,11 @@ signoff: approved   # user 2026-07-29 (หลัง mockup sign-off D-026/D-031)
 | `org.invite.status.expired` | หมดอายุแล้ว |
 | `org.invite.status.cancelled` | ยกเลิกแล้ว |
 | `org.invite.status.accepted` | รับแล้วเมื่อ {datetime} |
-| `org.invite.show_history` | ดูคำเชิญที่หมดอายุ/ยกเลิกแล้ว |
-| `org.invite.reinvite` | เชิญใหม่อีกครั้ง |
+| `org.invite.all_section` *(ใหม่)* | คำเชิญทั้งหมด ({n}) |
+| `org.invite.show_history` *(แก้ 2026-09-05)* | ~~ดูคำเชิญที่หมดอายุ/ยกเลิกแล้ว~~ → **ดูคำเชิญทั้งหมด รวมที่รับแล้ว** *(ป้ายเดิมบอกไม่ครบว่าเปิดอะไรออกมา — `?status=all` รวมคำเชิญที่ถูกรับแล้ว ซึ่งเป็นแถวเดียวที่ธง `accepted_flag` โผล่ ⇒ คำเตือนไปอยู่หลังปุ่มที่ไม่มีใครกด)* |
+| `org.invite.show_pending_only` *(ใหม่)* | ดูเฉพาะคำเชิญที่รอตอบรับ *(ทางกลับของ toggle)* |
+| `org.invite.empty_history` *(ใหม่)* | ร้านนี้ยังไม่เคยมีคำเชิญ *(filter นี้รวม pending ด้วย ⇒ ว่าง = ไม่เคยมีจริง ๆ)* |
+| `org.invite.reinvite` | เชิญใหม่อีกครั้ง *(แสดงเฉพาะแถว `expired`/`cancelled` — สเปกเต็ม [ux-wireframe §7](ux-wireframe.md))* |
 | `org.invite.accepted_flag` | บัญชีที่กดรับถูกสร้างขึ้นหลังจากออกลิงก์ ตรวจสอบว่าเป็นคนที่คุณตั้งใจเชิญ |
 
 ### 3.5 รับคำเชิญ (`org.accept.*`) + 403 (`org.denied.*`) + S13 (`org.reset.*`)

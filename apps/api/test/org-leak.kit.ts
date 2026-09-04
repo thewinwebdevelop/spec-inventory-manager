@@ -41,11 +41,12 @@ import type { INestApplication } from "@nestjs/common";
 import {
   assertNoForeignValues,
   assertNoSecretFields,
+  findFieldPaths,
   normalizeErrorBody,
   traceIdOf,
   type HttpResponseLike,
 } from "./assertions.kit";
-import { isTaxIdAllowedOnRoute } from "../src/common/authz";
+import { isTaxIdAllowedOnRoute, isTokenAllowedOnRoute } from "../src/common/authz";
 import { createSeedKit, type SeedKit, type SeedPrismaClient, type SeededOrg } from "./f002-seed.kit";
 
 /** The org an outcome was addressed to. */
@@ -88,6 +89,7 @@ export interface LeakFinding {
   readonly kind:
     | "leaked-to-outsider"
     | "tin-on-disallowed-route"
+    | "token-on-disallowed-route"
     | "wrong-denial-code"
     | "member-denied"
     | "existence-oracle"
@@ -223,6 +225,30 @@ export function auditSweep(
               `POST /orgs/{orgId}/tax-profile/reveal (api-spec §3.16).`,
           );
         }
+      }
+    }
+
+    // ★ A live invitation token may appear on exactly two routes (§3.11/§3.12,
+    // test-plan I-04). Everywhere else it is a leak of a BEARER CREDENTIAL:
+    // whoever reads it can join the shop, and only its HMAC is stored (D-018),
+    // so there is no revocation short of cancelling the invitation.
+    //
+    // Keyed on the field NAME, not on a value: unlike a TIN there is no seeded
+    // constant to search for, and a token that leaked is by definition one the
+    // test never saw. `token` exactly (case-insensitive) — `tokenIssuedAt` and
+    // `tokenHash` are different questions (`tokenHash` is already forbidden
+    // everywhere by FORBIDDEN_RESPONSE_FIELDS).
+    if (!isTokenAllowedOnRoute(routeMethod, routeRest.join(" "))) {
+      const hits = findFieldPaths(o.body, "token");
+      if (hits.length > 0) {
+        push(
+          "token-on-disallowed-route",
+          `${where}: the body carries \`token\` at ${hits.join(", ")}, and this route is not ` +
+            `in TOKEN_RESPONSE_ALLOWLIST. Exactly two routes may mint an invitation link — ` +
+            `POST /orgs/{orgId}/invitations and POST /orgs/{orgId}/invitations/{invitationId}/link ` +
+            `(api-spec §3.11/§3.12). A token on any other response is a bearer credential ` +
+            `handed to whoever asked.`,
+        );
       }
     }
   }

@@ -21,13 +21,13 @@ post:
     "204":
       description: Logged out (idempotent — always 204)
     "403":
-      description: CSRF check failed on the cookie path
+      description: "`CSRF_FAILED` — the CSRF check failed on the cookie path"
       content:
         application/json:
           schema:
             $ref: "../components/common.yaml#/ErrorResponse"
     "415":
-      description: Non-JSON Content-Type (L-2)
+      description: "`UNSUPPORTED_MEDIA_TYPE` — non-JSON Content-Type (L-2)"
       content:
         application/json:
           schema:

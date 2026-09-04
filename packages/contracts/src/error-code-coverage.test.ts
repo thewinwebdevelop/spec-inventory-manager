@@ -18,9 +18,21 @@
 // mandatory. Same shape every time: a fact one layer relies on and no layer
 // states.
 //
-// This guard does NOT fix the five. Documenting `/auth/*` responses is
-// backend-api's contract to write, and the F-001 surface is shipped. What it
-// does is stop the debt growing: the sixth undocumented code fails the build.
+// CLOSED 2026-09-05 by backend-api: all five are now named in the `description`
+// of the response that answers them (`openapi/paths/auth-signup.yaml`,
+// `auth-login.yaml`, `auth-change-password.yaml`,
+// `org-member-reset-password.yaml`). Nothing about the server changed — this was
+// documentation of responses that already shipped.
+//
+// The debt list below is therefore EMPTY, and that is the state to keep it in:
+// what remains is a plain guard, and the next undocumented code fails the build.
+//
+// ⚠️ This guard watches ONE direction — client branches ⊆ contract. The other
+// direction (a code the SERVER can answer that the contract never publishes) is
+// `apps/api/test/error-code-contract.test.ts`, which walks the production
+// `ERROR_CODES` registry against this same bundle. Both are needed: this one
+// alone stays green if the server renames a code AND the clients are updated
+// with it, while the contract still says the old value.
 import { readFileSync, existsSync, readdirSync, statSync } from "node:fs";
 import { dirname, join, relative, resolve, sep } from "node:path";
 import { describe, it, expect } from "vitest";
@@ -48,23 +60,18 @@ const CLIENT_TREES = ["apps/web/src", "apps/mobile/lib"];
 const BRANCH = /(?:code\s*===?\s*|case\s+)['"]([A-Z][A-Z0-9_]{3,})['"]/g;
 
 /**
- * ⚠️ DEBT, not permission. Each of these is a code both clients branch on and
- * the contract never published — F-001's signup and change-password surface.
+ * ⚠️ DEBT, not permission — and it is EMPTY, which is the whole point.
  *
- * Owner: **backend-api** (the contract is theirs; `/auth/*` is shipped, so the
- * fix is additive documentation of responses that already exist, not a change
- * in behaviour).
+ * An entry here is a code a client branches on that the contract never
+ * published. Adding a line is a reviewable admission (with an owner, in the
+ * comment beside it); removing one — by documenting the code — never needs a
+ * change to any other file.
  *
- * Adding a line here is a reviewable admission, which is the point. Removing
- * one — by documenting the code — should never need a change to any other file.
+ * The five F-001 signup/change-password codes that lived here until 2026-09-05
+ * are documented now; see the header. Do not re-add a code here to make a build
+ * pass: writing the response down takes about as long and is the actual fix.
  */
-const UNDOCUMENTED = Object.freeze([
-  "EMAIL_INVALID",
-  "EMAIL_TAKEN",
-  "PASSWORD_BREACHED",
-  "PASSWORD_TOO_LONG",
-  "PASSWORD_TOO_SHORT",
-]);
+const UNDOCUMENTED: readonly string[] = Object.freeze([]);
 
 export interface CodeUse {
   readonly code: string;
@@ -130,7 +137,7 @@ describe("★ every error code a client branches on is in the contract", () => {
     expect(undocumented(uses, bundle).map((u) => u.code)).toEqual(["MADE_UP_CODE"]);
   });
 
-  it("★ no NEW undocumented code — the five known ones are backend-api's to write up", () => {
+  it("★ every code a client branches on is published by the contract", () => {
     const missing = undocumented(findBranchedCodes(files), bundle).map((u) => u.code);
     expect(
       missing.filter((code) => !UNDOCUMENTED.includes(code)),
@@ -142,7 +149,8 @@ describe("★ every error code a client branches on is in the contract", () => {
 
   it("the debt list is honest — every entry is still really undocumented", () => {
     // The opposite failure: a list that outlives the problem, so the next
-    // person reads five open items where there are none.
+    // person reads open items where there are none. (It is empty today; this
+    // test is what keeps it empty once somebody documents a code they parked.)
     const missing = new Set(undocumented(findBranchedCodes(files), bundle).map((u) => u.code));
     const fixed = UNDOCUMENTED.filter((code) => !missing.has(code));
     expect(fixed, "these are documented now — delete them from UNDOCUMENTED").toEqual([]);

@@ -17,6 +17,7 @@ import {
   assertNoSecretFields,
   assertResponseHeaders,
   findForeignValues,
+  findFieldPaths,
   findSecretFields,
   normalizeErrorBody,
   traceIdOf,
@@ -91,6 +92,29 @@ describe("findSecretFields / assertNoSecretFields", () => {
       "refreshToken",
       "secret",
     ]);
+  });
+});
+
+describe("findFieldPaths — the route-aware callers' primitive", () => {
+  // Used by `org-leak.kit.ts` for the one rule that depends on WHICH endpoint
+  // answered: `token` is legal on exactly two routes (TOKEN_RESPONSE_ALLOWLIST)
+  // and a leak on every other. Sharing the walker with `findSecretFields` is
+  // deliberate — two scanners would eventually disagree about "contains".
+  it("finds a key at any depth, including through arrays", () => {
+    const body = { items: [{ id: "a" }, { link: { token: "live-secret" } }] };
+    expect(findFieldPaths(body, "token")).toEqual(["items[1].link.token"]);
+  });
+
+  it("matches the key name case-insensitively but never as a substring", () => {
+    expect(findFieldPaths({ Token: "x" }, "token")).toEqual(["Token"]);
+    expect(findFieldPaths({ tokenIssuedAt: "x", tokenHash: "y" }, "token")).toEqual([]);
+  });
+
+  it("with no field names it finds nothing — an empty ask is not a wildcard", () => {
+    // The failure mode this forbids: `findFieldPaths(body, ...allowlist)` with
+    // an empty allowlist reporting EVERY node, which reads as "everything leaks"
+    // and gets the check deleted.
+    expect(findFieldPaths({ token: "x" })).toEqual([]);
   });
 });
 

@@ -26,6 +26,8 @@ export {
   ANY_ACTIVE_MEMBER_ROUTES,
   TAX_ID_RESPONSE_ALLOWLIST,
   isTaxIdAllowedOnRoute,
+  TOKEN_RESPONSE_ALLOWLIST,
+  isTokenAllowedOnRoute,
   CAPABILITY_MANAGE_ORG_SETTINGS,
   capabilityLookupMethod,
   capabilityForRoute,

@@ -131,8 +131,45 @@
    * typed in by hand and `ConfirmDialog` had `400px`, i.e. every confirm
    * dialog rendered 80px narrower than the design (audit, 2026-09-01). */
   --size-dialog-max-w: 480px;
+  /* The width a dialog takes when the viewport is NARROWER than the max —
+   * 5% of the page stays visible down each side, which is what says "this is
+   * a layer you can dismiss" rather than "the page changed". */
+  --size-dialog-inline-w: 90%;
   --size-sidebar-w: 240px;
+
+  /* ⚠️ The DRAWER (<lg, §8.2) is NOT the permanent sidebar and deliberately
+   * not the same token: it floats over the page, so it is wider, and it is
+   * capped at 85% because the scrim behind it must stay visible — a drawer
+   * that fills the screen reads as a navigation, not as something you close. */
+  --size-drawer-w: 280px;
+  --size-drawer-max-w: 85%;
+
   --size-list-row-min-h: 56px;
+  /* `DataRow` — the fixed label column that makes four facts line up as four
+   * facts instead of eight loose lines. */
+  --size-data-row-label-w: 150px;
+  --size-data-row-value-min-w: 180px;
+
+  --size-content-max-w: 1280px;
+  /* Single-column pages that are mostly READ (settings, security). Wider than
+   * this and the eye loses the start of the next line. ⛔ Not the dialog
+   * width: 480px is for something floating on a scrim, a different job. */
+  --size-content-narrow-max-w: 640px;
+  --size-toast-max-w: 360px;
+  --size-dropdown-w: 290px;
+
+  /* A row that is present, legible, and plainly not actionable any more
+   * (a revoked member, a dead invitation). Checked against AA in BOTH themes
+   * before it was given a name — ⛔ do not lower it to "look more faded". */
+  --opacity-dim: 0.62;
+
+  /* Three layers, and no numbers outside this ladder (§1.3). Hand-picked
+   * z-indexes per component is the standard way a modal ends up underneath a
+   * header with nobody noticing. Toast sits ABOVE the overlay on purpose: it
+   * reports the result of what the user just pressed inside a dialog. */
+  --z-dropdown: 40;
+  --z-overlay: 50;
+  --z-toast: 100;
 
   /* `size.icon.*` (§1.2). `md` is the default: banner, button, list row. */
   --size-icon-sm: 16px;

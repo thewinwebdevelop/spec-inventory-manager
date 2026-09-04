@@ -164,6 +164,52 @@ export function isTaxIdAllowedOnRoute(method: string, path: string): boolean {
 }
 
 /**
+ * ★ The endpoints allowed to put a LIVE INVITATION TOKEN on the wire
+ * (test-plan I-04 · architecture §12.2 item 4 · api-spec §3.11/§3.12).
+ *
+ * ── WHY THIS EXISTS AT ALL, AND WHY IT DID NOT UNTIL NOW ──────────────────
+ * Three exports were promised to @qa so the suite would never re-declare a
+ * production table: `RESPONSE_HEADER_POLICY`, `TAX_ID_RESPONSE_ALLOWLIST` and
+ * this one. Two shipped. This one was cited by architecture §12.2 item 4 and by
+ * test-plan I-04 as though it existed, while `test/assertions.kit.ts` said in a
+ * comment that it did not and worked around it with a per-call `allowFields`
+ * opt-in. So the rule "exactly two endpoints may return a token" was written
+ * down in three documents and enforced by nobody: any endpoint could start
+ * emitting `token` and the only thing that would have changed is that one more
+ * test would have passed `allowFields: ["token"]` without a reviewer noticing.
+ *
+ * ── EXACTLY TWO ROWS, AND THAT IS THE ASSERTION ───────────────────────────
+ * @qa's I-04 pins the length at 2, so a third endpoint learning to return a
+ * token has to make a test red and be argued for. A live invitation token is a
+ * bearer credential: whoever holds it can join a shop (D-012/D-018 — only its
+ * HMAC is stored, so there is no "resend the same link", which is precisely why
+ * these two responses are the ONLY chance anyone gets to see it).
+ *
+ * A LITERAL LIST, NEVER A REGEX (@qa's condition, §12.2 item 7): a prefix rule
+ * like `/invitations/*` would silently adopt every route added under it — and
+ * `GET /orgs/{orgId}/invitations` and `POST /invitations/preview` are exactly
+ * the routes that must NOT be adopted.
+ *
+ * ⚠️ This says nothing about WHO may call these two (`ROUTE_CAPABILITIES`
+ * above: `manage_members`) nor about how the response is cached
+ * (`RESPONSE_HEADER_POLICY`: `no-store` + `no-referrer`). It answers one
+ * question: "if a `token` appears in a response body anywhere else, is that a
+ * bug?" Yes.
+ */
+export const TOKEN_RESPONSE_ALLOWLIST: readonly AnyActiveMemberRoute[] = Object.freeze([
+  // §3.11 — the invitation is created and the link is shown this once.
+  row({ method: "POST", path: "/orgs/{orgId}/invitations" }),
+  // §3.12 — reissue: a NEW token replacing the old one (the old hash is gone).
+  row({ method: "POST", path: "/orgs/{orgId}/invitations/{invitationId}/link" }),
+]);
+
+/** May `method path` legitimately return an invitation token? (Exactly two may.) */
+export function isTokenAllowedOnRoute(method: string, path: string): boolean {
+  const key = `${capabilityLookupMethod(method)} ${toTemplatePath(path)}`;
+  return TOKEN_RESPONSE_ALLOWLIST.some((r) => routeKey(r) === key);
+}
+
+/**
  * The verb a capability lookup should use (T-002-13).
  *
  * `HEAD` is answered by the `@Get()` handler (express), so it requires EXACTLY

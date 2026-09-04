@@ -371,19 +371,41 @@ export const BUILD_DEFECTS: readonly BuildDefect[] = Object.freeze([
       },
     ],
   },
-  // ── open: the decision is somebody else's ────────────────────────────────
   {
     finding: "B-18",
     title:
-      "every F-002 screen on mobile is orphaned — the app has no way to reach a shop, the members list or the tax card",
-    tier: "none",
+      "every F-002 screen on mobile was orphaned — the app could not reach a shop, the members list or the tax card",
+    tier: "smoke",
     foundBy:
       "the §12.2 manual pass, immediately after B-17 was fixed: login succeeded on a real emulator and landed on F-001's SecurityScreen with nowhere to go",
-    owner: "product (+ F-006, which `apps/mobile/lib/app/app.dart` already names as the owner of real navigation)",
-    noTest:
-      "No test, deliberately: writing one would mean BUILDING the navigation, and whether F-002 ships a temporary route or waits for F-006 is a scope decision — the same shape as B-14, which was also left open until product answered. " +
-      "The finding: `CreateOrgScreen`, `MembersScreen`, `OrgPickerScreen` and `OrgProfileScreen` have ZERO references anywhere in `apps/mobile/lib/` outside their own definition files. `app/app.dart` has three destinations — bootstrap, authFlow, and `authenticated → SecurityScreen` — and that file says in its own comment that \"F-006 owns real navigation/IA (app/router.dart)\". " +
-      "This is B-4 one layer up: B-4 was F-002's PROVIDERS never being wired into the app, and closing it wired the graph but not a single screen. It is also B-14's shape on the other platform — `/` sat on a placeholder because no test opened it; these screens work and nobody can open them. E-10 constructs `MembersScreen` inside its own `MaterialApp`, so it proves the screen works WHEN SOMEBODY SHOWS IT and cannot prove anyone can get there. " +
-      "What it blocks: M-07, M-07ข and M-07ค of test-plan §12.2 cannot be performed AT ALL — not here, not by a person with a real phone. `CHANGELOG.md` currently claims F-002 ships those mobile screens; they exist, they work, and the app cannot open them. Product decides: a temporary route now, or accept that F-002's mobile half is not usable until F-006 and correct the changelog and the AC to match.",
+    // Product chose to unblock M-07 now rather than wait for F-006 (user,
+    // 2026-09-05), so `app/shop_shell.dart` is a deliberately minimal shell
+    // that F-006 deletes rather than extends.
+    //
+    // The finding had two halves and the second was the dangerous one.
+    // `CreateOrgScreen`, `MembersScreen`, `OrgPickerScreen` and
+    // `OrgProfileScreen` had ZERO references in `lib/` outside their own
+    // files — but ALSO `signedIn()` had no caller anywhere, so the session
+    // controller sat on `SessionUnknown` for the life of the process. Since
+    // `switchOrg` returns early unless the state is already `SessionAuthed`,
+    // tapping a shop would have written nothing and looked like a dead row,
+    // and `learnCapabilities` swallows its errors by design. Wiring the
+    // screens without wiring the session would have shipped that.
+    //
+    // This is B-4 one layer up (that one was the PROVIDERS being unwired) and
+    // B-14's shape on the other platform (`/` was a placeholder because no
+    // test opened it). E-10 builds `MembersScreen` inside its own
+    // `MaterialApp`, which proves the screen works WHEN SOMEBODY SHOWS IT and
+    // can never prove anyone can get there.
+    pins: [
+      {
+        file: "apps/mobile/test/app/app_destination_test.dart",
+        must: ["`signedIn()` had no caller at all", "switchOrg` was a no-op before"],
+      },
+      {
+        file: "apps/mobile/test/app/shop_shell_test.dart",
+        must: ["the revealed tax id cannot outlive it", "not every device the person owns"],
+      },
+    ],
   },
 ]);

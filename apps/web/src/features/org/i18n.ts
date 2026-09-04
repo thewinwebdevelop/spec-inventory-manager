@@ -63,26 +63,37 @@ export const orgTh = {
     },
     nav: {
       /**
-       * ⚠️ COPY GAP — `ux` owns Thai copy and neither ux-wireframe §4 nor ui.md
-       * §2.2 gives wording for the §8.2 drawer toggle, because the drawer had
-       * never been built. These two are the plainest labels that say what the
-       * control does; they are accessible NAMES on an icon-only button, so
-       * shipping it unlabelled was not an option. Raise with ux to confirm or
-       * replace.
+       * ✓ux (2026-09-05) — CONFIRMED as written. These are the accessible
+       * names of two icon-only buttons (`icon.menu` / `icon.close`), and
+       * design-system §1.6.1 requires a Thai `aria-label` on exactly those.
+       * Kept verb-first and two words because a screen reader reads the name
+       * on its own, out of context: "เปิดเมนู" says what pressing does, where
+       * a noun ("เมนู") only says what the thing is.
+       * Now recorded in ux-wireframe §4 so the next drawer does not re-ask.
        */
       showMenu: "เปิดเมนู",
       hideMenu: "ปิดเมนู",
+      /**
+       * ✓ux (2026-09-05) — the `aria-label` of the nav landmark itself, in
+       * both the drawer and the permanent sidebar. It was a bare Thai string
+       * inside `AppShell.tsx`; copy belongs here (design-system §3: "เจ้าของ
+       * copy = ux ... frontend แค่ประกอบ").
+       * @frontend swap the two hardcoded `aria-label="เมนูของร้าน"` for this.
+       */
+      menuLabel: "เมนูของร้าน",
       orgProfile: "ข้อมูลร้าน",
       members: "สมาชิก",
       security: "ความปลอดภัย",
       logout: "ออกจากระบบ",
       /**
-       * ⚠️ COPY GAP (B-16, 2026-09-04) — ux-wireframe §S2 gives the row's
-       * label and no failure copy, because the row had never been built.
-       * Worded from `ux`'s own `auth.sessions.error.logoutAllFailed`
-       * ("ออกจากระบบทุกอุปกรณ์ไม่สำเร็จ ลองใหม่อีกครั้ง") narrowed to one
-       * device, rather than falling back to a generic "เกิดข้อผิดพลาด" for an
-       * action the person deliberately took. Raise with ux to confirm.
+       * ✓ux (2026-09-05, B-16) — CONFIRMED as written. It is the right shape
+       * for this failure: name the action that did not happen, then the one
+       * move that helps. Deriving it from `auth.sessions.error.logoutAllFailed`
+       * was also the right instinct — the two sentences now differ only in
+       * scope, which is exactly how much the two actions differ.
+       * ⛔ Do NOT fall back to `errorsTh.server` here: this is a deliberate
+       * press, and the person needs to know their session is still open.
+       * Recorded in ux-wireframe §4.
        */
       logoutFailed: "ออกจากระบบไม่สำเร็จ ลองใหม่อีกครั้ง",
     },
@@ -227,39 +238,109 @@ export const membersTh = {
   invite: "เชิญสมาชิก",
   pendingSection: (n: number) => `คำเชิญที่รอตอบรับ (${n})`,
   membersSection: (n: number) => `สมาชิกในร้าน (${n})`,
-  showHistoricInvitations: "ดูคำเชิญที่หมดอายุ/ยกเลิกแล้ว",
+  /**
+   * ★ ux CHANGED (2026-09-05, manual pass M-04) — was
+   * "ดูคำเชิญที่หมดอายุ/ยกเลิกแล้ว", which named two of the four things behind
+   * it. The button opens `?status=all`, and `all` includes invitations that
+   * were ACCEPTED — the only rows that can carry
+   * `acceptedAfterInviteFlag`. So the one security warning in F-002 sat behind
+   * a button whose label gave the inviter no reason to press it: nobody who
+   * just added a colleague goes looking under "expired/cancelled".
+   * The label now promises what is actually in there, and matches the heading
+   * it leads to (`allInvitationsSection` = "คำเชิญทั้งหมด"): recognition, not
+   * recall. ux-wireframe §7.
+   */
+  showHistoricInvitations: "ดูคำเชิญทั้งหมด รวมที่รับแล้ว",
   showRevokedMembers: "แสดงสมาชิกที่ถูกถอดออกแล้ว",
   /**
-   * ⚠️ COPY GAP (2026-09-01) — both filters were ONE-WAY. The button unmounted
-   * itself on click and there was no way back to the default view, so a person
-   * who pressed either one was stuck with it for the rest of the session.
-   * ux-wireframe §7 gives the "show more" wording and no "show less", because
-   * the toggle was never built as a toggle. Raise with ux to confirm.
+   * ✓ux (2026-09-05) — the way BACK from each widened filter. Both filters
+   * used to be one-way: the button unmounted itself on click, so a person who
+   * pressed either one was stuck with it for the rest of the session.
+   *
+   * `showActiveMembersOnly` now carries ux-wireframe §7's own reverse label
+   * ("ซ่อนสมาชิกที่ถูกถอดออกแล้ว"), which was in the copy table the whole
+   * time — a mirror pair (แสดง ⇄ ซ่อน) tells the reader exactly which rows
+   * are about to disappear, where "ดูเฉพาะสมาชิกที่ใช้งานอยู่" made them
+   * work it out. The invitation pair is not a mirror on purpose: its forward
+   * label WIDENS to everything, so the way back names the narrowing.
+   *
+   * @frontend the key name still says `showActiveMembersOnly`; rename it to
+   * `hideRevokedMembers` next time `MembersScreen.tsx` is open (left alone
+   * here only to avoid touching a component mid-flight).
    */
   showPendingInvitationsOnly: "ดูเฉพาะคำเชิญที่รอตอบรับ",
-  showActiveMembersOnly: "ดูเฉพาะสมาชิกที่ใช้งานอยู่",
+  showActiveMembersOnly: "ซ่อนสมาชิกที่ถูกถอดออกแล้ว",
   /** Headings follow the FILTER — the old one said "รอตอบรับ (n)" over a list
    *  that included cancelled and expired rows once the filter was widened. */
   allInvitationsSection: (n: number) => `คำเชิญทั้งหมด (${n})`,
   allMembersSection: (n: number) => `สมาชิกทั้งหมด (${n})`,
-  /** ⚠️ COPY GAP — with the widened filter and still nothing to show, the
-   *  screen previously rendered NOTHING at all: the section is hidden when the
-   *  list is empty, and the button had removed itself. */
-  emptyHistoricInvitations: "ไม่มีคำเชิญที่หมดอายุหรือถูกยกเลิก",
+  /**
+   * ✓ux (2026-09-05) — the answer to a deliberate press that reveals nothing.
+   * Without it the screen rendered NOTHING at all: the section is hidden when
+   * the list is empty, and the button had removed itself.
+   *
+   * ★ CHANGED: `emptyHistoricInvitations` is shown when the filter is `all`
+   * and the list is still empty — which means this shop has never had ANY
+   * invitation, not merely none expired. The old sentence described a
+   * narrower filter than the one that had just run, so it read as though
+   * something else might be hiding elsewhere.
+   */
+  emptyHistoricInvitations: "ร้านนี้ยังไม่เคยมีคำเชิญ",
   emptyRevokedMembers: "ไม่มีสมาชิกที่ถูกถอดออก",
   you: "(คุณ)",
   statusActive: "ใช้งานอยู่",
   statusRevoked: "ถูกถอดแล้ว",
   reissue: "ออกลิงก์ใหม่",
   cancelInvitation: "ยกเลิกคำเชิญ",
+  /**
+   * ✓ux (2026-09-05) — CONFIRMED, still wanted, still unbuilt (manual pass
+   * M-04). ux-wireframe §7 now carries the full spec: the button belongs on
+   * invitation rows whose `status` is `expired` or `cancelled` ONLY — never
+   * on `accepted`, where "invite them again" would be a lie about somebody
+   * who is already in the shop — and it opens S7 pre-filled with that row's
+   * email + role. No new server field is needed; the two ways it can be stale
+   * (they joined meanwhile / a new invitation is already pending) already have
+   * copy in `inviteFormTh.error.alreadyMember` / `.pending`.
+   */
   inviteAgain: "เชิญใหม่อีกครั้ง",
   changeRole: "เปลี่ยนสิทธิ์",
   removeFromOrg: "ถอดออกจากร้าน",
   leaveOrg: "ออกจากร้านนี้",
+  /**
+   * ★ ux CHANGED (2026-09-05, manual pass M-06 nit) — the `409 LAST_OWNER`
+   * refusal inside "ออกจากร้านนี้".
+   *
+   * `LEAVE_ORG_DIALOG_COPY.goToMembers` = "ไปหน้าสมาชิก" is correct only when
+   * the dialog was opened from S4 ("ข้อมูลร้าน"). Opened from the members
+   * screen — where the same dialog also lives (§10.3 entry ข) — it links to
+   * the page the reader is standing on, so pressing it does nothing. A CTA
+   * that visibly does nothing is worse than no CTA: it reads as "the app is
+   * broken" at the exact moment the person was already told "no".
+   *
+   * The fix names the OUTCOME instead of the destination, and the branch that
+   * cannot navigate says which control to reach for instead.
+   *
+   * @frontend replace `goToMembers` with these two (ux-wireframe §10.3):
+   *   - not on the members screen → `Link` labelled `leaveLastOwnerCta`
+   *   - already on it            → plain sentence `leaveLastOwnerHere`, no link
+   */
+  leaveLastOwnerCta: "ไปตั้งเจ้าของร้านคนใหม่",
+  leaveLastOwnerHere:
+    "เลือกคนที่คุณไว้ใจในรายชื่อด้านล่าง แล้วกด \"เปลี่ยนสิทธิ์\" เป็นเจ้าของร้าน",
   linkValidUntil: (when: string) => `ลิงก์ใช้ได้ถึง ${when}`,
   /** §7 — C-1 explained rather than a disabled item. */
   ownerOnlyNotice: "เฉพาะเจ้าของร้านเท่านั้นที่แก้สิทธิ์ของเจ้าของร้านคนอื่นได้",
-  /** §7 (D-028/I-7) — a soft flag, never an accusation. */
+  /**
+   * §7 (D-028/I-7) — a soft flag, never an accusation.
+   *
+   * ⚠️ ux 2026-09-05: the WORDING passed the manual pass (M-04); its PLACEMENT
+   * did not. It can only appear on an accepted invitation row, i.e. only after
+   * the reader widens the filter, and no server field lets the members list
+   * carry the same flag on the person's own row. Renaming the filter button
+   * (above) is the part that can ship today; putting the flag where the
+   * inviter already looks needs data F-002's contract does not have — escalated
+   * to @backend-api / @product, recorded in ux-wireframe §7.
+   */
   acceptedAfterInviteFlag:
     "บัญชีที่กดรับถูกสร้างขึ้นหลังจากออกลิงก์ ตรวจสอบว่าเป็นคนที่คุณตั้งใจเชิญ",
   empty: {

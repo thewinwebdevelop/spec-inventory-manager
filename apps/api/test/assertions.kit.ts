@@ -17,9 +17,13 @@
 //     compared, and both bodies must still HAVE that key with DIFFERENT values.
 //     A normalizer that can drop "whatever differs" proves nothing.
 //  3. Nothing here re-declares a production table. `assertResponseHeaders` takes
-//     the policy as an argument precisely so that when @backend-api ships
-//     `RESPONSE_HEADER_POLICY` (architecture §12.2 item 4) the call sites pass
-//     it in and no copy of it ever lives in the suite.
+//     the policy as an argument precisely so that the call sites pass
+//     `RESPONSE_HEADER_POLICY` (architecture §12.2 item 4) in, and no copy of it
+//     ever lives in the suite.
+//  4. Every function here is ROUTE-BLIND — it sees a body, never a URL. The two
+//     rules that depend on WHICH endpoint answered (`TOKEN_RESPONSE_ALLOWLIST`,
+//     `TAX_ID_RESPONSE_ALLOWLIST`) are therefore enforced in `org-leak.kit.ts`,
+//     which has the route in hand and imports both lists from production.
 
 /** The parts of a supertest/undici response these assertions read. */
 export interface HttpResponseLike {
@@ -30,11 +34,16 @@ export interface HttpResponseLike {
 
 /**
  * Field names that must never appear ANYWHERE in a response body, at any depth,
- * under any endpoint. `token` is NOT in this list by default: two endpoints
- * legitimately return one (the invitation link, D-012), and qa's condition is
- * that the exemption is an explicit endpoint list — never a regex, never a
- * blanket allowance. Until `TOKEN_RESPONSE_ALLOWLIST` exists in production, a
- * caller opts in per assertion with `allowFields`.
+ * under any endpoint.
+ *
+ * `token` is deliberately NOT in this list, because "may this body carry a
+ * token?" is a question about the ROUTE and these functions never see one: two
+ * endpoints legitimately return one (the invitation link, D-012). That rule now
+ * has a production home — `TOKEN_RESPONSE_ALLOWLIST` in
+ * `src/common/authz/route-capabilities.ts`, exactly two literal rows, never a
+ * regex (@qa's condition) — and it is applied in `org-leak.kit.ts`, where a
+ * route is in hand. A caller holding a body and no route still opts in per
+ * assertion with `allowFields`.
  */
 export const FORBIDDEN_RESPONSE_FIELDS: readonly string[] = Object.freeze([
   "passwordHash",
@@ -103,11 +112,26 @@ export function findSecretFields(
   options: { readonly allowFields?: readonly string[] } = {},
 ): string[] {
   const allowed = new Set((options.allowFields ?? []).map((f) => f.toLowerCase()));
-  const forbidden = new Set(
-    FORBIDDEN_RESPONSE_FIELDS.map((f) => f.toLowerCase()).filter((f) => !allowed.has(f)),
+  const forbidden = FORBIDDEN_RESPONSE_FIELDS.map((f) => f.toLowerCase()).filter(
+    (f) => !allowed.has(f),
   );
+  return findFieldPaths(body, ...forbidden);
+}
+
+/**
+ * Paths at which any of `fieldNames` appears as an object KEY, at any depth,
+ * including inside arrays.
+ *
+ * Same exact-key, case-insensitive rule as {@link findSecretFields} — and the
+ * same code underneath, so a route-aware caller (`org-leak.kit.ts` asking "is
+ * there a `token` in this body?") and the blanket secret scan can never
+ * disagree about what "the body contains X" means.
+ */
+export function findFieldPaths(body: unknown, ...fieldNames: readonly string[]): string[] {
+  const wanted = new Set(fieldNames.map((f) => f.toLowerCase()));
+  if (wanted.size === 0) return [];
   return nodes(body)
-    .filter((n) => n.key !== undefined && forbidden.has(n.key.toLowerCase()))
+    .filter((n) => n.key !== undefined && wanted.has(n.key.toLowerCase()))
     .map((n) => n.path);
 }
 

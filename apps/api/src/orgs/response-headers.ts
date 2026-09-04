@@ -181,14 +181,21 @@ export function responseHeaderPolicyFor(
 }
 
 /**
- * The allowlist of endpoints that may put a FULL TIN on the wire, re-exported so
- * a PII assertion imports the header policy and the allowlist from ONE module.
+ * The two PII allowlists — which endpoints may put a FULL TIN, and which may put
+ * a live invitation token, on the wire — re-exported so a PII assertion imports
+ * the header policy and both allowlists from ONE module.
  *
- * It is DEFINED once, in `common/authz/route-capabilities.ts` next to
- * `ANY_ACTIVE_MEMBER_ROUTES` (architecture §12.2 item 7 names that location).
- * This is a re-export, not a copy — there is exactly one array.
+ * They are DEFINED once, in `common/authz/route-capabilities.ts` next to
+ * `ANY_ACTIVE_MEMBER_ROUTES` (architecture §12.2 items 4 and 7 name that
+ * location). These are re-exports, not copies — there is exactly one of each
+ * array in the process.
  */
-export { TAX_ID_RESPONSE_ALLOWLIST, isTaxIdAllowedOnRoute } from "../common/authz";
+export {
+  TAX_ID_RESPONSE_ALLOWLIST,
+  isTaxIdAllowedOnRoute,
+  TOKEN_RESPONSE_ALLOWLIST,
+  isTokenAllowedOnRoute,
+} from "../common/authz";
 
 // ── application ─────────────────────────────────────────────────────────────
 

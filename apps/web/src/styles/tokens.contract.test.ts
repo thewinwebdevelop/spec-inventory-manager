@@ -42,6 +42,13 @@ const PREFIX: Readonly<Record<string, string>> = Object.freeze({
   size: "--size-",
   elevation: "--shadow-",
   focus: "--focus-",
+  // Added 2026-09-05 with the tokens that closed the last of the hand-typed
+  // numbers (`opacity-[.62]`, `z-[100]`). Neither is a Tailwind v4 theme
+  // namespace, so both are plain custom properties referenced through
+  // arbitrary values — the same treatment `--size-*` already gets, and §1.5
+  // now records it.
+  opacity: "--opacity-",
+  z: "--z-",
 });
 
 /**

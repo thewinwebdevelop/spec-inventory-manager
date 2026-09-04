@@ -131,6 +131,33 @@ signoff: approved   # user 2026-07-28
   `details: { limit: 50 }` ให้ UI แสดงข้อความที่มีตัวเลขจริง) ·
   `503 ORG_PROVISIONING_UNAVAILABLE` (ระบบยังไม่ได้ผูก plan ตั้งต้น — ไม่ใช่ความผิด user, ให้ติดต่อทีม)
 
+#### 3.1ก ⛔ `capabilities` **ไม่อยู่ใน `201`** — ตัดสิน 2026-09-05 (backend-api, release-gate-f §5)
+
+**คำถามที่ค้างมาจาก B-13:** ทุกทางเข้าร้านยกเว้น "สร้างร้าน" เข้าไปด้วย capability ว่าง เพราะ `/me/organizations`
+ตั้งใจไม่ publish capabilities · ตอนนี้ client ทั้งสองฝั่งแก้ด้วยการยิง `GET /orgs/{id}` ตามหลัง
+⇒ แล้ว `201` ควรส่ง `capabilities` มาเลยไหม (additive + optional จึงไม่ breaking — ทำได้ถ้าจะทำ)
+
+**คำตอบ: ไม่เพิ่ม** — และเหตุผลไม่ใช่ "เพราะ breaking" (มันไม่ breaking) แต่เป็นเรื่องจำนวนแหล่งของข้อเท็จจริงเดียว:
+
+1. **`capabilities` มีผู้ publish เพียงเจ้าเดียวในสัญญานี้** — `GET /orgs/{orgId}` → `myMembership.capabilities`
+   · `/me/organizations` ไม่ส่ง (§3.2/M-10) · `GET …/roles` ไม่ส่ง (§3.6 — เป็น field ที่ตัดสิน authorization)
+   ⇒ การเพิ่มที่ `201` ทำให้ "เส้นทางสร้างร้าน" กลายเป็น**ทางเดียวที่สิทธิ์มาจากคนละที่กับทางเข้าอื่นทั้งหมด**
+2. **ถ้าสองแหล่งไม่ตรงกันวันไหน ฝั่งที่ผิดคือฝั่งที่ fail OPEN** — `201` ถูกคำนวณตอน provision (ใน transaction เดียวกับที่สร้าง role)
+   ส่วน `GET /orgs/{id}` อ่านสถานะปัจจุบัน · พอ F-003 เปิดให้แก้ capabilities ของ role ค่าใน `201` คือค่าที่**ถ่ายไว้ ณ วินาทีนั้น**
+   ⇒ client ที่ cache ไว้จะเสนอปุ่มที่ server ปฏิเสธ ซึ่งคือรูปเดียวกับบั๊กที่ B-13 เพิ่งปิดไป (client เขียน `full_access` เองใต้คอมเมนต์ที่อ้างว่า response บอกมา)
+3. **ประโยชน์ที่ได้จริงคือ round trip เดียว ครั้งเดียวต่อการสร้างร้านหนึ่งร้าน** — ไม่ใช่ hot path
+   และ**ไม่ได้แก้ปัญหาทั่วไป**: ทางเข้าอื่น (picker/switcher) ยังต้องถามอยู่ดี ⇒ ถ้า lookup นั้นเปราะ (ยิงแล้วพลาดแล้วไม่ retry)
+   จุดที่ต้องแก้คือ**ตัว lookup ของ client** ไม่ใช่การใส่ทางลัดให้ 1 ใน N เส้นทาง
+4. **field ที่ไม่มีใครอ่านคือหนี้** — client ทั้งสองฝั่ง ship "ถามเอา" ไปแล้วพร้อมเทสต์ที่ pin พฤติกรรมนั้น (B-13 ใน build pack)
+   ⇒ เพิ่มไปตอนนี้ = ผิว contract ที่ไม่มี consumer แต่ลบออกไม่ได้แล้ว (contract-evolution: เพิ่มง่าย ถอนคือ breaking)
+
+**สิ่งที่ทำแทน:** เขียนความ "ไม่มีโดยตั้งใจ" ลงใน schema เอง — `CreatedOrganization.description`
+ใน `packages/contracts/openapi/components/orgs.yaml` (⛔ block) เพื่อให้ client รายถัดไปที่เปิดสัญญาอ่านเจอก่อนจะเดาเอง
+· `membership.roleKey = "owner"` ที่อยู่ใน `201` **ห้ามใช้ตัดสินสิทธิ์** (§1 ข้อ 17) — ownership คือ capability ไม่ใช่ role key
+
+**ทบทวนใหม่เมื่อไหร่:** ถ้ามีการวัดจริงว่า round trip นี้เป็นปัญหา หรือ F-003 ทำให้ "capabilities ตอนสร้าง" ต่างจาก
+"capabilities ตอนนี้" อย่างมีความหมาย ⇒ กลับมาคุยใหม่พร้อมตัวเลข ไม่ใช่พร้อมความรู้สึก
+
 ### 3.2 `GET /me/organizations` — รายการ org ของฉัน (US-2)
 
 `?cursor&limit&status=active|all` (default `active`)

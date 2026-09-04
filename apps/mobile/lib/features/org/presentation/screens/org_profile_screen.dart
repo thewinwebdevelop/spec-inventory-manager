@@ -12,6 +12,7 @@ import '../../application/org_providers.dart';
 import '../../application/tax_reveal_session.dart';
 import '../../domain/entities/org_entities.dart';
 import '../../domain/tax_reveal.dart';
+import '../widgets/org_switcher.dart';
 
 /// ★ M-07 — S4 on mobile, for the sake of one card: the shop's tax identity.
 ///
@@ -38,7 +39,11 @@ import '../../domain/tax_reveal.dart';
 ///     `SharedPreferences`, no log line. Seeing it again costs another
 ///     audited, rate-limited request, which is what §3.16 is built around.
 class OrgProfileScreen extends ConsumerStatefulWidget {
-  const OrgProfileScreen({super.key});
+  const OrgProfileScreen({super.key, this.onCreateOrganization});
+
+  /// Handed to the shop switcher in the AppBar. Navigation belongs to the
+  /// router (F-006); this screen only passes it through.
+  final VoidCallback? onCreateOrganization;
 
   @override
   ConsumerState<OrgProfileScreen> createState() => _OrgProfileScreenState();
@@ -108,7 +113,14 @@ class _OrgProfileScreenState extends ConsumerState<OrgProfileScreen>
     _syncScreenshotGuard(reveal);
 
     return Scaffold(
-      appBar: AppBar(title: Text(t.orgProfileTitle)),
+      // ★ B-18 — ux-wireframe §13: "ตัวสลับร้าน … แตะชื่อร้านบน AppBar →
+      // bottom sheet". `OrgSwitcherTitle` implements exactly that and had no
+      // caller anywhere in `lib/`, so the active shop's name appeared nowhere
+      // on mobile and there was no way to change shops at all. The screen's
+      // own title is redundant now: the shell's nav bar labels this
+      // destination, and §13's rule is that on a device with no address bar
+      // the AppBar is the ONE place the shop context can live.
+      appBar: AppBar(title: OrgSwitcherTitle(onCreateOrganization: widget.onCreateOrganization)),
       body: SafeArea(
         child: profile.when(
           loading: () => const Padding(

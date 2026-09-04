@@ -17,9 +17,14 @@ jobs:
   # AC2 (build covers all workspaces), lint (real TS lint), typecheck, test — Node only.
   node-ci:
     runs-on: ubuntu-latest
-    # Bounded so a hung step is a RESULT, not a six-hour absence (the
-    # default). Sized well above what this job actually takes.
-    timeout-minutes: 20
+    # Grounded in real data, not a guess: 10 most recent green runs on this
+    # branch (32812955717..33883029250, 2026-08-25..2026-09-04) — this job's
+    # wall time ranged 95s-132s (max 132s = 2.2min). No actions/cache is
+    # configured for the pnpm store, so every run pays a cold `pnpm install`;
+    # 10min = ~4.5x the observed max, floored at 10min (not a tighter 3x≈7min)
+    # so one slow npm-registry day doesn't fail the job outright. A real hang
+    # still becomes a result in 10min instead of GitHub's 6h default.
+    timeout-minutes: 10
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
@@ -43,9 +48,14 @@ jobs:
   # AC4/AC5/AC6/AC7/AC8 — one ephemeral Postgres, empty → migrated → introspected → trigger-armed (§3).
   db-migrate:
     runs-on: ubuntu-latest
-    # Bounded so a hung step is a RESULT, not a six-hour absence (the
-    # default). Sized well above what this job actually takes.
-    timeout-minutes: 15
+    # Grounded in real data: same 10-run sample as node-ci (see its comment
+    # for the run-id range) — this job's wall time ranged 42s-53s (max 53s).
+    # 10min is ~11x the observed max; kept at the same 10min floor as the
+    # other short lanes (not tightened further) because it also pays a cold
+    # `pnpm install` (no cache) plus a Postgres service-container health
+    # check, both of which vary with runner/network conditions the 10-run
+    # sample won't fully capture.
+    timeout-minutes: 10
     services:
       postgres:
         image: postgres:16
@@ -136,9 +146,13 @@ jobs:
   # is live, not decorative.
   depcruise:
     runs-on: ubuntu-latest
-    # Bounded so a hung step is a RESULT, not a six-hour absence (the
-    # default). Sized well above what this job actually takes.
-    timeout-minutes: 15
+    # Grounded in real data: same 10-run sample as node-ci (see its comment
+    # for the run-id range) — this job's wall time ranged 28s-33s (max 33s).
+    # 10min is the same floor as the other short lanes (>15x the observed
+    # max) — this is the cheapest job in the pipeline, so there is no cost
+    # reason to tighten it further; the floor exists purely to absorb a cold
+    # `pnpm install` (no cache) on a slow day without a false failure.
+    timeout-minutes: 10
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
@@ -161,9 +175,12 @@ jobs:
   # merge-base version via oasdiff (Docker image — no install/new npm dep).
   oasdiff:
     runs-on: ubuntu-latest
-    # Bounded so a hung step is a RESULT, not a six-hour absence (the
-    # default). Sized well above what this job actually takes.
-    timeout-minutes: 15
+    # Grounded in real data: same 10-run sample as node-ci (see its comment
+    # for the run-id range) — this job's wall time ranged 5s-16s (max 16s).
+    # 10min is the same floor as the other short lanes; the one variable step
+    # here (`docker pull` of the oasdiff image, no cache) is the reason to
+    # keep a real floor rather than shrinking to a multiple of 16s.
+    timeout-minutes: 10
     steps:
       # fetch-depth: 0 so `git merge-base` + the base-branch ref are available.
       - uses: actions/checkout@v4
@@ -179,9 +196,14 @@ jobs:
   # the generated api_client package is excluded from analyze (analysis_options).
   flutter-ci:
     runs-on: ubuntu-latest
-    # Bounded so a hung step is a RESULT, not a six-hour absence (the
-    # default). Sized well above what this job actually takes.
-    timeout-minutes: 20
+    # Grounded in real data: same 10-run sample as node-ci (see its comment
+    # for the run-id range) — this job's wall time ranged 166s-180s (max
+    # 180s = 3min). 15min is ~5x the observed max — more headroom than the
+    # 3x used elsewhere because this lane has two independently network-bound
+    # steps with no cache (flutter-action's SDK download + `dart pub get` /
+    # `flutter pub get` against pub.dev), either of which can be slow on its
+    # own without the job actually being stuck.
+    timeout-minutes: 15
     steps:
       - uses: actions/checkout@v4
       - uses: subosito/flutter-action@v2
@@ -214,9 +236,13 @@ jobs:
   # runs build_runner (T-000-09 fix); flutter-action provides it.
   contracts-drift:
     runs-on: ubuntu-latest
-    # Bounded so a hung step is a RESULT, not a six-hour absence (the
-    # default). Sized well above what this job actually takes.
-    timeout-minutes: 20
+    # Grounded in real data: same 10-run sample as node-ci (see its comment
+    # for the run-id range) — this job's wall time ranged 107s-159s (max
+    # 159s = 2.65min). 15min is ~5.7x the observed max, matching flutter-ci's
+    # headroom for the same reason: it also pays flutter-action's SDK
+    # download plus both `pnpm install` and Dart/TS codegen, each an
+    # independent network-bound step with no cache configured.
+    timeout-minutes: 15
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
@@ -255,9 +281,14 @@ jobs:
   # filename filter or a self-skipped suite must all be RED here, not a notice.
   integration-api:
     runs-on: ubuntu-latest
-    # Bounded so a hung step is a RESULT, not a six-hour absence (the
-    # default). Sized well above what this job actually takes.
-    timeout-minutes: 25
+    # Grounded in real data: same 10-run sample as node-ci (see its comment
+    # for the run-id range) — this job's wall time ranged 81s-144s (max
+    # 144s = 2.4min). 15min is ~6.25x the observed max — more headroom than
+    # the plain 3x floor because this lane boots a real `apps/api` process
+    # (its own 30s poll loop against /health) on top of Postgres + Redis
+    # service containers and a cold `pnpm install`, three independent
+    # sources of runner-day variance the 10-run sample won't fully capture.
+    timeout-minutes: 15
     services:
       postgres:
         image: postgres:16
@@ -462,9 +493,17 @@ jobs:
   # them.
   mobile-e2e:
     runs-on: ubuntu-latest
-    # Bounded so a hung step is a RESULT, not a six-hour absence (the
-    # default). Sized well above what this job actually takes.
-    timeout-minutes: 45
+    # Grounded in real data: same 10-run sample as node-ci (see its comment
+    # for the run-id range) — this job's wall time ranged 461s-578s (max
+    # 578s = 9.6min). 25min is ~2.6x the observed max — a smaller multiple
+    # than the other lanes get, but this is already the heaviest job in the
+    # pipeline (API build, Postgres+Redis, Gradle `assembleDebug`, KVM setup,
+    # and an Android emulator boot) and its own inline comments record two
+    # past incidents of the emulator process dying mid-run under memory
+    # pressure (since mitigated with `-memory 3072`) — real headroom for a
+    # slow-but-legitimate run, not just clock-hang protection. Down from the
+    # original unverified 45min guess, which was never grounded in a run.
+    timeout-minutes: 25
     services:
       postgres:
         image: postgres:16
@@ -629,9 +668,20 @@ jobs:
 
   e2e-web:
     runs-on: ubuntu-latest
-    # Bounded so a hung step is a RESULT, not a six-hour absence (the
-    # default). Sized well above what this job actually takes.
-    timeout-minutes: 30
+    # Grounded in real data, with one extra term the other lanes don't need:
+    # same 10-run sample as node-ci (see its comment for the run-id range) —
+    # this job's END-TO-END wall time (including a normally-fast Playwright
+    # install) ranged 117s-137s (max 137s ≈ 2.3min). But the "install
+    # Playwright browsers" step below has its OWN 12min step-level timeout
+    # with 3 bounded retries (the incident that motivated it — see that
+    # step's comment: two runs stalled 68min then 26min with nothing else in
+    # the repo changed) — a legitimate exhaustion of those 3 retries can
+    # legally take up to that full 12min on its own, on top of the rest of
+    # the job. So the floor here is (typical job time, ~2.3min) + (worst-case
+    # bounded retry budget, 12min) + margin ⇒ 20min, not the 3x-of-observed-
+    # max that would undersize it relative to a sub-step timeout it has to
+    # contain. Down from the original unverified 30min guess.
+    timeout-minutes: 20
     # ★ T-002-Q5 — this lane used to boot the web server alone and ask it for
     # `GET /`. Every row of test-plan §12.1 crosses the whole stack (signup,
     # provisioning, the org header), so a browser suite against a web server

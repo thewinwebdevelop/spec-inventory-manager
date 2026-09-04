@@ -34,27 +34,30 @@ post:
             $ref: "../components/auth.yaml#/TokenResponse"
     "401":
       description: >
-        Refresh token unknown / expired / not current / family-cap reached /
-        benign-retry / reuse — all generic INVALID_REFRESH (or
-        NO_REFRESH_TOKEN when neither cookie nor body is present).
+        `INVALID_REFRESH` — unknown / expired / not current / family-cap reached
+        / benign-retry / reuse, ALL of them the same generic code: the six cases
+        are distinguishable server-side and deliberately not on the wire.
+        `NO_REFRESH_TOKEN` — neither cookie nor body carried one, which is a
+        different situation for the client (it never had a session) and so gets
+        a code of its own.
       content:
         application/json:
           schema:
             $ref: "../components/common.yaml#/ErrorResponse"
     "403":
-      description: CSRF check failed on the cookie path
+      description: "`CSRF_FAILED` — the CSRF check failed on the cookie path"
       content:
         application/json:
           schema:
             $ref: "../components/common.yaml#/ErrorResponse"
     "415":
-      description: Non-JSON Content-Type (L-2)
+      description: "`UNSUPPORTED_MEDIA_TYPE` — non-JSON Content-Type (L-2)"
       content:
         application/json:
           schema:
             $ref: "../components/common.yaml#/ErrorResponse"
     "429":
-      description: IP rate cap tripped (Retry-After seconds, L-5)
+      description: "`RATE_LIMITED` — IP rate cap tripped (Retry-After seconds, L-5)"
       headers:
         Retry-After:
           $ref: "../components/headers.yaml#/RetryAfter"

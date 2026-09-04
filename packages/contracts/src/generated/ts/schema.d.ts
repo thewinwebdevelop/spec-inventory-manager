@@ -710,7 +710,15 @@ export interface components {
         /** @description The project-standard error envelope, produced by `DomainExceptionFilter` for every failure (F-001 §3.5, F-002 api-spec §1/§4). `code` is a machine-readable UPPER_SNAKE value the client switches on; `message` is user-facing Thai copy the client MUST NOT parse. */
         ErrorResponse: {
             error: {
-                /** @description Machine-readable error code (e.g. INVALID_CREDENTIALS, ORG_ACCESS_DENIED, RATE_LIMITED). A shipped value never changes. */
+                /**
+                 * @description Machine-readable error code (e.g. `INVALID_CREDENTIALS`, `ORG_ACCESS_DENIED`, `RATE_LIMITED`). A shipped value never changes.
+                 *
+                 *     Every code a response can carry is named in that response's `description` — an error code IS contract, because clients branch on it to choose which sentence a person reads (contract-evolution: adding a code is additive, changing or removing one is breaking).
+                 *
+                 *     TWO CODES BELONG TO NO SINGLE ENDPOINT and are therefore documented here instead: `INTERNAL` (`500`) — the filter's fallback for any unrecognised error, carrying no detail by design — and `UNSUPPORTED_MEDIA_TYPE` (`415`), which the transport guard can answer on any JSON route before the handler runs.
+                 *
+                 *     A client MUST tolerate a code it does not recognise (show the `message`), and MUST NOT parse the `message` to recover one.
+                 */
                 code: string;
                 /** @description User-facing Thai message. F-002 copy says "ร้าน" rather than "องค์กร" (D-029); identifiers and enum values stay English. */
                 message: string;
@@ -821,7 +829,13 @@ export interface components {
             id: string;
             name: string;
         };
-        /** @description `201` of `POST /organizations`. Deliberately complete enough to enter the new shop immediately (ux Q5): a client seeds its cache from this body and does NOT need to refetch `GET /me/organizations` first. */
+        /**
+         * @description `201` of `POST /organizations`. Deliberately complete enough to enter the new shop immediately (ux Q5): a client seeds its cache from this body and does NOT need to refetch `GET /me/organizations` first.
+         *
+         *     ⛔ `capabilities` is deliberately NOT here, and this is the second time that absence has had to be stated: a client once filled the field in itself with a literal `full_access` under a comment claiming the response said so (B-13). It does not. What the creator MAY DO has exactly ONE publisher in this contract — `GET /orgs/{orgId}` → `myMembership.capabilities` — and entering a shop you just created is not a special case that gets a second one. Adding it here would make the create path the only way into a shop whose permissions came from somewhere different from every other way in; when the two eventually disagreed, the create path would be the one that failed OPEN (offering Owner actions the server then refuses).
+         *
+         *     `membership.roleKey` is `"owner"` here and MUST NOT be used to decide what to offer (api-spec §1 item 17): ownership is a capability, never a role key. Ask, like every other entrance does. Full reasoning: api-spec §3.1.
+         */
         CreatedOrganization: {
             organization: components["schemas"]["NewOrganization"];
             membership: components["schemas"]["NewOrganizationMembership"];
@@ -1260,7 +1274,7 @@ export interface operations {
                     "application/json": components["schemas"]["SignupResponse"];
                 };
             };
-            /** @description Email already taken (the one necessary enumeration leak, Gate 1 §4) */
+            /** @description `EMAIL_TAKEN` — that address already has an account. The one necessary enumeration leak, accepted at Gate 1 §4 and IP-throttled. */
             409: {
                 headers: {
                     [name: string]: unknown;
@@ -1269,7 +1283,7 @@ export interface operations {
                     "application/json": components["schemas"]["ErrorResponse"];
                 };
             };
-            /** @description Non-JSON Content-Type (L-2) */
+            /** @description `UNSUPPORTED_MEDIA_TYPE` — non-JSON Content-Type (L-2) */
             415: {
                 headers: {
                     [name: string]: unknown;
@@ -1278,7 +1292,13 @@ export interface operations {
                     "application/json": components["schemas"]["ErrorResponse"];
                 };
             };
-            /** @description Password policy or email validation failure */
+            /**
+             * @description `EMAIL_INVALID` — the address is not a usable shape (the SAME check invitations apply, so an address that can never become an account is never invited either) · `PASSWORD_TOO_SHORT` (< 8) · `PASSWORD_TOO_LONG` (> 128) · `PASSWORD_BREACHED` — the password is in the bundled common/leaked list.
+             *
+             *     Each of the four is a SEPARATE code because each one sends the person to a different sentence and a different field; a client that collapses them shows the wrong advice. The password codes come from the one pure policy function (`@omnistock/core-domain`), so `POST /auth/change-password` and `POST /orgs/{orgId}/members/{userId}/reset-password` answer with exactly the same three values.
+             *
+             *     ⚠️ Not exhaustive: a body that fails the request-SHAPE check (missing or empty field) also answers `422`, with a `code` that is not one of the values above. Branch on the codes named here and treat anything else as a generic validation failure.
+             */
             422: {
                 headers: {
                     [name: string]: unknown;
@@ -1287,7 +1307,7 @@ export interface operations {
                     "application/json": components["schemas"]["ErrorResponse"];
                 };
             };
-            /** @description IP rate limit tripped (Retry-After seconds) */
+            /** @description `RATE_LIMITED` — IP rate limit tripped (Retry-After seconds) */
             429: {
                 headers: {
                     "Retry-After": components["headers"]["RetryAfter"];
@@ -1322,7 +1342,7 @@ export interface operations {
                     "application/json": components["schemas"]["TokenResponse"];
                 };
             };
-            /** @description Invalid credentials (generic — wrong password or unknown email) */
+            /** @description `INVALID_CREDENTIALS` — wrong password AND unknown email answer with the identical code and message (enumeration-safe). */
             401: {
                 headers: {
                     [name: string]: unknown;
@@ -1331,7 +1351,7 @@ export interface operations {
                     "application/json": components["schemas"]["ErrorResponse"];
                 };
             };
-            /** @description Non-JSON Content-Type (L-2) */
+            /** @description `UNSUPPORTED_MEDIA_TYPE` — non-JSON Content-Type (L-2) */
             415: {
                 headers: {
                     [name: string]: unknown;
@@ -1340,7 +1360,11 @@ export interface operations {
                     "application/json": components["schemas"]["ErrorResponse"];
                 };
             };
-            /** @description Malformed request (e.g. invalid deviceId / email shape) */
+            /**
+             * @description `EMAIL_INVALID` — bad email shape · `DEVICE_ID_INVALID` — `deviceId` longer than 64 chars or outside `[A-Za-z0-9_-]` · `TOKEN_TRANSPORT_INVALID` — `tokenTransport` is neither `cookie` nor `body`.
+             *
+             *     ⚠️ Not exhaustive — see the note on `POST /auth/signup` `422`. Login deliberately does NOT run the password policy here: a policy 422 would tell the caller their guess was well-formed, which is a fact about the password and not about the request.
+             */
             422: {
                 headers: {
                     [name: string]: unknown;
@@ -1349,7 +1373,7 @@ export interface operations {
                     "application/json": components["schemas"]["ErrorResponse"];
                 };
             };
-            /** @description IP or account backoff tripped (Retry-After seconds) */
+            /** @description `RATE_LIMITED` — IP or account backoff tripped (Retry-After seconds). ALWAYS its own 429, never folded into the 401 (M-1). */
             429: {
                 headers: {
                     "Retry-After": components["headers"]["RetryAfter"];
@@ -1384,7 +1408,7 @@ export interface operations {
                     "application/json": components["schemas"]["TokenResponse"];
                 };
             };
-            /** @description Refresh token unknown / expired / not current / family-cap reached / benign-retry / reuse — all generic INVALID_REFRESH (or NO_REFRESH_TOKEN when neither cookie nor body is present). */
+            /** @description `INVALID_REFRESH` — unknown / expired / not current / family-cap reached / benign-retry / reuse, ALL of them the same generic code: the six cases are distinguishable server-side and deliberately not on the wire. `NO_REFRESH_TOKEN` — neither cookie nor body carried one, which is a different situation for the client (it never had a session) and so gets a code of its own. */
             401: {
                 headers: {
                     [name: string]: unknown;
@@ -1393,7 +1417,7 @@ export interface operations {
                     "application/json": components["schemas"]["ErrorResponse"];
                 };
             };
-            /** @description CSRF check failed on the cookie path */
+            /** @description `CSRF_FAILED` — the CSRF check failed on the cookie path */
             403: {
                 headers: {
                     [name: string]: unknown;
@@ -1402,7 +1426,7 @@ export interface operations {
                     "application/json": components["schemas"]["ErrorResponse"];
                 };
             };
-            /** @description Non-JSON Content-Type (L-2) */
+            /** @description `UNSUPPORTED_MEDIA_TYPE` — non-JSON Content-Type (L-2) */
             415: {
                 headers: {
                     [name: string]: unknown;
@@ -1411,7 +1435,7 @@ export interface operations {
                     "application/json": components["schemas"]["ErrorResponse"];
                 };
             };
-            /** @description IP rate cap tripped (Retry-After seconds, L-5) */
+            /** @description `RATE_LIMITED` — IP rate cap tripped (Retry-After seconds, L-5) */
             429: {
                 headers: {
                     "Retry-After": components["headers"]["RetryAfter"];
@@ -1443,7 +1467,7 @@ export interface operations {
                 };
                 content?: never;
             };
-            /** @description CSRF check failed on the cookie path */
+            /** @description `CSRF_FAILED` — the CSRF check failed on the cookie path */
             403: {
                 headers: {
                     [name: string]: unknown;
@@ -1452,7 +1476,7 @@ export interface operations {
                     "application/json": components["schemas"]["ErrorResponse"];
                 };
             };
-            /** @description Non-JSON Content-Type (L-2) */
+            /** @description `UNSUPPORTED_MEDIA_TYPE` — non-JSON Content-Type (L-2) */
             415: {
                 headers: {
                     [name: string]: unknown;
@@ -1479,7 +1503,7 @@ export interface operations {
                 };
                 content?: never;
             };
-            /** @description Missing/invalid access token */
+            /** @description `UNAUTHENTICATED` — missing/invalid access token */
             401: {
                 headers: {
                     [name: string]: unknown;
@@ -1488,7 +1512,7 @@ export interface operations {
                     "application/json": components["schemas"]["ErrorResponse"];
                 };
             };
-            /** @description Non-JSON Content-Type (L-2) */
+            /** @description `UNSUPPORTED_MEDIA_TYPE` — non-JSON Content-Type (L-2) */
             415: {
                 headers: {
                     [name: string]: unknown;
@@ -1517,7 +1541,7 @@ export interface operations {
                     "application/json": components["schemas"]["SessionsResponse"];
                 };
             };
-            /** @description Missing/invalid access token */
+            /** @description `UNAUTHENTICATED` — missing/invalid access token */
             401: {
                 headers: {
                     [name: string]: unknown;
@@ -1550,7 +1574,7 @@ export interface operations {
                     "application/json": components["schemas"]["OkResponse"];
                 };
             };
-            /** @description Missing/invalid access token, or wrong currentPassword (generic) */
+            /** @description `UNAUTHENTICATED` — missing/invalid access token — or `INVALID_CREDENTIALS` — `currentPassword` did not verify (the same generic code login uses). */
             401: {
                 headers: {
                     [name: string]: unknown;
@@ -1559,7 +1583,7 @@ export interface operations {
                     "application/json": components["schemas"]["ErrorResponse"];
                 };
             };
-            /** @description CSRF check failed on the cookie path */
+            /** @description `CSRF_FAILED` — the CSRF check failed on the cookie path */
             403: {
                 headers: {
                     [name: string]: unknown;
@@ -1568,7 +1592,7 @@ export interface operations {
                     "application/json": components["schemas"]["ErrorResponse"];
                 };
             };
-            /** @description Non-JSON Content-Type (L-2) */
+            /** @description `UNSUPPORTED_MEDIA_TYPE` — non-JSON Content-Type (L-2) */
             415: {
                 headers: {
                     [name: string]: unknown;
@@ -1577,7 +1601,13 @@ export interface operations {
                     "application/json": components["schemas"]["ErrorResponse"];
                 };
             };
-            /** @description newPassword policy failure */
+            /**
+             * @description `newPassword` failed the signup policy: `PASSWORD_TOO_SHORT` (< 8) · `PASSWORD_TOO_LONG` (> 128) · `PASSWORD_BREACHED`. Same three values as `POST /auth/signup` — one pure policy function, one set of codes.
+             *
+             *     The policy runs AFTER `currentPassword` is verified, so a 422 here is never an answer about somebody else's account.
+             *
+             *     ⚠️ Not exhaustive — see the note on `POST /auth/signup` `422`.
+             */
             422: {
                 headers: {
                     [name: string]: unknown;
@@ -1586,7 +1616,7 @@ export interface operations {
                     "application/json": components["schemas"]["ErrorResponse"];
                 };
             };
-            /** @description currentPassword backoff tripped (Retry-After seconds, N-2) */
+            /** @description `RATE_LIMITED` — the `currentPassword` backoff tripped (Retry-After seconds, N-2). */
             429: {
                 headers: {
                     "Retry-After": components["headers"]["RetryAfter"];
@@ -1625,7 +1655,7 @@ export interface operations {
                     "application/json": components["schemas"]["OkResponse"];
                 };
             };
-            /** @description Missing/invalid access token */
+            /** @description `UNAUTHENTICATED` — missing/invalid access token */
             401: {
                 headers: {
                     [name: string]: unknown;
@@ -1634,7 +1664,7 @@ export interface operations {
                     "application/json": components["schemas"]["ErrorResponse"];
                 };
             };
-            /** @description Same-shape not-found — caller lacks an active membership / capability, or the target is not an active member (never 403; no enumeration). */
+            /** @description `NOT_FOUND` — same-shape not-found: the caller lacks an active membership / capability, or the target is not an active member (never 403; no enumeration). */
             404: {
                 headers: {
                     [name: string]: unknown;
@@ -1652,7 +1682,7 @@ export interface operations {
                     "application/json": components["schemas"]["ErrorResponse"];
                 };
             };
-            /** @description Non-JSON Content-Type */
+            /** @description `UNSUPPORTED_MEDIA_TYPE` — non-JSON Content-Type */
             415: {
                 headers: {
                     [name: string]: unknown;
@@ -1661,7 +1691,13 @@ export interface operations {
                     "application/json": components["schemas"]["ErrorResponse"];
                 };
             };
-            /** @description newPassword policy failure */
+            /**
+             * @description `newPassword` failed the signup policy: `PASSWORD_TOO_SHORT` (< 8) · `PASSWORD_TOO_LONG` (> 128) · `PASSWORD_BREACHED`. Same three values as `POST /auth/signup` — one pure policy function, one set of codes.
+             *
+             *     ⚠️ THE POLICY IS CHECKED FIRST, BEFORE ANYTHING READS THE DATABASE, and that ordering is load-bearing (security review of f66451f, Medium-1): a weak password now answers `422` for EVERY target, so the difference between `422` and the uniform `404` can no longer be used to ask "is this user a member of this shop?".
+             *
+             *     ⚠️ Not exhaustive — see the note on `POST /auth/signup` `422`.
+             */
             422: {
                 headers: {
                     [name: string]: unknown;
@@ -1670,7 +1706,7 @@ export interface operations {
                     "application/json": components["schemas"]["ErrorResponse"];
                 };
             };
-            /** @description Admin reset-attempt backoff tripped (Retry-After seconds) */
+            /** @description `RATE_LIMITED` — the admin reset-attempt backoff tripped (Retry-After seconds). */
             429: {
                 headers: {
                     "Retry-After": components["headers"]["RetryAfter"];

@@ -136,6 +136,60 @@ describe("auditSweep — RED cases (each is a shippable regression)", () => {
     expect(auditSweep(sweep).map((f) => f.kind)).not.toContain("foreign-email");
   });
 
+  // ★ TOKEN_RESPONSE_ALLOWLIST (test-plan I-04) — a LIVE invitation token is a
+  // bearer credential: whoever reads it can join the shop, and only its HMAC is
+  // stored (D-018), so it cannot be revoked without cancelling the invitation.
+  // Exactly two routes may mint one; every other body carrying `token` is a leak.
+  it("RED: a `token` in the body of a route that may not mint one", () => {
+    const sweep = cleanSweep().map((o) =>
+      o.persona === "activeInAOnly" && o.target === "A"
+        ? { ...o, body: { invitation: { id: "inv_1", token: "live-secret" } } }
+        : o,
+    );
+    const findings = auditSweep(sweep);
+    expect(findings.map((f) => f.kind)).toContain("token-on-disallowed-route");
+    // The message must name WHERE, or the reader has to grep a body for it.
+    expect(findings.find((f) => f.kind === "token-on-disallowed-route")?.message).toContain(
+      "invitation.token",
+    );
+  });
+
+  it("RED: nested and inside an array — not just a top-level key", () => {
+    const sweep = cleanSweep().map((o) =>
+      o.persona === "activeInAOnly" && o.target === "A"
+        ? { ...o, body: { items: [{ id: "a" }, { id: "b", link: { token: "live-secret" } }] } }
+        : o,
+    );
+    expect(auditSweep(sweep).map((f) => f.kind)).toContain("token-on-disallowed-route");
+  });
+
+  it("GREEN: the same body on one of the TWO routes that are allowed to mint it", () => {
+    // Imported from production, so this case fails the day somebody edits the
+    // allowlist — which is the point of the allowlist being importable.
+    for (const route of [
+      "POST /orgs/{orgId}/invitations",
+      "POST /orgs/{orgId}/invitations/{invitationId}/link",
+    ]) {
+      const sweep = cleanSweep().map((o) =>
+        o.persona === "activeInAOnly" && o.target === "A"
+          ? { ...o, route, body: { token: "live-secret", inviteUrl: "https://x/i/live-secret" } }
+          : { ...o, route },
+      );
+      expect(auditSweep(sweep).map((f) => f.kind)).not.toContain("token-on-disallowed-route");
+    }
+  });
+
+  it("GREEN: `tokenIssuedAt` / `tokenHash` are different questions", () => {
+    // Exact key match, never a substring: a substring rule dies the first time
+    // it cries wolf. (`tokenHash` is caught by the blanket secret scan instead.)
+    const sweep = cleanSweep().map((o) =>
+      o.persona === "activeInAOnly" && o.target === "A"
+        ? { ...o, body: { tokenIssuedAt: "2026-09-05T00:00:00Z" } }
+        : o,
+    );
+    expect(auditSweep(sweep).map((f) => f.kind)).not.toContain("token-on-disallowed-route");
+  });
+
   it("RED (the important one): an empty sweep is NOT green", () => {
     expect(auditSweep([]).map((f) => f.kind)).toEqual(["vacuous-sweep"]);
   });

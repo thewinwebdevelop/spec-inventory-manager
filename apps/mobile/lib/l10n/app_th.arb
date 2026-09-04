@@ -170,6 +170,18 @@
     }
   },
   "membersTitle": "สมาชิก",
+  "navShopSecurity": "ความปลอดภัย",
+  "@navShopSecurity": {
+    "description": "⚠️ COPY GAP (B-18) — ป้ายของ bottom nav ในเปลือกชั่วคราวจนกว่าจะถึง F-006. คำเดียวกับที่ ux ใช้บนเว็บ (ux-wireframe §S2 sidebar) สำหรับปลายทางเดียวกัน. รอ ux ยืนยันตอน F-006 ทำ IA จริง"
+  },
+  "navSignOut": "ออกจากระบบ",
+  "@navSignOut": {
+    "description": "⚠️ COPY GAP (B-18) — คำเดียวกับ ux-wireframe §S2 ของเว็บ. มือถือยังไม่มีทางออกจากระบบเลยจนกว่าจะมีอันนี้ (จอ session list ให้ออกได้แต่ 'อุปกรณ์อื่น' กับ 'ทุกอุปกรณ์')"
+  },
+  "navSignOutFailed": "ออกจากระบบไม่สำเร็จ ลองใหม่อีกครั้ง",
+  "@navSignOutFailed": {
+    "description": "⚠️ COPY GAP (B-18) — ย่อจาก authSessionsErrorLogoutAllFailed ของ ux ให้เหลือเครื่องเดียว (เหมือนที่ทำบนเว็บ). รอ ux ยืนยัน"
+  },
   "membersInviteCta": "เชิญสมาชิก",
   "membersPendingSection": "คำเชิญที่รอตอบรับ ({count})",
   "@membersPendingSection": {

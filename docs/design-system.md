@@ -206,8 +206,24 @@
 | `size.auth-card.max-w` | 400px | max-width auth card (web); mobile ไม่ใช้ (เต็มจอ) |
 | `size.tap-target.min` | 44px | **ความสูงขั้นต่ำของทุกอย่างที่กดได้** (ดูกติกาใต้ตาราง) |
 | `size.dialog.max-w` | 480px | ความกว้างสูงสุดของ dialog / การ์ดกึ่งกลางทั่วไป (web) — **คนละตัวกับ** `size.auth-card.max-w` (400px) |
-| `size.sidebar.w` | 240px | sidebar ของ AppShell (web ≥lg) |
+| `size.dialog.inline-w` | 90% | ความกว้างของ dialog **เมื่อจอแคบกว่า** `size.dialog.max-w` — เหลือขอบให้เห็นฉากหลัง 5% สองข้าง (dialog ที่ชนขอบพอดีอ่านเหมือน "เปลี่ยนหน้า" ไม่ใช่ "ชั้นที่ปิดได้") |
+| `size.sidebar.w` | 240px | sidebar **ถาวร** ของ AppShell (web ≥lg) |
+| `size.drawer.w` | 280px | **drawer ที่ลอยทับหน้า** (web <lg, §8.2) — **คนละตัวกับ** `size.sidebar.w` โดยเจตนา: ของที่ทับหน้าอยู่ต้องกว้างกว่าเพื่อให้อ่านเป็นชั้นแยก และไม่ควรขยับตามเวลา sidebar ถาวรเปลี่ยนความกว้าง |
+| `size.drawer.max-w` | 85% | เพดานของ drawer บนจอแคบ — **ต้องเหลือ scrim ให้เห็น** ไม่งั้นผู้ใช้ไม่รู้ว่ากดตรงไหนให้มันหายไป |
 | `size.list-row.min-h` | 56px | ความสูงขั้นต่ำของแถวรายการ / แถวเมนู (ทั้ง web + mobile) |
+| `size.data-row.label-w` | 150px | คอลัมน์ label ของแถว "ป้าย → ค่า" (`DataRow`) — ค่าคงที่เพื่อให้ label ทุกแถวเรียงเป็นคอลัมน์เดียวกัน |
+| `size.data-row.value-min-w` | 180px | ความกว้างขั้นต่ำของคอลัมน์ค่า ก่อนที่ค่าจะตัดลงบรรทัดใหม่ใต้ label |
+| `size.content.max-w` | 1280px | ความกว้างสูงสุดของเนื้อหาที่จัดกึ่งกลาง (§8.1) |
+| `size.content.narrow-max-w` | 640px | หน้าที่เป็น **คอลัมน์เดียวและอ่านเป็นหลัก** (การตั้งค่า / ความปลอดภัย) — ยาวกว่านี้ตาจะหาต้นบรรทัดถัดไปไม่เจอ · ⛔ ไม่ใช่ `size.dialog.max-w` (480px = ของที่ลอยอยู่บนฉากมืด คนละงานกัน) |
+| `size.toast.max-w` | 360px | ความกว้างสูงสุดของ toast (web) |
+| `size.dropdown.w` | 290px | dropdown/popover ที่ผูกกับตัวเปิด (org switcher) — กว้างพอใส่ชื่อร้าน + สิทธิ์ในบรรทัดเดียว |
+| `opacity.dim` | 0.62 | ความจางของ **แถวที่ไม่ใช้งานแล้ว** (สมาชิกที่ถูกถอด / คำเชิญที่ตายแล้ว) — "อยู่ตรงนั้น อ่านออก แต่ไม่ใช่ของที่ทำอะไรได้" · ตรวจแล้วผ่าน AA ทั้ง light (~5.0:1) และ dark (~5.6:1) · ⛔ อย่าลดต่ำกว่านี้เพื่อ "ให้ดูจางขึ้น" — จะตกเกณฑ์เงียบ ๆ |
+| `z.dropdown` | 40 | dropdown/popover ที่ผูกกับตัวเปิด |
+| `z.overlay` | 50 | scrim + dialog + drawer (ทุกอย่างที่กินทั้งจอ) |
+| `z.toast` | 100 | toast — **ต้องอยู่เหนือ overlay เสมอ** เพราะมันรายงานผลของสิ่งที่ผู้ใช้เพิ่งกดใน dialog |
+
+> **`z.*` มี 3 ชั้นพอ และห้ามเพิ่มเลขนอกบันได** — z-index ที่คิดกันเองทีละจุดคือวิธีมาตรฐานที่ทำให้ modal
+> ไปอยู่ใต้ header ได้เงียบ ๆ · ต้องการชั้นใหม่ = contribute-back (§6.1) ไม่ใช่พิมพ์ `z-[999]`
 | `size.icon.sm` | 16px | ไอคอนในบรรทัดข้อความ |
 | `size.icon.md` | 20px | **ค่า default** — banner, ปุ่ม, แถวรายการ |
 | `size.icon.lg` | 24px | nav, AppBar, icon-button |
@@ -261,6 +277,8 @@ specific `--<prefix>-*` key and a family of utilities:
 | `space.1`…`space.8` (generic 4-pt gaps not covered by a named alias above) | Tailwind's built-in numeric `--spacing` multiplier (4px) already matches this grid 1:1 | `p-3` = `space.3` (12px), `gap-4` = `space.4` (16px), … |
 | `radius.button`, `radius.card`, `radius.badge` | `--radius-button`, `--radius-card`, `--radius-badge` | `rounded-button`, `rounded-card`, `rounded-badge` |
 | `size.auth-card.max-w`, `size.tap-target.min` | plain `--size-*` custom properties (not a Tailwind-recognized prefix — referenced via arbitrary values) | `max-w-[var(--size-auth-card-max-w)]`, `min-h-[var(--size-tap-target-min)]` |
+| `opacity.dim` | plain `--opacity-*` custom property (same treatment as `--size-*`) | `opacity-[var(--opacity-dim)]` |
+| `z.dropdown`, `z.overlay`, `z.toast` | plain `--z-*` custom properties — Tailwind v4 has no `z-index` theme namespace, so these are referenced via arbitrary values | `z-[var(--z-overlay)]` |
 | `elevation.card`, `elevation.dialog`, `elevation.toast` | `--shadow-card`, `--shadow-dialog`, `--shadow-toast` | `shadow-card`, `shadow-dialog`, `shadow-toast` |
 | Skeleton shimmer (§2) | `--animate-shimmer` (kept as its own named animation — Tailwind's built-in `animate-pulse` uses a different 2s/cubic-bezier timing, which would have changed the value) | `animate-shimmer` |
 
@@ -417,19 +435,24 @@ design system นี้เป็นของ **กลาง 1 ชุด ไม�
 | `bp.lg` | `1024px` | desktop | layout หลัก (เต็มรูป) |
 | `bp.xl` | `1280px` | wide desktop | cap ความกว้างเนื้อหา |
 
-- `size.content.max-w` = **1280px** (เนื้อหา centered; page เต็มกว้าง + padding)
+- `size.content.max-w` = **1280px** (เนื้อหา centered; page เต็มกว้าง + padding) — token อยู่ใน §1.3
+  · หน้าคอลัมน์เดียวที่เป็นการ **อ่าน** เป็นหลัก (การตั้งค่า/ความปลอดภัย) ใช้ `size.content.narrow-max-w` (640px) แทน
 - page padding: `space.6` (24px) ที่ ≥lg · `space.4` (16px) ที่ md
 
 ### 8.2 กติกา responsive ต่อ component (desktop → tablet)
 
 | component | desktop (≥lg) | tablet (md 768–1023) |
 |---|---|---|
-| **AppShell nav** (org switcher + เมนู) | sidebar ถาวรซ้าย | ยุบเป็น top bar + drawer (hamburger) |
+| **AppShell nav** (org switcher + เมนู) | sidebar ถาวรซ้าย `size.sidebar.w` | ยุบเป็น top bar (56px) + **drawer ที่ลอยทับหน้า** `size.drawer.w` / สูงสุด `size.drawer.max-w` + scrim `color.overlay` (`z.overlay`) |
 | **DataTable** | คอลัมน์เต็ม | `overflow-x:auto` ในกรอบ (เลื่อนแนวนอน) — คอลัมน์คีย์คงไว้ |
 | **Form** | 1–2 คอลัมน์ตามเหมาะ | 1 คอลัมน์ |
 | **Auth card** | centered `size.auth-card.max-w` (400px) | เหมือนกัน (ใช้ได้ทุกกว้าง) |
 | **Header/ScreenHeader** (§7) | full bar | เหมือนกัน |
 
+- **drawer = ชั้นที่ลอยทับ ไม่ใช่บล็อกที่ดันหน้าลง** — ถ้ามันแทรกอยู่ในสายเนื้อหา ผู้ใช้จะอ่านว่าเป็น
+  "ส่วนหนึ่งของหน้า" และหาทางปิดไม่เจอ · ต้องมีครบ: scrim ที่กดปิดได้ · `Escape` ปิด · ปิดเองเมื่อเลือกเมนู
+  (ไม่งั้นมันบังหน้าที่เพิ่งขอ) · หน้าข้างหลังห้าม scroll ระหว่างเปิด · ปุ่มเปิด/ปิดมี **`aria-label` ภาษาไทย
+  แบบกริยานำ** ("เปิดเมนู"/"ปิดเมนู") + `aria-expanded`
 - **ทุกจอห้าม body scroll แนวนอน** — เนื้อกว้าง (table/chart/code) อยู่ในกรอบ `overflow-x:auto` ของตัวเอง
 - **mockup ตั้งแต่นี้ไป: เช็ค responsive อย่างน้อย 2 จุด (desktop + tablet) ก่อน sign-off** — ขยายเป็นเช็คลิสต์เต็มที่ **§8.4**
 

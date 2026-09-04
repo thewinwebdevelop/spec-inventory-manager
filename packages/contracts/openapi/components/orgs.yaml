@@ -313,6 +313,23 @@ CreatedOrganization:
     `201` of `POST /organizations`. Deliberately complete enough to enter the new
     shop immediately (ux Q5): a client seeds its cache from this body and does
     NOT need to refetch `GET /me/organizations` first.
+
+
+    ⛔ `capabilities` is deliberately NOT here, and this is the second time that
+    absence has had to be stated: a client once filled the field in itself with
+    a literal `full_access` under a comment claiming the response said so
+    (B-13). It does not. What the creator MAY DO has exactly ONE publisher in
+    this contract — `GET /orgs/{orgId}` → `myMembership.capabilities` — and
+    entering a shop you just created is not a special case that gets a second
+    one. Adding it here would make the create path the only way into a shop
+    whose permissions came from somewhere different from every other way in;
+    when the two eventually disagreed, the create path would be the one that
+    failed OPEN (offering Owner actions the server then refuses).
+
+
+    `membership.roleKey` is `"owner"` here and MUST NOT be used to decide what to
+    offer (api-spec §1 item 17): ownership is a capability, never a role key.
+    Ask, like every other entrance does. Full reasoning: api-spec §3.1.
   required:
     - organization
     - membership

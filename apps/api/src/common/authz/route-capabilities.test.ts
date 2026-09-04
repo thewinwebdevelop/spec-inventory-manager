@@ -17,7 +17,11 @@ import {
   MUTATING_HTTP_METHODS,
   READ_HTTP_METHODS,
   ROUTE_CAPABILITIES,
+  TAX_ID_RESPONSE_ALLOWLIST,
+  TOKEN_RESPONSE_ALLOWLIST,
   isMutatingMethod,
+  isTaxIdAllowedOnRoute,
+  isTokenAllowedOnRoute,
   routeKey,
   toTemplatePath,
 } from "./route-capabilities";
@@ -109,6 +113,77 @@ describe("ANY_ACTIVE_MEMBER_ROUTES — two tiers, pinned separately (§3.1 · G-
       // A route declaring BOTH layers is a contradiction — the guard refuses it
       // at runtime, and it must not be expressible in the tables either.
       expect(capabilityKeys.has(routeKey(route))).toBe(false);
+    }
+  });
+});
+
+// ── the two PII response allowlists (test-plan I-04 · §12.2 items 4 and 7) ──
+//
+// SIZE IS THE ASSERTION. Each list answers "which endpoints may put this secret
+// on the wire", and the answer is a number somebody signed: 1 for a full Thai
+// TIN (with `entityType: "personal"` that is a national ID), 2 for a live
+// invitation token (a bearer credential — whoever holds it can join a shop).
+// Adding a third row must make a test red and be argued for; a list that grows
+// quietly is not an allowlist, it is a log of what happened.
+describe("TOKEN_RESPONSE_ALLOWLIST — exactly the two routes that mint a link", () => {
+  it("is exactly POST …/invitations and POST …/invitations/{invitationId}/link", () => {
+    expect(TOKEN_RESPONSE_ALLOWLIST.map(routeKey)).toEqual([
+      "POST /orgs/{orgId}/invitations",
+      "POST /orgs/{orgId}/invitations/{invitationId}/link",
+    ]);
+  });
+
+  it("has EXACTLY two rows — a third endpoint returning a token cannot arrive quietly", () => {
+    expect(TOKEN_RESPONSE_ALLOWLIST).toHaveLength(2);
+  });
+
+  it("is frozen and literal — never a regex or a prefix (@qa's condition)", () => {
+    expect(Object.isFrozen(TOKEN_RESPONSE_ALLOWLIST)).toBe(true);
+    for (const route of TOKEN_RESPONSE_ALLOWLIST) {
+      expect(Object.isFrozen(route)).toBe(true);
+      expect(route.path.startsWith("/")).toBe(true);
+      // `*`/`+`/`(` would mean somebody turned a list into a pattern.
+      expect(route.path).not.toMatch(/[*+()[\]]/);
+    }
+  });
+
+  it("isTokenAllowedOnRoute says yes to both, in either path dialect", () => {
+    expect(isTokenAllowedOnRoute("POST", "/orgs/{orgId}/invitations")).toBe(true);
+    expect(isTokenAllowedOnRoute("post", "/orgs/:orgId/invitations")).toBe(true);
+    expect(isTokenAllowedOnRoute("POST", "/orgs/:orgId/invitations/:invitationId/link")).toBe(true);
+  });
+
+  it("★ says NO to the invitation routes that are one character away", () => {
+    // These are the routes a prefix rule would have adopted for free. The
+    // listing endpoint returns other people's invitations; `preview` is PUBLIC.
+    expect(isTokenAllowedOnRoute("GET", "/orgs/{orgId}/invitations")).toBe(false);
+    expect(isTokenAllowedOnRoute("DELETE", "/orgs/{orgId}/invitations/{invitationId}")).toBe(false);
+    expect(isTokenAllowedOnRoute("POST", "/invitations/preview")).toBe(false);
+    expect(isTokenAllowedOnRoute("POST", "/invitations/accept")).toBe(false);
+    expect(isTokenAllowedOnRoute("GET", "/orgs/{orgId}")).toBe(false);
+  });
+
+  it("the two allowlists are about different secrets and share no route", () => {
+    // Not a style point: if one route were on both lists, an assertion that
+    // exempted it for a token would also be exempting it for a TIN.
+    const tokenKeys = new Set(TOKEN_RESPONSE_ALLOWLIST.map(routeKey));
+    for (const route of TAX_ID_RESPONSE_ALLOWLIST) {
+      expect(tokenKeys.has(routeKey(route))).toBe(false);
+      expect(isTokenAllowedOnRoute(route.method, route.path)).toBe(false);
+    }
+    for (const route of TOKEN_RESPONSE_ALLOWLIST) {
+      expect(isTaxIdAllowedOnRoute(route.method, route.path)).toBe(false);
+    }
+  });
+
+  it("every allowlisted route is a route the capability table also knows", () => {
+    // A row here naming an endpoint that does not exist would be an allowlist
+    // guarding nothing — green forever, and reassuring for exactly that reason.
+    const known = new Set(ROUTE_CAPABILITIES.map(routeKey));
+    for (const route of TOKEN_RESPONSE_ALLOWLIST) {
+      expect(known.has(routeKey(route)), `${routeKey(route)} is not in ROUTE_CAPABILITIES`).toBe(
+        true,
+      );
     }
   });
 });

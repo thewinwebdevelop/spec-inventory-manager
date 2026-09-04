@@ -73,7 +73,7 @@ Phase 0/1 มี**ผู้ใช้กลุ่มเดียวคือเ�
 
 | ช่อง | สถานะ | ใคร |
 |---|---|---|
-| qa เขียว (Gate E) | ⚠️ **ยังไม่ออก verdict** — manual §12.2 เดินแล้ว ([ผลเต็ม](manual-pass-results.md)): M-03/M-05/M-06 ผ่าน · M-04 ครึ่งเดียว · M-02 ตอบไม่ได้เพราะไม่มีจอ · **M-07/ข/ค ทำไม่ได้ (B-18)** · M-01 ต้องใช้คน | qa + คน |
+| qa เขียว (Gate E) | ⚠️ **ยังไม่ออก verdict** — manual §12.2 เดินแล้ว ([ผลเต็ม](manual-pass-results.md)): M-03/M-05/M-06 ผ่าน · M-04 ครึ่งเดียว · M-02 ตอบไม่ได้เพราะไม่มีจอ · **M-07/ข/ค ผ่านครบ** · M-01 ต้องใช้คน | qa + คน |
 | devops env พร้อม | 🔴 **ไม่มี deploy target ใน Phase 0** — ไม่มี environment ให้ประกาศว่าพร้อม | devops |
 | CI Track 1 เขียว | ✅ **9/9 job** ทุก commit ล่าสุด · browser 29 · emulator 4 | — |
 | version + changelog | ⚠️ `CHANGELOG.md` สร้างแล้ว · **เวอร์ชันรอ `release` เคาะ** (ดู §1) | release |
@@ -105,9 +105,8 @@ Running Gradle task 'assembleDebug'...        254.9s
 
 | เรื่อง | เจ้าของ |
 |---|---|
-| เขียน error code 5 ตัว (`EMAIL_TAKEN` ฯลฯ) ลง OpenAPI · `TOKEN_RESPONSE_ALLOWLIST` จะสร้างหรือแก้เอกสาร · `capabilities` ใน `201` ไหม | backend-api |
+| ~~เขียน error code 5 ตัว (`EMAIL_TAKEN` ฯลฯ) ลง OpenAPI · `TOKEN_RESPONSE_ALLOWLIST` จะสร้างหรือแก้เอกสาร · `capabilities` ใน `201` ไหม~~ **✅ ปิดครบ 3 ข้อ 2026-09-05** — (1) 5 code เขียนลง `openapi/paths/*` แล้ว + `UNDOCUMENTED` ว่าง + guard ใหม่ฝั่ง server `apps/api/test/error-code-contract.test.ts` (ทุก code ใน `ERROR_CODES` ต้องถูกประกาศ **และตรง status** — เปลี่ยนชื่อ code = แดง) (2) **สร้างของจริง** `TOKEN_RESPONSE_ALLOWLIST` (2 แถวตัวอักษร) + `isTokenAllowedOnRoute()` + บังคับใน `org-leak.kit.ts` (3) **ไม่ใส่** `capabilities` ใน `201` — เหตุผลเต็มอยู่ที่ api-spec §3.1ก | backend-api |
 | mobile ควร auto-hide เลขภาษีเมื่อทิ้งจอไว้ไหม | ux + product |
 | ตัวเลข `timeout-minutes` ใน CI · `APP_ROLE` ที่ `apps/api/CLAUDE.md` อธิบายไว้สองแบบ | devops |
-| **B-18 (ใหม่ 2026-09-04 · บล็อก M-07/ข/ค):** จอ F-002 ทั้งชุดบนมือถือ **ไม่มีทางเข้าถึงในแอปจริง** — `OrgPickerScreen`/`CreateOrgScreen`/`MembersScreen`/`OrgProfileScreen` มี 0 อ้างอิงใน `lib/` นอกไฟล์ตัวเอง · `app.dart` จบที่ `SecurityScreen` ของ F-001 · **CHANGELOG อ้างว่า ship จอพวกนี้** ⇒ ต้องเคาะ: ต่อ nav ชั่วคราวใน F-002 หรือรอ F-006 แล้วแก้ AC/CHANGELOG ให้ตรง | **product** (+ F-006) |
 | ธง "บัญชีสร้างหลังออกลิงก์" ซ่อนหลังปุ่ม "ดูคำเชิญที่หมดอายุ/ยกเลิกแล้ว" · ปุ่ม "เชิญใหม่อีกครั้ง" (§7 บรรทัด 525) ยังไม่มี · copy ตอนออกจากระบบล้มเหลว (B-16) · CTA "ไปหน้าสมาชิก" ของ LAST_OWNER ชี้หน้าเดิม · connection failure บนมือถือพูดว่า "เกิดข้อผิดพลาด" แทน "เชื่อมต่อไม่ได้" | ux |
-| B-7..B-17 ปิดครบแล้ว (**B-14** `/` → login/select-org · **B-15** แถวคำเชิญที่ตายแล้วบอกว่าลิงก์ยังใช้ได้ · **B-16** ทั้งแอปไม่มีปุ่มออกจากระบบ · **B-17** แอปมือถือชี้ไป API ไหนไม่ได้) | — |
+| B-7..B-18 ปิดครบแล้ว (**B-14** `/` → login/select-org · **B-15** แถวคำเชิญที่ตายแล้วบอกว่าลิงก์ยังใช้ได้ · **B-16** ทั้งแอปไม่มีปุ่มออกจากระบบ · **B-17** แอปมือถือชี้ไป API ไหนไม่ได้ · **B-18** จอ F-002 บนมือถือไม่มีทางเข้าถึง — product เคาะทาง (ก), ต่อ nav ชั่วคราวแล้ว) | — |

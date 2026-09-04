@@ -23,25 +23,46 @@ post:
           schema:
             $ref: "../components/auth.yaml#/SignupResponse"
     "409":
-      description: Email already taken (the one necessary enumeration leak, Gate 1 §4)
+      description: >
+        `EMAIL_TAKEN` — that address already has an account. The one necessary
+        enumeration leak, accepted at Gate 1 §4 and IP-throttled.
       content:
         application/json:
           schema:
             $ref: "../components/common.yaml#/ErrorResponse"
     "415":
-      description: Non-JSON Content-Type (L-2)
+      description: "`UNSUPPORTED_MEDIA_TYPE` — non-JSON Content-Type (L-2)"
       content:
         application/json:
           schema:
             $ref: "../components/common.yaml#/ErrorResponse"
     "422":
-      description: Password policy or email validation failure
+      description: >
+        `EMAIL_INVALID` — the address is not a usable shape (the SAME check
+        invitations apply, so an address that can never become an account is
+        never invited either) · `PASSWORD_TOO_SHORT` (< 8) ·
+        `PASSWORD_TOO_LONG` (> 128) · `PASSWORD_BREACHED` — the password is in
+        the bundled common/leaked list.
+
+
+        Each of the four is a SEPARATE code because each one sends the person to
+        a different sentence and a different field; a client that collapses them
+        shows the wrong advice. The password codes come from the one pure policy
+        function (`@omnistock/core-domain`), so `POST /auth/change-password` and
+        `POST /orgs/{orgId}/members/{userId}/reset-password` answer with exactly
+        the same three values.
+
+
+        ⚠️ Not exhaustive: a body that fails the request-SHAPE check (missing or
+        empty field) also answers `422`, with a `code` that is not one of the
+        values above. Branch on the codes named here and treat anything else as
+        a generic validation failure.
       content:
         application/json:
           schema:
             $ref: "../components/common.yaml#/ErrorResponse"
     "429":
-      description: IP rate limit tripped (Retry-After seconds)
+      description: "`RATE_LIMITED` — IP rate limit tripped (Retry-After seconds)"
       headers:
         Retry-After:
           $ref: "../components/headers.yaml#/RetryAfter"
