@@ -75,7 +75,7 @@ Phase 0/1 มี**ผู้ใช้กลุ่มเดียวคือเ�
 |---|---|---|
 | qa เขียว (Gate E) | ⚠️ **ยังไม่ออก verdict** — เหลือ manual §12.2 (M-01..M-07ค, 9 ข้อ) ซึ่ง §17.6 บังคับให้ทำก่อนตัดสิน | qa + คน |
 | devops env พร้อม | 🔴 **ไม่มี deploy target ใน Phase 0** — ไม่มี environment ให้ประกาศว่าพร้อม | devops |
-| CI Track 1 เขียว | ✅ **9/9 job** ทุก commit ล่าสุด · browser 26 · emulator 4 | — |
+| CI Track 1 เขียว | ✅ **9/9 job** ทุก commit ล่าสุด · browser 28 · emulator 4 | — |
 | version + changelog | ⚠️ `CHANGELOG.md` สร้างแล้ว · **เวอร์ชันรอ `release` เคาะ** (ดู §1) | release |
 | rollback plan | ✅ §2 | release |
 | micro-retro | ✅ เขียนลง `docs/RETRO.md` แล้ว (PM ตรวจ/แก้ได้) | PM |
@@ -108,5 +108,4 @@ Running Gradle task 'assembleDebug'...        254.9s
 | เขียน error code 5 ตัว (`EMAIL_TAKEN` ฯลฯ) ลง OpenAPI · `TOKEN_RESPONSE_ALLOWLIST` จะสร้างหรือแก้เอกสาร · `capabilities` ใน `201` ไหม | backend-api |
 | mobile ควร auto-hide เลขภาษีเมื่อทิ้งจอไว้ไหม | ux + product |
 | ตัวเลข `timeout-minutes` ใน CI · `APP_ROLE` ที่ `apps/api/CLAUDE.md` อธิบายไว้สองแบบ | devops |
-| **B-14 (ใหม่):** `/` ยังเป็น placeholder · web.md สั่งให้ redirect ไป `/o/[defaultOrg]` แต่ **`defaultOrg` ไม่มีในโมเดล** ⇒ ต้องเคาะปลายทางก่อน | **product** |
-| B-7..B-13 ปิดครบแล้ว | — |
+| B-7..B-14 ปิดครบแล้ว (**B-14 ปิด 2026-09-04:** product เคาะว่า `/` ทำเหมือน login — signed out→`/login` · signed in→`/select-org` · E-15/E-15b เดินจริงทั้งสองทาง) | — |
