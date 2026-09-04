@@ -50,3 +50,61 @@ export function formatExpiry(expiresAt: string, now: Date = new Date()): string 
   if (Number.isNaN(at.getTime())) return "";
   return `ลิงก์ใช้ได้ถึง ${DATE_TIME.format(at)} (${formatRemaining(expiresAt, now)})`;
 }
+
+/**
+ * ★ B-15 — what an invitation ROW is allowed to say about its link.
+ *
+ * `formatExpiry` above warns, in its own doc comment, against "telling
+ * somebody a dead link is live" — and the members screen then called it on
+ * every row regardless of status. A cancelled invitation read
+ * "ลิงก์ใช้ได้ถึง 11 ก.ย. 2569 20:36 (อีกประมาณ 7 วัน)" one second after the
+ * confirm dialog had promised "ลิงก์ที่ส่งไปแล้วจะใช้ไม่ได้ทันที". The module
+ * had the rule; the call site ignored it.
+ *
+ * ux-wireframe §7 (line 549) already specifies the four labels — this is not a
+ * copy gap, it is a requirement that was never built:
+ *   `รอตอบรับ · หมดอายุแล้ว · ยกเลิกแล้ว · รับแล้วเมื่อ {วันเวลา}`
+ * …and §14 line 1091 requires a row past `expiresAt` to read "หมดอายุแล้ว"
+ * IMMEDIATELY, without waiting for the server to restate its status.
+ */
+export type InvitationLifecycle = "pending" | "accepted" | "cancelled" | "expired";
+
+export function invitationStatusLabel(
+  invitation: {
+    readonly status: string;
+    readonly expiresAt: string;
+    readonly acceptedAt?: string | null;
+  },
+  now: Date = new Date(),
+): string {
+  switch (invitation.status) {
+    case "accepted": {
+      // `acceptedAt` has been on the wire since the contract was locked and no
+      // screen had ever read it — which is why "ใครรับไปแล้วเมื่อไหร่" (M-04)
+      // could not be answered from the members list at all.
+      const at = invitation.acceptedAt ? new Date(invitation.acceptedAt) : null;
+      return at && !Number.isNaN(at.getTime())
+        ? `รับแล้วเมื่อ ${DATE_TIME.format(at)}`
+        : "รับแล้ว";
+    }
+    case "cancelled":
+      return "ยกเลิกแล้ว";
+    case "expired":
+      return "หมดอายุแล้ว";
+    default: {
+      // A stored `pending` row past its own `expiresAt`: say so now.
+      const at = new Date(invitation.expiresAt).getTime();
+      return Number.isFinite(at) && at <= now.getTime() ? "หมดอายุแล้ว" : "รอตอบรับ";
+    }
+  }
+}
+
+/** True only while the link in somebody's chat app would still work. */
+export function isInvitationLinkLive(
+  invitation: { readonly status: string; readonly expiresAt: string },
+  now: Date = new Date(),
+): boolean {
+  if (invitation.status !== "pending") return false;
+  const at = new Date(invitation.expiresAt).getTime();
+  return Number.isFinite(at) && at > now.getTime();
+}

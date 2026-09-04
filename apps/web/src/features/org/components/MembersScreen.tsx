@@ -18,7 +18,7 @@ import {
 import { memberActionsFor, isOwner } from "../member-actions";
 import { closeInviteLink, openInviteLink, type InviteLinkState } from "../invite-link";
 import { INVITE_LINK_CLOSED } from "../invite-link";
-import { formatExpiry } from "../expiry";
+import { formatExpiry, invitationStatusLabel, isInvitationLinkLive } from "../expiry";
 import { invitationConfirmTh, membersTh, roleLabel } from "../i18n";
 import { errorsTh } from "../../../i18n/errors";
 import { useActiveOrg } from "../../../lib/org/org-context";
@@ -138,6 +138,13 @@ export function MembersScreen() {
                       <Badge tone="neutral">
                         {roleLabel(invitation.roleKey, invitation.roleName)}
                       </Badge>
+                      {/* ★ B-15 — ux-wireframe §7: `รอตอบรับ · หมดอายุแล้ว ·
+                          ยกเลิกแล้ว · รับแล้วเมื่อ {วันเวลา}`. Without it the
+                          only thing separating a cancelled row from a live one
+                          was the ABSENCE of two buttons. */}
+                      <Badge tone={isInvitationLinkLive(invitation) ? "success" : "neutral"}>
+                        {invitationStatusLabel(invitation)}
+                      </Badge>
                       {/* D-028/I-7 — a soft flag, never an accusation. */}
                       {invitation.acceptedUserCreatedAfterInvite === true && (
                         <Badge tone="warning" >
@@ -146,7 +153,14 @@ export function MembersScreen() {
                       )}
                     </>
                   }
-                  sub={formatExpiry(invitation.expiresAt)}
+                  /* ⛔ ONLY while the link would still work. This line used
+                     to render for every row, so a dead invitation advertised
+                     an expiry days in the future — see `expiry.ts`. */
+                  sub={
+                    isInvitationLinkLive(invitation)
+                      ? formatExpiry(invitation.expiresAt)
+                      : undefined
+                  }
                   right={
                     invitation.status === "pending" && (
                       <>

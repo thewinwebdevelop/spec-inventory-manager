@@ -293,4 +293,97 @@ export const BUILD_DEFECTS: readonly BuildDefect[] = Object.freeze([
       { file: "apps/web/e2e/e10-root-route.spec.ts", must: ["E-15", "apps/web placeholder shell"] },
     ],
   },
+  // ── the §12.2 manual pass, 2026-09-04 ────────────────────────────────────
+  // Four findings from ONE person walking the runbook by hand on a real stack.
+  // Every one of them had the full suite — 363 web, 684 api, 440 mobile, a
+  // browser lane and an emulator lane — sitting green on top of it, which is
+  // the same sentence this file has had to write about every row it holds.
+  {
+    finding: "B-15",
+    title:
+      "a CANCELLED invitation still advertised its link as live for another seven days",
+    tier: "smoke",
+    foundBy:
+      "the §12.2 manual pass: cancelling an invitation in a browser, one second after the confirm dialog promised \"ลิงก์ที่ส่งไปแล้วจะใช้ไม่ได้ทันที\"",
+    // `expiry.ts` warns about this in its own doc comment — "telling somebody
+    // a dead link is live" — and `MembersScreen` called `formatExpiry` on
+    // every row without reading `status`. `expiresAt` is NON-NULL on every row
+    // by contract (ux Q14), so it always read and was always wrong. The module
+    // knowing the rule was never the same as the screen obeying it.
+    //
+    // The fix is ux-wireframe §7's own line 549, which had never been built:
+    // `รอตอบรับ · หมดอายุแล้ว · ยกเลิกแล้ว · รับแล้วเมื่อ {วันเวลา}` — and it
+    // closes M-04's missing half too, because `acceptedAt` had been on the
+    // wire since the contract locked with no production line of web code
+    // reading it.
+    pins: [
+      {
+        file: "apps/web/src/features/org/expiry.test.ts",
+        must: ["cancelled is dead even though", "รับแล้วเมื่อ"],
+      },
+      {
+        file: "apps/web/src/features/org/components/MembersScreen.invitation-status.test.tsx",
+        must: ["ยกเลิกแล้ว", "the fix must not blank every row"],
+      },
+    ],
+  },
+  {
+    finding: "B-16",
+    title:
+      "the web app had NO sign-out — the only way out ended every session on every device the person owned",
+    tier: "smoke",
+    foundBy:
+      "the §12.2 manual pass: trying to switch accounts for M-04 and finding nothing to click",
+    // ux-wireframe §S2 draws "ออกจากระบบ" as the last row of the sidebar, and
+    // `orgTh.shell.nav.logout` sat in the dictionary with NO consumer anywhere
+    // in the tree. A missing control renders nothing and asserts nothing:
+    // there is no failing render, no console error, no type error — which is
+    // why every lane stayed green over a gap a person hits in ten seconds.
+    pins: [
+      {
+        file: "apps/web/src/features/org/components/AppShell.logout.test.tsx",
+        must: ["not every session on every device", "does not fake success"],
+      },
+      { file: "apps/web/e2e/e11-sign-out.spec.ts", must: ["E-16", "does not walk back in"] },
+    ],
+  },
+  {
+    finding: "B-17",
+    title:
+      "the mobile app could not be pointed at any API — `main.dart` hardcoded `localhost`, which on a device is the DEVICE",
+    tier: "smoke",
+    foundBy:
+      "the §12.2 manual pass: login failed on a real Android 13 emulator with the generic \"เกิดข้อผิดพลาด\", because `login_controller`'s `catch (_)` swallows the transport error",
+    // `--dart-define=API_BASE_URL=…` — passed by CI's emulator lane AND by the
+    // runbook a human follows — was read by `integration_test/org_flow_test.
+    // dart` and by nothing else. E-10 builds the provider graph itself from
+    // the define and never comes through `main.dart`, so the harness and the
+    // app were each internally consistent and disagreed with each other.
+    //
+    // No behaviour test can catch it: `String.fromEnvironment` is resolved at
+    // COMPILE time, so a running test sees its own build's value and can say
+    // nothing about what the entrypoint asks for. The pin reads source, and
+    // the rule it enforces is that the three places naming this key agree.
+    pins: [
+      {
+        file: "apps/mobile/test/app/base_url_define_test.dart",
+        must: ["the app and its integration test read the SAME key", "10.0.2.2"],
+      },
+    ],
+  },
+  // ── open: the decision is somebody else's ────────────────────────────────
+  {
+    finding: "B-18",
+    title:
+      "every F-002 screen on mobile is orphaned — the app has no way to reach a shop, the members list or the tax card",
+    tier: "none",
+    foundBy:
+      "the §12.2 manual pass, immediately after B-17 was fixed: login succeeded on a real emulator and landed on F-001's SecurityScreen with nowhere to go",
+    owner: "product (+ F-006, which `apps/mobile/lib/app/app.dart` already names as the owner of real navigation)",
+    noTest:
+      "No test, deliberately: writing one would mean BUILDING the navigation, and whether F-002 ships a temporary route or waits for F-006 is a scope decision — the same shape as B-14, which was also left open until product answered. " +
+      "The finding: `CreateOrgScreen`, `MembersScreen`, `OrgPickerScreen` and `OrgProfileScreen` have ZERO references anywhere in `apps/mobile/lib/` outside their own definition files. `app/app.dart` has three destinations — bootstrap, authFlow, and `authenticated → SecurityScreen` — and that file says in its own comment that \"F-006 owns real navigation/IA (app/router.dart)\". " +
+      "This is B-4 one layer up: B-4 was F-002's PROVIDERS never being wired into the app, and closing it wired the graph but not a single screen. It is also B-14's shape on the other platform — `/` sat on a placeholder because no test opened it; these screens work and nobody can open them. E-10 constructs `MembersScreen` inside its own `MaterialApp`, so it proves the screen works WHEN SOMEBODY SHOWS IT and cannot prove anyone can get there. " +
+      "What it blocks: M-07, M-07ข and M-07ค of test-plan §12.2 cannot be performed AT ALL — not here, not by a person with a real phone. `CHANGELOG.md` currently claims F-002 ships those mobile screens; they exist, they work, and the app cannot open them. Product decides: a temporary route now, or accept that F-002's mobile half is not usable until F-006 and correct the changelog and the AC to match.",
+  },
 ]);

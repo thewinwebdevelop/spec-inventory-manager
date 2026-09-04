@@ -76,6 +76,15 @@ export const orgTh = {
       members: "สมาชิก",
       security: "ความปลอดภัย",
       logout: "ออกจากระบบ",
+      /**
+       * ⚠️ COPY GAP (B-16, 2026-09-04) — ux-wireframe §S2 gives the row's
+       * label and no failure copy, because the row had never been built.
+       * Worded from `ux`'s own `auth.sessions.error.logoutAllFailed`
+       * ("ออกจากระบบทุกอุปกรณ์ไม่สำเร็จ ลองใหม่อีกครั้ง") narrowed to one
+       * device, rather than falling back to a generic "เกิดข้อผิดพลาด" for an
+       * action the person deliberately took. Raise with ux to confirm.
+       */
+      logoutFailed: "ออกจากระบบไม่สำเร็จ ลองใหม่อีกครั้ง",
     },
     error: "เปิดข้อมูลร้านไม่สำเร็จ",
   },

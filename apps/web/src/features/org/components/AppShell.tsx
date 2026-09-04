@@ -15,13 +15,15 @@
  */
 import type { ReactNode } from "react";
 import { useEffect, useState } from "react";
-import { usePathname } from "next/navigation";
+import { usePathname, useRouter } from "next/navigation";
 import { useActiveOrg, useCan } from "../../../lib/org/org-context";
-import { NavItem } from "../../../components/ui/NavItem";
+import { NavAction, NavItem } from "../../../components/ui/NavItem";
+import { logoutDevice } from "../../../lib/auth-client";
 import { IconButton } from "../../../components/ui/IconButton";
 import { Icon } from "../../../components/ui/Icon";
 import { orgTh } from "../i18n";
 import { OrgSwitcher } from "./OrgSwitcher";
+import { useToast } from "../../../components/providers/ToastProvider";
 
 /** api-spec §3.3 — the capability the members screen requires. */
 import { CAPABILITY_MANAGE_MEMBERS } from "../../../lib/org/capability";
@@ -47,6 +49,9 @@ export const SECURITY_PATH = "/settings/security";
 export function AppShell({ children }: { children: ReactNode }) {
   const { orgId } = useActiveOrg();
   const pathname = usePathname();
+  const router = useRouter();
+  const toast = useToast();
+  const [signingOut, setSigningOut] = useState(false);
   // §4 answers Q13 explicitly: HIDE it, do not disable it — a disabled entry
   // just raises a question the user cannot resolve.
   const canManageMembers = useCan(CAPABILITY_MANAGE_MEMBERS);
@@ -97,6 +102,32 @@ export function AppShell({ children }: { children: ReactNode }) {
   // route people actually land on after entering a shop.
   const onOrgProfile = pathname === orgProfilePath || pathname === `/o/${orgId}`;
 
+  /**
+   * `logoutDevice()` with no `familyId` ends THIS session only — the refresh
+   * cookie and the in-memory access token — which is what a sidebar "sign
+   * out" means. `logoutAll()` is the deliberate, confirmed action that stays
+   * on the security page.
+   *
+   * ⛔ On failure it STAYS and says so, rather than routing to `/login`
+   * optimistically. `logoutDevice` clears the access token only after the
+   * server has answered `204`, so a failed call leaves both the token and the
+   * refresh cookie alive — sending the person to a login page while their
+   * session is still valid would show them a sign-out that did not happen.
+   * Same shape as `SessionList`'s logout-all error, which is the pattern ux
+   * already specified for this failure.
+   */
+  async function signOut() {
+    setSigningOut(true);
+    try {
+      await logoutDevice();
+      router.replace("/login");
+    } catch {
+      toast.error(orgTh.shell.nav.logoutFailed);
+    } finally {
+      setSigningOut(false);
+    }
+  }
+
   const nav = (
     <>
       <OrgSwitcher />
@@ -120,6 +151,18 @@ export function AppShell({ children }: { children: ReactNode }) {
           <NavItem href={SECURITY_PATH} active={pathname === SECURITY_PATH}>
             {orgTh.shell.nav.security}
           </NavItem>
+        </li>
+        {/* ★ B-16 — ux-wireframe §S2 draws this as the last row of the
+            sidebar, and it had never been built: `orgTh.shell.nav.logout`
+            existed with NO consumer anywhere in the tree. The only way out of
+            the app was "ออกจากระบบทุกอุปกรณ์" on the security page, which ends
+            every session on every device — an answer to a different question.
+            Found by the §12.2 manual pass, when signing out to switch accounts
+            turned out to be impossible without it. */}
+        <li className="mt-1 border-t border-border-default pt-1">
+          <NavAction disabled={signingOut} onClick={signOut}>
+            {orgTh.shell.nav.logout}
+          </NavAction>
         </li>
       </ul>
     </>
