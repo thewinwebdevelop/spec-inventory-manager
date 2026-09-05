@@ -16,7 +16,11 @@
 | ไม่มี deploy target (Phase 0/1) | "released" ยังไม่มีความหมายเชิงปฏิบัติ |
 
 ⇒ **เสนอ:** F-002 อยู่ใต้ `[Unreleased]` ใน `CHANGELOG.md` (สร้างแล้ว) · เวอร์ชันแรกตัดตอนปิด Phase 1
-⇒ **ที่ `release` ต้องเคาะ:** mobile จะเดินเลขเดียวกับ monorepo หรือเลขของตัวเอง (store build number มีข้อบังคับของมัน)
+
+✅ **ตัดสินแล้ว 2026-09-05** (user มอบให้ตัดสินแทน) — **`apps/mobile/pubspec.yaml` = `0.0.0+1`**
+· ตรงกับทุก workspace ของ npm · `1.0.0` เดิมคือ default ของ `flutter create` ที่ไม่มีใครแก้ ⇒ **อ้างเวอร์ชันที่ไม่เคย ship**
+· build number `+1` คงไว้เพราะสโตร์บังคับให้เป็นจำนวนเต็มที่เดินหน้าอย่างเดียว — เลข**หน้า** (`0.0.0`) กับเลข**หลัง** (`+1`) ตอบคนละคำถาม
+· นี่ไม่ใช่การตัดเวอร์ชัน แต่คือการหยุดอ้างเวอร์ชัน · `release` ยังเป็นคนตัด `0.1.0` (หรืออะไรก็ตาม) ตอนปิด Phase 1
 
 ---
 
@@ -76,7 +80,7 @@ Phase 0/1 มี**ผู้ใช้กลุ่มเดียวคือเ�
 | qa เขียว (Gate E) | ⚠️ **ยังไม่ออก verdict** — manual §12.2 เดินแล้ว ([ผลเต็ม](manual-pass-results.md)): M-03/M-05/M-06 ผ่าน · M-04 ครึ่งเดียว · M-02 ตอบไม่ได้เพราะไม่มีจอ · **M-07/ข/ค ผ่านครบ** · M-01 ต้องใช้คน | qa + คน |
 | devops env พร้อม | 🔴 **ไม่มี deploy target ใน Phase 0** — ไม่มี environment ให้ประกาศว่าพร้อม | devops |
 | CI Track 1 เขียว | ✅ **9/9 job** ทุก commit ล่าสุด · browser 29 · emulator 4 | — |
-| version + changelog | ⚠️ `CHANGELOG.md` สร้างแล้ว · **เวอร์ชันรอ `release` เคาะ** (ดู §1) | release |
+| version + changelog | ✅ `CHANGELOG.md` + เลขเวอร์ชันตรงกันทุก workspace แล้ว (`0.0.0`) · **การตัดเวอร์ชันแรกยังเป็นของ `release`** ตอนปิด Phase 1 | release |
 | rollback plan | ✅ §2 | release |
 | micro-retro | ✅ เขียนลง `docs/RETRO.md` แล้ว (PM ตรวจ/แก้ได้) | PM |
 
@@ -106,7 +110,10 @@ Running Gradle task 'assembleDebug'...        254.9s
 | เรื่อง | เจ้าของ |
 |---|---|
 | ~~เขียน error code 5 ตัว (`EMAIL_TAKEN` ฯลฯ) ลง OpenAPI · `TOKEN_RESPONSE_ALLOWLIST` จะสร้างหรือแก้เอกสาร · `capabilities` ใน `201` ไหม~~ **✅ ปิดครบ 3 ข้อ 2026-09-05** — (1) 5 code เขียนลง `openapi/paths/*` แล้ว + `UNDOCUMENTED` ว่าง + guard ใหม่ฝั่ง server `apps/api/test/error-code-contract.test.ts` (ทุก code ใน `ERROR_CODES` ต้องถูกประกาศ **และตรง status** — เปลี่ยนชื่อ code = แดง) (2) **สร้างของจริง** `TOKEN_RESPONSE_ALLOWLIST` (2 แถวตัวอักษร) + `isTokenAllowedOnRoute()` + บังคับใน `org-leak.kit.ts` (3) **ไม่ใส่** `capabilities` ใน `201` — เหตุผลเต็มอยู่ที่ api-spec §3.1ก | backend-api |
-| mobile ควร auto-hide เลขภาษีเมื่อทิ้งจอไว้ไหม | ux + product |
-| ตัวเลข `timeout-minutes` ใน CI · `APP_ROLE` ที่ `apps/api/CLAUDE.md` อธิบายไว้สองแบบ | devops |
-| ธง "บัญชีสร้างหลังออกลิงก์" ซ่อนหลังปุ่ม "ดูคำเชิญที่หมดอายุ/ยกเลิกแล้ว" · ปุ่ม "เชิญใหม่อีกครั้ง" (§7 บรรทัด 525) ยังไม่มี · copy ตอนออกจากระบบล้มเหลว (B-16) · CTA "ไปหน้าสมาชิก" ของ LAST_OWNER ชี้หน้าเดิม · connection failure บนมือถือพูดว่า "เกิดข้อผิดพลาด" แทน "เชื่อมต่อไม่ได้" | ux |
+| mobile auto-hide เลขภาษีด้วย idle timer (ux เสนอ §15.1: ซ่อนเมื่อ "จอไม่ได้อยู่กับผู้ใช้แล้ว" ทำครบแล้ว · idle timer ยังไม่ทำ เพราะกดใหม่ = audit event + กิน quota 20/ชม.) | ux + product |
+| ~~ตัวเลข `timeout-minutes` · `APP_ROLE` ที่ `apps/api/CLAUDE.md` อธิบายสองแบบ~~ **✅ ปิด 2026-09-05** — timeout ตั้งใหม่จากเวลาจริงของ 10 run (มีคอมเมนต์กำกับที่มาของทุกค่า) · `APP_ROLE` แก้แล้วที่บรรทัด 8 ให้บอกตรง ๆ ว่าเป็น target ที่ยังไม่มีในโค้ด (`grep` = 0 ครั้ง) · **iOS**: ยังไม่เพิ่ม mac runner (macOS minute แพงกว่า Linux ~10× และยังไม่มี cert/กำหนด release) — forward-commitment ลดขอบเขตเหลือ iOS แล้ว | devops |
+| **ux ตอบครบแล้ว 2026-09-05 — เหลือ *โค้ด* ที่ยังไม่ได้ตาม copy:** ปุ่ม "เชิญใหม่อีกครั้ง" (สเปกครบใน §7) · CTA ของ `LAST_OWNER` ต้องแตก 2 สาขาตาม §10.3 · `menuLabel`/`leaveLastOwnerCta`/`leaveLastOwnerHere` มีคีย์แล้วยังไม่มีคนเรียก (**รูปเดียวกับ B-16 เป๊ะ** — อย่าปล่อยข้ามรอบ) · literal → token 8 ไฟล์ | frontend |
+| ~~ธง "บัญชีสร้างหลังออกลิงก์" หายาก~~ ป้ายปุ่มเปลี่ยนเป็น "ดูคำเชิญทั้งหมด รวมที่รับแล้ว" แล้ว · **ย้ายธงไปแถวสมาชิก = ไม่ทำตอนนี้** (ต้องเพิ่ม field ใน `MemberRow`) → forward-commitments, trigger = F-004 Gate 2 | — |
+| ~~ปุ่มสลับ dark theme~~ · ~~`@phosphor-icons/react`~~ **ตัดสินแล้ว: ไม่ทำทั้งคู่** — เหตุผล + trigger อยู่ใน `docs/features/forward-commitments.md` | — |
+| **M-02 copy** — `/login/help` เคยบอกให้ติดต่อเจ้าของร้าน/ผู้ดูแลให้ตั้งรหัสใหม่ให้ ทั้งที่**ไม่มีจอไหนเรียก `reset-password` เลย** ⇒ แก้ให้ชี้ไป "ติดต่อทีมงาน OmniStock" ตาม ux-wireframe §12.3 · **กลับมาแก้อีกครั้งเมื่อ F-004 มีจอจริง** | ux + F-004 |
 | B-7..B-18 ปิดครบแล้ว (**B-14** `/` → login/select-org · **B-15** แถวคำเชิญที่ตายแล้วบอกว่าลิงก์ยังใช้ได้ · **B-16** ทั้งแอปไม่มีปุ่มออกจากระบบ · **B-17** แอปมือถือชี้ไป API ไหนไม่ได้ · **B-18** จอ F-002 บนมือถือไม่มีทางเข้าถึง — product เคาะทาง (ก), ต่อ nav ชั่วคราวแล้ว) | — |

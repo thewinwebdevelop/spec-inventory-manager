@@ -56,7 +56,19 @@ export const authTh = {
   },
   help: {
     title: "ลืมรหัสผ่าน?",
-    body: "ตอนนี้ระบบยังไม่รองรับการขอรีเซ็ตรหัสผ่านด้วยตัวเอง กรุณาติดต่อเจ้าของร้าน/ผู้ดูแลระบบ (Owner/Admin) ในทีมของคุณ เพื่อให้ตั้งรหัสผ่านใหม่ให้",
+    /**
+     * ★ M-02 (§12.2 manual pass, 2026-09-04) — this used to send the locked-out
+     * person to their Owner/Admin, and NO SCREEN CALLS
+     * `POST /orgs/{orgId}/members/{userId}/reset-password` on either client.
+     * The endpoint exists, the API refuses correctly, and there is nothing to
+     * press: the advice pointed at a path that does not exist in this phase.
+     *
+     * ux-wireframe §12.3 already decided where a blocked person goes —
+     * "ติดต่อทีมงาน OmniStock" — and §13's own rule is that the UI must never
+     * promise what is not built yet. The reset screen is F-004's; when it
+     * lands, this copy comes back to naming the Owner/Admin.
+     */
+    body: "ตอนนี้ระบบยังไม่รองรับการตั้งรหัสผ่านใหม่ด้วยตัวเอง และคนในร้านก็ยังตั้งให้คุณไม่ได้ — กรุณาติดต่อทีมงาน OmniStock เพื่อขอความช่วยเหลือ",
     bodySoloOwner:
       "หากคุณเป็นเจ้าของร้านเพียงคนเดียวและลืมรหัสผ่าน กรุณารอสักครู่แล้วลองพิมพ์รหัสผ่านที่คิดว่าถูกต้องอีกครั้ง (ระบบจะไม่ล็อกบัญชีคุณถาวร)",
     backToLogin: "กลับไปเข้าสู่ระบบ",

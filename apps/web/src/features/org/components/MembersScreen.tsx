@@ -376,7 +376,9 @@ export function MembersScreen() {
         <RemoveMemberDialog member={acting} onClose={() => setActing(null)} />
       )}
 
-      {acting?.kind === "leave" && <LeaveOrgDialog onClose={() => setActing(null)} />}
+      {acting?.kind === "leave" && (
+        <LeaveOrgDialog origin="members" onClose={() => setActing(null)} />
+      )}
 
       {link.status === "open" && (
         <CopyLinkPanel

@@ -196,7 +196,7 @@ export function AppShell({ children }: { children: ReactNode }) {
               (240px); design-system.md §1.2 has no token for it, so per §6 it
               stays a literal here and goes on the list for ux. */}
           <nav
-            aria-label="เมนูของร้าน"
+            aria-label={orgTh.shell.nav.menuLabel}
             className="absolute inset-y-0 left-0 flex w-[280px] max-w-[85%] flex-col gap-2 overflow-y-auto border-r border-border-default bg-surface p-card-padding shadow-dialog"
           >
             <div className="mb-2 flex items-center justify-between gap-2">
@@ -218,7 +218,7 @@ export function AppShell({ children }: { children: ReactNode }) {
           that existed in design-system.md and in no stylesheet until
           2026-09-01, so this was `md:w-64` (256px) off Tailwind's scale. */}
       <nav
-        aria-label="เมนูของร้าน"
+        aria-label={orgTh.shell.nav.menuLabel}
         className="hidden flex-col gap-2 border-border-default bg-surface p-card-padding lg:flex lg:w-[var(--size-sidebar-w)] lg:border-r"
       >
         <p className="m-0 mb-2 text-heading-sm">OmniStock</p>
