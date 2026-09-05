@@ -1,0 +1,73 @@
+post:
+  operationId: authLogin
+  summary: Authenticate and receive tokens
+  description: >
+    US-2. Public (IP + account throttle). The client declares its transport
+    via `tokenTransport` (default "body"). With "cookie" (web) the refresh
+    token is set as an httpOnly Secure SameSite=Strict cookie `omni_rt`
+    (Path=/auth) plus a readable `omni_csrf` cookie, and the body
+    `refreshToken` is null (H-1). With "body" (mobile/default) the plaintext
+    refresh token is returned in the body and no cookies are set. Wrong
+    password and unknown email both return the identical 401
+    INVALID_CREDENTIALS (enumeration-safe). Throttle is ALWAYS its own 429 +
+    Retry-After (M-1), never folded into the 401.
+  tags:
+    - auth
+  security: []
+  requestBody:
+    required: true
+    content:
+      application/json:
+        schema:
+          $ref: "../components/auth.yaml#/LoginRequest"
+  responses:
+    "200":
+      description: Authenticated — token pair issued
+      headers:
+        Set-Cookie:
+          $ref: "../components/headers.yaml#/SetAuthCookies"
+      content:
+        application/json:
+          schema:
+            $ref: "../components/auth.yaml#/TokenResponse"
+    "401":
+      description: >
+        `INVALID_CREDENTIALS` — wrong password AND unknown email answer with the
+        identical code and message (enumeration-safe).
+      content:
+        application/json:
+          schema:
+            $ref: "../components/common.yaml#/ErrorResponse"
+    "415":
+      description: "`UNSUPPORTED_MEDIA_TYPE` — non-JSON Content-Type (L-2)"
+      content:
+        application/json:
+          schema:
+            $ref: "../components/common.yaml#/ErrorResponse"
+    "422":
+      description: >
+        `EMAIL_INVALID` — bad email shape · `DEVICE_ID_INVALID` — `deviceId`
+        longer than 64 chars or outside `[A-Za-z0-9_-]` ·
+        `TOKEN_TRANSPORT_INVALID` — `tokenTransport` is neither `cookie` nor
+        `body`.
+
+
+        ⚠️ Not exhaustive — see the note on `POST /auth/signup` `422`. Login
+        deliberately does NOT run the password policy here: a policy 422 would
+        tell the caller their guess was well-formed, which is a fact about the
+        password and not about the request.
+      content:
+        application/json:
+          schema:
+            $ref: "../components/common.yaml#/ErrorResponse"
+    "429":
+      description: >
+        `RATE_LIMITED` — IP or account backoff tripped (Retry-After seconds).
+        ALWAYS its own 429, never folded into the 401 (M-1).
+      headers:
+        Retry-After:
+          $ref: "../components/headers.yaml#/RetryAfter"
+      content:
+        application/json:
+          schema:
+            $ref: "../components/common.yaml#/ErrorResponse"

@@ -11,12 +11,23 @@ class _$ErrorResponseError extends ErrorResponseError {
   final String code;
   @override
   final String message;
+  @override
+  final BuiltMap<String, JsonObject?>? details;
+  @override
+  final BuiltMap<String, String>? fieldErrors;
+  @override
+  final String? traceId;
 
   factory _$ErrorResponseError(
           [void Function(ErrorResponseErrorBuilder)? updates]) =>
       (ErrorResponseErrorBuilder()..update(updates))._build();
 
-  _$ErrorResponseError._({required this.code, required this.message})
+  _$ErrorResponseError._(
+      {required this.code,
+      required this.message,
+      this.details,
+      this.fieldErrors,
+      this.traceId})
       : super._();
   @override
   ErrorResponseError rebuild(
@@ -32,7 +43,10 @@ class _$ErrorResponseError extends ErrorResponseError {
     if (identical(other, this)) return true;
     return other is ErrorResponseError &&
         code == other.code &&
-        message == other.message;
+        message == other.message &&
+        details == other.details &&
+        fieldErrors == other.fieldErrors &&
+        traceId == other.traceId;
   }
 
   @override
@@ -40,6 +54,9 @@ class _$ErrorResponseError extends ErrorResponseError {
     var _$hash = 0;
     _$hash = $jc(_$hash, code.hashCode);
     _$hash = $jc(_$hash, message.hashCode);
+    _$hash = $jc(_$hash, details.hashCode);
+    _$hash = $jc(_$hash, fieldErrors.hashCode);
+    _$hash = $jc(_$hash, traceId.hashCode);
     _$hash = $jf(_$hash);
     return _$hash;
   }
@@ -48,7 +65,10 @@ class _$ErrorResponseError extends ErrorResponseError {
   String toString() {
     return (newBuiltValueToStringHelper(r'ErrorResponseError')
           ..add('code', code)
-          ..add('message', message))
+          ..add('message', message)
+          ..add('details', details)
+          ..add('fieldErrors', fieldErrors)
+          ..add('traceId', traceId))
         .toString();
   }
 }
@@ -65,6 +85,22 @@ class ErrorResponseErrorBuilder
   String? get message => _$this._message;
   set message(String? message) => _$this._message = message;
 
+  MapBuilder<String, JsonObject?>? _details;
+  MapBuilder<String, JsonObject?> get details =>
+      _$this._details ??= MapBuilder<String, JsonObject?>();
+  set details(MapBuilder<String, JsonObject?>? details) =>
+      _$this._details = details;
+
+  MapBuilder<String, String>? _fieldErrors;
+  MapBuilder<String, String> get fieldErrors =>
+      _$this._fieldErrors ??= MapBuilder<String, String>();
+  set fieldErrors(MapBuilder<String, String>? fieldErrors) =>
+      _$this._fieldErrors = fieldErrors;
+
+  String? _traceId;
+  String? get traceId => _$this._traceId;
+  set traceId(String? traceId) => _$this._traceId = traceId;
+
   ErrorResponseErrorBuilder() {
     ErrorResponseError._defaults(this);
   }
@@ -74,6 +110,9 @@ class ErrorResponseErrorBuilder
     if ($v != null) {
       _code = $v.code;
       _message = $v.message;
+      _details = $v.details?.toBuilder();
+      _fieldErrors = $v.fieldErrors?.toBuilder();
+      _traceId = $v.traceId;
       _$v = null;
     }
     return this;
@@ -93,13 +132,31 @@ class ErrorResponseErrorBuilder
   ErrorResponseError build() => _build();
 
   _$ErrorResponseError _build() {
-    final _$result = _$v ??
-        _$ErrorResponseError._(
-          code: BuiltValueNullFieldError.checkNotNull(
-              code, r'ErrorResponseError', 'code'),
-          message: BuiltValueNullFieldError.checkNotNull(
-              message, r'ErrorResponseError', 'message'),
-        );
+    _$ErrorResponseError _$result;
+    try {
+      _$result = _$v ??
+          _$ErrorResponseError._(
+            code: BuiltValueNullFieldError.checkNotNull(
+                code, r'ErrorResponseError', 'code'),
+            message: BuiltValueNullFieldError.checkNotNull(
+                message, r'ErrorResponseError', 'message'),
+            details: _details?.build(),
+            fieldErrors: _fieldErrors?.build(),
+            traceId: traceId,
+          );
+    } catch (_) {
+      late String _$failedField;
+      try {
+        _$failedField = 'details';
+        _details?.build();
+        _$failedField = 'fieldErrors';
+        _fieldErrors?.build();
+      } catch (e) {
+        throw BuiltValueNestedFieldError(
+            r'ErrorResponseError', _$failedField, e.toString());
+      }
+      rethrow;
+    }
     replace(_$result);
     return _$result;
   }

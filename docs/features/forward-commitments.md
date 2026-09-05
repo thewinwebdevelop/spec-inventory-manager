@@ -71,6 +71,25 @@
 | Super-admin config entitlement/plan/usage/support (UI) | F-007 mutation = internal API ให้ console ทับ |
 | Super-admin actor + cross-org access **เปิดใช้จริง**   | F-003 US-8 cross-org seam + F-005 audit       |
 
+## → จาก F-002 Gate 2 (2026-07-27..29 · D-027..D-031) — ผูก trigger ทุกแถว
+
+> **ปิดแล้วใน F-002:** D-018 invitation token hash-at-rest (ทำจริง — `Invitation.tokenHash`) ·
+> `@RequireCapability` decorator+guard (**registry/role CRUD ยังเป็น F-003**) · `OrgContextMiddleware`+`ORG_PRISMA`+`withOrgScope` enforcement
+
+| แถว | สิ่งที่ต้องรับเข้า | **TRIGGER** | ที่มา |
+| --- | --- | --- | --- |
+| **F-081 — ทางกู้บัญชี Owner (ทางเดียว)** ⚠️ | หลัง D-030 **ไม่มีใครในระบบรีเซ็ตรหัสให้ Owner ได้** (Admin ได้ 404) ⇒ ร้านที่มี Owner คนเดียวแล้วลืมรหัส **กู้เองไม่ได้** · F-081 ต้องส่งมอบ **self-serve password reset ทาง email** + **"must change password on next login" หลัง admin-reset** (ปิด NEW-5ข) | **ทันทีที่มี SMTP** — และ **บล็อกการเปิดขายจริง (non-dogfood)**: ระบบที่ผู้ใช้กู้บัญชีเองไม่ได้ ห้ามมีลูกค้าจริง | D-030 · NEW-1/NEW-5 |
+| **F-081 — email verification** | จนกว่าจะมี การผูกคำเชิญกับ email เป็น **defense-in-depth ไม่ใช่ control** (`User.verified` ไม่เคยเป็น true + login ไม่เช็ค) ⇒ ใครได้ลิงก์ก็สมัครด้วย email นั้นแล้ว accept ได้ | มี SMTP | D-028 · I-7 |
+| **F-003 — privilege-superset** | `canAssignRole` ของ F-002 เทียบเฉพาะ `full_access` ⇒ ต้องเพิ่ม "actor มอบได้เฉพาะ capability ที่ตัวเองถือ" + **"ห้ามรีเซ็ตรหัสของคนที่สิทธิ์ ⊇ ตัวเอง"** พร้อม capability registry จริง · มี tripwire `G-15` รออยู่แล้ว | **feature ใดก็ตามที่เปิดให้สร้าง/แก้ `capabilities` ของ role** | NEW-10 · D-030 |
+| **F-003 — `Role.key` ของ custom role** | F-002 ตอบว่า `null` · F-003 ตัดสินว่าจะเปิดให้ตั้งเองไหม (ถ้าเปิด ต้องกันชนค่าสงวน `owner\|admin\|staff`) | F-003 Gate 2 | amend #3 |
+| **F-003 — cache membership** | ถ้าเปิด cache ต้อง **invalidate ตอน revoke** + มี test ว่า revoke แล้ว request ถัดไป 403 ทันที ไม่งั้น AC US-5 พังเงียบ | เมื่อ resolve แพงขึ้น (capabilities+entitlements) | arch §1.5 |
+| **F-005 — จอ audit ของ Owner** | event `org.tax_profile.revealed` / `org.member.role_changed` / `auth.password.admin_reset_blocked_*` ต้องมี **จอที่ Owner เห็นจริง** — "ให้ Admin ดู TIN ได้แต่ตรวจสอบได้" ยังเป็นจริงครึ่งเดียวจนกว่าจะมีจอนี้ | F-005 เริ่ม | NEW-11 |
+| **F-011 — `Idempotency-Key`** | F-002 ไม่มี ⇒ กดสร้างร้าน/เชิญซ้ำเร็ว ๆ อาจได้ 2 รายการ (คุมด้วย cap 50 + UI disable ปุ่มไปพลาง) | interceptor กลางเกิดที่ F-011 | api-spec §Contract |
+| **PDPA — retention ของคำเชิญ** | email ของผู้ถูกเชิญที่**ไม่เคยรับ** ค้างในตาราง `Invitation` ตลอดกาล = ข้อมูลส่วนบุคคลของคนที่ไม่เคยเป็นผู้ใช้เรา ⇒ ต้องมี job ลบ/anonymize คำเชิญ `cancelled`/expired ที่เก่ากว่า N เดือน (ค่า N = product/legal) | launch-readiness | M-11 |
+| **F-087 — RLS** | ชั้น client-extension ไม่ครอบ nested read/raw ⇒ การบังคับระดับ DB ยังไม่มี | F-087 hardening | C-3 |
+| **security delta review รอบ 2 (ค้าง)** | user เลือกเลื่อน (spend limit) ⇒ ให้ `security-reviewer` ตรวจตอน **review โค้ดจริงของ ★-task** แทนการตรวจเอกสารซ้ำ — ต้องครอบ: เงื่อนไข §H.4 ทั้ง 4 · NEW-1..12 · ช่องใหม่จาก amend #4 (`409 busy` probe/DoS · `ANY_ACTIVE_MEMBER_ROUTES` 2 tier · `USER_SELECT` frozen บังคับได้จริงไหม · `Role.key` ถูกใช้ตัดสินสิทธิ์ไหม) | **★-task review ก่อน merge (บังคับอยู่แล้ว §3.6)** | D-030 · user 2026-07-29 |
+| **ux — sync-back `design-system.md`** | D-031 ทั้ง 8 ข้อ (icon policy Phosphor §1.6 ใหม่ · `color.info.*` · `type.button.sm` · `size.icon.*` · `focus.ring.*` · tap-target 44px ไม่มีข้อยกเว้น · Button +tertiary/+sm · กฎ theme ที่ `:root` + utility ต้องชนะ) — diff เต็มอยู่ `F-002/ui.md §7` | **ก่อน frontend เริ่ม task UI ตัวแรกของ F-002** | D-031 |
+
 ## → F-081 (Phase 5 — Onboarding) + email infra
 
 | สิ่งที่เลื่อน                                                                                                                                                 | seam ที่วางแล้ว                                                              |
@@ -191,4 +210,59 @@ F-000 final whole-branch review (2026-07-05): AC3 (api `/health`+web 200+flutter
 | --- | --- | --- | --- |
 | **T-001-13** global `/auth/*` request ceiling (L-4, กัน dummy-verify CPU-DoS) + **prod api artifact** (แถวบน) | devops | **เมื่อ spec feature deploy/hosting (F-009 เสนอ) เข้า Gate-1** — ต้องเป็น AC/checklist ของ feature นั้น · หรืออย่างช้า = ก่อน first non-dev deploy | ต้องเข้า Gate-1 ของ F-009 (ถ้าสร้าง) · ระหว่างนี้อยู่ launch-readiness bucket |
 | **T-001-19** agentic Track-2 (Browser Use SME ไทย, non-blocking) | qa + devops | **TRIGGER ปลดแล้ว** (dep T-001-15 = done) → **actionable ทันที**; งาน = wire scheduled workflow (`.github/workflows` cron) + เขียน persona flow | ไม่ block F-001 merge · หยิบเป็น task แยกได้เลย (spawn เป็น chip แล้ว) |
-| **native compile lane ใน CI** (Kotlin/Swift ไม่ถูก compile — flutter-ci = analyze+test เท่านั้น; FLAG_SECURE handlers + AppDelegate ship uncompiled, edit พังเงียบ → guard degrade เป็น no-op) | devops | ก่อน mobile feature ถัดไป (F-006) หรือก่อน first mobile release | เพิ่ม `flutter build apk --debug` (+ iOS `--no-codesign` เมื่อมี mac runner) เข้า flutter-ci · ต้องเพิ่ม `actions/setup-java` (**JDK 17**, matches Flutter's own `errorJavaMinVersionAndroid`) — ยังไม่มีใน flutter-ci job ตอนนี้เพราะไม่ build native · Android toolchain ปัจจุบัน (2026-07-12, pinned พร้อม Flutter 3.44.6/D-0XX): **Gradle 8.9 · AGP 8.6.0 · Kotlin 2.0.0** (ต่ำสุดที่ Flutter 3.44.6 ยอมรับ — จงใจไม่ขยับถึง template default ของ SDK ตัวนี้ (Gradle 9.1/AGP 9.0.1/Kotlin 2.3.20) เพราะ AGP 9+ บังคับ Kotlin-DSL ใหม่ทั้งชุด (`settings.gradle.kts`), โปรเจกต์นี้ยังเป็น Groovy DSL เดิม + `android.newDsl=false` (auto-added โดย Flutter migrator) — งอกเป็น task แยกถ้าจะ migrate DSL เต็ม) · **แยกจาก F-001 merge** เพราะ native build อาจเผย scaffold issue อื่น |
+| **native compile lane ใน CI — ✅ Android/Kotlin ปิดแล้ว (ทางอ้อม), iOS/Swift ยังเปิด** (~~Kotlin/Swift ไม่ถูก compile — flutter-ci = analyze+test เท่านั้น~~ **ไม่จริงแล้วครึ่งหนึ่ง:** เลน `mobile-e2e` (E-10, มาเพื่อรัน emulator integration test ไม่ใช่เพื่อปิด commitment นี้โดยตรง) ต้อง `flutter build`→Gradle `assembleDebug` APK จริงก่อนถึงจะรันได้ ⇒ `MainActivity.kt` (ทั้ง `FLAG_SECURE` และคลิปบอร์ดของ M-07) **compile ทุกรอบ CI แล้ว** — แก้พังแล้วเลนแดง · **iOS/Swift ยังไม่เคยถูก compile เลย** (ไม่มี mac runner) ⇒ `AppDelegate.swift` (privacy overlay ตอนสลับแอป + `localOnly` ของคลิปบอร์ด) ยัง ship โดยไม่มีใคร build, edit พังเงียบ → guard degrade เป็น no-op โดยไม่มีเลนไหนแดง) | devops | ก่อน mobile feature ถัดไปที่แตะ `AppDelegate.swift`/iOS-native (F-006 เป็นตัวที่ใกล้สุด) หรือก่อน first iOS release — อย่างช้าที่สุด | **ตัดสิน 2026-09-05 (devops, ตอบ F-002 release-gate-f §4.1):** ยังไม่เพิ่ม job `macos-latest` ตอนนี้ — เหตุผล: (1) macOS-hosted runner บิลที่ตัวคูณ ~10x ของ Linux minute ใน GitHub Actions, จ่ายทุก PR ไม่ใช่จ่ายครั้งเดียว (2) ยังไม่เคยพิสูจน์ Xcode/CocoaPods toolchain ในโปรเจกต์นี้เลยสักครั้ง — ความเสี่ยงที่ job แรกจะ flaky/ใช้เวลาตั้งค่านานสูง (3) ยังไม่มี consumer จริงของผล build (ไม่มี Apple cert, ไม่มี first iOS release ตั้งเป้าในเฟสนี้) ⇒ ต้นทุนที่จ่ายทุกรอบสูงกว่าประโยชน์ตอนนี้ · **สิ่งที่ทำแทน:** ลดขอบเขต forward-commitment แถวนี้เหลือ **iOS/Swift เท่านั้น** (Android/Kotlin ปิดแล้วจริง ไม่ต้องเพิ่ม `flutter build apk --debug` แยกอีก — `assembleDebug` มีอยู่แล้วใน `mobile-e2e`, เพิ่มซ้ำจะเสียเวลา CI โดยไม่ได้ signal ใหม่) · **เมื่อถึง trigger:** เพิ่ม job `macos-latest` รัน `flutter build ios --no-codesign` (ประเมิน: มักอยู่ราว 10–15 นาทีต่อรอบสำหรับโปรเจกต์ Flutter ขนาดนี้บน mac runner มาตรฐาน — ตัวเลขอ้างอิงจากขนาดโปรเจกต์ทั่วไป ไม่ใช่ค่าที่วัดจริงในโปรเจกต์นี้ เพราะยังไม่เคยรัน ต้องวัดซ้ำตอนเปิดจริง) |
+
+## F-002 · จาก security review ของ wave 5 (`f66451f`) — user เคาะ 2026-08-03
+
+| งานเปิดค้าง | เจ้าของ | **TRIGGER (เมื่อไหร่ทำ)** | binding |
+| --- | --- | --- | --- |
+| **`auth.password.admin_reset_blocked_multi_org` / `..._blocked_owner_target` ต้อง "operator เท่านั้น" ห้ามโผล่ในจอ audit ของ org admin** — ชื่อ event บอกตรงๆ ว่า target เป็น Owner หรืออยู่หลายร้าน = **oracle เดียวกับที่ 404 อุดไว้ แค่ย้ายไปอยู่ในจอ** | product + backend-api | **เมื่อ F-005 (audit log) เข้า Gate 1** — ต้องเป็น AC ของ feature นั้น ไม่ใช่ข้อสังเกตตอน build | user เคาะแล้ว: **ไม่ให้ org admin เห็น** · ถ้า F-005 จะเปิดให้เห็นต้องกลับมาถามใหม่ |
+| **เพิ่ม `409 CONFLICT` (`details.reason='busy'`) ของ `POST /orgs/{orgId}/members/{userId}/reset-password` ลง OpenAPI** — โค้ดคืน 409 แล้ว (§15 แถว 6b) แต่ contract ที่ ship ไปยังไม่รู้จัก ⇒ client ที่ generate จาก spec จะเจอ status ที่ไม่มีใน type | backend-api | **T-002-21** (งาน OpenAPI ของ F-002) — ห้ามเลยไปกว่านั้น เพราะเป็น status ใหม่บน endpoint ที่ ship แล้ว | skill `contract-evolution` · additive (เพิ่ม response) ไม่ breaking |
+| **ทบทวนว่า self-reset ที่ถูกปฏิเสธ (`caller_is_target`) ควรมี security event ไหม** — ตอนนี้เงียบ เหมือน refusal อื่นที่ไม่ใช่ policy · แต่ "มีคนใช้ token ที่ขโมยมาตั้งรหัสใหม่" เป็นสัญญาณที่อยากเห็น | backend-api + product | **F-005 Gate 1** (พร้อมข้อบน) — ตอนนี้ไม่เพิ่มเพราะ §9 pin จำนวน event ไว้ 15 ค่า การเพิ่มที่ 16 ต้องแก้เอกสารที่เซ็นแล้ว | ถ้าเพิ่ม ต้องผ่าน §9 + เทสต์ที่ pin จำนวน |
+| **`hashInvitationToken` ยังไม่มีใน `packages/**`** (architecture §12.2 item 2ก) ⇒ 3 invite scenario ของ test kit ยัง throw `MissingProductionDependencyError` | backend-api | **T-002-19** (คำเชิญฝั่ง org) — kit มีเทสต์ที่จะเขียวเองวันที่ export ลง | qa จงใจไม่คำนวณ hash เอง (ไม่งั้น I-14 พิสูจน์แค่ว่า kit เห็นด้วยกับ kit) |
+| ~~**export `RESPONSE_HEADER_POLICY` / `TOKEN_RESPONSE_ALLOWLIST` / `TAX_ID_RESPONSE_ALLOWLIST`**~~ (architecture §12.2 items 4, 7) — **✅ ปิดครบทั้งสาม 2026-09-05** (backend-api, release-gate-f §5): สองตัวแรกลงที่ T-002-17 แล้ว · `TOKEN_RESPONSE_ALLOWLIST` เป็นตัวสุดท้ายและ**ค้างมานานที่สุดแบบมองไม่เห็น** — เอกสาร 3 ที่ (architecture §12.2 item 4, test-plan I-04, api-spec §592) อ้างถึงมันเหมือนมันมีอยู่ ขณะที่ `test/assertions.kit.ts` เขียนไว้ในคอมเมนต์ว่ามันยังไม่มี ⇒ กฎ "มีแค่ 2 เส้นที่คืน token ได้" ถูกเขียนไว้ 3 ที่และไม่มีใครบังคับ · ตอนนี้อยู่ที่ `apps/api/src/common/authz/route-capabilities.ts` (2 แถวตัวอักษร ไม่ใช่ regex) + `isTokenAllowedOnRoute()` และถูกใช้จริงใน `auditSweep` ของ `org-leak.kit.ts` (finding `token-on-disallowed-route`, สแกน nested + array) | backend-api | ~~T-002-17~~ **ปิดแล้ว** | `assertResponseHeaders` รับ policy เป็น argument อยู่แล้ว ไม่มีสำเนาที่สอง |
+
+## F-003 · ช่องบน last-Owner invariant ที่ยังไม่มีวันนี้ แต่จะมีวันที่ F-003 เปิดให้แก้ role (พบตอน delta review 2026-08-06)
+
+`assertOwnerRemains` ตัดสิน "ใครเป็น Owner" จาก **capabilities** ถูกต้องแล้ว (`isOwnerRole(membership.capabilities)`
+ไม่ใช่ `role.name`/`role.key`) — และ `OwnerChange` มีแค่ **2 รูป**:
+
+```ts
+| { kind: "role_change"; userId; newRoleCapabilities }   // ย้าย membership ไป role อื่น
+| { kind: "revoke";      userId }                        // ถอด membership
+```
+
+**ทั้งสองรูปอธิบายการเปลี่ยนที่ `Membership` — ไม่มีรูปไหนอธิบาย "capabilities ของ `Role` เองเปลี่ยน"**
+
+⇒ วันที่ F-003 เปิดให้แก้ capabilities ของ role: ถอด `full_access` ออกจาก role "Owner" ของร้านที่มี Owner คนเดียว
+จะทำให้ร้าน**เหลือ Owner ศูนย์คน** โดยที่ **ไม่มี membership ใบไหนถูกแตะเลย** ⇒ ไม่มีเส้นทางไหนเรียก
+`assertOwnerRemains` และ invariant ที่ทั้ง F-002 สร้างชั้นล็อกมาปกป้อง ก็ถูกข้ามทั้งดุ้น
+
+**ใน F-002 ยังไม่เกิด** — ไม่มี endpoint ไหนเขียน `Role.capabilities` เลย (ยืนยันด้วย grep: ไม่มี `role.update` ใน `apps/api/src`)
+role ถูกสร้างครั้งเดียวตอน `POST /organizations` แล้วไม่ถูกแก้อีก
+
+| งานเปิดค้าง | เจ้าของ | **TRIGGER** | binding |
+| --- | --- | --- | --- |
+| **ขยาย `OwnerChange` ให้มีรูปที่สาม** (เช่น `{ kind: "role_capabilities_change"; roleId; newCapabilities }`) แล้วบังคับให้ทุกเส้นทางที่แก้ capabilities ของ role เรียก `assertOwnerRemains` ใน tx เดียวกับการเขียน | backend-api | **เมื่อ F-003 เข้า Gate 2** — ต้องเป็นหัวข้อใน architecture ของ F-003 ไม่ใช่ข้อสังเกตตอน build | ผลถ้าไม่ทำ: ร้านเหลือ Owner 0 คน ซึ่งใน Phase 0 **กู้ไม่ได้** (ไม่มี back-office F-085, ไม่มี "ลบร้าน") — เหตุผลเดียวกับที่ §5 ทั้งหัวข้อมีอยู่ |
+
+---
+
+## → F-004 / F-006 (ตัดสินไว้ 2026-09-05 — ทั้งสามข้อคือ "ไม่ทำตอนนี้" ไม่ใช่ "ลืม")
+
+user มอบให้ตัดสินแทน (2026-09-05) · สามข้อนี้เลือก **ไม่ทำ** พร้อมเหตุผลและ trigger — เขียนไว้เพื่อไม่ให้กลายเป็นความเงียบ
+
+| งานเปิดค้าง | เจ้าของ | **TRIGGER** | ทำไมไม่ทำตอนนี้ |
+| --- | --- | --- | --- |
+| **ย้ายธง `acceptedUserCreatedAfterInvite` ไปแถว*สมาชิก*** — ตอนนี้ธงอยู่บนแถว*คำเชิญ*เท่านั้น | backend-api + ux | **เมื่อ F-004 เข้า Gate 2** (จอจัดการสมาชิกเต็มรูป) | ต้องเพิ่ม field ใน `MemberRow` = ผิว contract ใหม่ + ทั้งสอง client + ข้อเท็จจริงเดียวกันอยู่สองที่ · ปัญหาที่ manual pass เจอจริงคือ**หาไม่เจอ** ไม่ใช่ไม่มี ⇒ ux แก้ป้ายปุ่มเป็น "ดูคำเชิญทั้งหมด รวมที่รับแล้ว" ซึ่งปิดอาการนั้นแล้วโดยไม่ต้องแตะ contract |
+| **ปุ่มสลับธีมสว่าง/มืด** | ux + F-006 | **เมื่อ F-006 ทำ IA ของหน้าตั้งค่า** | ทั้งสองแอปตามระบบปฏิบัติการอยู่แล้ว (`prefers-color-scheme` / `ThemeMode.system`) ซึ่งถูกต้องตาม design-system §1.1b · ปุ่มสลับต้องตัดสินเรื่อง**เก็บที่ไหน** (ต่อเครื่อง? ต่อบัญชี? sync ข้ามอุปกรณ์ไหม) ซึ่งเป็นคำถามของหน้าตั้งค่า ไม่ใช่ของ F-002 |
+| **`@phosphor-icons/react` เป็น dependency** | frontend + PM | **เมื่อมีจอที่ `components/ui/Icon.tsx` วาดไม่ไหวจริง ๆ** | ยังไม่ได้ติดตั้ง และไม่ต้องติดตั้ง — `Icon.tsx` ครอบทุกไอคอนที่ F-002 ใช้อยู่แล้ว · dependency ใหม่ต้องผ่าน PM (quality-gate §E diff hygiene) และ "สวยขึ้นนิดหน่อย" ไม่คุ้มกับผิวที่เพิ่ม |
+
+---
+
+## → F-003 / F-020 (จาก Gate E verdict ของ F-002, qa · 2026-09-05)
+
+| งานเปิดค้าง | เจ้าของ | **TRIGGER** | binding |
+| --- | --- | --- | --- |
+| **§10 gate 4 ตัวไม่มี implementation เลย** — G-06 · G-09 · G-11 · G-12 · qa ตรวจ *คุณสมบัติ* ด้วยมือแล้วผ่านวันนี้ (ไม่มี mailer dependency ที่ไหน · `role.key ===` ที่เจอทั้งหมดเป็นคอมเมนต์ที่**ปฏิเสธ**วิธีนั้น เช่น `roles.service.ts:36`) แต่ **gate ที่ไม่มีอยู่ ไม่มีวันแดง** — รูปเดียวกับ NEW-1/B-14 | qa + devops | **ก่อน F-003 เปิด role CRUD** (F-003 ทำให้ role แก้ได้ ⇒ คุณสมบัติที่วันนี้จริงโดยบังเอิญ จะเลิกจริงโดยไม่มีใครรู้) | ตอนนี้พึ่งชั้นที่แข็งกว่าอยู่ (I-45 พิสูจน์ G-12 เชิงพฤติกรรม) |
+| **`--passWithNoTests` เหลืออยู่ 2 workspace** — `packages/connectors` · `apps/back-office` (ทั้งคู่มีไฟล์ source 1 ไฟล์, ยังไม่มีโค้ดจริง) ⇒ วันที่โค้ดลง จะเขียวโดยพิสูจน์อะไรไม่ได้เลย — **รูปเดียวกับ I-37 เป๊ะ** ซึ่งเคยถอดออกจาก `web`/`contracts` ไปแล้วรอบหนึ่ง | devops | **commit แรกที่เพิ่มโค้ดจริงลงสอง workspace นี้** (connectors = F-020) | ถอด flag แล้วต้องมีเทสต์อย่างน้อย 1 ตัว ไม่ใช่ `echo ok` (D-014) |
+| **G-08 ถูกละเมิดตามตัวอักษร** — `packages/db/src/ledger-guard.ts` เปลี่ยน import path (`./generated/client` → `../generated/client`) ตอน B-10 · **semantics ของ ledger ไม่ขยับ** (`ledger-guard.test.ts` 6/6 + ขั้น ledger-immutability ของ `db-migrate` เขียว) — บันทึกไว้ไม่ให้กลายเป็นบรรทัดฐานเงียบ ๆ ว่า "แตะไฟล์นี้ได้ถ้าเทสต์ยังเขียว" | backend-api | **ครั้งถัดไปที่มีคนแตะ `ledger-guard.ts`** | เจตนาของ G-08 คือ "ไฟล์นี้ห้ามขยับโดยไม่มีคนดู" — ครั้งนี้มีคนดูแล้ว (qa) |

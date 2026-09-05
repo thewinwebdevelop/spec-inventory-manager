@@ -2,7 +2,7 @@ import Flutter
 import UIKit
 
 /// T-001-17 ★ (L-5, client-security skill): backs
-/// `apps/mobile/lib/auth/screenshot_guard.dart`'s `omnistock/screenshot_guard`
+/// `apps/mobile/lib/core/security/screenshot_guard.dart`'s `omnistock/screenshot_guard`
 /// MethodChannel. iOS has no OS-level API to block screenshots/screen
 /// recording (unlike Android's `FLAG_SECURE`) — the mitigation available on
 /// this platform is covering the view with an opaque overlay right before
@@ -35,6 +35,10 @@ import UIKit
   private var isScreenshotGuardEnabled = false
   private var privacyOverlay: UIView?
 
+  /// How long a copied tax id may sit on the pasteboard. Long enough to paste
+  /// into another app, short enough that it is not still there tomorrow.
+  private static let clipboardLifetimeSeconds: TimeInterval = 120
+
   override func application(
     _ application: UIApplication,
     didFinishLaunchingWithOptions launchOptions: [UIApplication.LaunchOptionsKey: Any]?
@@ -54,6 +58,43 @@ import UIKit
         case "disable":
           self?.isScreenshotGuardEnabled = false
           self?.removePrivacyOverlay()
+          result(nil)
+        default:
+          result(FlutterMethodNotImplemented)
+        }
+      }
+
+      // ★ M-07 (client-security): backs
+      // `apps/mobile/lib/core/security/sensitive_clipboard.dart`. A national ID
+      // copied here must not travel to the person's other Apple devices.
+      // `localOnly` keeps it off Universal Clipboard; the expiry means the
+      // system clears it rather than holding it indefinitely, which is the
+      // ordinary pasteboard's behaviour.
+      //
+      // Named explicitly because nothing compiles the pair — the channel name
+      // is the only link. The screenshot-guard comment above had gone stale
+      // against a moved file, which is exactly what that costs.
+      let clipboard = FlutterMethodChannel(
+        name: "omnistock/sensitive_clipboard",
+        binaryMessenger: controller.binaryMessenger
+      )
+      clipboard.setMethodCallHandler { call, result in
+        switch call.method {
+        case "copy":
+          guard
+            let args = call.arguments as? [String: Any],
+            let text = args["text"] as? String
+          else {
+            result(FlutterError(code: "BAD_ARGS", message: "text is required", details: nil))
+            return
+          }
+          UIPasteboard.general.setItems(
+            [["public.utf8-plain-text": text]],
+            options: [
+              .localOnly: true,
+              .expirationDate: Date().addingTimeInterval(Self.clipboardLifetimeSeconds),
+            ]
+          )
           result(nil)
         default:
           result(FlutterMethodNotImplemented)

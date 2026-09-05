@@ -43,7 +43,7 @@ Finder submitButtonFinder() => find.widgetWithText(ElevatedButton, 'เปลี
 void main() {
   testWidgets('success clears both fields and calls onChanged', (tester) async {
     final adapter = FakeHttpClientAdapter();
-    adapter.enqueue(FakeResponse(statusCode: 200, jsonBody: {'ok': 'true'}));
+    adapter.enqueue(FakeResponse(statusCode: 200, jsonBody: {'ok': true}));
     final client = await buildClient(adapter);
     var changed = false;
 

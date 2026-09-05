@@ -15,6 +15,7 @@ import { Controller, Get, HttpCode, HttpStatus, Inject, Res } from "@nestjs/comm
 import type { Response } from "express";
 import type { components } from "@omnistock/contracts";
 import { HealthService } from "./health.service";
+import { Public } from "../tenancy/route-scope.decorator";
 
 /**
  * The full /health payload, imported directly from the generated contract
@@ -24,6 +25,10 @@ import { HealthService } from "./health.service";
  */
 type HealthResponsePayload = components["schemas"]["HealthResponse"];
 
+// T-002-13 — the liveness probe answers before any tenant exists, so it carries
+// no org context (architecture §1.1). It returns dependency health only, never
+// tenant data.
+@Public()
 @Controller("health")
 export class HealthController {
   constructor(@Inject(HealthService) private readonly healthService: HealthService) {}

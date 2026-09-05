@@ -89,10 +89,17 @@ void main() {
       adapter.enqueue(FakeResponse(statusCode: 201, jsonBody: {
         'userId': 'u1',
         'email': 'somchai@shop.com',
-        // built_value models `verified` as an enum whose sole wire value is
-        // the STRING "false" (not JSON boolean false) — see
-        // SignupResponseVerifiedEnum in the generated model.
-        'verified': 'false',
+        // ⚠️ A JSON BOOLEAN, which is what the API actually sends.
+        //
+        // This line used to be the string 'false', with a comment explaining
+        // that the generated model wanted it that way — the fake had been
+        // adjusted to match the CLIENT instead of the SERVER, so this test
+        // reproduced the bug faithfully and passed. The contract said
+        // `type: boolean, enum: [false]`, which openapi-generator's dart-dio
+        // target turns into a string-valued EnumClass, and real signups died
+        // with `ApiError(status: 201)`. E-10 on a real emulator found it; the
+        // enum is gone from the contract (tasks.md, 2026-08-17).
+        'verified': false,
       }));
       final client = buildClient(adapter);
 
@@ -438,9 +445,9 @@ void main() {
   group('AuthRepositoryImpl.changePassword', () {
     test('success returns OkResponse and sends the current refresh token to help the server spare this session', () async {
       final adapter = FakeHttpClientAdapter();
-      // built_value models `ok` as an enum whose sole wire value is the
-      // STRING "true" (not JSON boolean true) — see OkResponseOkEnum.
-      adapter.enqueue(FakeResponse(statusCode: 200, jsonBody: {'ok': 'true'}));
+      // A JSON boolean, as the API sends it — see the note in the signup
+      // group: this fake used to say the string 'true'.
+      adapter.enqueue(FakeResponse(statusCode: 200, jsonBody: {'ok': true}));
       final tokenStore = TokenStore(secureStorage: FakeSecureStorage());
       tokenStore.setAccessToken('access-1');
       await tokenStore.setRefreshToken('refresh-1');
@@ -448,7 +455,7 @@ void main() {
 
       final res = await client.changePassword(currentPassword: 'old12345', newPassword: 'new123456');
 
-      expect(res.ok, OkResponseOkEnum.true_);
+      expect(res.ok, isTrue);
       final sentBody = adapter.capturedRequests.single.data as Map;
       expect(sentBody['refreshToken'], 'refresh-1');
     });
@@ -519,7 +526,7 @@ void main() {
         'tokenType': 'Bearer',
       }));
       // 3) retried call -> succeeds.
-      adapter.enqueue(FakeResponse(statusCode: 200, jsonBody: {'ok': 'true'}));
+      adapter.enqueue(FakeResponse(statusCode: 200, jsonBody: {'ok': true}));
 
       final tokenStore = TokenStore(secureStorage: FakeSecureStorage());
       tokenStore.setAccessToken('stale-access');
@@ -528,7 +535,7 @@ void main() {
 
       final res = await client.changePassword(currentPassword: 'old12345', newPassword: 'new123456');
 
-      expect(res.ok, OkResponseOkEnum.true_);
+      expect(res.ok, isTrue);
       expect(adapter.capturedRequests, hasLength(3));
       expect(tokenStore.accessToken, 'fresh-access');
     });

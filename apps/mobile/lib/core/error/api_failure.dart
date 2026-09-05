@@ -19,6 +19,12 @@ import '../l10n/l10n.dart';
 /// `switch` over this sealed class is compiler-exhaustive — see
 /// [failureMessage] — a new failure case can't be silently unhandled
 /// anywhere it's switched over.
+/// api-spec §4 — the one 403 code that means "not a member of this shop".
+const String orgAccessDeniedCode = 'ORG_ACCESS_DENIED';
+
+/// api-spec §1 — `details.reason` marking a 409 as temporary lock contention.
+const String busyReason = 'busy';
+
 sealed class ApiFailure implements Exception {
   const ApiFailure();
 }
@@ -54,6 +60,44 @@ class ForbiddenFailure extends ApiFailure {
   final String? code;
 }
 
+/// ★ T-002-M2 — `403 ORG_ACCESS_DENIED`: not an active member of THIS shop
+/// (removed, never was, or the shop does not exist — api-spec §4).
+///
+/// Its OWN case, not `ForbiddenFailure(code: 'ORG_ACCESS_DENIED')`, because
+/// the two demand opposite behaviour: this one drops the active shop and
+/// sends the person to the picker; [ForbiddenFailure] keeps them where they
+/// are and shows a message. A reader who forgets to check the code gets one
+/// of them at random, and the wrong pick is the destructive direction —
+/// throwing somebody out of a shop they are still a member of.
+///
+/// Separate cases make the omission a compile error instead, because
+/// [failureMessage]'s `switch` is exhaustive. Same decision as the web
+/// client's `ApiFailure` union: "ลืมแล้วพัง ไม่ใช่ลืมแล้วรั่ว".
+///
+/// ⛔ Never sign the person out here. A session is not tied to a shop
+/// (D-027) — `SessionController.orgAccessDenied()` drops the org and keeps
+/// the session.
+class OrgAccessDeniedFailure extends ApiFailure {
+  const OrgAccessDeniedFailure();
+}
+
+/// ★ T-002-M2 — `409 CONFLICT` + `details.reason == "busy"`: the shop is
+/// mid-write on another request and this one lost the row lock
+/// (api-spec §1 "Lock contention", architecture §5.2).
+///
+/// Its own case rather than a flag on [ConflictFailure] because
+/// ux-wireframe §1.4 requires it to be checked BEFORE any screen's own 409
+/// copy — a cancel-invitation screen must not report "คำเชิญนี้ไม่ได้รออยู่แล้ว"
+/// for what is actually a temporary collision. A separate case makes that
+/// ordering structural.
+///
+/// The wire is unchanged: it is still a plain 409, so api-spec §1's promise
+/// that a client which does not recognise `reason` still behaves correctly
+/// holds. Only our taxonomy names the case.
+class BusyFailure extends ApiFailure {
+  const BusyFailure();
+}
+
 /// 403 — tier/entitlement (not RBAC). `feature` carries the entitlement
 /// code once F-007 defines a wire convention for it — see
 /// [mapStatusToApiFailure]'s doc comment for the (conservative, additive)
@@ -63,21 +107,37 @@ class EntitlementFailure extends ApiFailure {
   final String? feature;
 }
 
-/// 400/422. `fieldErrors` is always empty today — the current wire
-/// `ErrorResponse` envelope (`api_client/lib/src/model/error_response*.dart`)
-/// only carries `{code, message}`, no per-field map yet (a `backend-api`
-/// contract change, not a mobile decision — docs/architecture/refactor-plan.md
-/// §2 "wire envelope").
+/// 400/422.
+///
+/// ★ T-002-M3 — [fieldErrors] is now populated. The previous note here said
+/// the wire envelope "only carries `{code, message}`, no per-field map yet",
+/// and that stopped being true when D-025 landed: `ErrorResponseError`
+/// (`api_client/lib/src/model/error_response_error.dart`) has carried
+/// `details` and `fieldErrors` since. The extraction, not the contract, was
+/// the missing half — see `core/api/error_mapping.dart`.
 class ValidationFailure extends ApiFailure {
   const ValidationFailure({this.code, this.fieldErrors = const {}});
   final String? code;
+
+  /// Keyed by field name (`name`, `email`) — the server's own message for
+  /// that field. A screen still decides whether to show it or its own copy;
+  /// `failureMessage` never reaches for it (B6: server prose is not routed
+  /// to the user by default).
   final Map<String, String> fieldErrors;
 }
 
 /// 409.
 class ConflictFailure extends ApiFailure {
-  const ConflictFailure({this.code});
+  const ConflictFailure({this.code, this.details = const {}});
   final String? code;
+
+  /// `error.details` — the numbers a 409 is meaningless without.
+  ///
+  /// ★ `ORG_LIMIT_REACHED` carries `details.limit` precisely so no screen
+  /// hard-codes the cap (api-spec §3.1): the limit is per-plan, and a screen
+  /// that prints its own number is wrong for every plan but one. A missing
+  /// `limit` must fall back to generic copy — never to an invented figure.
+  final Map<String, Object?> details;
 }
 
 /// 404.
@@ -88,7 +148,17 @@ class NotFoundFailure extends ApiFailure {
 /// 5xx, and the safe fallback for any status this mapper doesn't otherwise
 /// recognize — never silently drops a failure into an unhandled state.
 class ServerFailure extends ApiFailure {
-  const ServerFailure();
+  const ServerFailure({this.code});
+
+  /// ★ T-002-M3 — kept because one 5xx is not like the others:
+  /// `503 ORG_PROVISIONING_UNAVAILABLE` means the plan we would attach the
+  /// new shop to is not configured, and ux-wireframe §3 gives it its own copy
+  /// ("ไม่ใช่ความผิดของคุณ"). Without the code, S2 could only offer the
+  /// generic "ลองใหม่" for a condition retrying will not fix.
+  ///
+  /// Null for a 5xx with no envelope (a gateway HTML page) — the generic
+  /// treatment, which is the right default.
+  final String? code;
 }
 
 /// 426 / `APP_UPDATE_REQUIRED`.
@@ -109,7 +179,21 @@ class ForceUpdateFailure extends ApiFailure {
 /// today stays [ForbiddenFailure], the safer of the two UX treatments
 /// (hide/disable) rather than [EntitlementFailure]'s "show + upsell" for a
 /// code that might not actually mean "wrong tier".
-ApiFailure mapStatusToApiFailure(int? status, {String? code, int? retryAfterSeconds}) {
+ApiFailure mapStatusToApiFailure(
+  int? status, {
+  String? code,
+  int? retryAfterSeconds,
+
+  /// `error.details.reason` — today only `"busy"` (api-spec §1). Passed in
+  /// rather than sniffed here so this file stays pure Dart.
+  String? reason,
+
+  /// `error.fieldErrors` / `error.details` (D-025). Passed in for the same
+  /// reason as [reason]: the JSON walk belongs to `core/api`, the
+  /// classification belongs here.
+  Map<String, String> fieldErrors = const {},
+  Map<String, Object?> details = const {},
+}) {
   if (status == null) return const NetworkFailure();
   switch (status) {
     case 429:
@@ -117,21 +201,30 @@ ApiFailure mapStatusToApiFailure(int? status, {String? code, int? retryAfterSeco
     case 401:
       return AuthExpiredFailure(code: code);
     case 403:
+      // ★ Checked FIRST, and by exact code: this is the one 403 that means
+      // "you are not in this shop" rather than "you may not do this".
+      if (code == orgAccessDeniedCode) return const OrgAccessDeniedFailure();
       if (code != null && (code.startsWith('ENTITLEMENT') || code.startsWith('TIER'))) {
         return EntitlementFailure(feature: code);
       }
+      // An unlabelled 403 stays Forbidden — the NON-destructive reading.
+      // Guessing OrgAccessDenied would evict a member on any 403 this build
+      // has not seen before.
       return ForbiddenFailure(code: code);
     case 400:
     case 422:
-      return ValidationFailure(code: code);
+      return ValidationFailure(code: code, fieldErrors: fieldErrors);
     case 409:
-      return ConflictFailure(code: code);
+      // ★ Before the generic conflict, per ux-wireframe §1.4's explicit
+      // ordering rule.
+      if (reason == busyReason) return const BusyFailure();
+      return ConflictFailure(code: code, details: details);
     case 404:
       return const NotFoundFailure();
     case 426:
       return const ForceUpdateFailure();
     default:
-      return const ServerFailure();
+      return ServerFailure(code: code);
   }
 }
 
@@ -152,9 +245,11 @@ String failureMessage(AppLocalizations t, ApiFailure f) => switch (f) {
       NetworkFailure() => t.errorNetwork,
       ThrottledFailure() => t.errorThrottled,
       AuthExpiredFailure() => t.authSessionExpiredToast,
+      OrgAccessDeniedFailure() => t.errorOrgAccessDenied,
       ForbiddenFailure() => t.errorForbidden,
       EntitlementFailure() => t.errorEntitlement,
       ValidationFailure() => t.errorValidation,
+      BusyFailure() => t.errorBusy,
       ConflictFailure() => t.errorConflict,
       NotFoundFailure() => t.errorNotFound,
       ServerFailure() => t.errorServer,

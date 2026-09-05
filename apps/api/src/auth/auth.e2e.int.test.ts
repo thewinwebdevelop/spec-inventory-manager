@@ -13,8 +13,13 @@ import cookieParser from "cookie-parser";
 import request from "supertest";
 import { Redis } from "ioredis";
 import { PrismaClient } from "@omnistock/db";
-import { CAPABILITY_MANAGE_MEMBERS } from "@omnistock/core-domain";
+import { CAPABILITY_FULL_ACCESS, CAPABILITY_MANAGE_MEMBERS } from "@omnistock/core-domain";
 import { AuthModule } from "./auth.module";
+import {
+  SecurityEventsService,
+  collectSecurityEvents,
+  type SecurityEventCollector,
+} from "./security-events.service";
 
 const TEST_DB = process.env.TEST_DATABASE_URL;
 const TEST_REDIS = process.env.TEST_REDIS_URL;
@@ -30,14 +35,50 @@ if (enabled) {
   process.env.JWT_REFRESH_SECRET = "e2e-refresh-secret-32-chars-different-val!";
   process.env.PORT = "3000";
   process.env.NODE_ENV = "test";
+  // F-002 (T-002-06) required vars — loadEnv validates the WHOLE shape, so the
+  // AuthModule factories here exit(1) without them even though auth never reads
+  // them. Test-only placeholders, mirroring CI's integration-api job.
+  // Must be >=32 chars and differ from both JWT secrets (schema .superRefine).
+  process.env.INVITATION_TOKEN_SECRET = "e2e-invitation-secret-32-chars-distinct!!";
+  // http on loopback is accepted because NODE_ENV=test (production requires
+  // https); same value as CI so an asserted inviteUrl reads identically.
+  process.env.WEB_APP_BASE_URL = "http://localhost:3001";
+  process.env.DEFAULT_ORG_PLAN_KEY = "comp_full";
 }
 
 const STRONG_PW = "correct-horse-battery-staple-9f3aK!";
+
+/**
+ * Drop the fields that are random PER RESPONSE, so two error bodies can be
+ * compared for "does this tell the caller anything different?".
+ *
+ * Today that is exactly one field: `traceId` (T-002-10 / NEW-7 — a server-issued
+ * random UUID on every error). It is volatile BY DESIGN, so comparing whole
+ * bodies without normalizing it would fail for reasons that have nothing to do
+ * with information leakage. Everything else stays in the comparison, strictly:
+ * a stray field, a different code, a different message would all still be caught.
+ */
+function stripVolatile(body: unknown): unknown {
+  const clone = JSON.parse(JSON.stringify(body ?? null)) as
+    | { error?: { traceId?: string } }
+    | null;
+  if (clone && typeof clone === "object" && clone.error && typeof clone.error === "object") {
+    delete clone.error.traceId;
+  }
+  return clone;
+}
+
+/** The per-response random id, when the filter is wired into the app. */
+function traceIdOf(body: unknown): string | undefined {
+  return (body as { error?: { traceId?: string } } | null)?.error?.traceId;
+}
 
 d("auth endpoints (E2E, DB+Redis)", () => {
   let app: INestApplication;
   let prisma: PrismaClient;
   let redis: Redis;
+  /** F-005 seam used as the test sink (test-plan §19.1 item 3). */
+  let sink: SecurityEventCollector;
 
   beforeAll(async () => {
     prisma = new PrismaClient({ datasources: { db: { url: TEST_DB } } });
@@ -62,12 +103,47 @@ d("auth endpoints (E2E, DB+Redis)", () => {
         },
       }),
     );
-    await app.init();
+    // Listen on an ephemeral loopback port instead of leaving the server
+    // unstarted. With `init()` alone supertest starts and closes a server for
+    // EVERY request; across parallel forks that churn produced this lane's
+    // transport flakes (`socket hang up`, `Parse Error: Expected HTTP/`) on
+    // arbitrary files, unrelated to the code under test. A listening server is
+    // reused, and `app.close()` still tears it down.
+    await app.listen(0, "127.0.0.1");
+    sink = collectSecurityEvents(app.get(SecurityEventsService));
   });
 
   afterAll(async () => {
+    sink?.stop();
     if (app) await app.close();
-    if (prisma) await prisma.$disconnect();
+    // Delete exactly what this suite created, in FK order. Before this the
+    // suite left its fixtures behind — 65 organizations and 220 users after a
+    // single run — which made "is the database dirty?" unanswerable while
+    // debugging any LATER suite, and grew without bound on a developer box.
+    if (prisma) {
+      if (createdOrgIds.length > 0) {
+        const where = { organizationId: { in: createdOrgIds } };
+        await prisma.invitation.deleteMany({ where });
+        await prisma.membership.deleteMany({ where });
+        await prisma.role.deleteMany({ where });
+        await prisma.organization.deleteMany({ where: { id: { in: createdOrgIds } } });
+      }
+      if (createdEmails.length > 0) {
+        // Users are created over HTTP (signup), so they are tracked by the one
+        // factory that mints their addresses rather than by id.
+        const users = await prisma.user.findMany({
+          where: { email: { in: createdEmails.map((e) => e.toLowerCase()) } },
+          select: { id: true },
+        });
+        const userIds = users.map((u) => u.id);
+        if (userIds.length > 0) {
+          await prisma.refreshToken.deleteMany({ where: { userId: { in: userIds } } });
+          await prisma.membership.deleteMany({ where: { userId: { in: userIds } } });
+          await prisma.user.deleteMany({ where: { id: { in: userIds } } });
+        }
+      }
+      await prisma.$disconnect();
+    }
     if (redis) redis.disconnect();
   });
 
@@ -79,8 +155,31 @@ d("auth endpoints (E2E, DB+Redis)", () => {
     if (keys.length > 0) await redis.del(...keys);
   });
 
+  /**
+   * A per-test client IP, so one test's requests cannot exhaust another's
+   * throttle window. 203.0.113.0/24 is TEST-NET-3 (RFC 5737) — documentation
+   * space that can never be a real client.
+   */
+  let ipCounter = 0;
+  function uniqueForwardedIp(): string {
+    ipCounter += 1;
+    return `203.0.113.${ipCounter % 254 + 1}`;
+  }
+
+  /**
+   * Everything this suite created, so `afterAll` can remove exactly it.
+   *
+   * Postgres is SHARED with the suites vitest runs in parallel, so this is
+   * never a TRUNCATE and never a `deleteMany({})`: those would delete a
+   * neighbour's fixtures and produce a failure nobody can reproduce.
+   */
+  const createdEmails: string[] = [];
+  const createdOrgIds: string[] = [];
+
   function uniqueEmail(prefix: string): string {
-    return `${prefix}-${Date.now()}-${Math.random().toString(36).slice(2)}@e2e.co`;
+    const email = `${prefix}-${Date.now()}-${Math.random().toString(36).slice(2)}@e2e.co`;
+    createdEmails.push(email);
+    return email;
   }
 
   const server = () => app.getHttpServer();
@@ -101,9 +200,18 @@ d("auth endpoints (E2E, DB+Redis)", () => {
   });
 
   it("I1.2 duplicate email → 409 EMAIL_TAKEN", async () => {
+    // Own IP bucket. `IP_WINDOW_MAX` is 20 per 5 minutes keyed on the client
+    // address, and without a forwarded IP every request in every suite shares
+    // the localhost bucket. `beforeEach` clears `throttle:*`, but vitest runs
+    // files in parallel against ONE Redis, so a neighbouring suite's signups
+    // refill the bucket between that clear and this assertion: the FIRST signup
+    // 429s, no user is created, and the second returns 201 instead of 409.
+    // Observed once in a full run and reproduced by the arithmetic — the file
+    // already documents this technique, it just was not applied here.
+    const ip = uniqueForwardedIp();
     const email = uniqueEmail("dup");
-    await request(server()).post("/auth/signup").set("Content-Type", "application/json").send({ email, password: STRONG_PW });
-    const res = await request(server()).post("/auth/signup").set("Content-Type", "application/json").send({ email, password: STRONG_PW });
+    await request(server()).post("/auth/signup").set("Content-Type", "application/json").set("X-Forwarded-For", ip).send({ email, password: STRONG_PW });
+    const res = await request(server()).post("/auth/signup").set("Content-Type", "application/json").set("X-Forwarded-For", ip).send({ email, password: STRONG_PW });
     expect(res.status).toBe(409);
     expect(res.body.error.code).toBe("EMAIL_TAKEN");
   });
@@ -173,7 +281,14 @@ d("auth endpoints (E2E, DB+Redis)", () => {
     const unknown = await request(server()).post("/auth/login").set("Content-Type", "application/json").send({ email: uniqueEmail("nobody"), password: "wrong-but-long-enough" });
     expect(wrong.status).toBe(401);
     expect(unknown.status).toBe(401);
-    expect(wrong.body).toEqual(unknown.body);
+    // Everything a caller could learn from must match. `traceId` (T-002-10) is
+    // excluded because it is random per RESPONSE — and enumeration safety
+    // depends on it staying that way, which is asserted right below: two equal
+    // trace ids would mean the value is derived from the request.
+    expect(stripVolatile(wrong.body)).toEqual(stripVolatile(unknown.body));
+    if (traceIdOf(wrong.body) !== undefined) {
+      expect(traceIdOf(wrong.body)).not.toBe(traceIdOf(unknown.body));
+    }
     expect(wrong.body.error.code).toBe("INVALID_CREDENTIALS");
   });
 
@@ -263,6 +378,7 @@ d("auth endpoints (E2E, DB+Redis)", () => {
     memberEmail: string;
   }> {
     const org = await prisma.organization.create({ data: { name: `Org-${Math.random().toString(36).slice(2)}` } });
+    createdOrgIds.push(org.id);
     const role = await prisma.role.create({
       data: { organizationId: org.id, name: "Admin", capabilities: [CAPABILITY_MANAGE_MEMBERS] },
     });
@@ -370,6 +486,213 @@ d("auth endpoints (E2E, DB+Redis)", () => {
     expect(stillOriginal.status).toBe(200);
   });
 
+  // ── T-002-09 ★ the two F-002 conditions, proven against a real database ───
+  //
+  // These four cases are the ONLY thing that can catch a regression here.
+  // `oasdiff` sees nothing: the request and both response shapes are byte-for-
+  // byte what F-001 shipped. The unit suite (auth.service.test.ts) pins the
+  // decision and the transaction against a fake client; what it cannot prove is
+  // that the cross-org COUNT and the `FOR UPDATE` actually behave this way
+  // against PostgreSQL, with real rows and a real `Membership` unique index.
+
+  /** Put `userId` into a SECOND organization with an active membership (C-2). */
+  async function alsoActiveInAnotherOrg(userId: string): Promise<string> {
+    const other = await prisma.organization.create({
+      data: { name: `Other-${Math.random().toString(36).slice(2)}` },
+    });
+    createdOrgIds.push(other.id);
+    const role = await prisma.role.create({
+      data: { organizationId: other.id, name: "Staff", capabilities: ["manage_products"] },
+    });
+    await prisma.membership.create({
+      data: { organizationId: other.id, userId, roleId: role.id, status: "active" },
+    });
+    return other.id;
+  }
+
+  it("I5.5 (C-2/D-028) target is active in ANOTHER org → 404, password untouched, event emitted", async () => {
+    const { orgId, adminAccess, memberId, memberEmail } = await seedOrgWithAdmin();
+    await alsoActiveInAnotherOrg(memberId);
+    sink.clear();
+
+    const res = await request(server())
+      .post(`/orgs/${orgId}/members/${memberId}/reset-password`)
+      .set("Content-Type", "application/json")
+      .set("Authorization", `Bearer ${adminAccess}`)
+      .send({ newPassword: "cross-tenant-takeover-3Qq!" });
+
+    expect(res.status).toBe(404);
+    // The takeover attempt failing is not enough — the credential must be
+    // provably unchanged, which is what an attacker would actually use.
+    const stillOriginal = await request(server())
+      .post("/auth/login")
+      .set("Content-Type", "application/json")
+      .send({ email: memberEmail, password: STRONG_PW });
+    expect(stillOriginal.status).toBe(200);
+    const withAttempted = await request(server())
+      .post("/auth/login")
+      .set("Content-Type", "application/json")
+      .send({ email: memberEmail, password: "cross-tenant-takeover-3Qq!" });
+    expect(withAttempted.status).toBe(401);
+
+    expect(sink.ofType("auth.password.admin_reset_blocked_multi_org")).toHaveLength(1);
+    expect(sink.ofType("auth.password.admin_reset")).toHaveLength(0);
+  });
+
+  it("I5.6 (NEW-1/D-030) Admin resets an OWNER → 404, password untouched, owner-target event", async () => {
+    const { orgId, adminAccess, memberId, memberEmail } = await seedOrgWithAdmin();
+    // Promote the target to Owner INSIDE this org — the case C-2 cannot see,
+    // because an Owner of a single shop has no "other org" to trip it.
+    const ownerRole = await prisma.role.create({
+      data: {
+        organizationId: orgId,
+        name: "Owner",
+        capabilities: [CAPABILITY_FULL_ACCESS],
+        isSystem: true,
+      },
+    });
+    await prisma.membership.update({
+      where: { organizationId_userId: { organizationId: orgId, userId: memberId } },
+      data: { roleId: ownerRole.id },
+    });
+    sink.clear();
+
+    const res = await request(server())
+      .post(`/orgs/${orgId}/members/${memberId}/reset-password`)
+      .set("Content-Type", "application/json")
+      .set("Authorization", `Bearer ${adminAccess}`)
+      .send({ newPassword: "admin-takes-the-shop-5Rr!" });
+
+    expect(res.status).toBe(404);
+    const stillOriginal = await request(server())
+      .post("/auth/login")
+      .set("Content-Type", "application/json")
+      .send({ email: memberEmail, password: STRONG_PW });
+    expect(stillOriginal.status).toBe(200);
+
+    expect(sink.ofType("auth.password.admin_reset_blocked_owner_target")).toHaveLength(1);
+    expect(sink.ofType("auth.password.admin_reset")).toHaveLength(0);
+  });
+
+  it("I5.7 control · an Owner (full_access) may still reset another Owner → 200", async () => {
+    // Without this the two rules above could be satisfied by an endpoint that
+    // simply never works — a green suite proving only that nothing happens.
+    const { orgId, memberId, memberEmail } = await seedOrgWithAdmin();
+    const ownerRole = await prisma.role.create({
+      data: {
+        organizationId: orgId,
+        name: "Owner",
+        capabilities: [CAPABILITY_FULL_ACCESS],
+        isSystem: true,
+      },
+    });
+    await prisma.membership.update({
+      where: { organizationId_userId: { organizationId: orgId, userId: memberId } },
+      data: { roleId: ownerRole.id },
+    });
+    // The caller is an Owner too.
+    const ownerEmail = uniqueEmail("owner");
+    await request(server()).post("/auth/signup").set("Content-Type", "application/json").send({ email: ownerEmail, password: STRONG_PW });
+    const owner = await prisma.user.findUniqueOrThrow({ where: { email: ownerEmail } });
+    await prisma.membership.create({
+      data: { organizationId: orgId, userId: owner.id, roleId: ownerRole.id, status: "active" },
+    });
+    const ownerLogin = await request(server()).post("/auth/login").set("Content-Type", "application/json").send({ email: ownerEmail, password: STRONG_PW, tokenTransport: "body" });
+
+    const NEW_PW = "owner-resets-owner-6Ss!";
+    const res = await request(server())
+      .post(`/orgs/${orgId}/members/${memberId}/reset-password`)
+      .set("Content-Type", "application/json")
+      .set("Authorization", `Bearer ${ownerLogin.body.accessToken}`)
+      .send({ newPassword: NEW_PW });
+
+    expect(res.status).toBe(200);
+    const login = await request(server())
+      .post("/auth/login")
+      .set("Content-Type", "application/json")
+      .send({ email: memberEmail, password: NEW_PW });
+    expect(login.status).toBe(200);
+  });
+
+  it("I5.8 every refusal reason returns a BYTE-IDENTICAL 404 — no ownership oracle", async () => {
+    // If "blocked because they are the Owner" looked different from "no such
+    // member", the endpoint would answer a question it must never answer: is
+    // this person the owner of this shop?
+    const { orgId, adminAccess, memberId } = await seedOrgWithAdmin();
+    const NEW_PW = "probe-for-a-difference-7Tt!";
+    const call = (target: string) =>
+      request(server())
+        .post(`/orgs/${orgId}/members/${target}/reset-password`)
+        .set("Content-Type", "application/json")
+        .set("Authorization", `Bearer ${adminAccess}`)
+        .send({ newPassword: NEW_PW });
+
+    // (1) no such user at all
+    const unknownUser = await call("00000000-0000-4000-8000-000000000000");
+    // (2) blocked by C-2
+    const multiOrgTarget = await seedOrgWithAdmin();
+    await alsoActiveInAnotherOrg(multiOrgTarget.memberId);
+    const multiOrg = await request(server())
+      .post(`/orgs/${multiOrgTarget.orgId}/members/${multiOrgTarget.memberId}/reset-password`)
+      .set("Content-Type", "application/json")
+      .set("Authorization", `Bearer ${multiOrgTarget.adminAccess}`)
+      .send({ newPassword: NEW_PW });
+    // (3) blocked by NEW-1
+    const ownerRole = await prisma.role.create({
+      data: {
+        organizationId: orgId,
+        name: "Owner",
+        capabilities: [CAPABILITY_FULL_ACCESS],
+        isSystem: true,
+      },
+    });
+    await prisma.membership.update({
+      where: { organizationId_userId: { organizationId: orgId, userId: memberId } },
+      data: { roleId: ownerRole.id },
+    });
+    const ownerTarget = await call(memberId);
+
+    for (const res of [unknownUser, multiOrg, ownerTarget]) {
+      expect(res.status).toBe(404);
+    }
+    expect(stripVolatile(multiOrg.body)).toEqual(stripVolatile(unknownUser.body));
+    expect(stripVolatile(ownerTarget.body)).toEqual(stripVolatile(unknownUser.body));
+    // …and the one field allowed to differ must actually differ, or it is
+    // derived from the request and becomes an oracle of its own.
+    if (traceIdOf(unknownUser.body) !== undefined) {
+      expect(traceIdOf(ownerTarget.body)).not.toBe(traceIdOf(unknownUser.body));
+    }
+  });
+
+  it("I5.9 (High-2) an admin cannot reset their OWN password here → 404, password untouched", async () => {
+    // Narrows a shipped endpoint for the third time, so it gets the same
+    // end-to-end proof as C-2 and NEW-1. The attack it closes: steal a
+    // `manage_members` holder's short-lived ACCESS token, self-reset (no current
+    // password required), and you hold the account permanently — while
+    // `revokeAllForUser` logs the real person out of every device.
+    const { orgId, adminId, adminAccess } = await seedOrgWithAdmin();
+    const admin = await prisma.user.findUniqueOrThrow({ where: { id: adminId } });
+
+    const res = await request(server())
+      .post(`/orgs/${orgId}/members/${adminId}/reset-password`)
+      .set("Content-Type", "application/json")
+      .set("Authorization", `Bearer ${adminAccess}`)
+      .send({ newPassword: "token-thief-takes-over-8Uu!" });
+
+    expect(res.status).toBe(404);
+    // The admin's own password still works, and the attacker's does not.
+    const stillOriginal = await request(server())
+      .post("/auth/login")
+      .set("Content-Type", "application/json")
+      .send({ email: admin.email, password: STRONG_PW });
+    expect(stillOriginal.status).toBe(200);
+    const attempted = await request(server())
+      .post("/auth/login")
+      .set("Content-Type", "application/json")
+      .send({ email: admin.email, password: "token-thief-takes-over-8Uu!" });
+    expect(attempted.status).toBe(401);
+  });
+
   it("logout-all / sessions / change-password require Bearer → 401 without it", async () => {
     expect((await request(server()).get("/auth/sessions")).status).toBe(401);
     expect((await request(server()).post("/auth/logout-all").set("Content-Type", "application/json").send({})).status).toBe(401);
@@ -388,6 +711,8 @@ const ALLOWED_ORIGIN = "http://localhost:3001";
 d("prod-path security wiring (trust proxy 0 + CORS allow-list)", () => {
   let app: INestApplication;
   let redis: Redis;
+  /** Signup emails this block minted, so `afterAll` can remove exactly them. */
+  const spoofEmails: string[] = [];
 
   beforeAll(async () => {
     // Wire the prod path: TRUST_PROXY_HOPS default 0, an explicit CORS origin.
@@ -421,11 +746,36 @@ d("prod-path security wiring (trust proxy 0 + CORS allow-list)", () => {
         },
       }),
     );
-    await app.init();
+    // Listen on an ephemeral loopback port instead of leaving the server
+    // unstarted. With `init()` alone supertest starts and closes a server for
+    // EVERY request; across parallel forks that churn produced this lane's
+    // transport flakes (`socket hang up`, `Parse Error: Expected HTTP/`) on
+    // arbitrary files, unrelated to the code under test. A listening server is
+    // reused, and `app.close()` still tears it down.
+    await app.listen(0, "127.0.0.1");
   });
 
   afterAll(async () => {
     if (app) await app.close();
+    // This block signs users up too, so it removes its own. Same rule as the
+    // suite above: delete exactly what was created, never a table-wide sweep —
+    // vitest runs files in parallel against one shared database.
+    if (spoofEmails.length > 0) {
+      const prisma = new PrismaClient({ datasources: { db: { url: TEST_DB } } });
+      try {
+        const users = await prisma.user.findMany({
+          where: { email: { in: spoofEmails.map((e) => e.toLowerCase()) } },
+          select: { id: true },
+        });
+        const ids = users.map((u) => u.id);
+        if (ids.length > 0) {
+          await prisma.refreshToken.deleteMany({ where: { userId: { in: ids } } });
+          await prisma.user.deleteMany({ where: { id: { in: ids } } });
+        }
+      } finally {
+        await prisma.$disconnect();
+      }
+    }
     if (redis) redis.disconnect();
   });
 
@@ -445,6 +795,7 @@ d("prod-path security wiring (trust proxy 0 + CORS allow-list)", () => {
     // email 422s before the handler, so no bucket would be written). The password
     // strength is irrelevant here — checkIp runs before the policy check.
     const spoofBase = Date.now();
+    spoofEmails.push(`spoof-${spoofBase}-1@example.com`, `spoof-${spoofBase}-2@example.com`);
     await request(server).post("/auth/signup").set("Content-Type", "application/json").set("X-Forwarded-For", "1.2.3.4").send({ email: `spoof-${spoofBase}-1@example.com`, password: STRONG_PW });
     await request(server).post("/auth/signup").set("Content-Type", "application/json").set("X-Forwarded-For", "5.6.7.8").send({ email: `spoof-${spoofBase}-2@example.com`, password: STRONG_PW });
     // Both requests hit the SAME ip bucket → count == 2 under one key.

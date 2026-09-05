@@ -24,15 +24,15 @@ Method | HTTP request | Description
 
 Admin resets a member's password
 
-US-5. Bearer-authed. The capability check is INLINE application logic (F-001-owned): the caller must have an ACTIVE Membership(orgId) whose role grants `manage_members`, AND the target must be an ACTIVE member of orgId (H-2). Any failure → the same-shape 404 (never 403 — no org-existence/status/capability oracle). On success: sets the target's password and revokes all the target's families. The capability check is not expressible as an OpenAPI security requirement. 
+US-5. Bearer-authed. The capability check is INLINE application logic (F-001-owned): the caller must have an ACTIVE Membership(orgId) whose role grants `manage_members`, AND the target must be an ACTIVE member of orgId (H-2). Any failure → the same-shape 404 (never 403 — no org-existence/status/capability oracle). On success: sets the target's password and revokes all the target's families. The capability check is not expressible as an OpenAPI security requirement.  ⚠️ THE WIRE SHAPE IS UNCHANGED SINCE F-001, BUT THE BEHAVIOUR NARROWED TWICE — cases that used to answer `200` now answer the SAME `404`, and no diff tool can see it (api-spec §2 note / architecture §15):   • D-028/C-2 — the target also holds an active membership in ANOTHER shop;   • D-030/NEW-1 — the target is an Owner (role holds `full_access`) and the     caller does not hold `full_access`. Accepted consequence (D-030): a shop with a single Owner who forgets their password cannot self-recover until F-081. 
 
 ### Example
 ```dart
 import 'package:omnistock_api_client/api.dart';
 
 final api = OmnistockApiClient().getAuthApi();
-final String orgId = orgId_example; // String | Organization id (the caller's authority derives from a shared membership)
-final String userId = userId_example; // String | Target member's user id
+final String orgId = orgId_example; // String | Organization id. On F-002 org-scoped routes this is one of the two accepted sources of org context (the other is the `X-Organization-Id` header, D-025); sending both with different values is `422 ORG_MISMATCH`. 
+final String userId = userId_example; // String | Target member's user id.
 final AdminResetRequest adminResetRequest = ; // AdminResetRequest | 
 
 try {
@@ -47,8 +47,8 @@ try {
 
 Name | Type | Description  | Notes
 ------------- | ------------- | ------------- | -------------
- **orgId** | **String**| Organization id (the caller's authority derives from a shared membership) | 
- **userId** | **String**| Target member's user id | 
+ **orgId** | **String**| Organization id. On F-002 org-scoped routes this is one of the two accepted sources of org context (the other is the `X-Organization-Id` header, D-025); sending both with different values is `422 ORG_MISMATCH`.  | 
+ **userId** | **String**| Target member's user id. | 
  **adminResetRequest** | [**AdminResetRequest**](AdminResetRequest.md)|  | 
 
 ### Return type

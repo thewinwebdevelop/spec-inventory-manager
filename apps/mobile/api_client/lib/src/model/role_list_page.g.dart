@@ -1,0 +1,115 @@
+// GENERATED CODE - DO NOT MODIFY BY HAND
+
+part of 'role_list_page.dart';
+
+// **************************************************************************
+// BuiltValueGenerator
+// **************************************************************************
+
+class _$RoleListPage extends RoleListPage {
+  @override
+  final BuiltList<RoleRow> items;
+  @override
+  final String? nextCursor;
+
+  factory _$RoleListPage([void Function(RoleListPageBuilder)? updates]) =>
+      (RoleListPageBuilder()..update(updates))._build();
+
+  _$RoleListPage._({required this.items, this.nextCursor}) : super._();
+  @override
+  RoleListPage rebuild(void Function(RoleListPageBuilder) updates) =>
+      (toBuilder()..update(updates)).build();
+
+  @override
+  RoleListPageBuilder toBuilder() => RoleListPageBuilder()..replace(this);
+
+  @override
+  bool operator ==(Object other) {
+    if (identical(other, this)) return true;
+    return other is RoleListPage &&
+        items == other.items &&
+        nextCursor == other.nextCursor;
+  }
+
+  @override
+  int get hashCode {
+    var _$hash = 0;
+    _$hash = $jc(_$hash, items.hashCode);
+    _$hash = $jc(_$hash, nextCursor.hashCode);
+    _$hash = $jf(_$hash);
+    return _$hash;
+  }
+
+  @override
+  String toString() {
+    return (newBuiltValueToStringHelper(r'RoleListPage')
+          ..add('items', items)
+          ..add('nextCursor', nextCursor))
+        .toString();
+  }
+}
+
+class RoleListPageBuilder
+    implements Builder<RoleListPage, RoleListPageBuilder> {
+  _$RoleListPage? _$v;
+
+  ListBuilder<RoleRow>? _items;
+  ListBuilder<RoleRow> get items => _$this._items ??= ListBuilder<RoleRow>();
+  set items(ListBuilder<RoleRow>? items) => _$this._items = items;
+
+  String? _nextCursor;
+  String? get nextCursor => _$this._nextCursor;
+  set nextCursor(String? nextCursor) => _$this._nextCursor = nextCursor;
+
+  RoleListPageBuilder() {
+    RoleListPage._defaults(this);
+  }
+
+  RoleListPageBuilder get _$this {
+    final $v = _$v;
+    if ($v != null) {
+      _items = $v.items.toBuilder();
+      _nextCursor = $v.nextCursor;
+      _$v = null;
+    }
+    return this;
+  }
+
+  @override
+  void replace(RoleListPage other) {
+    _$v = other as _$RoleListPage;
+  }
+
+  @override
+  void update(void Function(RoleListPageBuilder)? updates) {
+    if (updates != null) updates(this);
+  }
+
+  @override
+  RoleListPage build() => _build();
+
+  _$RoleListPage _build() {
+    _$RoleListPage _$result;
+    try {
+      _$result = _$v ??
+          _$RoleListPage._(
+            items: items.build(),
+            nextCursor: nextCursor,
+          );
+    } catch (_) {
+      late String _$failedField;
+      try {
+        _$failedField = 'items';
+        items.build();
+      } catch (e) {
+        throw BuiltValueNestedFieldError(
+            r'RoleListPage', _$failedField, e.toString());
+      }
+      rethrow;
+    }
+    replace(_$result);
+    return _$result;
+  }
+}
+
+// ignore_for_file: deprecated_member_use_from_same_package,type=lint

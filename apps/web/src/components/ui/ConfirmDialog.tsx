@@ -62,7 +62,7 @@ export function ConfirmDialog({
         aria-modal="true"
         aria-labelledby="confirm-dialog-title"
         aria-describedby="confirm-dialog-body"
-        className="w-[90%] max-w-[400px] rounded-card bg-surface p-6 shadow-dialog"
+        className="w-[90%] max-w-[var(--size-dialog-max-w)] rounded-card bg-surface p-card-padding shadow-dialog"
       >
         <h2
           id="confirm-dialog-title"

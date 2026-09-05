@@ -9,12 +9,16 @@ import swc from "unplugin-swc";
 // `new` their subject directly don't need it, but this keeps both paths working.
 export default defineConfig({
   test: {
-    include: ["src/**/*.{test,int.test}.ts"],
+    // `test/` holds the F-002 test kits (T-002-22) and their meta-tests. They
+    // live outside `src/` on purpose — `tsconfig.json` compiles only `src`, so
+    // a fixture that throws on purpose can never reach `dist/`.
+    include: ["src/**/*.{test,int.test}.ts", "test/**/*.{test,int.test}.ts"],
     exclude: ["node_modules/**", "dist/**"],
     // Integration/E2E specs (*.int.test.ts) hit a real Postgres/Redis and can be
     // slower; give them headroom.
     testTimeout: 30000,
     hookTimeout: 30000,
+
   },
   plugins: [
     swc.vite({

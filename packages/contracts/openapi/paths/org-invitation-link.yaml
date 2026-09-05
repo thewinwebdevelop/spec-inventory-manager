@@ -1,0 +1,107 @@
+parameters:
+  - $ref: "../components/parameters.yaml#/OrgIdParam"
+  - $ref: "../components/parameters.yaml#/InvitationIdParam"
+  - $ref: "../components/parameters.yaml#/OrgIdHeader"
+
+post:
+  operationId: reissueInvitationLink
+  summary: Issue a NEW link for an existing invitation (rotates the token)
+  description: >
+    F-002 api-spec §3.12 (D-027). Requires `manage_members`, plus `full_access`
+    when the INVITATION's role holds `full_access` (NEW-2) — reissuing an Owner
+    invitation is handing out Owner, so the rule that gates creating one gates
+    copying it too. Without that, anyone with `manage_members` could make
+    unlimited copies of the Owner key and the D-028 rule would be bypassed
+    wholesale.
+
+
+    ⚠️ `200`, NOT `201` — nothing is created; an existing invitation's token is
+    rotated. (The implementation shipped `201` in T-002-19 and was corrected to
+    the locked contract in a follow-up commit, rather than the contract being
+    bent to the code.)
+
+
+    ⚠️ THE PREVIOUS LINK STOPS WORKING IMMEDIATELY, and the expiry RESTARTS from
+    now (`now + TTL(role)`), so an elevated-role invitation can be extended 24
+    hours at a time. The UI needs a confirmation dialog and must not use the
+    words "copy the existing link".
+
+
+    The invitation's email and role do not change. Every call emits
+    `org.invitation.link_reissued` so a leaked link can be traced.
+
+
+    An EXPIRED invitation can still be reissued (its stored status is still
+    `pending`) — deliberately, to avoid a dead end on screen; with the Owner-only
+    rule in place, forbidding it would buy no security.
+
+
+    `Cache-Control: no-store` + `Referrer-Policy: no-referrer`.
+  tags:
+    - invitations
+  security:
+    - bearerAuth: []
+  responses:
+    "200":
+      description: A new token and link; the old one is already dead.
+      headers:
+        Cache-Control:
+          $ref: "../components/headers.yaml#/CacheControlNoStore"
+        Pragma:
+          $ref: "../components/headers.yaml#/PragmaNoCache"
+        Referrer-Policy:
+          $ref: "../components/headers.yaml#/ReferrerPolicyNoReferrer"
+      content:
+        application/json:
+          schema:
+            $ref: "../components/orgs.yaml#/ReissuedLink"
+    "401":
+      description: Missing/invalid access token (`UNAUTHENTICATED`)
+      content:
+        application/json:
+          schema:
+            $ref: "../components/common.yaml#/ErrorResponse"
+    "403":
+      description: >
+        `FORBIDDEN` — missing `manage_members`, or reissuing an Owner invitation
+        without `full_access` (nothing is written when this fires) — or
+        `ORG_ACCESS_DENIED`.
+      content:
+        application/json:
+          schema:
+            $ref: "../components/common.yaml#/ErrorResponse"
+    "404":
+      description: "`NOT_FOUND` — no such invitation in this shop."
+      content:
+        application/json:
+          schema:
+            $ref: "../components/common.yaml#/ErrorResponse"
+    "409":
+      description: >
+        `CONFLICT` — the invitation is not in a reissuable state (already
+        accepted or cancelled) · `INVITATION_EXPIRED` — it is past `expiresAt`;
+        an expired link is NOT resurrected, because a `pending` row that can be
+        revived at any time is a permanent standing option rather than an
+        invitation (security review A-9). The way forward is
+        `DELETE /orgs/{orgId}/invitations/{invitationId}` followed by a fresh
+        `POST /orgs/{orgId}/invitations` · or `CONFLICT` +
+        `details.reason = "busy"` (lock contention, retry).
+      content:
+        application/json:
+          schema:
+            $ref: "../components/common.yaml#/ErrorResponse"
+    "422":
+      description: "`ORG_CONTEXT_REQUIRED` / `ORG_MISMATCH`"
+      content:
+        application/json:
+          schema:
+            $ref: "../components/common.yaml#/ErrorResponse"
+    "429":
+      description: "`RATE_LIMITED` — 60 reissues per hour per shop."
+      headers:
+        Retry-After:
+          $ref: "../components/headers.yaml#/RetryAfter"
+      content:
+        application/json:
+          schema:
+            $ref: "../components/common.yaml#/ErrorResponse"

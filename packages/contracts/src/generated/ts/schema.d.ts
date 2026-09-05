@@ -176,8 +176,497 @@ export interface paths {
         /**
          * Admin resets a member's password
          * @description US-5. Bearer-authed. The capability check is INLINE application logic (F-001-owned): the caller must have an ACTIVE Membership(orgId) whose role grants `manage_members`, AND the target must be an ACTIVE member of orgId (H-2). Any failure → the same-shape 404 (never 403 — no org-existence/status/capability oracle). On success: sets the target's password and revokes all the target's families. The capability check is not expressible as an OpenAPI security requirement.
+         *
+         *     ⚠️ THE WIRE SHAPE IS UNCHANGED SINCE F-001, BUT THE BEHAVIOUR NARROWED TWICE — cases that used to answer `200` now answer the SAME `404`, and no diff tool can see it (api-spec §2 note / architecture §15):
+         *       • D-028/C-2 — the target also holds an active membership in ANOTHER shop;
+         *       • D-030/NEW-1 — the target is an Owner (role holds `full_access`) and the
+         *         caller does not hold `full_access`.
+         *     Accepted consequence (D-030): a shop with a single Owner who forgets their password cannot self-recover until F-081.
          */
         post: operations["authAdminResetPassword"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/organizations": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Create a shop (organization)
+         * @description F-002 US-1 (api-spec §3.1). USER-SCOPED: there is no org context on this request and there must not be one — the shop does not exist yet, so any `X-Organization-Id` the caller sends is ignored (I-3).
+         *
+         *     The `201` is deliberately complete enough to enter the new shop immediately (ux Q5): org, the creator's membership + role, the entitlement and the default warehouse. Seed the cache from it; do not refetch `GET /me/organizations` before navigating.
+         *
+         *     Everything is provisioned in ONE transaction: Organization + the three system Roles + the creator's Owner Membership + OrgEntitlement + a default Warehouse. The plan comes from a server-side env seam and FAILS CLOSED (`503 ORG_PROVISIONING_UNAVAILABLE`) rather than falling back to a tier nobody authorised.
+         *
+         *     Rate limit 10/hour/user (abuse control, fails OPEN if Redis is down). The 50-shops-per-user cap is enforced separately IN the transaction and fails CLOSED (`409 ORG_LIMIT_REACHED` with `details.limit`).
+         */
+        post: operations["createOrganization"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/me/organizations": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * List the shops I belong to (org switcher)
+         * @description F-002 US-2 (api-spec §3.2). USER-SCOPED — "which shops am I in?" has no single org to be scoped to, so `X-Organization-Id` is ignored (I-3).
+         *
+         *     `status=active` (the default) is evaluated as a DATABASE FILTER on every request: no cache, no TTL. A client that receives `403 ORG_ACCESS_DENIED` refetches this endpoint and the shop it was removed from is already gone (AC US-5 / D-027).
+         *
+         *     `status=all` additionally returns shops the caller was removed from, and those rows come back in the SHORT shape — id, name, status, `revokedAt` and nothing else (M-10). The role they held and the plan that shop is on are internal facts about an organization they are no longer part of.
+         *
+         *     ⚠️ `?withTotal=true` is NOT supported here (see the T-002-21 report): api-spec §1 states the convention generally, but only `GET /orgs/{orgId}/members` implements it. An unknown query parameter is ignored, so asking for it simply yields no `total`.
+         */
+        get: operations["listMyOrganizations"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/orgs/{orgId}": {
+        parameters: {
+            query?: never;
+            header?: {
+                /** @description Org context (api-spec §1). Optional on routes that already carry `{orgId}` in the path; if both are sent they MUST match, otherwise `422 ORG_MISMATCH`. User-scoped and public routes ignore this header entirely (I-3). */
+                "X-Organization-Id"?: components["parameters"]["OrgIdHeader"];
+            };
+            path: {
+                /** @description Organization id. On F-002 org-scoped routes this is one of the two accepted sources of org context (the other is the `X-Organization-Id` header, D-025); sending both with different values is `422 ORG_MISMATCH`. */
+                orgId: components["parameters"]["OrgIdParam"];
+            };
+            cookie?: never;
+        };
+        /**
+         * Shop profile (org + plan + tax status + my membership)
+         * @description F-002 api-spec §3.3. Any ACTIVE member may call it; the body is safe for them because it goes through the PDPA mapper — no member list, no full tax id, and `taxIdMasked` only for a caller holding `manage_org_settings` (ux Q13, which is stricter than D-028).
+         *
+         *     `myMembership.capabilities` exists so the client can hide buttons it should not offer. It is NOT enforcement — the server refuses the call regardless.
+         *
+         *     `Cache-Control: no-store` always: the body carries the shop's name and its tax status.
+         */
+        get: operations["getOrganization"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        /**
+         * Update the shop's name / logo / timezone
+         * @description F-002 api-spec §3.4. Requires `manage_org_settings`. Returns the SAME body as `GET` — one mapper, so the field-level authorization cannot drift between the two.
+         *
+         *     An absent key means "leave alone"; an empty patch is a valid no-op that returns the current profile. `logo` accepts `null` and nothing else until F-040 mints object keys (M-4).
+         */
+        patch: operations["updateOrganization"];
+        trace?: never;
+    };
+    "/orgs/{orgId}/tax-profile": {
+        parameters: {
+            query?: never;
+            header?: {
+                /** @description Org context (api-spec §1). Optional on routes that already carry `{orgId}` in the path; if both are sent they MUST match, otherwise `422 ORG_MISMATCH`. User-scoped and public routes ignore this header entirely (I-3). */
+                "X-Organization-Id"?: components["parameters"]["OrgIdHeader"];
+            };
+            path: {
+                /** @description Organization id. On F-002 org-scoped routes this is one of the two accepted sources of org context (the other is the `X-Organization-Id` header, D-025); sending both with different values is `422 ORG_MISMATCH`. */
+                orgId: components["parameters"]["OrgIdParam"];
+            };
+            cookie?: never;
+        };
+        get?: never;
+        /**
+         * Declare (or clear) the shop's legal tax identity
+         * @description F-002 US-7 (api-spec §3.5). Requires `manage_org_settings`. `PUT` of the WHOLE set: send the complete declaration, or `{}` to clear it. There is no half-declared state (data-model §3.3), so a partial body is `422` with a message on every field that is missing.
+         *
+         *     ⚠️ THE RESPONSE DOES NOT ECHO `taxId` BACK. It is the ordinary §3.3 profile body — `taxIdMasked` at most. The caller typed the number, so returning it adds nothing and only multiplies the places a full TIN appears. The value is never logged either; the security event records `taxIdPresent` and `entityType` only.
+         *
+         *     F-002 stores the declaration and exposes `taxProfileComplete`. Gating features on it is F-007's job, not this endpoint's.
+         */
+        put: operations["putTaxProfile"];
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/orgs/{orgId}/tax-profile/reveal": {
+        parameters: {
+            query?: never;
+            header?: {
+                /** @description Org context (api-spec §1). Optional on routes that already carry `{orgId}` in the path; if both are sent they MUST match, otherwise `422 ORG_MISMATCH`. User-scoped and public routes ignore this header entirely (I-3). */
+                "X-Organization-Id"?: components["parameters"]["OrgIdHeader"];
+            };
+            path: {
+                /** @description Organization id. On F-002 org-scoped routes this is one of the two accepted sources of org context (the other is the `X-Organization-Id` header, D-025); sending both with different values is `422 ORG_MISMATCH`. */
+                orgId: components["parameters"]["OrgIdParam"];
+            };
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Reveal the shop's full tax id (deliberate, recorded, rate-limited)
+         * @description F-002 api-spec §3.16 (ux Q7/Q13, D-030/NEW-11). Requires `manage_org_settings` — which Admin also holds, decided deliberately: the person who files the shop's tax documents has to be able to read the number. It is fenced by CONTROLS rather than by hiding it:
+         *       (a) a deliberate action, never a side effect of opening the shop page;
+         *       (b) `org.tax_profile.revealed` on every success (the event carries NO TIN);
+         *       (c) 20/hour per (user, shop);
+         *       (d) `no-store` + `no-cache` + `no-referrer`;
+         *       (e) `TAX_ID_RESPONSE_ALLOWLIST` = this route and nothing else, CI-pinned.
+         *
+         *
+         *     `POST` with an empty body `{}`, not `GET`: a GET would record a national-ID lookup in browser history, in proxy access logs and in the `Referer` of the next outbound link.
+         *
+         *     `200`, not `201` — nothing is created.
+         *
+         *     Known limitation (forward-commitment): the Owner has no screen showing these reveal events until F-005.
+         */
+        post: operations["revealTaxId"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/orgs/{orgId}/members": {
+        parameters: {
+            query?: never;
+            header?: {
+                /** @description Org context (api-spec §1). Optional on routes that already carry `{orgId}` in the path; if both are sent they MUST match, otherwise `422 ORG_MISMATCH`. User-scoped and public routes ignore this header entirely (I-3). */
+                "X-Organization-Id"?: components["parameters"]["OrgIdHeader"];
+            };
+            path: {
+                /** @description Organization id. On F-002 org-scoped routes this is one of the two accepted sources of org context (the other is the `X-Organization-Id` header, D-025); sending both with different values is `422 ORG_MISMATCH`. */
+                orgId: components["parameters"]["OrgIdParam"];
+            };
+            cookie?: never;
+        };
+        /**
+         * List the shop's members
+         * @description F-002 US-5 (api-spec §3.7). ⚠️ THIS READ REQUIRES `manage_members`. Every row carries somebody's email address, which is PII under PDPA (D-028/I-8) — it is not a UX preference, and a Staff member calling it gets `403 FORBIDDEN`. If a screen needs "who did this?", take the name/id off the resource rather than pulling the whole directory.
+         *
+         *     `status` defaults to `all` here (unlike `GET /me/organizations`, whose default is `active`): this is the audit view of who is and who WAS in the shop, and hiding removed rows by default would make "why can this person no longer sign in?" unanswerable from the UI. `invited` is not an accepted value — memberships are only created at accept time (data-model §7), so the filter could only ever return nothing. People invited but not yet joined live in `GET /orgs/{orgId}/invitations`.
+         *
+         *     This is the ONLY list endpoint that supports `?withTotal=true` today.
+         *
+         *     `Cache-Control: no-store` — a list of email addresses must not sit in a shared cache (M-11).
+         */
+        get: operations["listMembers"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/orgs/{orgId}/members/{userId}": {
+        parameters: {
+            query?: never;
+            header?: {
+                /** @description Org context (api-spec §1). Optional on routes that already carry `{orgId}` in the path; if both are sent they MUST match, otherwise `422 ORG_MISMATCH`. User-scoped and public routes ignore this header entirely (I-3). */
+                "X-Organization-Id"?: components["parameters"]["OrgIdHeader"];
+            };
+            path: {
+                /** @description Organization id. On F-002 org-scoped routes this is one of the two accepted sources of org context (the other is the `X-Organization-Id` header, D-025); sending both with different values is `422 ORG_MISMATCH`. */
+                orgId: components["parameters"]["OrgIdParam"];
+                /** @description Target member's user id. */
+                userId: components["parameters"]["UserIdParam"];
+            };
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        /**
+         * Remove another member from the shop
+         * @description F-002 US-5 (api-spec §3.9). Requires `manage_members`, plus `full_access` when the target is an Owner (D-028/C-1).
+         *
+         *     SOFT delete: `status → revoked` and `revokedAt` is stamped. The row stays, because history references it and because `revokedAt` is a security input — an invitation issued BEFORE it can no longer be accepted (I-1).
+         *
+         *     In the SAME transaction, any pending invitation for that person's email in this shop is cancelled; `cancelledInvitations` reports how many, so the UI can say so.
+         *
+         *     Effect is immediate: the removed member's next request to this shop is `403 ORG_ACCESS_DENIED` and the shop is gone from their `GET /me/organizations`. Their session is not destroyed and their other shops are untouched.
+         *
+         *     Removing YOURSELF through this route works, but only if you already hold `manage_members`. Everyone else uses `DELETE /orgs/{orgId}/membership` — this route grants nobody a softer path (D-029).
+         *
+         *     Idempotency under a race: two concurrent revokes of the same person produce one `200` and one `404`, and `revokedAt` is written once.
+         */
+        delete: operations["revokeMember"];
+        options?: never;
+        head?: never;
+        /**
+         * Change a member's role
+         * @description F-002 US-6 (api-spec §3.8). Requires `manage_members`, and additionally `full_access` (Owner-only, D-028/C-1) when EITHER the new role holds `full_access` (promoting somebody — including yourself — to Owner) OR the target's CURRENT role holds it (editing an Owner). Otherwise `403 FORBIDDEN`.
+         *
+         *     Acting on yourself is allowed (an Owner stepping down after appointing a successor), subject to the last-Owner rule.
+         *
+         *     Answers with the §3.7 member row, so the client never has to refetch the list to render the new state — which is why this response carries an email address and therefore the §3.7 `no-store` policy (api-spec §1 lists §3.7 but not §3.8 by number; the classification follows the SHAPE, and `RESPONSE_HEADER_POLICY` in apps/api encodes that).
+         *
+         *     The target's state is re-read INSIDE the transaction, after the shop's row lock is taken — so a `PATCH` racing a `DELETE` answers `404`, never a 500 or a resurrection.
+         */
+        patch: operations["updateMemberRole"];
+        trace?: never;
+    };
+    "/orgs/{orgId}/roles": {
+        parameters: {
+            query?: never;
+            header?: {
+                /** @description Org context (api-spec §1). Optional on routes that already carry `{orgId}` in the path; if both are sent they MUST match, otherwise `422 ORG_MISMATCH`. User-scoped and public routes ignore this header entirely (I-3). */
+                "X-Organization-Id"?: components["parameters"]["OrgIdHeader"];
+            };
+            path: {
+                /** @description Organization id. On F-002 org-scoped routes this is one of the two accepted sources of org context (the other is the `X-Organization-Id` header, D-025); sending both with different values is `422 ORG_MISMATCH`. */
+                orgId: components["parameters"]["OrgIdParam"];
+            };
+            cookie?: never;
+        };
+        /**
+         * List this shop's roles (the invite dropdown)
+         * @description F-002 (api-spec §3.6). Any ACTIVE member may read it: the response carries no personal data and nothing about anybody else — three role names the caller can already see on their own membership. Requiring `manage_members` would mean a Staff member could not be shown the name of their own role.
+         *
+         *     It exists because AC US-3 makes choosing a role MANDATORY when inviting somebody: without this endpoint no client can populate that dropdown, so the acceptance criterion could not be met at all.
+         *
+         *     Read-only in F-002. F-003 adds create/update/delete.
+         */
+        get: operations["listOrgRoles"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/orgs/{orgId}/membership": {
+        parameters: {
+            query?: never;
+            header?: {
+                /** @description Org context (api-spec §1). Optional on routes that already carry `{orgId}` in the path; if both are sent they MUST match, otherwise `422 ORG_MISMATCH`. User-scoped and public routes ignore this header entirely (I-3). */
+                "X-Organization-Id"?: components["parameters"]["OrgIdHeader"];
+            };
+            path: {
+                /** @description Organization id. On F-002 org-scoped routes this is one of the two accepted sources of org context (the other is the `X-Organization-Id` header, D-025); sending both with different values is `422 ORG_MISMATCH`. */
+                orgId: components["parameters"]["OrgIdParam"];
+            };
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        /**
+         * Leave this shop myself
+         * @description F-002 US-5 / D-029 (api-spec §3.17). ANY active member may call it — NO `manage_members` required.
+         *
+         *     ⚠️ WHY THIS IS A SEPARATE ROUTE rather than relaxing `DELETE /orgs/{orgId}/members/{userId}` when the id happens to be your own:
+         *       1. Confused deputy closed BY SHAPE — there is no `userId` anywhere in this
+         *          route, so the target is `ctx.userId` always and no bug can point it at
+         *          another person. The alternative closes the same hole with an `if`, and
+         *          an `if` is exactly what finding C-1 was.
+         *       2. The route registry stays decidable — the capability guard reads
+         *          metadata only; "the capability depends on a value in the path" cannot
+         *          be expressed in metadata and would push the decision into a service,
+         *          where forgetting it is silent.
+         *       3. Different event: `org.member.left`, not `org.member.revoked`. Afterwards
+         *          "did they walk out or were they cleared out?" is answerable.
+         *
+         *
+         *     Behaviour is identical to §3.9 apart from the actor: soft revoke, own pending invitations cancelled in the same transaction, the shop disappears from `GET /me/organizations` immediately, other shops and the session untouched.
+         *
+         *     `200` with a body rather than `204`: the caller needs `cancelledInvitations` and `revokedAt` for the confirmation copy.
+         *
+         *     ⛔ There is NO `403 FORBIDDEN` on this route — there is no capability to lack, so a 403 here can only be `ORG_ACCESS_DENIED`.
+         *
+         *     ⚠️ The last Owner cannot leave (`409 LAST_OWNER`) and F-002 has no "delete shop", so the way out is to appoint another Owner first. Accepted limitation.
+         */
+        delete: operations["leaveOrganization"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/orgs/{orgId}/invitations": {
+        parameters: {
+            query?: never;
+            header?: {
+                /** @description Org context (api-spec §1). Optional on routes that already carry `{orgId}` in the path; if both are sent they MUST match, otherwise `422 ORG_MISMATCH`. User-scoped and public routes ignore this header entirely (I-3). */
+                "X-Organization-Id"?: components["parameters"]["OrgIdHeader"];
+            };
+            path: {
+                /** @description Organization id. On F-002 org-scoped routes this is one of the two accepted sources of org context (the other is the `X-Organization-Id` header, D-025); sending both with different values is `422 ORG_MISMATCH`. */
+                orgId: components["parameters"]["OrgIdParam"];
+            };
+            cookie?: never;
+        };
+        /**
+         * List the shop's invitations
+         * @description F-002 api-spec §3.10. Requires `manage_members` — every row carries somebody else's email address (PDPA, D-028/I-8).
+         *
+         *     Never returns a token or a link: only an HMAC of the token is stored (D-018), so there is nothing to return. Use `POST /orgs/{orgId}/invitations/{invitationId}/link` to mint a new one.
+         *
+         *     The members screen is ONE screen with TWO sections, fetched from this endpoint and `GET /orgs/{orgId}/members` separately and NOT merged (ux Q1): the two sources have different states and different actions (reissue/cancel vs change-role/remove), each with its own cursor and its own error states.
+         *
+         *     ⚠️ `?withTotal=true` is NOT supported here — see the T-002-21 report.
+         *
+         *     `Cache-Control: no-store` + `Referrer-Policy: no-referrer`.
+         */
+        get: operations["listInvitations"];
+        put?: never;
+        /**
+         * Invite somebody to the shop (returns the link once)
+         * @description F-002 US-3 (api-spec §3.11, D-012). Requires `manage_members`, plus `full_access` when the invited role itself holds `full_access` (D-028/C-1).
+         *
+         *     ⚠️ `token` and `inviteUrl` are shown THIS ONCE. Only an HMAC is stored (D-018), so there is no "resend the same link" — and no email is sent (D-012): the UI must offer a copy button and the user forwards it.
+         *
+         *     LIFETIME DEPENDS ON THE ROLE: 24 hours when the invited role holds `full_access` or `manage_members`, 7 days otherwise (D-028/I-7). ⛔ The UI must render `expiresAt` and never hard-code "7 days".
+         *
+         *     Inviting an address that already has a live invitation is `409 INVITATION_PENDING` WITH `details.invitationId` (+ `expiresAt`, `roleId`, `roleName`), so the UI can immediately offer "issue a new link" or "cancel" instead of leaving the user in a dead end (D-027).
+         *
+         *     `Cache-Control: no-store` + `Referrer-Policy: no-referrer` — the body carries a live credential.
+         */
+        post: operations["createInvitation"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/orgs/{orgId}/invitations/{invitationId}": {
+        parameters: {
+            query?: never;
+            header?: {
+                /** @description Org context (api-spec §1). Optional on routes that already carry `{orgId}` in the path; if both are sent they MUST match, otherwise `422 ORG_MISMATCH`. User-scoped and public routes ignore this header entirely (I-3). */
+                "X-Organization-Id"?: components["parameters"]["OrgIdHeader"];
+            };
+            path: {
+                /** @description Organization id. On F-002 org-scoped routes this is one of the two accepted sources of org context (the other is the `X-Organization-Id` header, D-025); sending both with different values is `422 ORG_MISMATCH`. */
+                orgId: components["parameters"]["OrgIdParam"];
+                /** @description Invitation id (`inv_…`). */
+                invitationId: components["parameters"]["InvitationIdParam"];
+            };
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        /**
+         * Cancel a pending invitation
+         * @description F-002 api-spec §3.13. Requires `manage_members`. Any link already sent stops working immediately.
+         */
+        delete: operations["cancelInvitation"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/orgs/{orgId}/invitations/{invitationId}/link": {
+        parameters: {
+            query?: never;
+            header?: {
+                /** @description Org context (api-spec §1). Optional on routes that already carry `{orgId}` in the path; if both are sent they MUST match, otherwise `422 ORG_MISMATCH`. User-scoped and public routes ignore this header entirely (I-3). */
+                "X-Organization-Id"?: components["parameters"]["OrgIdHeader"];
+            };
+            path: {
+                /** @description Organization id. On F-002 org-scoped routes this is one of the two accepted sources of org context (the other is the `X-Organization-Id` header, D-025); sending both with different values is `422 ORG_MISMATCH`. */
+                orgId: components["parameters"]["OrgIdParam"];
+                /** @description Invitation id (`inv_…`). */
+                invitationId: components["parameters"]["InvitationIdParam"];
+            };
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Issue a NEW link for an existing invitation (rotates the token)
+         * @description F-002 api-spec §3.12 (D-027). Requires `manage_members`, plus `full_access` when the INVITATION's role holds `full_access` (NEW-2) — reissuing an Owner invitation is handing out Owner, so the rule that gates creating one gates copying it too. Without that, anyone with `manage_members` could make unlimited copies of the Owner key and the D-028 rule would be bypassed wholesale.
+         *
+         *     ⚠️ `200`, NOT `201` — nothing is created; an existing invitation's token is rotated. (The implementation shipped `201` in T-002-19 and was corrected to the locked contract in a follow-up commit, rather than the contract being bent to the code.)
+         *
+         *     ⚠️ THE PREVIOUS LINK STOPS WORKING IMMEDIATELY, and the expiry RESTARTS from now (`now + TTL(role)`), so an elevated-role invitation can be extended 24 hours at a time. The UI needs a confirmation dialog and must not use the words "copy the existing link".
+         *
+         *     The invitation's email and role do not change. Every call emits `org.invitation.link_reissued` so a leaked link can be traced.
+         *
+         *     An EXPIRED invitation can still be reissued (its stored status is still `pending`) — deliberately, to avoid a dead end on screen; with the Owner-only rule in place, forbidding it would buy no security.
+         *
+         *     `Cache-Control: no-store` + `Referrer-Policy: no-referrer`.
+         */
+        post: operations["reissueInvitationLink"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/invitations/preview": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Look at an invitation before signing in or signing up (public)
+         * @description F-002 US-4 (api-spec §3.14). PUBLIC — the invite page has to render before the person decides whether to sign in or sign up, so there is nobody to authenticate. The quota is therefore the ONLY bound on this endpoint: 30/hour per IP (IPv6 collapsed to /64, so one subscriber cannot mint unlimited buckets).
+         *
+         *     ⛔ THE TOKEN IS IN THE BODY, NOT THE QUERY STRING (I-6). It is the single secret standing between a stranger and membership of a shop; in a URL it would be written to access logs, to every proxy in front of us and to the `Referer` of anything the invite page loads. A free side effect: a POST is not cached by anything.
+         *
+         *     Returns no `organizationId`, no full email address and no member list.
+         *
+         *     `Cache-Control: no-store` + `Referrer-Policy: no-referrer`.
+         *
+         *     @frontend: read the token out of the URL, `history.replaceState` it away immediately, and keep it in memory (never localStorage) for the whole sign-up → sign-in → accept flow.
+         */
+        post: operations["previewInvitation"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/invitations/accept": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Accept an invitation and join the shop
+         * @description F-002 US-4 (api-spec §3.15). USER-SCOPED: authenticated, but about the USER, not about an org. The organization comes from the invitation ROW and from nowhere else — `X-Organization-Id` is ignored entirely (I-3), which is a structural property of this route rather than a check somebody must remember.
+         *
+         *     The signed-in account's normalized email must match the invited address, otherwise `403 INVITATION_EMAIL_MISMATCH` with `details.emailMasked` so the UI can say which account to use. ⚠️ Phase 0 cannot verify email addresses (F-081), so this is defence in depth, NOT a control: whoever holds the link can redeem it.
+         *
+         *     Somebody previously REMOVED from the shop comes back only if the invitation was issued AFTER the removal; otherwise `409 INVITATION_SUPERSEDED`.
+         *
+         *     Already an active member → `409 ALREADY_MEMBER` and THE EXISTING ROLE IS NOT TOUCHED (the invitation is marked cancelled so it does not linger). An earlier draft upserted the role here, which opened "accepting an invitation leaves the shop with zero Owners".
+         *
+         *     Decision order, pinned by unit test: unknown token → expired → cancelled/accepted → email mismatch → role unavailable → already a member → superseded → success. Every one of these is re-checked INSIDE the transaction that holds the shop's row lock, so `accept` cannot slip between a `revoke`/`cancel`/`reissue` and win.
+         *
+         *     `Cache-Control: no-store` + `Referrer-Policy: no-referrer`.
+         */
+        post: operations["acceptInvitation"];
         delete?: never;
         options?: never;
         head?: never;
@@ -208,19 +697,6 @@ export interface components {
                 redis?: "ok" | "fail";
             };
         };
-        /** @description The project-standard error envelope. `code` is a machine-readable uppercase enum; `message` is user-facing Thai copy. Every error response (401/403/404/409/415/422/429) references this schema. */
-        ErrorResponse: {
-            error: {
-                /** @description Machine-readable error code (e.g. INVALID_CREDENTIALS, RATE_LIMITED) */
-                code: string;
-                /** @description User-facing Thai message */
-                message: string;
-            };
-        };
-        OkResponse: {
-            /** @enum {boolean} */
-            ok: true;
-        };
         SignupRequest: {
             /** Format: email */
             email: string;
@@ -229,8 +705,34 @@ export interface components {
         SignupResponse: {
             userId: string;
             email: string;
-            /** @enum {boolean} */
-            verified: false;
+            verified: boolean;
+        };
+        /** @description The project-standard error envelope, produced by `DomainExceptionFilter` for every failure (F-001 §3.5, F-002 api-spec §1/§4). `code` is a machine-readable UPPER_SNAKE value the client switches on; `message` is user-facing Thai copy the client MUST NOT parse. */
+        ErrorResponse: {
+            error: {
+                /**
+                 * @description Machine-readable error code (e.g. `INVALID_CREDENTIALS`, `ORG_ACCESS_DENIED`, `RATE_LIMITED`). A shipped value never changes.
+                 *
+                 *     Every code a response can carry is named in that response's `description` — an error code IS contract, because clients branch on it to choose which sentence a person reads (contract-evolution: adding a code is additive, changing or removing one is breaking).
+                 *
+                 *     TWO CODES BELONG TO NO SINGLE ENDPOINT and are therefore documented here instead: `INTERNAL` (`500`) — the filter's fallback for any unrecognised error, carrying no detail by design — and `UNSUPPORTED_MEDIA_TYPE` (`415`), which the transport guard can answer on any JSON route before the handler runs.
+                 *
+                 *     A client MUST tolerate a code it does not recognise (show the `message`), and MUST NOT parse the `message` to recover one.
+                 */
+                code: string;
+                /** @description User-facing Thai message. F-002 copy says "ร้าน" rather than "องค์กร" (D-029); identifiers and enum values stay English. */
+                message: string;
+                /** @description Optional, code-specific context. Documented cases (F-002): `INVITATION_PENDING` → `{ invitationId, expiresAt, roleId, roleName }` (§3.11) · `ORG_LIMIT_REACHED` → `{ limit }` (§3.1) · `INVITATION_EMAIL_MISMATCH` → `{ emailMasked }` (§3.15) · `CONFLICT` → `{ reason: "busy" }` when the request lost the race for the shop's row lock (amend #4 / NEW-4 — retryable, never a 500). A client that does not recognise a key MUST still behave correctly. */
+                details?: {
+                    [key: string]: unknown;
+                };
+                /** @description Per-field Thai messages on a `422` (e.g. `{ "taxId": "…" }`). */
+                fieldErrors?: {
+                    [key: string]: string;
+                };
+                /** @description Opaque random UUID v4 issued by the SERVER for this request, echoed in `X-Request-Id`. Present on EVERY error response in practice; it stays optional in the schema so already-shipped clients are not broken (api-spec §1, NEW-7). Never derived from client input. */
+                traceId?: string;
+            };
         };
         LoginRequest: {
             /** Format: email */
@@ -239,11 +741,20 @@ export interface components {
             /** @description Client session label (arch §4). Not a security boundary. */
             deviceId?: string;
             /**
-             * @description Refresh-token delivery channel (api-spec §0). Web sends "cookie"; mobile omits or sends "body".
-             * @default body
+             * @description Refresh-token delivery channel (api-spec §0). Web sends "cookie"; mobile omits it or sends "body", and the SERVER treats absent as "body".
              * @enum {string}
              */
-            tokenTransport: "cookie" | "body";
+            tokenTransport?: "cookie" | "body";
+        };
+        TokenResponse: {
+            /** @description HS256 JWT access token (Bearer). 15-minute TTL. */
+            accessToken: string;
+            /** @description The rotated refresh token on the BODY transport; `null` on the cookie transport (the token is in the httpOnly `omni_rt` cookie, never JS-readable — H-1). */
+            refreshToken: string | null;
+            /** @description Access-token TTL in seconds (900). */
+            expiresIn: number;
+            /** @enum {string} */
+            tokenType: "Bearer";
         };
         /** @description Body-transport clients (mobile) send `refreshToken`. Cookie-transport clients (web) send it via the `omni_rt` cookie and omit the body field. */
         RefreshRequest: {
@@ -256,28 +767,6 @@ export interface components {
             /** @description Optional — revoke a specific LISTED family owned by the caller (M-3). */
             familyId?: string;
         };
-        ChangePasswordRequest: {
-            currentPassword: string;
-            newPassword: string;
-            /** @description Optional mobile refresh token to identify the current family to spare (N-1). */
-            refreshToken?: string | null;
-        };
-        AdminResetRequest: {
-            newPassword: string;
-        };
-        TokenResponse: {
-            /** @description HS256 JWT access token (Bearer). 15-minute TTL. */
-            accessToken: string;
-            /** @description The rotated refresh token on the BODY transport; `null` on the cookie transport (the token is in the httpOnly `omni_rt` cookie, never JS-readable — H-1). */
-            refreshToken: string | null;
-            /** @description Access-token TTL in seconds (900). */
-            expiresIn: number;
-            /** @enum {string} */
-            tokenType: "Bearer";
-        };
-        SessionsResponse: {
-            sessions: components["schemas"]["Session"][];
-        };
         Session: {
             familyId: string;
             deviceId: string | null;
@@ -288,20 +777,447 @@ export interface components {
             /** @description True for the family matching the caller's omni_rt cookie (C-1). */
             current: boolean;
         };
+        SessionsResponse: {
+            sessions: components["schemas"]["Session"][];
+        };
+        ChangePasswordRequest: {
+            currentPassword: string;
+            newPassword: string;
+            /** @description Optional mobile refresh token to identify the current family to spare (N-1). */
+            refreshToken?: string | null;
+        };
+        OkResponse: {
+            ok: boolean;
+        };
+        AdminResetRequest: {
+            newPassword: string;
+        };
+        CreateOrganizationRequest: {
+            /** @description Not unique — two shops may share a name. */
+            name: string;
+            /** @description Optional IANA zone. Omit it and the SERVER applies Asia/Bangkok (architecture §6) — stated here rather than as `default:` so the generators leave the field optional. */
+            timezone?: string;
+        };
+        NewOrganization: {
+            id: string;
+            name: string;
+            logo: string | null;
+            timezone: string;
+            currency: string;
+            /** @description Always `false` on a brand-new shop. */
+            taxProfileComplete: boolean;
+            /** Format: date-time */
+            createdAt: string;
+        };
+        NewOrganizationMembership: {
+            userId: string;
+            roleId: string;
+            roleName: string;
+            /** @description `owner` for the creator's system role. */
+            roleKey: string | null;
+            /** @example active */
+            status: string;
+        };
+        /** @description The plan bound to a shop (`OrgEntitlement`), flattened for the wire. */
+        EntitlementSummary: {
+            /** @example comp_full */
+            planKey: string;
+            /** @example Full (comp) */
+            tierLabel: string | null;
+        };
+        WarehouseSummary: {
+            id: string;
+            name: string;
+        };
+        /**
+         * @description `201` of `POST /organizations`. Deliberately complete enough to enter the new shop immediately (ux Q5): a client seeds its cache from this body and does NOT need to refetch `GET /me/organizations` first.
+         *
+         *     ⛔ `capabilities` is deliberately NOT here, and this is the second time that absence has had to be stated: a client once filled the field in itself with a literal `full_access` under a comment claiming the response said so (B-13). It does not. What the creator MAY DO has exactly ONE publisher in this contract — `GET /orgs/{orgId}` → `myMembership.capabilities` — and entering a shop you just created is not a special case that gets a second one. Adding it here would make the create path the only way into a shop whose permissions came from somewhere different from every other way in; when the two eventually disagreed, the create path would be the one that failed OPEN (offering Owner actions the server then refuses).
+         *
+         *     `membership.roleKey` is `"owner"` here and MUST NOT be used to decide what to offer (api-spec §1 item 17): ownership is a capability, never a role key. Ask, like every other entrance does. Full reasoning: api-spec §3.1.
+         */
+        CreatedOrganization: {
+            organization: components["schemas"]["NewOrganization"];
+            membership: components["schemas"]["NewOrganizationMembership"];
+            entitlement: components["schemas"]["EntitlementSummary"];
+            defaultWarehouse: components["schemas"]["WarehouseSummary"];
+        };
+        /** @description The three fields an org switcher row needs. */
+        OrganizationSummary: {
+            /** @example org_01H… */
+            id: string;
+            name: string;
+            /** @description Phase 0: always `null`. Uploads arrive with F-040; until then `PATCH /orgs/{orgId}` accepts `null` and nothing else (M-4). */
+            logo: string | null;
+        };
+        /** @description THE SHAPE DEPENDS ON `status` (M-10). For an `active` membership the role fields are present. For a shop the caller has been removed from (only reachable via `?status=all`) the server returns `status` + `revokedAt` and NOTHING else — the role they held is an internal fact about an org they are no longer part of. */
+        MyOrganizationMembership: {
+            /** @enum {string} */
+            status: "active" | "invited" | "revoked";
+            /** @description Present only on the `active` (full) shape. */
+            roleId?: string;
+            /** @description Present only on the `active` (full) shape. */
+            roleName?: string;
+            /** @description Present only on the `active` (full) shape. */
+            roleKey?: string | null;
+            /**
+             * Format: date-time
+             * @description Present only on the revoked (short) shape.
+             */
+            revokedAt?: string | null;
+        };
+        MyOrganizationItem: {
+            organization: components["schemas"]["OrganizationSummary"];
+            membership: components["schemas"]["MyOrganizationMembership"];
+            /** @description Present only on the `active` (full) shape; absent on a revoked row. */
+            entitlement?: components["schemas"]["EntitlementSummary"] | null;
+        };
+        MyOrganizationsPage: {
+            items: components["schemas"]["MyOrganizationItem"][];
+            /** @description `null` means there is no next page. */
+            nextCursor: string | null;
+        };
+        /**
+         * @description The shop's tax identity AS THIS CALLER MAY SEE IT (api-spec §3.3, three tiers). EVERY field is optional and a client MUST work when any of them is absent:
+         *       • caller with `manage_org_settings` → `entityType`, `taxIdMasked`,
+         *         `vatRegistered`, `branchCode`;
+         *       • any other active member → `vatRegistered` ONLY (no digits at all, not
+         *         even the last four — ux Q13);
+         *       • nothing declared yet → the whole object is `null` (for every tier).
+         *     ⛔ There is no `taxId` here and there never will be. The full number comes from `POST /orgs/{orgId}/tax-profile/reveal` alone. ⛔ Do NOT read "no `taxIdMasked`" as "not declared" — `taxProfileComplete` on the parent answers that question.
+         */
+        TaxProfileView: {
+            /** @enum {string} */
+            entityType?: "personal" | "company";
+            /**
+             * @description Last four digits only, e.g. `•••••••••4567`.
+             * @example •••••••••4567
+             */
+            taxIdMasked?: string;
+            vatRegistered?: boolean;
+            /**
+             * @description 5 digits; `"00000"` is head office.
+             * @example 00000
+             */
+            branchCode?: string;
+        };
+        /** @description The CALLER's own membership in this shop. */
+        OrgMyMembership: {
+            roleId: string;
+            roleName: string;
+            /** @description `owner|admin|staff` for a system role, `null` for an F-003 custom one. Open set — an unknown value MUST fall back to showing `roleName`. ⛔ Never use it to decide permissions; use `capabilities`. */
+            roleKey: string | null;
+            /** @description What the client may OFFER. Not enforcement — the server refuses the call regardless (architecture §3.1). */
+            capabilities: string[];
+            /** @description Always `active` here — a non-member cannot reach this endpoint. */
+            status: string;
+        };
+        /** @description Totals, never a list. Every active member may see HOW MANY colleagues they have; only `manage_members` may see WHO they are (D-028, PDPA). */
+        OrgCounts: {
+            activeMembers: number;
+            pendingInvitations: number;
+        };
+        /** @description `GET /orgs/{orgId}`, and the `200` of `PATCH /orgs/{orgId}` and `PUT /orgs/{orgId}/tax-profile` — one mapper, one shape (api-spec §3.3). */
+        OrgProfile: {
+            id: string;
+            name: string;
+            logo: string | null;
+            /** @example Asia/Bangkok */
+            timezone: string;
+            /**
+             * @description Fixed `THB` in Phase 0 (D-013). Never accepted from a client.
+             * @example THB
+             */
+            currency: string;
+            /** @description `null` when the shop has declared nothing — at EVERY permission tier, so "not declared" is not a permission signal either. */
+            taxProfile: components["schemas"]["TaxProfileView"] | null;
+            /** @description Derived (entity type + tax id + VAT flag all present). Visible to every member. F-002 only reports it; F-007 is what gates features on it. */
+            taxProfileComplete: boolean;
+            /** @description `null` only if the shop somehow has no entitlement row. */
+            entitlement: components["schemas"]["EntitlementSummary"] | null;
+            myMembership: components["schemas"]["OrgMyMembership"];
+            counts: components["schemas"]["OrgCounts"];
+        };
+        /** @description `PATCH /orgs/{orgId}` (api-spec §3.4). An absent key means "leave alone"; an empty body is a valid no-op that returns the current profile. */
+        UpdateOrganizationRequest: {
+            name?: string;
+            /** @description ⛔ Phase 0 accepts `null` and NOTHING ELSE (M-4). Any string → `422 VALIDATION_FAILED` with `fieldErrors.logo = "ยังไม่รองรับการตั้งโลโก้ในเวอร์ชันนี้"`. An arbitrary URL here would make every member of the shop fetch a resource chosen by whoever holds `manage_org_settings`. */
+            logo?: string | null;
+            /**
+             * @description IANA zone from `Intl.supportedValuesOf('timeZone')`; anything else is 422.
+             * @example Asia/Bangkok
+             */
+            timezone?: string;
+        };
+        /** @description `PUT /orgs/{orgId}/tax-profile` — THE WHOLE SET OR NOTHING (data-model §3.3). An empty body `{}` is legitimate and CLEARS the declaration; a partial one is `422` with a message on every missing field. `branchCode` alone is a partial declaration, not an update. */
+        TaxProfileRequest: {
+            /** @enum {string} */
+            entityType?: "personal" | "company";
+            /**
+             * @description 13 digits + checksum (data-model §6). Separators are stripped before storage, so `1-1017-00207-36-6` and `1101700207366` are one value. Rejected → `422 TAX_ID_INVALID` + `fieldErrors.taxId`. ⚠️ With `entityType: personal` this IS the owner's national ID. It is never logged, never echoed back, and never appears in any response except `POST /orgs/{orgId}/tax-profile/reveal`.
+             * @example 0105551234567
+             */
+            taxId?: string;
+            /** @description A real boolean — the string `"true"` is refused, not coerced. */
+            vatRegistered?: boolean;
+            /**
+             * @description Optional. `"00000"` = head office.
+             * @example 00000
+             */
+            branchCode?: string;
+        };
+        /** @description `200` of `POST /orgs/{orgId}/tax-profile/reveal` — the ONLY response in the entire system that carries a full tax id (`TAX_ID_RESPONSE_ALLOWLIST` has exactly one row and CI pins its length). Every call emits `org.tax_profile.revealed` (with no TIN in the event) and counts against 20/hour per (user, shop). @frontend: hold this in screen memory only — never persist it, never log it, and re-request it if the user hides and re-shows the number. */
+        TaxIdReveal: {
+            /** @description The full 13-digit number, as stored. */
+            taxId: string;
+            /**
+             * @description Absent on a legacy row that holds a TIN but no entity type.
+             * @enum {string}
+             */
+            entityType?: "personal" | "company";
+            /** Format: date-time */
+            revealedAt: string;
+        };
+        /** @description One row of `GET /orgs/{orgId}/members`, and the `200` body of `PATCH /orgs/{orgId}/members/{userId}` (api-spec §3.7/§3.8) — so a client never has to refetch the list to render the new state. */
+        MemberRow: {
+            userId: string;
+            /** @description PII under PDPA — the reason this READ requires `manage_members` and the reason the response is `no-store`. */
+            email: string;
+            roleId: string;
+            roleName: string;
+            roleKey: string | null;
+            /**
+             * @description `invited` is a dead state: memberships are created at ACCEPT time only (data-model §7). It is listed because the column allows it, not because a write path produces it.
+             * @enum {string}
+             */
+            status: "active" | "invited" | "revoked";
+            /** Format: date-time */
+            activatedAt: string | null;
+            /** Format: date-time */
+            revokedAt: string | null;
+            /** Format: date-time */
+            createdAt: string;
+            /** @description Decided server-side, so the client never compares ids itself. */
+            isMe: boolean;
+            /** @description This row's role holds `full_access`. Computed from CAPABILITIES, never from the role's name or key. Use it to hide buttons; the server enforces. */
+            isOwner: boolean;
+        };
+        MemberListPage: {
+            items: components["schemas"]["MemberRow"][];
+            nextCursor: string | null;
+            /** @description Present ONLY when the request asked with `?withTotal=true`. */
+            total?: number;
+        };
+        /** @description `200` of `DELETE /orgs/{orgId}/members/{userId}` (api-spec §3.9). */
+        RevokeMemberResult: {
+            userId: string;
+            /**
+             * @description Soft delete — the row stays, so history and `revokedAt` survive.
+             * @enum {string}
+             */
+            status: "revoked";
+            /** Format: date-time */
+            revokedAt: string;
+            /** @description Pending invitations for that email that were cancelled in the SAME transaction (normally 0 or 1) — so the UI can say "their pending invitation was withdrawn too". */
+            cancelledInvitations: number;
+        };
+        UpdateMemberRoleRequest: {
+            /** @description Must be a role OF THIS SHOP — otherwise `422 ROLE_INVALID`. A role id from another tenant and one that never existed are indistinguishable by construction (no cross-tenant existence oracle). */
+            roleId: string;
+        };
+        /**
+         * @description One role of a shop (api-spec §3.6). Read-only in F-002; F-003 adds create/update/delete and per-role capability editing.
+         *
+         *     ⛔ `capabilities` is deliberately NOT published here. It is the field that decides authorization (`full_access` ⇒ Owner), and putting it on a list any active member can read invites a client to compute permissions from it. The server refuses an over-privileged invitation itself (C-1/D-028), so the invite dropdown never needs to filter.
+         *
+         *     `grantsOwnership` is the ONE derived bit that is published, added for B-9. Without it a client cannot tell which role is the Owner role unless the VIEWER holds it, so ux-wireframe §10.1's rule — show the Owner option, disabled, with the reason — was unimplementable for an Admin, and S7's filter silently filtered nothing. The alternative a client reaches for is `key === "owner"`, which is exactly what the golden rule forbids and what F-003's custom roles break. Publishing the bit keeps the capability list private while removing the temptation.
+         */
+        RoleRow: {
+            id: string;
+            /** @description Display name. F-003 lets people rename roles, so do NOT map this to Thai copy — use `key`, and fall back to this string. */
+            name: string;
+            /**
+             * @description Stable slug for TRANSLATION ONLY (ux Q4). Guaranteed `owner`, `admin` or `staff` for the three system roles — those values are part of the contract and changing one is a breaking change. `null` for any role F-003 lets a user create, because `key` is the system's namespace.
+             *
+             *     OPEN SET: on `null` or an unrecognised value the client MUST fall back to `name`. Never `switch` without a default.
+             *
+             *     ⛔ NEVER a permission input, on either side. "Is this the Owner?" is answered by capabilities alone (architecture §3.2 / data-model §5.2); @qa's I-45 flips a Staff role's `key` to `"owner"` in the database to prove a client that trusted it would be wrong.
+             */
+            key: string | null;
+            /**
+             * @description Does granting this role grant OWNERSHIP? Derived server-side from `capabilities` (`full_access`), never from `key` — @qa's I-45 flips a Staff role's key to `"owner"` in the database precisely to prove the difference.
+             *
+             *     ⚠️ OPTIONAL on purpose (contract-evolution): a client newer than the server must not fail to parse a role list, so absent means "this server does not say" and the client falls back to its previous behaviour. It is a UX input — which option to disable, and why — never a permission check: the server refuses an over-privileged grant regardless (C-1/D-028).
+             */
+            grantsOwnership?: boolean;
+            /** @description True for roles the system provisions with the shop. F-003 will refuse to delete these. */
+            isSystem: boolean;
+        };
+        RoleListPage: {
+            items: components["schemas"]["RoleRow"][];
+            /** @description Always `null` in F-002 — a shop has exactly its three system roles until F-003. The field is present so a client written today does not need rewriting the day a fourth role exists. */
+            nextCursor: string | null;
+        };
+        /** @description `200` of `DELETE /orgs/{orgId}/membership` (api-spec §3.17, D-029). */
+        LeaveOrgResult: {
+            organizationId: string;
+            /** @enum {string} */
+            status: "revoked";
+            /** Format: date-time */
+            revokedAt: string;
+            cancelledInvitations: number;
+        };
+        /** @description One row of `GET /orgs/{orgId}/invitations`, and the `invitation` of the `201` from `POST /orgs/{orgId}/invitations` (api-spec §3.10/§3.11). ⛔ Never carries a token: only an HMAC of it is stored (D-018), so there is no "resend the same link" — see `POST …/invitations/{invitationId}/link`. */
+        Invitation: {
+            /** @example inv_01H… */
+            id: string;
+            /** @description Normalized (lower-cased, trimmed) at creation. */
+            email: string;
+            roleId: string;
+            roleName: string;
+            roleKey: string | null;
+            /**
+             * @description Resolved at read time — a stored `pending` row past `expiresAt` reads as `expired`.
+             * @enum {string}
+             */
+            status: "pending" | "accepted" | "cancelled" | "expired";
+            /**
+             * Format: date-time
+             * @description NON-NULL ON EVERY ROW, accepted and cancelled ones included (ux Q14). ⛔ UI must render the remaining time FROM THIS VALUE — never hard-code "7 days": an elevated role's invitation lives 24 hours, and reissuing a link restarts the clock (D-027).
+             */
+            expiresAt: string;
+            /**
+             * Format: date-time
+             * @description When the CURRENT link was minted. Moves on every reissue.
+             */
+            tokenIssuedAt: string;
+            invitedByUserId: string;
+            /**
+             * Format: date-time
+             * @description When the invitation first existed. Does NOT move on reissue.
+             */
+            createdAt: string;
+            /** Format: date-time */
+            acceptedAt: string | null;
+            acceptedByUserId: string | null;
+            /** @description Was the accepting ACCOUNT created after `createdAt`? `null` until somebody accepts — "we do not know yet" is not "no". Phase 0 cannot verify email addresses, so this is the only signal that a link may have been redeemed by whoever found it. Render it as a soft flag, not an accusation. */
+            acceptedUserCreatedAfterInvite: boolean | null;
+        };
+        InvitationListPage: {
+            items: components["schemas"]["Invitation"][];
+            nextCursor: string | null;
+        };
+        CreateInvitationRequest: {
+            /**
+             * Format: email
+             * @description Normalized server-side (lower-cased + trimmed).
+             */
+            email: string;
+            /** @description Mandatory (AC US-3) — there is no default role. */
+            roleId: string;
+        };
+        /** @description `201` of `POST /orgs/{orgId}/invitations`. ⚠️ `token` and `inviteUrl` are shown THIS ONCE — only an HMAC is stored. No email is sent (D-012), so the UI must offer a copy button. */
+        IssuedInvitation: {
+            invitation: components["schemas"]["Invitation"];
+            /** @description The raw invitation token. Never retrievable again. */
+            token: string;
+            /**
+             * Format: uri
+             * @description Ready-to-share link containing the token.
+             */
+            inviteUrl: string;
+        };
+        /** @description `200` of `DELETE /orgs/{orgId}/invitations/{invitationId}`. */
+        CancelledInvitation: {
+            id: string;
+            /** @enum {string} */
+            status: "cancelled";
+        };
+        /** @description `200` of `POST /orgs/{orgId}/invitations/{invitationId}/link` — 200 and not 201: nothing was created, an existing invitation's token was rotated. ⚠️ THE PREVIOUS LINK STOPS WORKING IMMEDIATELY and the expiry restarts from now (D-027), so the UI needs a confirmation dialog and must not say "copy the existing link". */
+        ReissuedLink: {
+            token: string;
+            /** Format: uri */
+            inviteUrl: string;
+            /**
+             * Format: date-time
+             * @description `now + TTL(role)` — recomputed, not inherited.
+             */
+            expiresAt: string;
+            /** Format: date-time */
+            tokenIssuedAt: string;
+            rotated: boolean;
+        };
+        /** @description Body of `POST /invitations/preview` and `POST /invitations/accept`. ⛔ THE TOKEN TRAVELS IN THE BODY AND ONLY IN THE BODY (I-6) — that is why both routes are POSTs. In a query string it would land in access logs, in every proxy in front of us, and in the `Referer` of anything the invite page loads. @frontend: read it out of the URL, `history.replaceState` it away immediately, and keep it in memory (never localStorage). */
+        RedeemInvitationRequest: {
+            token: string;
+        };
+        /** @description `200` of `POST /invitations/preview` — public, for somebody who may not have an account yet (api-spec §3.14). Carries no `organizationId`, no full email address and no member list. */
+        InvitationPreview: {
+            organizationName: string;
+            roleName: string;
+            roleKey: string | null;
+            /**
+             * @description `u***@example.com` — enough to pick the right account, not an address.
+             * @example n***@example.com
+             */
+            emailMasked: string;
+            /** Format: date-time */
+            expiresAt: string;
+            /**
+             * @description Always `pending` on a `200`; the other states answer `409`.
+             * @enum {string}
+             */
+            status: "pending" | "accepted" | "cancelled" | "expired";
+        };
+        AcceptedMembership: {
+            roleId: string;
+            roleName: string;
+            roleKey: string | null;
+            /** @enum {string} */
+            status: "active";
+        };
+        /** @description `200` of `POST /invitations/accept` (api-spec §3.15). Carries no email, no invitation id and no token — the response is the last place a redeemed credential could still leak. */
+        InvitationAcceptResult: {
+            organization: {
+                id: string;
+                name: string;
+            };
+            membership: components["schemas"]["AcceptedMembership"];
+        };
     };
     responses: never;
     parameters: {
-        /** @description Organization id (the caller's authority derives from a shared membership) */
+        /** @description Organization id. On F-002 org-scoped routes this is one of the two accepted sources of org context (the other is the `X-Organization-Id` header, D-025); sending both with different values is `422 ORG_MISMATCH`. */
         OrgIdParam: string;
-        /** @description Target member's user id */
+        /** @description Target member's user id. */
         UserIdParam: string;
+        /** @description Opaque keyset cursor from the previous page's `nextCursor`. Base64url — clients MUST NOT decode or construct one. Unreadable value → `422 VALIDATION_FAILED` with `fieldErrors.cursor`. */
+        CursorParam: string;
+        /** @description Page size. Default 25, clamped to 100. Non-integer / < 1 → `422 VALIDATION_FAILED` with `fieldErrors.limit` (a bug is not silently corrected). */
+        LimitParam: number;
+        /** @description Org context (api-spec §1). Optional on routes that already carry `{orgId}` in the path; if both are sent they MUST match, otherwise `422 ORG_MISMATCH`. User-scoped and public routes ignore this header entirely (I-3). */
+        OrgIdHeader: string;
+        /** @description Opt in to the `total` count on this page. OPT-IN PER ENDPOINT: only the endpoints that declare this parameter compute a total — see the endpoint's own documentation. (`GET /me/organizations` and `GET /orgs/{orgId}/invitations` do NOT support it today; api-spec §1 states the convention generally, the server implements it on `GET /orgs/{orgId}/members` only.) */
+        WithTotalParam: boolean;
+        /** @description Invitation id (`inv_…`). */
+        InvitationIdParam: string;
     };
     requestBodies: never;
     headers: {
-        /** @description Seconds until the backoff window clears (UX countdown source) */
+        /**
+         * @description Seconds until the backoff window clears (UX countdown source). The server GUARANTEES an integer ≥ 1 — rounded up, never `0`, never fractional, never an HTTP-date — so mobile can compute a backoff from it directly (api-spec §1, qa Q11); `org-rate-limit.guard.ts` enforces it and a unit test pins it.
+         *
+         *     ⚠️ `minimum` stays `0` deliberately. F-001 shipped it that way, and tightening a constraint on an already-published surface is a change `oasdiff` may judge, for a guarantee that changes nothing in any generated client. The promise lives in the sentence above and in the test, which is where it can actually be enforced.
+         */
         RetryAfter: number;
         /** @description On the cookie transport, sets `omni_rt` (httpOnly, Secure, SameSite=Strict, Path=/auth) and `omni_csrf` (readable, Secure, SameSite=Strict, Path=/auth). Absent on the body transport. */
         SetAuthCookies: string;
+        /** @description Always `no-store` — this response carries a token, an email address, a tax id (masked or full) or a membership fact about a person (api-spec §1 "Cache / PII"). */
+        CacheControlNoStore: "no-store";
+        /** @description HTTP/1.0 twin of `Cache-Control: no-store`. Always `no-cache`. */
+        PragmaNoCache: "no-cache";
+        /** @description Always `no-referrer` on the invitation routes and on `POST /orgs/{orgId}/tax-profile/reveal` (I-6 / §3.16): the PAGE these responses render on holds a token in its URL, and without this header that URL travels to whatever the page loads next. */
+        ReferrerPolicyNoReferrer: "no-referrer";
     };
     pathItems: never;
 }
@@ -358,7 +1274,7 @@ export interface operations {
                     "application/json": components["schemas"]["SignupResponse"];
                 };
             };
-            /** @description Email already taken (the one necessary enumeration leak, Gate 1 §4) */
+            /** @description `EMAIL_TAKEN` — that address already has an account. The one necessary enumeration leak, accepted at Gate 1 §4 and IP-throttled. */
             409: {
                 headers: {
                     [name: string]: unknown;
@@ -367,7 +1283,7 @@ export interface operations {
                     "application/json": components["schemas"]["ErrorResponse"];
                 };
             };
-            /** @description Non-JSON Content-Type (L-2) */
+            /** @description `UNSUPPORTED_MEDIA_TYPE` — non-JSON Content-Type (L-2) */
             415: {
                 headers: {
                     [name: string]: unknown;
@@ -376,7 +1292,13 @@ export interface operations {
                     "application/json": components["schemas"]["ErrorResponse"];
                 };
             };
-            /** @description Password policy or email validation failure */
+            /**
+             * @description `EMAIL_INVALID` — the address is not a usable shape (the SAME check invitations apply, so an address that can never become an account is never invited either) · `PASSWORD_TOO_SHORT` (< 8) · `PASSWORD_TOO_LONG` (> 128) · `PASSWORD_BREACHED` — the password is in the bundled common/leaked list.
+             *
+             *     Each of the four is a SEPARATE code because each one sends the person to a different sentence and a different field; a client that collapses them shows the wrong advice. The password codes come from the one pure policy function (`@omnistock/core-domain`), so `POST /auth/change-password` and `POST /orgs/{orgId}/members/{userId}/reset-password` answer with exactly the same three values.
+             *
+             *     ⚠️ Not exhaustive: a body that fails the request-SHAPE check (missing or empty field) also answers `422`, with a `code` that is not one of the values above. Branch on the codes named here and treat anything else as a generic validation failure.
+             */
             422: {
                 headers: {
                     [name: string]: unknown;
@@ -385,7 +1307,7 @@ export interface operations {
                     "application/json": components["schemas"]["ErrorResponse"];
                 };
             };
-            /** @description IP rate limit tripped (Retry-After seconds) */
+            /** @description `RATE_LIMITED` — IP rate limit tripped (Retry-After seconds) */
             429: {
                 headers: {
                     "Retry-After": components["headers"]["RetryAfter"];
@@ -420,7 +1342,7 @@ export interface operations {
                     "application/json": components["schemas"]["TokenResponse"];
                 };
             };
-            /** @description Invalid credentials (generic — wrong password or unknown email) */
+            /** @description `INVALID_CREDENTIALS` — wrong password AND unknown email answer with the identical code and message (enumeration-safe). */
             401: {
                 headers: {
                     [name: string]: unknown;
@@ -429,7 +1351,7 @@ export interface operations {
                     "application/json": components["schemas"]["ErrorResponse"];
                 };
             };
-            /** @description Non-JSON Content-Type (L-2) */
+            /** @description `UNSUPPORTED_MEDIA_TYPE` — non-JSON Content-Type (L-2) */
             415: {
                 headers: {
                     [name: string]: unknown;
@@ -438,7 +1360,11 @@ export interface operations {
                     "application/json": components["schemas"]["ErrorResponse"];
                 };
             };
-            /** @description Malformed request (e.g. invalid deviceId / email shape) */
+            /**
+             * @description `EMAIL_INVALID` — bad email shape · `DEVICE_ID_INVALID` — `deviceId` longer than 64 chars or outside `[A-Za-z0-9_-]` · `TOKEN_TRANSPORT_INVALID` — `tokenTransport` is neither `cookie` nor `body`.
+             *
+             *     ⚠️ Not exhaustive — see the note on `POST /auth/signup` `422`. Login deliberately does NOT run the password policy here: a policy 422 would tell the caller their guess was well-formed, which is a fact about the password and not about the request.
+             */
             422: {
                 headers: {
                     [name: string]: unknown;
@@ -447,7 +1373,7 @@ export interface operations {
                     "application/json": components["schemas"]["ErrorResponse"];
                 };
             };
-            /** @description IP or account backoff tripped (Retry-After seconds) */
+            /** @description `RATE_LIMITED` — IP or account backoff tripped (Retry-After seconds). ALWAYS its own 429, never folded into the 401 (M-1). */
             429: {
                 headers: {
                     "Retry-After": components["headers"]["RetryAfter"];
@@ -482,7 +1408,7 @@ export interface operations {
                     "application/json": components["schemas"]["TokenResponse"];
                 };
             };
-            /** @description Refresh token unknown / expired / not current / family-cap reached / benign-retry / reuse — all generic INVALID_REFRESH (or NO_REFRESH_TOKEN when neither cookie nor body is present). */
+            /** @description `INVALID_REFRESH` — unknown / expired / not current / family-cap reached / benign-retry / reuse, ALL of them the same generic code: the six cases are distinguishable server-side and deliberately not on the wire. `NO_REFRESH_TOKEN` — neither cookie nor body carried one, which is a different situation for the client (it never had a session) and so gets a code of its own. */
             401: {
                 headers: {
                     [name: string]: unknown;
@@ -491,7 +1417,7 @@ export interface operations {
                     "application/json": components["schemas"]["ErrorResponse"];
                 };
             };
-            /** @description CSRF check failed on the cookie path */
+            /** @description `CSRF_FAILED` — the CSRF check failed on the cookie path */
             403: {
                 headers: {
                     [name: string]: unknown;
@@ -500,7 +1426,7 @@ export interface operations {
                     "application/json": components["schemas"]["ErrorResponse"];
                 };
             };
-            /** @description Non-JSON Content-Type (L-2) */
+            /** @description `UNSUPPORTED_MEDIA_TYPE` — non-JSON Content-Type (L-2) */
             415: {
                 headers: {
                     [name: string]: unknown;
@@ -509,7 +1435,7 @@ export interface operations {
                     "application/json": components["schemas"]["ErrorResponse"];
                 };
             };
-            /** @description IP rate cap tripped (Retry-After seconds, L-5) */
+            /** @description `RATE_LIMITED` — IP rate cap tripped (Retry-After seconds, L-5) */
             429: {
                 headers: {
                     "Retry-After": components["headers"]["RetryAfter"];
@@ -541,7 +1467,7 @@ export interface operations {
                 };
                 content?: never;
             };
-            /** @description CSRF check failed on the cookie path */
+            /** @description `CSRF_FAILED` — the CSRF check failed on the cookie path */
             403: {
                 headers: {
                     [name: string]: unknown;
@@ -550,7 +1476,7 @@ export interface operations {
                     "application/json": components["schemas"]["ErrorResponse"];
                 };
             };
-            /** @description Non-JSON Content-Type (L-2) */
+            /** @description `UNSUPPORTED_MEDIA_TYPE` — non-JSON Content-Type (L-2) */
             415: {
                 headers: {
                     [name: string]: unknown;
@@ -577,7 +1503,7 @@ export interface operations {
                 };
                 content?: never;
             };
-            /** @description Missing/invalid access token */
+            /** @description `UNAUTHENTICATED` — missing/invalid access token */
             401: {
                 headers: {
                     [name: string]: unknown;
@@ -586,7 +1512,7 @@ export interface operations {
                     "application/json": components["schemas"]["ErrorResponse"];
                 };
             };
-            /** @description Non-JSON Content-Type (L-2) */
+            /** @description `UNSUPPORTED_MEDIA_TYPE` — non-JSON Content-Type (L-2) */
             415: {
                 headers: {
                     [name: string]: unknown;
@@ -615,7 +1541,7 @@ export interface operations {
                     "application/json": components["schemas"]["SessionsResponse"];
                 };
             };
-            /** @description Missing/invalid access token */
+            /** @description `UNAUTHENTICATED` — missing/invalid access token */
             401: {
                 headers: {
                     [name: string]: unknown;
@@ -648,7 +1574,7 @@ export interface operations {
                     "application/json": components["schemas"]["OkResponse"];
                 };
             };
-            /** @description Missing/invalid access token, or wrong currentPassword (generic) */
+            /** @description `UNAUTHENTICATED` — missing/invalid access token — or `INVALID_CREDENTIALS` — `currentPassword` did not verify (the same generic code login uses). */
             401: {
                 headers: {
                     [name: string]: unknown;
@@ -657,7 +1583,7 @@ export interface operations {
                     "application/json": components["schemas"]["ErrorResponse"];
                 };
             };
-            /** @description CSRF check failed on the cookie path */
+            /** @description `CSRF_FAILED` — the CSRF check failed on the cookie path */
             403: {
                 headers: {
                     [name: string]: unknown;
@@ -666,7 +1592,7 @@ export interface operations {
                     "application/json": components["schemas"]["ErrorResponse"];
                 };
             };
-            /** @description Non-JSON Content-Type (L-2) */
+            /** @description `UNSUPPORTED_MEDIA_TYPE` — non-JSON Content-Type (L-2) */
             415: {
                 headers: {
                     [name: string]: unknown;
@@ -675,7 +1601,13 @@ export interface operations {
                     "application/json": components["schemas"]["ErrorResponse"];
                 };
             };
-            /** @description newPassword policy failure */
+            /**
+             * @description `newPassword` failed the signup policy: `PASSWORD_TOO_SHORT` (< 8) · `PASSWORD_TOO_LONG` (> 128) · `PASSWORD_BREACHED`. Same three values as `POST /auth/signup` — one pure policy function, one set of codes.
+             *
+             *     The policy runs AFTER `currentPassword` is verified, so a 422 here is never an answer about somebody else's account.
+             *
+             *     ⚠️ Not exhaustive — see the note on `POST /auth/signup` `422`.
+             */
             422: {
                 headers: {
                     [name: string]: unknown;
@@ -684,7 +1616,7 @@ export interface operations {
                     "application/json": components["schemas"]["ErrorResponse"];
                 };
             };
-            /** @description currentPassword backoff tripped (Retry-After seconds, N-2) */
+            /** @description `RATE_LIMITED` — the `currentPassword` backoff tripped (Retry-After seconds, N-2). */
             429: {
                 headers: {
                     "Retry-After": components["headers"]["RetryAfter"];
@@ -701,9 +1633,9 @@ export interface operations {
             query?: never;
             header?: never;
             path: {
-                /** @description Organization id (the caller's authority derives from a shared membership) */
+                /** @description Organization id. On F-002 org-scoped routes this is one of the two accepted sources of org context (the other is the `X-Organization-Id` header, D-025); sending both with different values is `422 ORG_MISMATCH`. */
                 orgId: components["parameters"]["OrgIdParam"];
-                /** @description Target member's user id */
+                /** @description Target member's user id. */
                 userId: components["parameters"]["UserIdParam"];
             };
             cookie?: never;
@@ -723,7 +1655,7 @@ export interface operations {
                     "application/json": components["schemas"]["OkResponse"];
                 };
             };
-            /** @description Missing/invalid access token */
+            /** @description `UNAUTHENTICATED` — missing/invalid access token */
             401: {
                 headers: {
                     [name: string]: unknown;
@@ -732,7 +1664,7 @@ export interface operations {
                     "application/json": components["schemas"]["ErrorResponse"];
                 };
             };
-            /** @description Same-shape not-found — caller lacks an active membership / capability, or the target is not an active member (never 403; no enumeration). */
+            /** @description `NOT_FOUND` — same-shape not-found: the caller lacks an active membership / capability, or the target is not an active member (never 403; no enumeration). */
             404: {
                 headers: {
                     [name: string]: unknown;
@@ -741,7 +1673,16 @@ export interface operations {
                     "application/json": components["schemas"]["ErrorResponse"];
                 };
             };
-            /** @description Non-JSON Content-Type */
+            /** @description ADDITIVE (T-002-21, closing a documentation debt — the server has answered this since T-002-09/§15 row 6b, the contract simply never said so). `CONFLICT` + `details.reason = "busy"`: this request lost the race for the shop's row lock, or hit a deadlock / statement timeout. It is transient — retry. It is deliberately NOT a 500 (ordinary contention must not page on-call) and deliberately NOT folded into the uniform 404 (that would make a retryable state look like a permission answer). */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description `UNSUPPORTED_MEDIA_TYPE` — non-JSON Content-Type */
             415: {
                 headers: {
                     [name: string]: unknown;
@@ -750,7 +1691,13 @@ export interface operations {
                     "application/json": components["schemas"]["ErrorResponse"];
                 };
             };
-            /** @description newPassword policy failure */
+            /**
+             * @description `newPassword` failed the signup policy: `PASSWORD_TOO_SHORT` (< 8) · `PASSWORD_TOO_LONG` (> 128) · `PASSWORD_BREACHED`. Same three values as `POST /auth/signup` — one pure policy function, one set of codes.
+             *
+             *     ⚠️ THE POLICY IS CHECKED FIRST, BEFORE ANYTHING READS THE DATABASE, and that ordering is load-bearing (security review of f66451f, Medium-1): a weak password now answers `422` for EVERY target, so the difference between `422` and the uniform `404` can no longer be used to ask "is this user a member of this shop?".
+             *
+             *     ⚠️ Not exhaustive — see the note on `POST /auth/signup` `422`.
+             */
             422: {
                 headers: {
                     [name: string]: unknown;
@@ -759,7 +1706,1231 @@ export interface operations {
                     "application/json": components["schemas"]["ErrorResponse"];
                 };
             };
-            /** @description Admin reset-attempt backoff tripped (Retry-After seconds) */
+            /** @description `RATE_LIMITED` — the admin reset-attempt backoff tripped (Retry-After seconds). */
+            429: {
+                headers: {
+                    "Retry-After": components["headers"]["RetryAfter"];
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+        };
+    };
+    createOrganization: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["CreateOrganizationRequest"];
+            };
+        };
+        responses: {
+            /** @description Shop created — the body is enough to enter it. */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["CreatedOrganization"];
+                };
+            };
+            /** @description Missing/invalid access token (`UNAUTHENTICATED`) */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description `ORG_LIMIT_REACHED` — the caller is already an active member of the maximum number of shops. `details.limit` carries the real number so the UI never hard-codes it. */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Non-JSON Content-Type (`UNSUPPORTED_MEDIA_TYPE`) */
+            415: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description `VALIDATION_FAILED` with `fieldErrors` (`name`, `timezone`) */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description `RATE_LIMITED` — 10 shop creations per hour per user */
+            429: {
+                headers: {
+                    "Retry-After": components["headers"]["RetryAfter"];
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description `ORG_PROVISIONING_UNAVAILABLE` — no default plan is configured to bind the new shop to. Our misconfiguration, not the caller's input. */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+        };
+    };
+    listMyOrganizations: {
+        parameters: {
+            query?: {
+                /** @description `active` (default) returns the full shape. `all` adds shops the caller was removed from, in the short shape. Any other value → `422`. */
+                status?: "active" | "all";
+                /** @description Opaque keyset cursor from the previous page's `nextCursor`. Base64url — clients MUST NOT decode or construct one. Unreadable value → `422 VALIDATION_FAILED` with `fieldErrors.cursor`. */
+                cursor?: components["parameters"]["CursorParam"];
+                /** @description Page size. Default 25, clamped to 100. Non-integer / < 1 → `422 VALIDATION_FAILED` with `fieldErrors.limit` (a bug is not silently corrected). */
+                limit?: components["parameters"]["LimitParam"];
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description One page, sorted `createdAt desc, id desc`. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["MyOrganizationsPage"];
+                };
+            };
+            /** @description Missing/invalid access token (`UNAUTHENTICATED`) */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description `VALIDATION_FAILED` — unknown `status`, unreadable `cursor`, or a `limit` that is not a positive integer (`fieldErrors` names the field). */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+        };
+    };
+    getOrganization: {
+        parameters: {
+            query?: never;
+            header?: {
+                /** @description Org context (api-spec §1). Optional on routes that already carry `{orgId}` in the path; if both are sent they MUST match, otherwise `422 ORG_MISMATCH`. User-scoped and public routes ignore this header entirely (I-3). */
+                "X-Organization-Id"?: components["parameters"]["OrgIdHeader"];
+            };
+            path: {
+                /** @description Organization id. On F-002 org-scoped routes this is one of the two accepted sources of org context (the other is the `X-Organization-Id` header, D-025); sending both with different values is `422 ORG_MISMATCH`. */
+                orgId: components["parameters"]["OrgIdParam"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description The shop profile, field-filtered for this caller. */
+            200: {
+                headers: {
+                    "Cache-Control": components["headers"]["CacheControlNoStore"];
+                    Pragma: components["headers"]["PragmaNoCache"];
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["OrgProfile"];
+                };
+            };
+            /** @description Missing/invalid access token (`UNAUTHENTICATED`) */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description `ORG_ACCESS_DENIED` — not an active member of this shop (covers "the shop does not exist" and "you were removed"). ⚠️ Distinct from `FORBIDDEN`: the client sends the user back to the shop picker and refetches `GET /me/organizations`, rather than staying on the page with a toast. Never merge the two codes. */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description `ORG_CONTEXT_REQUIRED` (no org in path or header) or `ORG_MISMATCH` (both sent and they disagree — a client bug, deliberately NOT a 403 so a valid member is not bounced out of the shop they are looking at). */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+        };
+    };
+    updateOrganization: {
+        parameters: {
+            query?: never;
+            header?: {
+                /** @description Org context (api-spec §1). Optional on routes that already carry `{orgId}` in the path; if both are sent they MUST match, otherwise `422 ORG_MISMATCH`. User-scoped and public routes ignore this header entirely (I-3). */
+                "X-Organization-Id"?: components["parameters"]["OrgIdHeader"];
+            };
+            path: {
+                /** @description Organization id. On F-002 org-scoped routes this is one of the two accepted sources of org context (the other is the `X-Organization-Id` header, D-025); sending both with different values is `422 ORG_MISMATCH`. */
+                orgId: components["parameters"]["OrgIdParam"];
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["UpdateOrganizationRequest"];
+            };
+        };
+        responses: {
+            /** @description Updated — same shape as `GET /orgs/{orgId}`. */
+            200: {
+                headers: {
+                    "Cache-Control": components["headers"]["CacheControlNoStore"];
+                    Pragma: components["headers"]["PragmaNoCache"];
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["OrgProfile"];
+                };
+            };
+            /** @description Missing/invalid access token (`UNAUTHENTICATED`) */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description `FORBIDDEN` — an active member without `manage_org_settings` (stay on the page, show a toast) — or `ORG_ACCESS_DENIED` — not a member at all (go back to the shop picker). */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Non-JSON Content-Type (`UNSUPPORTED_MEDIA_TYPE`) */
+            415: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description `VALIDATION_FAILED` with `fieldErrors` — every rejected field at once (`name`, `logo`, `timezone`) — or `ORG_CONTEXT_REQUIRED` / `ORG_MISMATCH`. */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+        };
+    };
+    putTaxProfile: {
+        parameters: {
+            query?: never;
+            header?: {
+                /** @description Org context (api-spec §1). Optional on routes that already carry `{orgId}` in the path; if both are sent they MUST match, otherwise `422 ORG_MISMATCH`. User-scoped and public routes ignore this header entirely (I-3). */
+                "X-Organization-Id"?: components["parameters"]["OrgIdHeader"];
+            };
+            path: {
+                /** @description Organization id. On F-002 org-scoped routes this is one of the two accepted sources of org context (the other is the `X-Organization-Id` header, D-025); sending both with different values is `422 ORG_MISMATCH`. */
+                orgId: components["parameters"]["OrgIdParam"];
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["TaxProfileRequest"];
+            };
+        };
+        responses: {
+            /** @description Stored — answers with the §3.3 profile body (`taxProfileComplete: true` once the trio is present). */
+            200: {
+                headers: {
+                    "Cache-Control": components["headers"]["CacheControlNoStore"];
+                    Pragma: components["headers"]["PragmaNoCache"];
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["OrgProfile"];
+                };
+            };
+            /** @description Missing/invalid access token (`UNAUTHENTICATED`) */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description `FORBIDDEN` (no `manage_org_settings`) or `ORG_ACCESS_DENIED` (not a member) */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Non-JSON Content-Type (`UNSUPPORTED_MEDIA_TYPE`) */
+            415: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description `TAX_ID_INVALID` when the NUMBER itself failed the 13-digit checksum (+`fieldErrors.taxId`) · `VALIDATION_FAILED` for everything else, including a half-filled declaration · `ORG_CONTEXT_REQUIRED` / `ORG_MISMATCH`. The message never quotes the rejected value. */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+        };
+    };
+    revealTaxId: {
+        parameters: {
+            query?: never;
+            header?: {
+                /** @description Org context (api-spec §1). Optional on routes that already carry `{orgId}` in the path; if both are sent they MUST match, otherwise `422 ORG_MISMATCH`. User-scoped and public routes ignore this header entirely (I-3). */
+                "X-Organization-Id"?: components["parameters"]["OrgIdHeader"];
+            };
+            path: {
+                /** @description Organization id. On F-002 org-scoped routes this is one of the two accepted sources of org context (the other is the `X-Organization-Id` header, D-025); sending both with different values is `422 ORG_MISMATCH`. */
+                orgId: components["parameters"]["OrgIdParam"];
+            };
+            cookie?: never;
+        };
+        /** @description Empty object. There is no input — the shop comes from the context. */
+        requestBody?: {
+            content: {
+                "application/json": Record<string, never>;
+            };
+        };
+        responses: {
+            /** @description The full tax id, this once. */
+            200: {
+                headers: {
+                    "Cache-Control": components["headers"]["CacheControlNoStore"];
+                    Pragma: components["headers"]["PragmaNoCache"];
+                    "Referrer-Policy": components["headers"]["ReferrerPolicyNoReferrer"];
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["TaxIdReveal"];
+                };
+            };
+            /** @description Missing/invalid access token (`UNAUTHENTICATED`) */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description `FORBIDDEN` (no `manage_org_settings`) or `ORG_ACCESS_DENIED` (not a member) */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description `NOT_FOUND` — this shop has not declared a tax identity. */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Non-JSON Content-Type (`UNSUPPORTED_MEDIA_TYPE`) */
+            415: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description `ORG_CONTEXT_REQUIRED` / `ORG_MISMATCH` */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description `RATE_LIMITED` — 20 reveals per hour per (user, shop). This is what makes "a stolen session cannot be used to harvest the number" true; the capability check alone would let one compromised token read it in a loop. */
+            429: {
+                headers: {
+                    "Retry-After": components["headers"]["RetryAfter"];
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+        };
+    };
+    listMembers: {
+        parameters: {
+            query?: {
+                /** @description Default `all`. Any other value → `422`. */
+                status?: "active" | "revoked" | "all";
+                /** @description Opaque keyset cursor from the previous page's `nextCursor`. Base64url — clients MUST NOT decode or construct one. Unreadable value → `422 VALIDATION_FAILED` with `fieldErrors.cursor`. */
+                cursor?: components["parameters"]["CursorParam"];
+                /** @description Page size. Default 25, clamped to 100. Non-integer / < 1 → `422 VALIDATION_FAILED` with `fieldErrors.limit` (a bug is not silently corrected). */
+                limit?: components["parameters"]["LimitParam"];
+                /** @description Opt in to the `total` count on this page. OPT-IN PER ENDPOINT: only the endpoints that declare this parameter compute a total — see the endpoint's own documentation. (`GET /me/organizations` and `GET /orgs/{orgId}/invitations` do NOT support it today; api-spec §1 states the convention generally, the server implements it on `GET /orgs/{orgId}/members` only.) */
+                withTotal?: components["parameters"]["WithTotalParam"];
+            };
+            header?: {
+                /** @description Org context (api-spec §1). Optional on routes that already carry `{orgId}` in the path; if both are sent they MUST match, otherwise `422 ORG_MISMATCH`. User-scoped and public routes ignore this header entirely (I-3). */
+                "X-Organization-Id"?: components["parameters"]["OrgIdHeader"];
+            };
+            path: {
+                /** @description Organization id. On F-002 org-scoped routes this is one of the two accepted sources of org context (the other is the `X-Organization-Id` header, D-025); sending both with different values is `422 ORG_MISMATCH`. */
+                orgId: components["parameters"]["OrgIdParam"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description One page, sorted `createdAt desc, id desc`. */
+            200: {
+                headers: {
+                    "Cache-Control": components["headers"]["CacheControlNoStore"];
+                    Pragma: components["headers"]["PragmaNoCache"];
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["MemberListPage"];
+                };
+            };
+            /** @description Missing/invalid access token (`UNAUTHENTICATED`) */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description `FORBIDDEN` (no `manage_members`) or `ORG_ACCESS_DENIED` (not a member) */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description `VALIDATION_FAILED` (`status` / `cursor` / `limit`) or `ORG_CONTEXT_REQUIRED` / `ORG_MISMATCH`. */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+        };
+    };
+    revokeMember: {
+        parameters: {
+            query?: never;
+            header?: {
+                /** @description Org context (api-spec §1). Optional on routes that already carry `{orgId}` in the path; if both are sent they MUST match, otherwise `422 ORG_MISMATCH`. User-scoped and public routes ignore this header entirely (I-3). */
+                "X-Organization-Id"?: components["parameters"]["OrgIdHeader"];
+            };
+            path: {
+                /** @description Organization id. On F-002 org-scoped routes this is one of the two accepted sources of org context (the other is the `X-Organization-Id` header, D-025); sending both with different values is `422 ORG_MISMATCH`. */
+                orgId: components["parameters"]["OrgIdParam"];
+                /** @description Target member's user id. */
+                userId: components["parameters"]["UserIdParam"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Removed (soft). */
+            200: {
+                headers: {
+                    "Cache-Control": components["headers"]["CacheControlNoStore"];
+                    Pragma: components["headers"]["PragmaNoCache"];
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["RevokeMemberResult"];
+                };
+            };
+            /** @description Missing/invalid access token (`UNAUTHENTICATED`) */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description `FORBIDDEN` — missing `manage_members`, or removing an Owner without `full_access` — or `ORG_ACCESS_DENIED`. */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description `NOT_FOUND` — not an active member of this shop (any more). */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description `LAST_OWNER` — the shop would be left with no active Owner · or `CONFLICT` + `details.reason = "busy"` (lock contention, retry). */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description `ORG_CONTEXT_REQUIRED` / `ORG_MISMATCH` */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+        };
+    };
+    updateMemberRole: {
+        parameters: {
+            query?: never;
+            header?: {
+                /** @description Org context (api-spec §1). Optional on routes that already carry `{orgId}` in the path; if both are sent they MUST match, otherwise `422 ORG_MISMATCH`. User-scoped and public routes ignore this header entirely (I-3). */
+                "X-Organization-Id"?: components["parameters"]["OrgIdHeader"];
+            };
+            path: {
+                /** @description Organization id. On F-002 org-scoped routes this is one of the two accepted sources of org context (the other is the `X-Organization-Id` header, D-025); sending both with different values is `422 ORG_MISMATCH`. */
+                orgId: components["parameters"]["OrgIdParam"];
+                /** @description Target member's user id. */
+                userId: components["parameters"]["UserIdParam"];
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["UpdateMemberRoleRequest"];
+            };
+        };
+        responses: {
+            /** @description The updated member row (same shape as a `GET /members` item). */
+            200: {
+                headers: {
+                    "Cache-Control": components["headers"]["CacheControlNoStore"];
+                    Pragma: components["headers"]["PragmaNoCache"];
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["MemberRow"];
+                };
+            };
+            /** @description Missing/invalid access token (`UNAUTHENTICATED`) */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description `FORBIDDEN` — missing `manage_members`, or the Owner-only rule — or `ORG_ACCESS_DENIED` (not a member of this shop). */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description `NOT_FOUND` — the target is not an ACTIVE member of this shop (including "was removed by a request that raced this one"). */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description `LAST_OWNER` — the change would leave the shop with zero active Owners, which is unrecoverable in Phase 0 · or `CONFLICT` + `details.reason = "busy"` — this request lost the race for the shop's row lock (transient, retry; deliberately not a 500). */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Non-JSON Content-Type (`UNSUPPORTED_MEDIA_TYPE`) */
+            415: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description `ROLE_INVALID` — `roleId` is not a role of THIS shop (a foreign id and a non-existent id are indistinguishable by construction) · `VALIDATION_FAILED` — `roleId` missing · `ORG_CONTEXT_REQUIRED` / `ORG_MISMATCH`. */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+        };
+    };
+    listOrgRoles: {
+        parameters: {
+            query?: never;
+            header?: {
+                /** @description Org context (api-spec §1). Optional on routes that already carry `{orgId}` in the path; if both are sent they MUST match, otherwise `422 ORG_MISMATCH`. User-scoped and public routes ignore this header entirely (I-3). */
+                "X-Organization-Id"?: components["parameters"]["OrgIdHeader"];
+            };
+            path: {
+                /** @description Organization id. On F-002 org-scoped routes this is one of the two accepted sources of org context (the other is the `X-Organization-Id` header, D-025); sending both with different values is `422 ORG_MISMATCH`. */
+                orgId: components["parameters"]["OrgIdParam"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Every role of this shop, oldest first. */
+            200: {
+                headers: {
+                    "Cache-Control": components["headers"]["CacheControlNoStore"];
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["RoleListPage"];
+                };
+            };
+            /** @description Missing/invalid access token (`UNAUTHENTICATED`) */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description `ORG_ACCESS_DENIED` — not an active member of this shop (including the shop not existing: the two are indistinguishable on purpose, I-5). */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description `ORG_MISMATCH` — `X-Organization-Id` disagrees with the path (a client bug; the server never picks a side). */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+        };
+    };
+    leaveOrganization: {
+        parameters: {
+            query?: never;
+            header?: {
+                /** @description Org context (api-spec §1). Optional on routes that already carry `{orgId}` in the path; if both are sent they MUST match, otherwise `422 ORG_MISMATCH`. User-scoped and public routes ignore this header entirely (I-3). */
+                "X-Organization-Id"?: components["parameters"]["OrgIdHeader"];
+            };
+            path: {
+                /** @description Organization id. On F-002 org-scoped routes this is one of the two accepted sources of org context (the other is the `X-Organization-Id` header, D-025); sending both with different values is `422 ORG_MISMATCH`. */
+                orgId: components["parameters"]["OrgIdParam"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description You have left the shop. */
+            200: {
+                headers: {
+                    "Cache-Control": components["headers"]["CacheControlNoStore"];
+                    Pragma: components["headers"]["PragmaNoCache"];
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["LeaveOrgResult"];
+                };
+            };
+            /** @description Missing/invalid access token (`UNAUTHENTICATED`) */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description `ORG_ACCESS_DENIED` — not an active member (which covers pressing the button twice). Never `FORBIDDEN` here. */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description `LAST_OWNER` — you are the only active Owner; appoint another first · or `CONFLICT` + `details.reason = "busy"` (lock contention, retry). */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description `ORG_CONTEXT_REQUIRED` / `ORG_MISMATCH` */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+        };
+    };
+    listInvitations: {
+        parameters: {
+            query?: {
+                /** @description Default `pending` — the actionable view. Any other value → `422`. */
+                status?: "pending" | "accepted" | "cancelled" | "expired" | "all";
+                /** @description Opaque keyset cursor from the previous page's `nextCursor`. Base64url — clients MUST NOT decode or construct one. Unreadable value → `422 VALIDATION_FAILED` with `fieldErrors.cursor`. */
+                cursor?: components["parameters"]["CursorParam"];
+                /** @description Page size. Default 25, clamped to 100. Non-integer / < 1 → `422 VALIDATION_FAILED` with `fieldErrors.limit` (a bug is not silently corrected). */
+                limit?: components["parameters"]["LimitParam"];
+            };
+            header?: {
+                /** @description Org context (api-spec §1). Optional on routes that already carry `{orgId}` in the path; if both are sent they MUST match, otherwise `422 ORG_MISMATCH`. User-scoped and public routes ignore this header entirely (I-3). */
+                "X-Organization-Id"?: components["parameters"]["OrgIdHeader"];
+            };
+            path: {
+                /** @description Organization id. On F-002 org-scoped routes this is one of the two accepted sources of org context (the other is the `X-Organization-Id` header, D-025); sending both with different values is `422 ORG_MISMATCH`. */
+                orgId: components["parameters"]["OrgIdParam"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description One page, sorted `createdAt desc, id desc`. */
+            200: {
+                headers: {
+                    "Cache-Control": components["headers"]["CacheControlNoStore"];
+                    Pragma: components["headers"]["PragmaNoCache"];
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["InvitationListPage"];
+                };
+            };
+            /** @description Missing/invalid access token (`UNAUTHENTICATED`) */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description `FORBIDDEN` (no `manage_members`) or `ORG_ACCESS_DENIED` */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description `VALIDATION_FAILED` (`status` / `cursor` / `limit`) or `ORG_CONTEXT_REQUIRED` / `ORG_MISMATCH`. */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+        };
+    };
+    createInvitation: {
+        parameters: {
+            query?: never;
+            header?: {
+                /** @description Org context (api-spec §1). Optional on routes that already carry `{orgId}` in the path; if both are sent they MUST match, otherwise `422 ORG_MISMATCH`. User-scoped and public routes ignore this header entirely (I-3). */
+                "X-Organization-Id"?: components["parameters"]["OrgIdHeader"];
+            };
+            path: {
+                /** @description Organization id. On F-002 org-scoped routes this is one of the two accepted sources of org context (the other is the `X-Organization-Id` header, D-025); sending both with different values is `422 ORG_MISMATCH`. */
+                orgId: components["parameters"]["OrgIdParam"];
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["CreateInvitationRequest"];
+            };
+        };
+        responses: {
+            /** @description Invitation created — token and link included, once. */
+            201: {
+                headers: {
+                    "Cache-Control": components["headers"]["CacheControlNoStore"];
+                    Pragma: components["headers"]["PragmaNoCache"];
+                    "Referrer-Policy": components["headers"]["ReferrerPolicyNoReferrer"];
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["IssuedInvitation"];
+                };
+            };
+            /** @description Missing/invalid access token (`UNAUTHENTICATED`) */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description `FORBIDDEN` — missing `manage_members`, or inviting an Owner-capable role without `full_access` — or `ORG_ACCESS_DENIED`. */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description `ALREADY_MEMBER` — that person is already an active member · `INVITATION_PENDING` (+`details.invitationId`) — a live invitation for that address exists · `INVITATION_LIMIT_REACHED` — too many unexpired pending invitations · `CONFLICT` + `details.reason = "busy"` (lock contention, retry). */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Non-JSON Content-Type (`UNSUPPORTED_MEDIA_TYPE`) */
+            415: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description `VALIDATION_FAILED` (+`fieldErrors.email` / `fieldErrors.roleId`) · `ROLE_INVALID` — the role is not one of THIS shop's · `ORG_CONTEXT_REQUIRED` / `ORG_MISMATCH`. */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description `RATE_LIMITED` — 30 invitations per hour per shop. */
+            429: {
+                headers: {
+                    "Retry-After": components["headers"]["RetryAfter"];
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+        };
+    };
+    cancelInvitation: {
+        parameters: {
+            query?: never;
+            header?: {
+                /** @description Org context (api-spec §1). Optional on routes that already carry `{orgId}` in the path; if both are sent they MUST match, otherwise `422 ORG_MISMATCH`. User-scoped and public routes ignore this header entirely (I-3). */
+                "X-Organization-Id"?: components["parameters"]["OrgIdHeader"];
+            };
+            path: {
+                /** @description Organization id. On F-002 org-scoped routes this is one of the two accepted sources of org context (the other is the `X-Organization-Id` header, D-025); sending both with different values is `422 ORG_MISMATCH`. */
+                orgId: components["parameters"]["OrgIdParam"];
+                /** @description Invitation id (`inv_…`). */
+                invitationId: components["parameters"]["InvitationIdParam"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Cancelled. */
+            200: {
+                headers: {
+                    "Cache-Control": components["headers"]["CacheControlNoStore"];
+                    Pragma: components["headers"]["PragmaNoCache"];
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["CancelledInvitation"];
+                };
+            };
+            /** @description Missing/invalid access token (`UNAUTHENTICATED`) */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description `FORBIDDEN` (no `manage_members`) or `ORG_ACCESS_DENIED` */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description `NOT_FOUND` — no such invitation in this shop. */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description `CONFLICT` — the invitation is not pending (already accepted or cancelled) · or `CONFLICT` + `details.reason = "busy"` (lock contention). */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description `ORG_CONTEXT_REQUIRED` / `ORG_MISMATCH` */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+        };
+    };
+    reissueInvitationLink: {
+        parameters: {
+            query?: never;
+            header?: {
+                /** @description Org context (api-spec §1). Optional on routes that already carry `{orgId}` in the path; if both are sent they MUST match, otherwise `422 ORG_MISMATCH`. User-scoped and public routes ignore this header entirely (I-3). */
+                "X-Organization-Id"?: components["parameters"]["OrgIdHeader"];
+            };
+            path: {
+                /** @description Organization id. On F-002 org-scoped routes this is one of the two accepted sources of org context (the other is the `X-Organization-Id` header, D-025); sending both with different values is `422 ORG_MISMATCH`. */
+                orgId: components["parameters"]["OrgIdParam"];
+                /** @description Invitation id (`inv_…`). */
+                invitationId: components["parameters"]["InvitationIdParam"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description A new token and link; the old one is already dead. */
+            200: {
+                headers: {
+                    "Cache-Control": components["headers"]["CacheControlNoStore"];
+                    Pragma: components["headers"]["PragmaNoCache"];
+                    "Referrer-Policy": components["headers"]["ReferrerPolicyNoReferrer"];
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ReissuedLink"];
+                };
+            };
+            /** @description Missing/invalid access token (`UNAUTHENTICATED`) */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description `FORBIDDEN` — missing `manage_members`, or reissuing an Owner invitation without `full_access` (nothing is written when this fires) — or `ORG_ACCESS_DENIED`. */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description `NOT_FOUND` — no such invitation in this shop. */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description `CONFLICT` — the invitation is not in a reissuable state (already accepted or cancelled) · `INVITATION_EXPIRED` — it is past `expiresAt`; an expired link is NOT resurrected, because a `pending` row that can be revived at any time is a permanent standing option rather than an invitation (security review A-9). The way forward is `DELETE /orgs/{orgId}/invitations/{invitationId}` followed by a fresh `POST /orgs/{orgId}/invitations` · or `CONFLICT` + `details.reason = "busy"` (lock contention, retry). */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description `ORG_CONTEXT_REQUIRED` / `ORG_MISMATCH` */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description `RATE_LIMITED` — 60 reissues per hour per shop. */
+            429: {
+                headers: {
+                    "Retry-After": components["headers"]["RetryAfter"];
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+        };
+    };
+    previewInvitation: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["RedeemInvitationRequest"];
+            };
+        };
+        responses: {
+            /** @description The invitation, safe for an anonymous viewer. */
+            200: {
+                headers: {
+                    "Cache-Control": components["headers"]["CacheControlNoStore"];
+                    Pragma: components["headers"]["PragmaNoCache"];
+                    "Referrer-Policy": components["headers"]["ReferrerPolicyNoReferrer"];
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["InvitationPreview"];
+                };
+            };
+            /** @description `INVITATION_INVALID` — one answer, one body, for an unknown token, a rotated one and a token that never existed. Anything more would turn this public endpoint into an oracle that says "this secret used to be real". */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description `INVITATION_EXPIRED` · `INVITATION_CANCELLED` · `INVITATION_ALREADY_ACCEPTED`. These ARE distinguished — the caller already holds a token that matched a stored hash, so telling them what happened to it leaks nothing and each answer sends them somewhere different (AC US-4). */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Non-JSON Content-Type (`UNSUPPORTED_MEDIA_TYPE`) */
+            415: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description `VALIDATION_FAILED` — no token in the body (`fieldErrors.token`). */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description `RATE_LIMITED` — 30/hour per IP (IPv6 /64). */
+            429: {
+                headers: {
+                    "Retry-After": components["headers"]["RetryAfter"];
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+        };
+    };
+    acceptInvitation: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["RedeemInvitationRequest"];
+            };
+        };
+        responses: {
+            /** @description Joined — enough to enter the shop. */
+            200: {
+                headers: {
+                    "Cache-Control": components["headers"]["CacheControlNoStore"];
+                    Pragma: components["headers"]["PragmaNoCache"];
+                    "Referrer-Policy": components["headers"]["ReferrerPolicyNoReferrer"];
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["InvitationAcceptResult"];
+                };
+            };
+            /** @description Missing/invalid access token (`UNAUTHENTICATED`) */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description `INVITATION_EMAIL_MISMATCH` (+`details.emailMasked`) — this invitation was issued to a different address. */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description `INVITATION_INVALID` — unknown token (one answer for every reason). */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description `INVITATION_EXPIRED` · `INVITATION_CANCELLED` · `INVITATION_ALREADY_ACCEPTED` · `ALREADY_MEMBER` · `INVITATION_SUPERSEDED` (the link predates your removal) · `INVITATION_ROLE_UNAVAILABLE` (the invited role was deleted — checked at ACCEPT, not only at creation) · `CONFLICT` + `details.reason = "busy"` (lock contention, retry). */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Non-JSON Content-Type (`UNSUPPORTED_MEDIA_TYPE`) */
+            415: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description `VALIDATION_FAILED` — no token in the body (`fieldErrors.token`). */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description `RATE_LIMITED` — 30/hour per IP (IPv6 /64), shared with preview. */
             429: {
                 headers: {
                     "Retry-After": components["headers"]["RetryAfter"];

@@ -16,7 +16,12 @@ publish_to: 'none' # Remove this line if you wish to publish to pub.dev
 # https://developer.apple.com/library/archive/documentation/General/Reference/InfoPlistKeyReference/Articles/CoreFoundationKeys.html
 # In Windows, build-name is used as the major, minor, and patch parts
 # of the product and file versions while build-number is used as the build suffix.
-version: 1.0.0+1
+# 0.0.0 ตรงกับทุก workspace ของ npm — repo นี้ยังไม่มี git tag และไม่มี deploy target
+# (CHANGELOG อยู่ใต้ `[Unreleased]` ทั้งหมด) · ค่าเดิม `1.0.0+1` คือ default ของ
+# `flutter create` ที่ไม่มีใครแก้ ⇒ อ้างเวอร์ชันที่ไม่เคย ship · build number `+1`
+# คงไว้เพราะสโตร์บังคับให้เป็นจำนวนเต็มที่เดินหน้าอย่างเดียว · `release` ตัดเวอร์ชันจริง
+# ตอนปิด Phase 1 (release-gate-f.md §1)
+version: 0.0.0+1
 
 environment:
   sdk: ^3.6.1
@@ -78,6 +83,11 @@ dependencies:
 
 dev_dependencies:
   flutter_test:
+    sdk: flutter
+  # E-10's browser-lane equivalent: the org flow on a real device against a
+  # real API (integration_test/org_flow_test.dart). Runs only in the
+  # `mobile-e2e` CI job, never in `flutter test`.
+  integration_test:
     sdk: flutter
 
   # T-001-17 — mocks the generated Dio-based AuthApi in widget/unit tests

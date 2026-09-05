@@ -27,10 +27,15 @@ non-derived column is `StockMovement.balanceAfter` (audit snapshot per movement)
 - **One and only one** Prisma schema: `packages/db/prisma/schema.prisma`. No other
   package or app declares a `schema.prisma`. This is the single source of truth for
   the physical data model (satisfies AC5/AC6/AC7 introspection targets).
-- Generator output goes to a package-internal path, e.g.
-  `generator client { provider = "prisma-client-js"; output = "../src/generated/client" }`,
-  so the generated client is versioned as part of `@omnistock/db` rather than
+- Generator output goes to a package-internal path —
+  `generator client { provider = "prisma-client-js"; output = "../generated/client" }`
+  — so the generated client is versioned as part of `@omnistock/db` rather than
   leaking into a root `node_modules/.prisma` that other packages reach into.
+  ⚠️ It was `../src/generated/client` until B-10 (F-002). Once `@omnistock/db`
+  had to emit `dist/` so the API could boot with plain `node`, a client under
+  `src/` served only the source tree; the alternative was copying it into
+  `dist/` at build time, i.e. two clients with one free to go stale against the
+  schema. A sibling of both directories serves both.
 - `packages/db` exports a thin barrel (`packages/db/src/index.ts`) that re-exports
   the generated `PrismaClient`, the model types, and enums. **Consumers import from
   `@omnistock/db` only** — never from a raw generated path. This keeps the physical

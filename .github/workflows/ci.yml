@@ -17,6 +17,14 @@ jobs:
   # AC2 (build covers all workspaces), lint (real TS lint), typecheck, test — Node only.
   node-ci:
     runs-on: ubuntu-latest
+    # Grounded in real data, not a guess: 10 most recent green runs on this
+    # branch (32812955717..33883029250, 2026-08-25..2026-09-04) — this job's
+    # wall time ranged 95s-132s (max 132s = 2.2min). No actions/cache is
+    # configured for the pnpm store, so every run pays a cold `pnpm install`;
+    # 10min = ~4.5x the observed max, floored at 10min (not a tighter 3x≈7min)
+    # so one slow npm-registry day doesn't fail the job outright. A real hang
+    # still becomes a result in 10min instead of GitHub's 6h default.
+    timeout-minutes: 10
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
@@ -29,11 +37,25 @@ jobs:
         # block scalar on purpose: the inline JS contains ": " which is illegal in a YAML plain scalar
         run: |
           pnpm exec turbo build --dry=json | node -e "const g=JSON.parse(require('fs').readFileSync(0));const names=new Set(g.tasks.map(t=>t.package));for(const p of ['@omnistock/core-domain','@omnistock/db','@omnistock/connectors','@omnistock/contracts','@omnistock/config','api','web','mobile','back-office']){if(!names.has(p)){console.error('::error::workspace missing from build graph: '+p);process.exit(1)}}console.log('all workspaces present')"
+      # NOTE (F-002 T-002-D1b): this lane has NO database, so packages/db's
+      # src/tenancy.db.test.ts and apps/api's *.int.test.ts self-skip here — by
+      # design, and visibly (the suites print a loud warning). Their real,
+      # merge-blocking run lives in `db-migrate` and `integration-api`, each
+      # protected by the lane-enabled guard (I-37). Do not read a green node-ci
+      # as "tenancy isolation was proven".
       - run: pnpm turbo lint typecheck test --filter='!./apps/mobile'
 
   # AC4/AC5/AC6/AC7/AC8 — one ephemeral Postgres, empty → migrated → introspected → trigger-armed (§3).
   db-migrate:
     runs-on: ubuntu-latest
+    # Grounded in real data: same 10-run sample as node-ci (see its comment
+    # for the run-id range) — this job's wall time ranged 42s-53s (max 53s).
+    # 10min is ~11x the observed max; kept at the same 10min floor as the
+    # other short lanes (not tightened further) because it also pays a cold
+    # `pnpm install` (no cache) plus a Postgres service-container health
+    # check, both of which vary with runner/network conditions the 10-run
+    # sample won't fully capture.
+    timeout-minutes: 10
     services:
       postgres:
         image: postgres:16
@@ -49,6 +71,14 @@ jobs:
           --health-retries 10
     env:
       DATABASE_URL: postgresql://omnistock:omnistock@localhost:5432/omnistock_ci
+      # F-002 T-002-D1b — packages/db's DB-backed tenancy proof
+      # (src/tenancy.db.test.ts, security-review M-9) gates on TEST_DATABASE_URL
+      # and self-skips otherwise. `node-ci` has no database, so WITHOUT this line
+      # those 15 cases (extendedWhereUnique / upsert / $transaction inheritance /
+      # nested-read leak) would skip on every PR and CI would be "green because it
+      # never ran" (F-001 lesson). Same ephemeral container the migrations above
+      # run against, so the suite meets the exact schema this PR ships.
+      TEST_DATABASE_URL: postgresql://omnistock:omnistock@localhost:5432/omnistock_ci
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
@@ -58,6 +88,17 @@ jobs:
       - run: pnpm install --frozen-lockfile
       - name: generate Prisma client (gitignored — verify:ac imports it)
         run: pnpm --filter @omnistock/db exec prisma generate
+      # ★ B-10 — build the packages this job then RUNS.
+      #
+      # `@omnistock/config` and `@omnistock/db` emit `dist/` now (that is what
+      # lets plain `node` boot the API), so anything importing them needs them
+      # built. `turbo test` already declares `dependsOn: ["build"]`, but the
+      # steps below call `pnpm --filter … run <script>` directly and bypass
+      # that graph — which is exactly how this job went red on the packaging
+      # change with "Failed to resolve entry for package @omnistock/config"
+      # while every turbo-driven lane stayed green.
+      - name: build the workspace packages this job imports
+        run: pnpm turbo build --filter=@omnistock/db
       - name: AC4 — migrate deploy from empty
         run: pnpm --filter @omnistock/db exec prisma migrate deploy
       - name: AC4 — migrate status in sync (no drift)
@@ -69,6 +110,34 @@ jobs:
       # status` won't catch it (T-000-05 security review, Important-2).
       - name: AC5/6/7/8 — schema shape + ledger immutability
         run: pnpm --filter @omnistock/db run verify:ac
+      # ── F-002 T-002-D1b · the DB-backed tenancy proof + its lane-enabled guard ──
+      # Runs HERE (not in node-ci, not in integration-api) because this lane already
+      # owns a Postgres that has just been `migrate deploy`d + drift-checked, so the
+      # suite meets exactly the schema under test and the ordering is guaranteed by
+      # step order. integration-api boots the HTTP app and is about API behaviour;
+      # this is a package-level proof about Prisma-vs-Postgres and belongs next to
+      # the schema checks, where a failure points straight at the tenancy extension.
+      - name: I-37 — fail fast if this lane is not DB-enabled
+        run: |
+          if [ -z "${TEST_DATABASE_URL:-}" ]; then
+            echo "::error::db-migrate: TEST_DATABASE_URL is unset — packages/db's DB-backed tenancy proof (M-9) would SILENTLY SKIP and this job would go green having proven nothing. Restore it in this job's env: block."
+            exit 1
+          fi
+          echo "TEST_DATABASE_URL is set — the DB-backed suite will actually run."
+      - name: T-002-02 (M-9) — packages/db suite incl. the DB-backed tenancy proof
+        # --reporter=default keeps the human log; --reporter=json feeds the guard.
+        run: pnpm --filter @omnistock/db run test --reporter=default --reporter=json --outputFile.json=/tmp/db-tests.json
+      - name: I-37 lane-enabled guard — a skipped tenancy proof is RED, not green
+        # Asserts the run really happened: 0 skipped cases, tenancy.db.test.ts
+        # contributed >= 15 PASSED cases, and the package suite as a whole >= 100.
+        # Raising these numbers is welcome; lowering one is a reviewable diff.
+        run: |
+          node tool/ci/assert-tests-ran.mjs \
+            --report /tmp/db-tests.json \
+            --lane "db-migrate · packages/db" \
+            --require "src/tenancy.db.test.ts=15" \
+            --require "src/org-lock.db.test.ts=5" \
+            --min-passed 165
 
   # AC9 + R1 — architectural boundary gates (dependency-cruiser, §2.5, backend.md
   # §5.2). `pnpm depcruise` (turbo) runs EVERY package's gate: core-domain purity
@@ -77,6 +146,13 @@ jobs:
   # is live, not decorative.
   depcruise:
     runs-on: ubuntu-latest
+    # Grounded in real data: same 10-run sample as node-ci (see its comment
+    # for the run-id range) — this job's wall time ranged 28s-33s (max 33s).
+    # 10min is the same floor as the other short lanes (>15x the observed
+    # max) — this is the cheapest job in the pipeline, so there is no cost
+    # reason to tighten it further; the floor exists purely to absorb a cold
+    # `pnpm install` (no cache) on a slow day without a false failure.
+    timeout-minutes: 10
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
@@ -99,6 +175,12 @@ jobs:
   # merge-base version via oasdiff (Docker image — no install/new npm dep).
   oasdiff:
     runs-on: ubuntu-latest
+    # Grounded in real data: same 10-run sample as node-ci (see its comment
+    # for the run-id range) — this job's wall time ranged 5s-16s (max 16s).
+    # 10min is the same floor as the other short lanes; the one variable step
+    # here (`docker pull` of the oasdiff image, no cache) is the reason to
+    # keep a real floor rather than shrinking to a multiple of 16s.
+    timeout-minutes: 10
     steps:
       # fetch-depth: 0 so `git merge-base` + the base-branch ref are available.
       - uses: actions/checkout@v4
@@ -114,6 +196,14 @@ jobs:
   # the generated api_client package is excluded from analyze (analysis_options).
   flutter-ci:
     runs-on: ubuntu-latest
+    # Grounded in real data: same 10-run sample as node-ci (see its comment
+    # for the run-id range) — this job's wall time ranged 166s-180s (max
+    # 180s = 3min). 15min is ~5x the observed max — more headroom than the
+    # 3x used elsewhere because this lane has two independently network-bound
+    # steps with no cache (flutter-action's SDK download + `dart pub get` /
+    # `flutter pub get` against pub.dev), either of which can be slow on its
+    # own without the job actually being stuck.
+    timeout-minutes: 15
     steps:
       - uses: actions/checkout@v4
       - uses: subosito/flutter-action@v2
@@ -146,6 +236,13 @@ jobs:
   # runs build_runner (T-000-09 fix); flutter-action provides it.
   contracts-drift:
     runs-on: ubuntu-latest
+    # Grounded in real data: same 10-run sample as node-ci (see its comment
+    # for the run-id range) — this job's wall time ranged 107s-159s (max
+    # 159s = 2.65min). 15min is ~5.7x the observed max, matching flutter-ci's
+    # headroom for the same reason: it also pays flutter-action's SDK
+    # download plus both `pnpm install` and Dart/TS codegen, each an
+    # independent network-bound step with no cache configured.
+    timeout-minutes: 15
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
@@ -177,14 +274,21 @@ jobs:
   # "→ F-001 (e2e-in-CI for AC3 / AC15)"): a supertest-equivalent HTTP hit
   # against a booted `/health`, now wired as a required, merge-blocking check
   # instead of local-only verification.
-  # D-014: no `echo ok`/fake-pass steps. Once backend-api lands T-001-07's
-  # supertest suite under the `test:integration` script convention, this job
-  # picks it up automatically (no CI file change needed) — see the explicit
-  # existence check below, which fails loudly rather than silently skipping
-  # if the convention name is wrong, and prints a visible (not silent) notice
-  # when the script genuinely doesn't exist yet.
+  # D-014: no `echo ok`/fake-pass steps. T-001-07's supertest suite has landed
+  # under the `test:integration` script convention, so this job now RUNS it as a
+  # hard gate (F-002 T-002-D1b): the old "run it only if the script exists,
+  # otherwise print a notice" branch is gone — a missing script, an unmatched
+  # filename filter or a self-skipped suite must all be RED here, not a notice.
   integration-api:
     runs-on: ubuntu-latest
+    # Grounded in real data: same 10-run sample as node-ci (see its comment
+    # for the run-id range) — this job's wall time ranged 81s-144s (max
+    # 144s = 2.4min). 15min is ~6.25x the observed max — more headroom than
+    # the plain 3x floor because this lane boots a real `apps/api` process
+    # (its own 30s poll loop against /health) on top of Postgres + Redis
+    # service containers and a cold `pnpm install`, three independent
+    # sources of runner-day variance the 10-run sample won't fully capture.
+    timeout-minutes: 15
     services:
       postgres:
         image: postgres:16
@@ -207,7 +311,16 @@ jobs:
           --health-timeout 5s
           --health-retries 10
     env:
-      DATABASE_URL: postgresql://omnistock:omnistock@localhost:5432/omnistock_ci
+      # T-002-D1 · `connection_limit` is EXPLICIT here on purpose (§12.3,
+      # test-plan §8 "pool ต้องมี connection ≥ จำนวน request ขนาน").
+      # Prisma's default pool size is derived from CPU count — 5 on a 2-core
+      # GitHub runner — and the concurrency suite runs several *.int.test.ts
+      # files at once, each with its own client, each firing parallel requests.
+      # If the pool is narrower than the fan-out, the requests queue and run
+      # SERIALLY: every race test then passes without ever having raced, which
+      # is the worst kind of green. 25 is comfortably above the widest fan-out
+      # and far below Postgres 16's default max_connections of 100.
+      DATABASE_URL: postgresql://omnistock:omnistock@localhost:5432/omnistock_ci?connection_limit=25
       REDIS_URL: redis://localhost:6379
       # The *.int.test.ts DB-backed suites gate on TEST_DATABASE_URL/TEST_REDIS_URL
       # (skip otherwise). Point them at the same ephemeral service containers so
@@ -216,12 +329,38 @@ jobs:
       # isolation) actually RUN as a merge gate — not just the /health smoke.
       # They use supertest in-memory (app.init(), no listen) so there is no port
       # clash with the booted server above.
-      TEST_DATABASE_URL: postgresql://omnistock:omnistock@localhost:5432/omnistock_ci
+      TEST_DATABASE_URL: postgresql://omnistock:omnistock@localhost:5432/omnistock_ci?connection_limit=25
       TEST_REDIS_URL: redis://localhost:6379
+      # T-002-22's in-test lane guard (I-37) asserts "this process MUST have the
+      # DB+Redis lane enabled". It cannot key that off `CI`: GitHub sets `CI` in
+      # EVERY job, including node-ci, which has no service containers on purpose
+      # and legitimately skips the int suites. Keying off `CI` made node-ci red
+      # for doing exactly what it is supposed to do. This variable marks the one
+      # job where a skipped int suite is a failure rather than a choice.
+      REQUIRE_INT_LANE: "1"
       # CI-only placeholders — never real secrets (root CLAUDE.md constraint).
       # Satisfy packages/config's env schema (>=32 chars, must differ, F-001 I-4).
       JWT_ACCESS_SECRET: ci-access-secret-not-a-real-value-000000
       JWT_REFRESH_SECRET: ci-refresh-secret-not-a-real-value-00000
+      # F-002 (T-002-06) added three REQUIRED vars — without them every
+      # `loadEnv` call (main.ts boot + AuthModule factories in the int suites)
+      # exits 1 and this whole job goes red. Placeholders only, same rule as above.
+      # >=32 chars AND must differ from BOTH JWT secrets (schema .superRefine,
+      # F-002 §7.3 key separation) — hence the distinct "invitation" prefix.
+      INVITATION_TOKEN_SECRET: ci-invitation-secret-not-a-real-value-00
+      # Only ever string-concatenated into `inviteUrl` (`${base}/invite?token=…`);
+      # nothing in CI fetches it. Plain http is legal here because the schema
+      # allows http on loopback when NODE_ENV != production (this job sets
+      # NODE_ENV: test) — using a loopback host also guarantees a stray request
+      # can never leave the runner toward a real origin. Port 3001 mirrors
+      # .env.example / the apps/web port the e2e-web job boots, so an asserted
+      # invite URL reads the same locally and in CI. If NODE_ENV here is ever
+      # flipped to production, boot fails loudly on this line — by design.
+      WEB_APP_BASE_URL: http://localhost:3001
+      # Must match a PlanDefinition key seeded by packages/db/prisma/seed.ts
+      # (dogfood complimentary full tier). No fallback exists by design: a wrong
+      # key must surface as 503 ORG_PROVISIONING_UNAVAILABLE, never a free plan.
+      DEFAULT_ORG_PLAN_KEY: comp_full
       PORT: "3000"
       NODE_ENV: test
       # T-001-12 — no proxy in front of the api in CI: trust zero XFF hops so
@@ -246,6 +385,15 @@ jobs:
         run: pnpm --filter @omnistock/db exec prisma generate
       - name: migrate deploy (empty CI database)
         run: pnpm --filter @omnistock/db exec prisma migrate deploy
+      # F-002 T-002-07/architecture.md §12.3 item 2 — without this, PlanDefinition
+      # has 0 rows and EVERY POST /organizations in the int suite below fails
+      # closed with 503 ORG_PROVISIONING_UNAVAILABLE (§6.2 fail-closed, no silent
+      # fallback to `free`). Must run after `migrate deploy` (no PlanDefinition
+      # table = nothing to seed into) and before the api boots / any test step.
+      # No `|| true` / continue-on-error: a failed seed must fail this job loudly,
+      # the same way a failed migration does above.
+      - name: T-002-D1c — prisma db seed (PlanDefinition rows, §12.3 item 2)
+        run: pnpm --filter @omnistock/db exec prisma db seed
       - name: boot apps/api in the background
         # Boot the REAL app via tsx (not `node dist/main.js`): @omnistock/config,
         # @omnistock/db and @omnistock/contracts still ship a TS-source `main`
@@ -269,13 +417,56 @@ jobs:
           echo "::error::apps/api never answered 200 on /health within 30s"
           cat /tmp/api.log || true
           exit 1
-      - name: run api integration suite (T-001-07 supertest, once it lands)
+      # ── F-002 T-002-D1b · same silent-skip trap as packages/db, closed the same way ──
+      # The `test:integration` script exists now (F-001 T-001-07 landed), so the old
+      # "run it if it exists, print a notice otherwise" branch is gone: a missing
+      # script must be RED, not a notice. The *.int.test.ts suites self-skip without
+      # TEST_DATABASE_URL/TEST_REDIS_URL and `vitest run int.test` exits 0 while
+      # skipping — verified locally: 29/29 skipped, exit 0. Hence the two steps below.
+      - name: I-37 — fail fast if this lane is not DB+Redis-enabled
         run: |
-          if node -e "process.exit(require('./apps/api/package.json').scripts['test:integration'] ? 0 : 1)"; then
-            pnpm --filter api run test:integration
-          else
-            echo "::notice::apps/api has no 'test:integration' script yet (F-001 T-001-07/T-001-18 not landed) — the required /health boot-smoke above still ran and gated this job; this step is a no-op until backend-api adds the script."
+          # plain `if`s, not `[ … ] && x=…`: GitHub runs this with `bash -e`, where a
+          # false test as the last command of an && list would fail the step itself.
+          missing=""
+          if [ -z "${TEST_DATABASE_URL:-}" ]; then missing="$missing TEST_DATABASE_URL"; fi
+          if [ -z "${TEST_REDIS_URL:-}" ]; then missing="$missing TEST_REDIS_URL"; fi
+          if [ -n "$missing" ]; then
+            echo "::error::integration-api: missing$missing — every *.int.test.ts case would SILENTLY SKIP and this job would go green having proven nothing. Restore them in this job's env: block (they point at the service containers above)."
+            exit 1
           fi
+          echo "TEST_DATABASE_URL + TEST_REDIS_URL are set — the int suites will actually run."
+      - name: api integration suite (*.int.test.ts against the real Postgres + Redis)
+        # Calls apps/api's own script (backend-api owns WHICH files are "integration");
+        # the appended flags only add the JSON report the guard reads.
+        run: pnpm --filter api run test:integration --reporter=default --reporter=json --outputFile.json=/tmp/api-int-tests.json
+      - name: I-37 lane-enabled guard — skipped/absent int suites are RED, not green
+        run: |
+          # ★ B-6 — the floors used to be the two AUTH files and `--min-passed 29`,
+          # which those two files fill exactly. Every F-002 suite (8 files, ~160
+          # cases) therefore had NO floor at all: if all of them had silently
+          # stopped running, this lane would still have gone green — which is
+          # precisely the failure I-37 exists to catch.
+          #
+          # `--require` is a FLOOR (>= N), so adding cases is free; only losing
+          # them is red. Counts are the real ones at the time of writing, taken
+          # from the lane's own JSON report rather than guessed.
+          node tool/ci/assert-tests-ran.mjs \
+            --report /tmp/api-int-tests.json \
+            --lane "integration-api · apps/api *.int.test.ts" \
+            --require "src/auth/auth.e2e.int.test.ts=21" \
+            --require "src/auth/refresh-token.service.int.test.ts=8" \
+            --require "test/orgs.e2e.int.test.ts=37" \
+            --require "test/members.e2e.int.test.ts=34" \
+            --require "test/invitations.e2e.int.test.ts=23" \
+            --require "test/invitations-redeem.e2e.int.test.ts=16" \
+            --require "test/org-leak.kit.int.test.ts=20" \
+            --require "test/f002-seed.kit.int.test.ts=13" \
+            --require "test/org-rate-limit.e2e.int.test.ts=6" \
+            --require "test/openapi-parity.int.test.ts=5" \
+            --require "test/response-header-policy.int.test.ts=4" \
+            --require "test/concurrency-matrix.int.test.ts=14" \
+            --require "test/perf-smoke.int.test.ts=5" \
+            --min-passed 206
       - name: dump api log on failure
         if: failure()
         run: cat /tmp/api.log || true
@@ -285,8 +476,67 @@ jobs:
   # Also runs apps/web's Playwright suite (T-001-18/qa) once it exists, via the
   # same existence-check convention as the api job above — no CI file change
   # needed when qa/frontend land `test:e2e`.
-  e2e-web:
+  # ★ T-002-Q5 / E-10 — the browser lane's mobile equivalent: the Flutter app's
+  # REAL provider graph, on a real emulator, against a real API and Postgres.
+  #
+  # WHY IT IS WORTH THE MINUTES. Every one of the 390-odd widget tests overrides
+  # the org repositories with fakes, so all of them agree with a client the app
+  # never builds — and the first thing this lane found is that the app did not
+  # build one at all: `orgDirectoryProvider` threw `UnimplementedError` outside
+  # tests, so F-002's whole mobile half could not run. The web lane found six
+  # defects nothing else could see, two of them total (an Owner who could not
+  # see their own members menu; a reveal endpoint that answered 415 every
+  # time). This is the same instrument pointed at the other client.
+  #
+  # It is a SEPARATE job from flutter-ci on purpose: analyze/test stay fast and
+  # required, and this one's emulator boot (~5 min) does not sit in front of
+  # them.
+  mobile-e2e:
     runs-on: ubuntu-latest
+    # Grounded in real data: same 10-run sample as node-ci (see its comment
+    # for the run-id range) — this job's wall time ranged 461s-578s (max
+    # 578s = 9.6min). 25min is ~2.6x the observed max — a smaller multiple
+    # than the other lanes get, but this is already the heaviest job in the
+    # pipeline (API build, Postgres+Redis, Gradle `assembleDebug`, KVM setup,
+    # and an Android emulator boot) and its own inline comments record two
+    # past incidents of the emulator process dying mid-run under memory
+    # pressure (since mitigated with `-memory 3072`) — real headroom for a
+    # slow-but-legitimate run, not just clock-hang protection. Down from the
+    # original unverified 45min guess, which was never grounded in a run.
+    timeout-minutes: 25
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_USER: omnistock
+          POSTGRES_PASSWORD: omnistock
+          POSTGRES_DB: omnistock_mobile_e2e
+        ports: ["5432:5432"]
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+      redis:
+        image: redis:7
+        ports: ["6379:6379"]
+        options: >-
+          --health-cmd "redis-cli ping"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+    env:
+      # Its OWN database, not the web lane's: the two jobs run in parallel and
+      # a shared one would make either lane's failures depend on the other's
+      # rows — the kind of flake nobody can reproduce.
+      DATABASE_URL: postgresql://omnistock:omnistock@localhost:5432/omnistock_mobile_e2e
+      REDIS_URL: redis://localhost:6379
+      JWT_ACCESS_SECRET: e2e-access-secret-32-chars-minimum-value!!
+      JWT_REFRESH_SECRET: e2e-refresh-secret-32-chars-different-va!
+      INVITATION_TOKEN_SECRET: e2e-invitation-secret-32-chars-distinct!!
+      WEB_APP_BASE_URL: http://localhost:3001
+      DEFAULT_ORG_PLAN_KEY: comp_full
+      PORT: "3000"
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
@@ -294,10 +544,249 @@ jobs:
           node-version-file: ".nvmrc"
       - uses: pnpm/action-setup@v4
       - run: pnpm install --frozen-lockfile
-      - name: build workspace deps (web needs contracts built)
-        run: pnpm turbo build --filter=web^...
-      - name: build apps/web (production)
-        run: pnpm --filter web run build
+      - name: build the API (turbo builds its workspace deps first)
+        env:
+          NODE_ENV: test
+        run: pnpm turbo build --filter=api
+      - name: generate Prisma client + migrate + seed the plan
+        env:
+          NODE_ENV: test
+        run: |
+          pnpm --filter @omnistock/db exec prisma generate
+          pnpm --filter @omnistock/db exec prisma migrate deploy
+          pnpm --filter @omnistock/db exec prisma db seed
+      # The repo's own `start` script (`node dist/main.js`) — see e2e-web for
+      # what this used to have to be, and why B-10 changed it.
+      - name: boot apps/api in the background
+        env:
+          NODE_ENV: test
+        run: pnpm --filter api start &>/tmp/api.log &
+      - name: wait for the API to answer
+        run: |
+          for i in $(seq 1 60); do
+            code=$(curl -s -o /dev/null -w '%{http_code}' http://localhost:3000/health || true)
+            if [ "$code" = "200" ] || [ "$code" = "503" ]; then
+              echo "API answering on :3000 (attempt $i, status $code)"
+              exit 0
+            fi
+            sleep 1
+          done
+          echo "::error::apps/api never answered on :3000 — the mobile lane would have tested nothing"
+          cat /tmp/api.log || true
+          exit 1
+      - uses: subosito/flutter-action@v2
+        with:
+          flutter-version-file: apps/mobile/.flutter-version
+      - name: build_runner — generate api_client .g.dart (built_value companions)
+        working-directory: apps/mobile/api_client
+        run: |
+          flutter pub get
+          dart run build_runner build --delete-conflicting-outputs
+      - name: flutter pub get
+        working-directory: apps/mobile
+        run: flutter pub get
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "17"
+      # KVM, or the emulator falls back to software rendering and the boot
+      # takes long enough to time out.
+      - name: enable KVM
+        run: |
+          echo 'KERNEL=="kvm", GROUP="kvm", MODE="0666", OPTIONS+="static_node=kvm"' \
+            | sudo tee /etc/udev/rules.d/99-kvm4all.rules
+          sudo udevadm control --reload-rules
+          sudo udevadm trigger --name-match=kvm
+      - name: E-10 — the org flow on a real device against the real API
+        uses: reactivecircus/android-emulator-runner@v2
+        with:
+          api-level: 34
+          target: google_apis
+          arch: x86_64
+          # No window, no audio, no boot animation: nothing here looks at the
+          # screen, and each of them is a way for the boot to hang.
+          # `-memory 3072`: the default is tight for a device that is also
+          # hosting a debug Flutter app while Postgres, Redis, the API and a
+          # Gradle JVM share the runner. The first real run lost the emulator
+          # process mid-case (three tests reported "did not complete", no
+          # exception to read) — the cause was a `pumpAndSettle` against an
+          # infinite skeleton animation, fixed in the test, and the headroom
+          # here is so that the next such storm produces a failed assertion
+          # rather than a dead device.
+          emulator-options: -no-window -gpu swiftshader_indirect -noaudio -no-boot-anim -camera-back none -memory 3072
+          working-directory: apps/mobile
+          # ⚠️ 10.0.2.2, never localhost. Inside the emulator localhost is the
+          # emulated device, so a suite pointed at it fails with connection
+          # refused that reads exactly like the API being down.
+          # ⚠️ ONE LINE PER COMMAND, no backslash continuations. The action does
+          # not preserve them: the first run turned `\` + newline into a space,
+          # so `grep`, `-q` and `/tmp/mobile-e2e.log` arrived as extra POSITIONAL
+          # arguments to `flutter test` — i.e. as test paths. Flutter then saw one
+          # file under `integration_test/` and several outside it and refused
+          # with "Integration tests and unit tests cannot be run in a single
+          # invocation", which reads like a problem with the test and was a
+          # problem with the YAML.
+          #
+          # The grep is load-bearing rather than belt-and-braces: `sh` on the
+          # runner is dash, which has no `pipefail`, so a failing suite piped
+          # into `tee` exits 0 and the step would pass.
+          script: |
+            flutter test integration_test/org_flow_test.dart --dart-define=API_BASE_URL=http://10.0.2.2:3000 --reporter expanded 2>&1 | tee /tmp/mobile-e2e.log || true
+            adb devices > /tmp/adb-devices.txt 2>&1 || true
+            free -m > /tmp/mem.txt 2>&1 || true
+            adb logcat -d -t 400 > /tmp/logcat.txt 2>&1 || true
+            grep -q "All tests passed" /tmp/mobile-e2e.log || { echo "::error::the mobile integration suite did not report a pass"; exit 1; }
+            # …and it passed the RIGHT NUMBER of cases. "All tests passed" is
+            # also what a suite of one prints, so on its own it would stay green
+            # after somebody deleted two of E-10's three cases. Flutter's
+            # expanded reporter ends with `+N`, so N is the count. Raise the
+            # floor when cases are added (3 → 4 when M-07's round trip landed);
+            # lowering it is a visible edit.
+            #
+            # ⚠️ ONE LINE, and this is the SECOND time this action's execution
+            # model has cost a run. It runs every line as its own `sh -c`, so a
+            # variable assigned on one line is gone on the next: the first
+            # version of this check printed "0 passing case(s)" and failed a
+            # suite that had just passed all three. (The first time was the
+            # backslash continuation above.) If a step needs shell state, it
+            # has to be one command.
+            passed=$(grep -oE '\+[0-9]+' /tmp/mobile-e2e.log | tail -1 | tr -d '+'); echo "mobile integration: ${passed:-0} passing case(s) (floor 4)"; [ "${passed:-0}" -ge 4 ] || { echo "::error::the mobile lane passed ${passed:-0} case(s), floor is 4 — a case was deleted, renamed or skipped"; exit 1; }
+      # ⚠️ Collected BEFORE the emulator is torn down (the lines above run
+      # inside the action's script), because the question these answer cannot
+      # be asked afterwards: two runs ended with three tests reporting "did not
+      # complete" and no exception anywhere, and `adb emu kill` then failing
+      # with "connection refused" — i.e. the device was already gone. Whether
+      # that is Android killing the app, the host running out of memory, or the
+      # emulator itself dying is not something to guess at a third time.
+      - name: dump the evidence on failure
+        if: failure()
+        run: |
+          echo "───────── adb devices"; cat /tmp/adb-devices.txt || true
+          echo "───────── free -m";     cat /tmp/mem.txt || true
+          echo "───────── logcat (tail)"; tail -200 /tmp/logcat.txt || true
+          echo "───────── api";         cat /tmp/api.log || true
+
+  e2e-web:
+    runs-on: ubuntu-latest
+    # Grounded in real data, with one extra term the other lanes don't need:
+    # same 10-run sample as node-ci (see its comment for the run-id range) —
+    # this job's END-TO-END wall time (including a normally-fast Playwright
+    # install) ranged 117s-137s (max 137s ≈ 2.3min). But the "install
+    # Playwright browsers" step below has its OWN 12min step-level timeout
+    # with 3 bounded retries (the incident that motivated it — see that
+    # step's comment: two runs stalled 68min then 26min with nothing else in
+    # the repo changed) — a legitimate exhaustion of those 3 retries can
+    # legally take up to that full 12min on its own, on top of the rest of
+    # the job. So the floor here is (typical job time, ~2.3min) + (worst-case
+    # bounded retry budget, 12min) + margin ⇒ 20min, not the 3x-of-observed-
+    # max that would undersize it relative to a sub-step timeout it has to
+    # contain. Down from the original unverified 30min guess.
+    timeout-minutes: 20
+    # ★ T-002-Q5 — this lane used to boot the web server alone and ask it for
+    # `GET /`. Every row of test-plan §12.1 crosses the whole stack (signup,
+    # provisioning, the org header), so a browser suite against a web server
+    # with no API behind it could only ever have tested the login page's
+    # markup. The services below are what make the lane mean something.
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_USER: omnistock
+          POSTGRES_PASSWORD: omnistock
+          POSTGRES_DB: omnistock_e2e
+        ports: ["5432:5432"]
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+      redis:
+        image: redis:7
+        ports: ["6379:6379"]
+        options: >-
+          --health-cmd "redis-cli ping"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+    env:
+      DATABASE_URL: postgresql://omnistock:omnistock@localhost:5432/omnistock_e2e
+      REDIS_URL: redis://localhost:6379
+      JWT_ACCESS_SECRET: e2e-access-secret-32-chars-minimum-value!!
+      JWT_REFRESH_SECRET: e2e-refresh-secret-32-chars-different-va!
+      INVITATION_TOKEN_SECRET: e2e-invitation-secret-32-chars-distinct!!
+      # The API builds `${WEB_APP_BASE_URL}/invite?token=…`; this lane's browser
+      # opens those links, so it has to be the web server this job boots.
+      WEB_APP_BASE_URL: http://localhost:3001
+      # Without a seeded PlanDefinition under this key, `POST /organizations`
+      # answers 503 for every case (§6.2) — see the seed step below.
+      DEFAULT_ORG_PLAN_KEY: comp_full
+      PORT: "3000"
+      # ⚠️ NODE_ENV is deliberately NOT set at the job level. `next build` and
+      # `next start` manage it themselves, and an inherited non-standard value
+      # makes Next warn and behave unlike the production build this lane is
+      # supposed to exercise. The API needs it (the schema has no default), so
+      # it is set on the API's own steps only — as `test`, because the schema
+      # refuses a plain-http WEB_APP_BASE_URL in production and http://localhost
+      # is what this lane actually serves.
+      # apps/web's rewrite target — the same-origin `/auth/*` proxy that makes
+      # the `Path=/auth` refresh cookie work (infra/gateway/README.md).
+      API_ORIGIN: http://localhost:3000
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version-file: ".nvmrc"
+      - uses: pnpm/action-setup@v4
+      - run: pnpm install --frozen-lockfile
+      # ★ Both apps, through turbo, so their workspace deps are built first.
+      # The first run of this lane built only `web^...` and the API failed to
+      # compile on `Cannot find module '@omnistock/core-domain'` — the web
+      # filter has no reason to build the API's dependencies, and this lane now
+      # boots the API.
+      - name: build the API and web (turbo builds their workspace deps first)
+        env:
+          NODE_ENV: test
+        run: pnpm turbo build --filter=api --filter=web
+      - name: generate Prisma client + migrate + seed the plan
+        env:
+          NODE_ENV: test
+        # Order matters and each step has a distinct failure: no client = the
+        # API cannot import @omnistock/db; no migration = every query fails; no
+        # seed = 503 on the one endpoint E-01 exists to exercise.
+        run: |
+          pnpm --filter @omnistock/db exec prisma generate
+          pnpm --filter @omnistock/db exec prisma migrate deploy
+          pnpm --filter @omnistock/db exec prisma db seed
+      # ✅ `pnpm --filter api start`, which is now `node dist/main.js`.
+      #
+      # This used to be `tsx dist/main.js` with twenty lines explaining why
+      # neither `dev` nor `start` could run the API: `@omnistock/config` and
+      # `@omnistock/db` shipped TypeScript source, so plain Node died on the
+      # first `export` it met, and `tsx src/main.ts` booted into a DI graph full
+      # of `undefined` because esbuild emits no `design:paramtypes`.
+      #
+      # B-10 closed both. The packages emit `dist/` like `core-domain` always
+      # did, the compiled entry keeps the decorator metadata, and there is no
+      # TypeScript loader in the boot path at all. Running the repo's own
+      # `start` script — rather than a command that exists only in this file —
+      # is the point: CI now proves the thing a person types.
+      - name: boot apps/api in the background
+        env:
+          NODE_ENV: test
+        run: pnpm --filter api start &>/tmp/api.log &
+      - name: wait for the API to answer
+        run: |
+          for i in $(seq 1 60); do
+            code=$(curl -s -o /dev/null -w '%{http_code}' http://localhost:3000/health || true)
+            if [ "$code" = "200" ] || [ "$code" = "503" ]; then
+              echo "API answering on :3000 (attempt $i, status $code)"
+              exit 0
+            fi
+            sleep 1
+          done
+          echo "::error::apps/api never answered on :3000 — the browser suite would have tested a web server with nothing behind it"
+          cat /tmp/api.log || true
+          exit 1
       - name: boot apps/web in the background
         run: pnpm --filter web exec next start -p 3001 &>/tmp/web.log &
         working-directory: .
@@ -314,20 +803,74 @@ jobs:
           echo "::error::apps/web never answered 200 on / within 30s"
           cat /tmp/web.log || true
           exit 1
-      - name: install Playwright browsers (only if apps/web declares test:e2e)
+      # ★ Bounded, and retried — this step hung twice in a row on 2026-08-19,
+      # for 68 minutes and 26 minutes, on two consecutive commits, while the
+      # same step took well under a minute on every earlier run. Nothing in the
+      # repo changed; the browser download stalls.
+      #
+      # Two separate problems, and the timeout is the important one: with no
+      # `timeout-minutes` anywhere in this file, a stalled download runs to
+      # GitHub's six-hour default. So the lane does not report — not red, not
+      # green, just absent — and the only signal is somebody noticing a spinner
+      # an hour later. A bounded step is a RESULT.
+      #
+      # The retry is the cheap half: a stall is transient, and three bounded
+      # attempts turn most of them into a pass instead of a rerun somebody has
+      # to request by hand.
+      - name: install Playwright browsers
+        timeout-minutes: 12
         run: |
-          if node -e "process.exit(require('./apps/web/package.json').scripts['test:e2e'] ? 0 : 1)"; then
-            pnpm --filter web exec playwright install --with-deps chromium
-          else
-            echo "::notice::apps/web has no 'test:e2e' script yet (F-001 T-001-15/16/18 not landed) — the required GET / boot-smoke above still ran and gated this job; this step is a no-op until frontend/qa add the script + Playwright config."
-          fi
-      - name: run web Playwright suite (T-001-18/qa, once it lands)
+          for attempt in 1 2 3; do
+            if timeout 220 pnpm --filter web exec playwright install --with-deps chromium; then
+              echo "playwright browsers installed (attempt $attempt)"
+              exit 0
+            fi
+            echo "::warning::playwright install stalled or failed (attempt $attempt/3) — retrying"
+            sleep 5
+          done
+          echo "::error::playwright install did not finish in 3 bounded attempts"
+          exit 1
+      # ★ The conditional that used to wrap the two steps above is GONE. It read
+      # "run the suite if apps/web declares test:e2e", which meant this job was
+      # green for months on a repo that had no browser suite at all — the exact
+      # "green because it never ran" shape I-37 exists to catch, sitting in the
+      # lane that was supposed to be the last line of defence.
+      - name: run the web Playwright suite (test-plan §12.1)
+        # `E2E_REDIS_URL` lets the suite clear F-001's per-IP pre-auth counter
+        # between files. That counter is per IP per five minutes and every page
+        # load spends a slot through `/auth/refresh`, so one runner driving a
+        # browser hits it after about three files — a situation that exists
+        # only in CI. The underlying finding (an office behind one NAT hits the
+        # same wall) is filed for backend-api, not worked around here.
+        env:
+          E2E_REDIS_URL: redis://localhost:6379
+        run: pnpm --filter web run test:e2e
+      - name: I-37 — a browser lane that ran no cases is RED, not green
+        if: always()
+        # Reads the JSON reporter, not the HTML one. The first version grepped
+        # `index.html` for case ids and failed a run in which all six tests
+        # passed: the HTML report keeps its data in a packed payload, so the
+        # count was always zero. A guard that reddens a green suite is worse
+        # than no guard — it teaches the next person to delete it — so this one
+        # reads the machine-readable output and prints what it counted.
         run: |
-          if node -e "process.exit(require('./apps/web/package.json').scripts['test:e2e'] ? 0 : 1)"; then
-            pnpm --filter web run test:e2e
-          else
-            echo "::notice::skipped — see previous step"
+          if [ ! -f apps/web/playwright-results.json ]; then
+            echo "::error::no Playwright JSON report — the suite did not run"
+            exit 1
           fi
-      - name: dump web log on failure
+          # The floor is the case count §12.1 currently buys us. Raise it when
+          # rows are added; lowering it is a visible edit that has to justify
+          # itself in review, which is the point.
+          node tool/ci/assert-playwright-ran.mjs apps/web/playwright-results.json 29
+      - name: upload the Playwright report on failure
         if: failure()
-        run: cat /tmp/web.log || true
+        uses: actions/upload-artifact@v4
+        with:
+          name: playwright-report
+          path: apps/web/playwright-report
+          retention-days: 7
+      - name: dump the logs on failure
+        if: failure()
+        run: |
+          echo "───────── api"; cat /tmp/api.log || true
+          echo "───────── web"; cat /tmp/web.log || true

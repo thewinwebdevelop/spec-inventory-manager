@@ -1,0 +1,67 @@
+post:
+  operationId: authRefresh
+  summary: Rotate the refresh token → new token pair
+  description: >
+    US-3. Dual-transport: the refresh token is presented via the `omni_rt`
+    cookie (web) OR a body `refreshToken` field (mobile). Resolution order:
+    cookie first, then body. On the cookie path an `X-CSRF-Token` header
+    must equal the `omni_csrf` cookie (403 otherwise). The response follows
+    the presented transport. Rotation mints a new refresh token; the old one
+    becomes unusable. Reuse of a consumed/revoked token outside the 60s
+    leeway (D-011) revokes the whole family, but the wire response is the
+    same generic 401 INVALID_REFRESH. IP-throttled (L-5) — no account
+    dimension.
+    Auth is carried by the cookie or body (not a standard bearer/apiKey
+    scheme), so `security` is [].
+  tags:
+    - auth
+  security: []
+  requestBody:
+    required: true
+    content:
+      application/json:
+        schema:
+          $ref: "../components/auth.yaml#/RefreshRequest"
+  responses:
+    "200":
+      description: Rotated — new token pair issued (transport follows the presented one)
+      headers:
+        Set-Cookie:
+          $ref: "../components/headers.yaml#/SetAuthCookies"
+      content:
+        application/json:
+          schema:
+            $ref: "../components/auth.yaml#/TokenResponse"
+    "401":
+      description: >
+        `INVALID_REFRESH` — unknown / expired / not current / family-cap reached
+        / benign-retry / reuse, ALL of them the same generic code: the six cases
+        are distinguishable server-side and deliberately not on the wire.
+        `NO_REFRESH_TOKEN` — neither cookie nor body carried one, which is a
+        different situation for the client (it never had a session) and so gets
+        a code of its own.
+      content:
+        application/json:
+          schema:
+            $ref: "../components/common.yaml#/ErrorResponse"
+    "403":
+      description: "`CSRF_FAILED` — the CSRF check failed on the cookie path"
+      content:
+        application/json:
+          schema:
+            $ref: "../components/common.yaml#/ErrorResponse"
+    "415":
+      description: "`UNSUPPORTED_MEDIA_TYPE` — non-JSON Content-Type (L-2)"
+      content:
+        application/json:
+          schema:
+            $ref: "../components/common.yaml#/ErrorResponse"
+    "429":
+      description: "`RATE_LIMITED` — IP rate cap tripped (Retry-After seconds, L-5)"
+      headers:
+        Retry-After:
+          $ref: "../components/headers.yaml#/RetryAfter"
+      content:
+        application/json:
+          schema:
+            $ref: "../components/common.yaml#/ErrorResponse"

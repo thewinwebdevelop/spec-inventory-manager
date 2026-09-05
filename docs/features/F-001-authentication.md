@@ -79,3 +79,24 @@
 
 # ══ Gate 2 — Design ══
 > _TODO: ทำหลัง Gate 1 (architecture token security · data-model · API · UX · test plan)_
+
+---
+
+## ⚠️ หมายเหตุย้อนหลัง — F-002 เปลี่ยนพฤติกรรมของ F-001 (อย่า "แก้กลับ")
+
+> F-002 (Organization · License · Membership) ทำให้ **"1 ผู้ใช้อยู่ได้หลายร้าน"** เป็นจริง
+> ⇒ ความหมายของ endpoint บางเส้นที่ F-001 ship ไปแล้ว **เปลี่ยนไปโดยที่ไม่มีใครแตะโค้ดนั้นเลย**
+> บันทึกไว้กันคนอ่าน spec F-001 อย่างเดียวแล้วเข้าใจผิดจน revert
+
+1. **`POST /orgs/{orgId}/members/{userId}/reset-password` ถูกลดความสามารถ 2 รอบ** (wire/status ไม่เปลี่ยน — บางเคสที่เคย `200` กลายเป็น `404` รูปเดิม)
+   - **D-028 / C-2:** ปฏิเสธเมื่อ target มี `Membership active` ใน **org อื่น** — เพราะ `passwordHash` เป็น credential ระดับ *ผู้ใช้* ไม่ใช่ระดับ *org* ⇒ Admin ร้าน B รีเซ็ตรหัสคนที่เป็น Owner ร้าน A แล้วสวมรอยได้
+   - **D-030 / NEW-1:** ปฏิเสธเมื่อ **target เป็น Owner** (`full_access`) และผู้เรียก**ไม่มี** `full_access` — เพราะการรีเซ็ตรหัสแรงกว่าการยกสิทธิ์ ถ้าไม่ปิด กฎ Owner-only (D-028/C-1) จะเป็นแค่การตกแต่ง
+   - emit `auth.password.admin_reset_blocked_multi_org` / `…_blocked_owner_target`
+   - **ผลที่ต้องยอมรับ:** ร้านที่มี Owner คนเดียวแล้วลืมรหัส **กู้เองไม่ได้จนกว่าจะมี F-081** (self-serve reset) — ผูกเป็น forward-commitment ที่บล็อกการเปิดขายจริงแล้ว
+2. **error envelope มี `traceId` ทุกครั้ง** ตั้งแต่ F-002 (เดิมมีเฉพาะเมื่อมี correlation id จาก gateway) ⇒ เทสต์เดิมใน `common/domain-exception.filter.test.ts` ที่ assert ว่า "ไม่มี traceId" **ต้องกลับด้าน** (แก้ในคอมมิตเดียวกับโค้ด · ห้าม skip)
+3. **`/auth/*` ถูกจัดชั้นเป็น `@Public()`** และ `reset-password` เป็น `@UserScoped()` ภายใต้ default-deny guard ใหม่ — คง **404-never-403** ของ F-001 ไว้ตามเดิม (ต่างจาก F-002 ที่ใช้ 403 โดยเจตนา)
+   · **wire เปลี่ยน 1 จุด** (แก้ย้อนหลังตอน build T-002-13 — ข้อความเดิมเขียนว่า "ไม่เปลี่ยนแม้แต่ status เดียว" ซึ่งไม่จริง):
+   request บน `reset-password` ที่ **ไม่มี token และ Content-Type ไม่ใช่ JSON** เดิม `415` → ตอนนี้ `401`
+   เพราะ global guard ตอบก่อน controller guard · body ของ 401 เหมือนกันทุกไบต์ทั้งสองทาง
+
+> รายละเอียดเต็ม + test ที่บังคับ: [F-002/architecture.md §15](F-002/architecture.md) · decision: [D-028](../DECISIONS.md) · [D-030](../DECISIONS.md)

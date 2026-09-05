@@ -1,0 +1,86 @@
+post:
+  operationId: createOrganization
+  summary: Create a shop (organization)
+  description: >
+    F-002 US-1 (api-spec §3.1). USER-SCOPED: there is no org context on this
+    request and there must not be one — the shop does not exist yet, so any
+    `X-Organization-Id` the caller sends is ignored (I-3).
+
+
+    The `201` is deliberately complete enough to enter the new shop
+    immediately (ux Q5): org, the creator's membership + role, the entitlement
+    and the default warehouse. Seed the cache from it; do not refetch
+    `GET /me/organizations` before navigating.
+
+
+    Everything is provisioned in ONE transaction: Organization + the three
+    system Roles + the creator's Owner Membership + OrgEntitlement + a default
+    Warehouse. The plan comes from a server-side env seam and FAILS CLOSED
+    (`503 ORG_PROVISIONING_UNAVAILABLE`) rather than falling back to a tier
+    nobody authorised.
+
+
+    Rate limit 10/hour/user (abuse control, fails OPEN if Redis is down). The
+    50-shops-per-user cap is enforced separately IN the transaction and fails
+    CLOSED (`409 ORG_LIMIT_REACHED` with `details.limit`).
+  tags:
+    - organizations
+  security:
+    - bearerAuth: []
+  requestBody:
+    required: true
+    content:
+      application/json:
+        schema:
+          $ref: "../components/orgs.yaml#/CreateOrganizationRequest"
+  responses:
+    "201":
+      description: Shop created — the body is enough to enter it.
+      content:
+        application/json:
+          schema:
+            $ref: "../components/orgs.yaml#/CreatedOrganization"
+    "401":
+      description: Missing/invalid access token (`UNAUTHENTICATED`)
+      content:
+        application/json:
+          schema:
+            $ref: "../components/common.yaml#/ErrorResponse"
+    "409":
+      description: >
+        `ORG_LIMIT_REACHED` — the caller is already an active member of the
+        maximum number of shops. `details.limit` carries the real number so the
+        UI never hard-codes it.
+      content:
+        application/json:
+          schema:
+            $ref: "../components/common.yaml#/ErrorResponse"
+    "415":
+      description: Non-JSON Content-Type (`UNSUPPORTED_MEDIA_TYPE`)
+      content:
+        application/json:
+          schema:
+            $ref: "../components/common.yaml#/ErrorResponse"
+    "422":
+      description: "`VALIDATION_FAILED` with `fieldErrors` (`name`, `timezone`)"
+      content:
+        application/json:
+          schema:
+            $ref: "../components/common.yaml#/ErrorResponse"
+    "429":
+      description: "`RATE_LIMITED` — 10 shop creations per hour per user"
+      headers:
+        Retry-After:
+          $ref: "../components/headers.yaml#/RetryAfter"
+      content:
+        application/json:
+          schema:
+            $ref: "../components/common.yaml#/ErrorResponse"
+    "503":
+      description: >
+        `ORG_PROVISIONING_UNAVAILABLE` — no default plan is configured to bind
+        the new shop to. Our misconfiguration, not the caller's input.
+      content:
+        application/json:
+          schema:
+            $ref: "../components/common.yaml#/ErrorResponse"

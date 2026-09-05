@@ -4,16 +4,18 @@ import { useRouter, useSearchParams } from "next/navigation";
 import { Suspense, useEffect, useState } from "react";
 import Link from "next/link";
 import { AuthCard } from "../../components/ui/AuthCard";
-import { AuthForm } from "../../components/auth/AuthForm";
+import { AuthForm } from "../../features/auth/components/AuthForm";
 import { Toast, type ToastData } from "../../components/ui/Toast";
 import { useThrottleCountdown } from "../../hooks/use-throttle-countdown";
-import { authTh } from "../../i18n/auth";
+import { authTh } from "../../features/auth/i18n";
 import { ApiError, login } from "../../lib/auth-client";
 import { loginErrorMessage } from "../../lib/error-messages";
+import { useSession } from "../../lib/session/session-context";
 
 function LoginPageInner() {
   const router = useRouter();
   const searchParams = useSearchParams();
+  const session = useSession();
 
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
@@ -53,10 +55,25 @@ function LoginPageInner() {
     setLoading(true);
     try {
       await login(email, password);
-      // F-002 will own the post-login destination (org context); for now
-      // land on the app root — this is not a data-shape decision, just a
-      // placeholder redirect target until F-002 exists.
-      router.push("/");
+      // ★ T-002-Q5 — tell the provider, or the app still believes nobody is
+      // signed in. It bootstraps once per page load, and that bootstrap ran
+      // before this login; `OrgGuard` reads the result, so without this line
+      // `/o/{orgId}` sends the person who just signed in back to `/login`.
+      session.beginSession();
+      // ★ T-002-Q5 — F-002 owns this destination, and never claimed it.
+      //
+      // The line here read `router.push("/")` with a comment saying F-002
+      // would take it over. F-002 shipped its screens and left the redirect
+      // pointing at the F-000 placeholder shell, so a successful login landed
+      // on "apps/web placeholder shell (T-000-09)" and the org flow was
+      // reachable only by typing the URL. Found by writing E-01, which is the
+      // first thing that ever walked login → shop as one journey.
+      //
+      // `/select-org` is what ux-wireframe §1.1's flow map has always said:
+      // login สำเร็จ → S1. The picker itself decides where to go from there —
+      // it is the screen that knows whether the person has no shops, one, or
+      // several.
+      router.push("/select-org");
     } catch (err) {
       if (err instanceof ApiError) {
         if (err.status === 429) {

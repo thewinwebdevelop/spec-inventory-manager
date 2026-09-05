@@ -6,7 +6,7 @@
  *
  * D-005: never say "locked"/"suspended" — only the mm:ss / seconds copy.
  */
-import { authTh } from "../i18n/auth";
+import { authTh } from "../features/auth/i18n";
 
 export function pad2(n: number): string {
   return n.toString().padStart(2, "0");

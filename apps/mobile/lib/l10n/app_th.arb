@@ -1,7 +1,6 @@
 {
   "@@locale": "th",
   "@@last_modified": "2026-07-11",
-
   "authSignupTitle": "สมัครใช้งาน OmniStock",
   "authSignupSubtitle": "เริ่มต้นจัดการสต๊อกและบัญชีร้านค้าของคุณ",
   "authSignupEmailLabel": "อีเมล",
@@ -19,7 +18,6 @@
   "authSignupErrorEmailTaken": "อีเมลนี้มีผู้ใช้งานแล้ว",
   "authSignupErrorEmailTakenLoginLink": "เข้าสู่ระบบ",
   "authSignupErrorGeneric": "เกิดข้อผิดพลาด กรุณาลองใหม่อีกครั้ง",
-
   "authLoginTitle": "เข้าสู่ระบบ",
   "authLoginEmailLabel": "อีเมล",
   "authLoginPasswordLabel": "รหัสผ่าน",
@@ -29,34 +27,42 @@
   "authLoginLinkToSignup": "ยังไม่มีบัญชี? สมัครใช้งาน",
   "authLoginErrorInvalidCredentials": "อีเมลหรือรหัสผ่านไม่ถูกต้อง",
   "authLoginErrorGeneric": "เกิดข้อผิดพลาด กรุณาลองใหม่อีกครั้ง",
-
   "authThrottleBannerLong": "ลองเข้าสู่ระบบถี่เกินไป กรุณารอสักครู่แล้วลองใหม่ · เหลือ {mm}:{ss} นาที",
   "@authThrottleBannerLong": {
     "placeholders": {
-      "mm": { "type": "String" },
-      "ss": { "type": "String" }
+      "mm": {
+        "type": "String"
+      },
+      "ss": {
+        "type": "String"
+      }
     }
   },
   "authThrottleBannerShort": "รอสักครู่แล้วลองใหม่ · เหลือ {n} วินาที",
   "@authThrottleBannerShort": {
     "placeholders": {
-      "n": { "type": "int" }
+      "n": {
+        "type": "int"
+      }
     }
   },
   "authThrottleHelper": "เพื่อความปลอดภัยของบัญชีคุณ ระบบจะให้ลองใหม่ได้เองเมื่อครบเวลา",
-
   "authHelpTitle": "ลืมรหัสผ่าน?",
-  "authHelpBody": "ตอนนี้ระบบยังไม่รองรับการขอรีเซ็ตรหัสผ่านด้วยตัวเอง กรุณาติดต่อเจ้าของร้าน/ผู้ดูแลระบบ (Owner/Admin) ในทีมของคุณ เพื่อให้ตั้งรหัสผ่านใหม่ให้",
+  "authHelpBody": "ตอนนี้ระบบยังไม่รองรับการตั้งรหัสผ่านใหม่ด้วยตัวเอง และคนในร้านก็ยังตั้งให้คุณไม่ได้ — กรุณาติดต่อทีมงาน OmniStock เพื่อขอความช่วยเหลือ",
+  "@authHelpBody": {
+    "description": "★ M-02 — เดิมบอกให้ติดต่อเจ้าของร้าน/ผู้ดูแลให้ตั้งรหัสใหม่ให้ แต่ไม่มีจอไหนเรียก reset-password เลยทั้งสองแอป ⇒ ชี้ไปทางที่ยังไม่มี. ux-wireframe §12.3 ตัดสินไว้แล้วว่าทางไปต่อคือติดต่อทีมงาน OmniStock. จอ reset เป็นของ F-004 — เมื่อมีแล้วให้กลับมาแก้ให้พูดถึงเจ้าของร้าน/ผู้ดูแลอีกครั้ง"
+  },
   "authHelpBodySoloOwner": "หากคุณเป็นเจ้าของร้านเพียงคนเดียวและลืมรหัสผ่าน กรุณารอสักครู่แล้วลองพิมพ์รหัสผ่านที่คิดว่าถูกต้องอีกครั้ง (ระบบจะไม่ล็อกบัญชีคุณถาวร)",
   "authHelpBackToLogin": "กลับไปเข้าสู่ระบบ",
-
   "authSessionsTitle": "อุปกรณ์ที่เข้าสู่ระบบ",
   "authSessionsSubtitle": "รายการอุปกรณ์ที่กำลังเข้าใช้งานบัญชีของคุณอยู่",
   "authSessionsBadgeCurrent": "อุปกรณ์นี้",
   "authSessionsLastActive": "ใช้งานล่าสุด: {relativeTime}",
   "@authSessionsLastActive": {
     "placeholders": {
-      "relativeTime": { "type": "String" }
+      "relativeTime": {
+        "type": "String"
+      }
     }
   },
   "authSessionsDeviceUnknown": "อุปกรณ์ไม่ทราบชื่อ",
@@ -68,7 +74,6 @@
   "authSessionsToastDeviceLogoutFailed": "ออกจากอุปกรณ์ไม่สำเร็จ กรุณาลองใหม่",
   "authSessionsErrorLogoutAllFailed": "ออกจากระบบทุกอุปกรณ์ไม่สำเร็จ ลองใหม่อีกครั้ง",
   "authSessionsMobileCannotIdentifyCurrent": "อุปกรณ์นี้ไม่สามารถระบุตัวเองในรายการด้านล่างได้ — หากไม่แน่ใจว่าแถวไหนคืออุปกรณ์ที่ถืออยู่ กรุณาระวังก่อนกด \"ออกจากอุปกรณ์นี้\"",
-
   "authConfirmLogoutDeviceTitle": "ออกจากอุปกรณ์นี้?",
   "authConfirmLogoutDeviceBody": "อุปกรณ์นี้จะต้องเข้าสู่ระบบใหม่อีกครั้ง",
   "authConfirmLogoutDeviceCancel": "ยกเลิก",
@@ -78,9 +83,7 @@
   "authConfirmLogoutAllCancel": "ยกเลิก",
   "authConfirmLogoutAllConfirm": "ออกจากระบบทุกอุปกรณ์",
   "authConfirmLogoutAllToast": "ออกจากระบบทุกอุปกรณ์แล้ว",
-
   "authSessionExpiredToast": "เซสชันหมดอายุ กรุณาเข้าสู่ระบบอีกครั้ง",
-
   "authChangePasswordSectionTitle": "เปลี่ยนรหัสผ่าน",
   "authChangePasswordCurrentLabel": "รหัสผ่านปัจจุบัน",
   "authChangePasswordNewLabel": "รหัสผ่านใหม่",
@@ -93,18 +96,15 @@
   "authChangePasswordErrorPasswordBreached": "รหัสผ่านนี้ถูกใช้งานทั่วไปมาก ไม่ปลอดภัย ลองตั้งรหัสผ่านที่คาดเดายากขึ้น",
   "authChangePasswordErrorGeneric": "เกิดข้อผิดพลาด กรุณาลองใหม่อีกครั้ง",
   "authChangePasswordSuccessToast": "เปลี่ยนรหัสผ่านแล้ว · อุปกรณ์อื่นถูกออกจากระบบเพื่อความปลอดภัย",
-
   "commonPasswordShow": "แสดงรหัสผ่าน",
   "commonPasswordHide": "ซ่อนรหัสผ่าน",
   "commonRetry": "ลองใหม่",
   "commonCancel": "ยกเลิก",
-
   "authBootstrapLoading": "กำลังตรวจสอบสถานะการเข้าสู่ระบบ...",
   "authBootstrapOfflineTitle": "เชื่อมต่อไม่สำเร็จ",
   "authBootstrapOfflineBody": "ตรวจสอบอินเทอร์เน็ตแล้วลองใหม่อีกครั้ง บัญชีของคุณยังเข้าสู่ระบบอยู่",
   "authBootstrapOfflineRetry": "ลองใหม่",
   "authBootstrapOfflineUseLoginInstead": "เข้าสู่ระบบด้วยรหัสผ่าน",
-
   "errorNetwork": "เชื่อมต่อไม่ได้ กรุณาลองใหม่",
   "errorThrottled": "คำขอถี่เกินไป กรุณารอสักครู่แล้วลองใหม่อีกครั้ง",
   "errorForbidden": "คุณไม่มีสิทธิ์ทำรายการนี้",
@@ -113,5 +113,236 @@
   "errorConflict": "ข้อมูลมีการเปลี่ยนแปลงแล้ว กรุณาลองใหม่อีกครั้ง",
   "errorNotFound": "ไม่พบข้อมูลที่ต้องการ",
   "errorServer": "ระบบขัดข้องชั่วคราว",
-  "errorForceUpdate": "กรุณาอัปเดตแอปเป็นเวอร์ชันล่าสุดเพื่อใช้งานต่อ"
+  "errorForceUpdate": "กรุณาอัปเดตแอปเป็นเวอร์ชันล่าสุดเพื่อใช้งานต่อ",
+  "errorOrgAccessDenied": "คุณไม่ได้เป็นสมาชิกของร้านนี้แล้ว — เลือกร้านอื่น หรือติดต่อเจ้าของร้านถ้าคิดว่าไม่ถูกต้อง",
+  "@errorOrgAccessDenied": {
+    "description": "403 ORG_ACCESS_DENIED (ux-wireframe §12.1). Warning tone, never danger: the user did nothing wrong and can keep using the app."
+  },
+  "errorBusy": "ระบบกำลังทำรายการอื่นของร้านนี้อยู่ กรุณารอสักครู่แล้วลองใหม่อีกครั้ง",
+  "@errorBusy": {
+    "description": "409 + details.reason=busy (ux-wireframe §1.4). Never show the words busy/CONFLICT/reason/traceId, and never word it as an outage — this is temporary."
+  },
+  "orgPickerTitle": "เลือกร้านที่จะเข้าใช้งาน",
+  "orgPickerSubtitle": "คุณเป็นสมาชิกอยู่ {count} ร้าน",
+  "orgPickerEmptyTitle": "คุณยังไม่ได้อยู่ในร้านไหน",
+  "orgPickerEmptyBody": "สร้างร้านของคุณเอง หรือถ้ามีคนชวนคุณเข้าร้าน ให้ขอลิงก์คำเชิญจากเจ้าของร้าน",
+  "orgPickerError": "โหลดรายการร้านไม่สำเร็จ",
+  "orgCreateCta": "สร้างร้านใหม่",
+  "orgSwitcherTitle": "สลับร้าน",
+  "orgSwitcherCurrent": "ร้านที่ใช้อยู่",
+  "roleOwner": "เจ้าของร้าน",
+  "roleAdmin": "ผู้ดูแล",
+  "roleStaff": "พนักงาน",
+  "@orgPickerSubtitle": {
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
+  "actionRetry": "ลองใหม่",
+  "@actionRetry": {
+    "description": "Generic retry action. `ErrorBanner` still carries its own hard-coded default (a pre-F-002 debt); new call sites use this key."
+  },
+  "orgCreateTitle": "สร้างร้านใหม่",
+  "orgCreateNameLabel": "ชื่อร้าน",
+  "orgCreateNamePlaceholder": "เช่น ร้านหอมกรุ่นเบเกอรี่",
+  "orgCreateNameHelper": "ตั้งชื่อที่คุณเรียกร้านตัวเอง เปลี่ยนทีหลังได้",
+  "orgCreateInfo": "เมื่อสร้างเสร็จ คุณจะเป็นเจ้าของร้านนี้ และระบบจะเตรียม \"คลังหลัก\" ให้ 1 คลัง · ใช้สกุลเงินบาท (฿) และเวลาประเทศไทย",
+  "orgCreateSubmit": "สร้างร้าน",
+  "orgCreateSubmitting": "กำลังสร้างร้าน...",
+  "orgCreateNameError": "กรอกชื่อร้าน (ไม่เกิน 120 ตัวอักษร)",
+  "orgCreateLimitReached": "คุณสร้างร้านครบ {limit} ร้านแล้ว หากต้องการเพิ่ม กรุณาติดต่อทีมงาน OmniStock",
+  "@orgCreateLimitReached": {
+    "description": "409 ORG_LIMIT_REACHED. The number ALWAYS comes from details.limit (api-spec §3.1) — it is per-plan, so it must never be written into this string.",
+    "placeholders": {
+      "limit": {
+        "type": "int"
+      }
+    }
+  },
+  "orgCreateProvisioningUnavailable": "ตอนนี้ระบบยังเปิดร้านใหม่ให้ไม่ได้ (ไม่ใช่ความผิดของคุณ) ลองใหม่อีกครั้ง หรือติดต่อทีมงาน OmniStock",
+  "orgCreateGenericError": "สร้างร้านไม่สำเร็จ กรุณาลองใหม่อีกครั้ง",
+  "orgCreateThrottled": "สร้างร้านถี่เกินไป กรุณารอสักครู่แล้วลองใหม่",
+  "orgCreateSuccessToast": "สร้างร้าน \"{name}\" เรียบร้อย",
+  "@orgCreateSuccessToast": {
+    "placeholders": {
+      "name": {
+        "type": "String"
+      }
+    }
+  },
+  "membersTitle": "สมาชิก",
+  "navShopSecurity": "ความปลอดภัย",
+  "@navShopSecurity": {
+    "description": "⚠️ COPY GAP (B-18) — ป้ายของ bottom nav ในเปลือกชั่วคราวจนกว่าจะถึง F-006. คำเดียวกับที่ ux ใช้บนเว็บ (ux-wireframe §S2 sidebar) สำหรับปลายทางเดียวกัน. รอ ux ยืนยันตอน F-006 ทำ IA จริง"
+  },
+  "navSignOut": "ออกจากระบบ",
+  "@navSignOut": {
+    "description": "⚠️ COPY GAP (B-18) — คำเดียวกับ ux-wireframe §S2 ของเว็บ. มือถือยังไม่มีทางออกจากระบบเลยจนกว่าจะมีอันนี้ (จอ session list ให้ออกได้แต่ 'อุปกรณ์อื่น' กับ 'ทุกอุปกรณ์')"
+  },
+  "navSignOutFailed": "ออกจากระบบไม่สำเร็จ ลองใหม่อีกครั้ง",
+  "@navSignOutFailed": {
+    "description": "⚠️ COPY GAP (B-18) — ย่อจาก authSessionsErrorLogoutAllFailed ของ ux ให้เหลือเครื่องเดียว (เหมือนที่ทำบนเว็บ). รอ ux ยืนยัน"
+  },
+  "membersInviteCta": "เชิญสมาชิก",
+  "membersPendingSection": "คำเชิญที่รอตอบรับ ({count})",
+  "@membersPendingSection": {
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
+  "membersSection": "สมาชิกในร้าน ({count})",
+  "@membersSection": {
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
+  "membersYouBadge": "(คุณ)",
+  "membersStatusActive": "ใช้งานอยู่",
+  "membersStatusRevoked": "ถูกถอดแล้ว",
+  "membersShowRevoked": "แสดงสมาชิกที่ถูกถอดออกแล้ว",
+  "membersHideRevoked": "ซ่อนสมาชิกที่ถูกถอดออกแล้ว",
+  "membersOnlyYou": "ตอนนี้มีคุณอยู่คนเดียวในร้านนี้ — ชวนทีมงานเข้ามาช่วยกันได้เลย",
+  "membersLoadError": "โหลดรายชื่อสมาชิกไม่สำเร็จ",
+  "membersLoadMore": "โหลดเพิ่ม",
+  "invitationsLoadError": "โหลดคำเชิญไม่สำเร็จ",
+  "invitationStatusPending": "รอตอบรับ",
+  "invitationStatusExpired": "หมดอายุแล้ว",
+  "invitationStatusCancelled": "ยกเลิกแล้ว",
+  "invitationStatusAccepted": "รับแล้วเมื่อ {dateTime}",
+  "@invitationStatusAccepted": {
+    "placeholders": {
+      "dateTime": {
+        "type": "String"
+      }
+    }
+  },
+  "invitationAcceptedAfterInviteNote": "บัญชีที่กดรับถูกสร้างขึ้นหลังจากออกลิงก์ ตรวจสอบว่าเป็นคนที่คุณตั้งใจเชิญ",
+  "@invitationAcceptedAfterInviteNote": {
+    "description": "D-028/I-7. Informative, never accusatory — no words implying fraud."
+  },
+  "invitationShowArchived": "ดูคำเชิญที่หมดอายุ/ยกเลิกแล้ว",
+  "invitationHideArchived": "ซ่อนคำเชิญที่หมดอายุ/ยกเลิกแล้ว",
+  "inviteExpiresAt": "ลิงก์ใช้ได้ถึง {dateTime} ({remaining})",
+  "@inviteExpiresAt": {
+    "description": "ux-wireframe §1.4/§9.1. BOTH parts are derived from the response's expiresAt — never from a hard-coded TTL, which changes with the invited role (D-028/I-7) and restarts on every reissue (D-027).",
+    "placeholders": {
+      "dateTime": {
+        "type": "String"
+      },
+      "remaining": {
+        "type": "String"
+      }
+    }
+  },
+  "remainingDays": "อีกประมาณ {count} วัน",
+  "@remainingDays": {
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
+  "remainingHours": "อีกประมาณ {count} ชั่วโมง",
+  "@remainingHours": {
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
+  "remainingMinutes": "อีกประมาณ {count} นาที",
+  "@remainingMinutes": {
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
+  "remainingExpired": "หมดอายุแล้ว",
+  "backupOwnerNudgeBody": "ตอนนี้ร้านนี้มีเจ้าของร้านคนเดียวคือคุณ — ถ้าวันหนึ่งคุณเข้าระบบไม่ได้ จะไม่มีใครในร้านช่วยตั้งรหัสผ่านใหม่ให้ได้ แนะนำให้ตั้งคนที่คุณไว้ใจอีก 1 คนเป็นเจ้าของร้านไว้",
+  "@backupOwnerNudgeBody": {
+    "description": "D-030. Tone is info, not warning: nothing is wrong right now. Never use อันตราย/เสี่ยง/ข้อมูลจะหาย, and never a red warning icon."
+  },
+  "backupOwnerNudgeCta": "เชิญเจ้าของร้านอีกคน",
+  "backupOwnerNudgeDismiss": "ไว้ทีหลัง",
+  "inviteTitle": "เชิญสมาชิก",
+  "inviteEmailLabel": "อีเมลของคนที่จะเชิญ",
+  "inviteEmailPlaceholder": "เช่น malee@shop.com",
+  "inviteRoleLabel": "ให้สิทธิ์เป็น",
+  "inviteRoleOwnerDesc": "ทำได้ทุกอย่าง รวมถึงตั้ง/ถอดเจ้าของร้านคนอื่น",
+  "inviteRoleAdminDesc": "จัดการทีมงานและงานประจำวันได้ แต่ตั้งเจ้าของร้านไม่ได้",
+  "inviteRoleStaffDesc": "ทำงานประจำวัน ไม่เห็นรายชื่อทีมงานและข้อมูลผู้เสียภาษี",
+  "inviteOwnerDisabledHelper": "เฉพาะเจ้าของร้านเท่านั้นที่ตั้งเจ้าของร้านคนใหม่ได้",
+  "inviteShortTtlNote": "สิทธิ์ระดับนี้ ลิงก์คำเชิญจะมีอายุสั้นกว่าปกติเพื่อความปลอดภัย",
+  "inviteNoEmailNote": "ระบบยังไม่ส่งอีเมลให้อัตโนมัติ — คุณจะได้ลิงก์ไว้ส่งเองทางแชต (เช่น LINE)",
+  "inviteSubmit": "สร้างลิงก์คำเชิญ",
+  "inviteSubmitting": "กำลังสร้างลิงก์...",
+  "inviteRolesLoadError": "โหลดรายการสิทธิ์ไม่สำเร็จ",
+  "inviteErrorEmailInvalid": "รูปแบบอีเมลไม่ถูกต้อง",
+  "inviteErrorAlreadyMember": "อีเมลนี้เป็นสมาชิกของร้านอยู่แล้ว",
+  "inviteErrorRoleUnavailable": "สิทธิ์ที่เลือกใช้ไม่ได้แล้ว กรุณาเลือกใหม่อีกครั้ง",
+  "inviteErrorPendingTitle": "อีเมลนี้มีคำเชิญค้างอยู่แล้ว",
+  "inviteErrorPendingBody": "คำเชิญเดิม: สิทธิ์ {roleName}",
+  "@inviteErrorPendingBody": {
+    "placeholders": {
+      "roleName": {
+        "type": "String"
+      }
+    }
+  },
+  "inviteErrorPendingBack": "กลับไปแก้อีเมล",
+  "inviteErrorLimitReached": "มีคำเชิญที่รอตอบรับค้างอยู่มากเกินไป — ยกเลิกคำเชิญที่ไม่ใช้แล้วก่อน จึงจะเชิญคนใหม่ได้",
+  "inviteErrorForbidden": "คุณไม่มีสิทธิ์เชิญสมาชิกด้วยสิทธิ์ระดับนี้ — เฉพาะเจ้าของร้านเท่านั้นที่ตั้งเจ้าของร้านคนใหม่ได้",
+  "inviteErrorThrottled": "เชิญสมาชิกถี่เกินไป กรุณารอสักครู่แล้วลองใหม่",
+  "inviteErrorGeneric": "สร้างคำเชิญไม่สำเร็จ กรุณาลองใหม่อีกครั้ง",
+  "inviteLinkTitle": "ลิงก์คำเชิญพร้อมแล้ว",
+  "inviteLinkOnceWarning": "ลิงก์นี้แสดงครั้งเดียว — ปิดหน้านี้แล้วจะดูซ้ำไม่ได้ ถ้าทำหาย ให้ออกลิงก์ใหม่จากหน้าสมาชิก",
+  "@inviteLinkOnceWarning": {
+    "description": "ux-wireframe §9.1 — the single gate before the link disappears (D-018: only its hash is stored). Must never say 'คัดลอกลิงก์เดิม' anywhere, because there is no old link to copy."
+  },
+  "inviteLinkFor": "สำหรับ {email}",
+  "@inviteLinkFor": {
+    "placeholders": {
+      "email": {
+        "type": "String"
+      }
+    }
+  },
+  "inviteLinkCopy": "คัดลอกลิงก์",
+  "inviteLinkCopied": "คัดลอกลิงก์แล้ว",
+  "inviteLinkDone": "เสร็จสิ้น",
+  "inviteLinkSemantics": "คัดลอกลิงก์คำเชิญ",
+  "orgProfileTitle": "ข้อมูลร้าน",
+  "taxTitle": "ข้อมูลผู้เสียภาษี",
+  "taxEntityTypeLabel": "ประเภท",
+  "taxEntityPersonal": "บุคคลธรรมดา",
+  "taxEntityCompany": "นิติบุคคล",
+  "taxIdLabel": "เลขผู้เสียภาษี",
+  "taxVatLabel": "VAT",
+  "taxVatYes": "จดทะเบียน VAT",
+  "taxVatNo": "ไม่ได้จดทะเบียน VAT",
+  "taxBranchLabel": "รหัสสาขา",
+  "taxBranchHeadOffice": "00000 (สำนักงานใหญ่)",
+  "taxReveal": "แสดงเลขเต็ม",
+  "taxHide": "ซ่อนเลข",
+  "taxRevealLoading": "กำลังขอเลข...",
+  "taxRevealNotice": "การกดดูเลขเต็มถูกบันทึกไว้เพื่อความปลอดภัยของร้าน",
+  "taxUndeclaredReadOnly": "ร้านนี้ยังไม่ได้ประกาศข้อมูลผู้เสียภาษี",
+  "taxDeclaredReadOnlyHint": "รายละเอียดเปิดให้เฉพาะผู้ที่ดูแลข้อมูลร้าน",
+  "taxRevealError": "ขอดูเลขเต็มไม่สำเร็จ กรุณาลองใหม่อีกครั้ง",
+  "taxLoadError": "โหลดข้อมูลร้านไม่สำเร็จ",
+  "taxEditOnWebHint": "แก้ไขข้อมูลผู้เสียภาษีได้ที่เว็บ",
+  "taxHiddenOnResumeHint": "เลขเต็มจะถูกซ่อนอัตโนมัติเมื่อสลับออกจากแอป",
+  "@taxEditOnWebHint": {
+    "description": "Mobile-only: F-002 has no tax form on the phone, so the reader is told where the form is instead of being left at a dead end."
+  },
+  "@taxHiddenOnResumeHint": {
+    "description": "Mobile-only: the number is dropped when the app backgrounds (M-07). Said BEFORE it happens, so the disappearance is not read as a bug."
+  }
 }

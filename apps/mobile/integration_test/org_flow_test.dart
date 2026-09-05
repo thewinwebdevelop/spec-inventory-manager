@@ -1,0 +1,382 @@
+import 'package:dio/dio.dart';
+import 'package:flutter/material.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:flutter_test/flutter_test.dart';
+import 'package:integration_test/integration_test.dart';
+import 'package:mobile/app/bootstrap.dart';
+import 'package:mobile/core/l10n/l10n.dart';
+import 'package:mobile/core/session/session_controller.dart';
+import 'package:mobile/core/session/session_state.dart';
+import 'package:mobile/features/auth/application/auth_providers.dart';
+import 'package:mobile/features/org/application/org_providers.dart';
+import 'package:mobile/core/error/api_failure.dart';
+import 'package:mobile/features/org/domain/entities/org_entities.dart';
+import 'package:mobile/features/org/presentation/screens/create_org_screen.dart';
+import 'package:mobile/features/org/presentation/screens/members_screen.dart';
+
+/// E-10 (test-plan §12.1) — the mobile half, on a real device against a real
+/// API and a real Postgres.
+///
+/// ── What this proves that 391 widget tests cannot ────────────────────────
+/// Every mobile test to date overrides the repositories with fakes, so all of
+/// them agree with a client the app never builds. This one runs the REAL
+/// provider graph from `buildAppOverrides` over real HTTP: the interceptor
+/// chain, the org header, the DTO→entity mapping, the paged controllers and
+/// the screens, against the same server the browser lane uses. The web lane
+/// found six defects nothing else could see, two of them total; this is the
+/// same instrument pointed at the other client.
+///
+/// ── What it deliberately does NOT do ─────────────────────────────────────
+/// It does not drive the app's own navigation, because there is none yet:
+/// `app/app.dart` is F-001's auth shell and the router is F-006's. So the
+/// test composes the screens the way a router would, and says so. When F-006
+/// lands, the composition here is what it replaces.
+///
+/// ── Reaching the API ─────────────────────────────────────────────────────
+/// `--dart-define=API_BASE_URL=…`. On an Android emulator the host is
+/// 10.0.2.2, never localhost — localhost is the emulated device itself, and
+/// the failure mode is a connection refused that looks like the API is down.
+void main() {
+  IntegrationTestWidgetsFlutterBinding.ensureInitialized();
+
+  const baseUrl = String.fromEnvironment(
+    'API_BASE_URL',
+    defaultValue: 'http://10.0.2.2:3000',
+  );
+
+  /// Unique per run: one database serves the whole CI run, web lane included.
+  String freshEmail(String prefix) =>
+      '$prefix-${DateTime.now().microsecondsSinceEpoch}@omnistock.test';
+  const password = 'E2e-passphrase-8Kx!';
+
+  /// Boots the real graph, exactly as `main.dart` does.
+  ProviderContainer bootApp() {
+    final container = ProviderContainer(overrides: buildAppOverrides(baseUrl: baseUrl));
+    addTearDown(container.dispose);
+    return container;
+  }
+
+  /// ⚠️ NEVER `pumpAndSettle` on these screens, and the reason cost a CI run.
+  ///
+  /// The loading skeleton is an `AnimationController(...)..repeat()`
+  /// (`core/ui/skeleton.dart`), so a frame is always scheduled and
+  /// `pumpAndSettle` never returns — it just renders frames as fast as it can
+  /// until it gives up. On a software-rendered emulator that is a CPU storm:
+  /// the first run of this lane lost the emulator process mid-case, and the
+  /// suite reported three tests as "did not complete" with no exception to
+  /// read. The skeleton is right to animate forever; the test was wrong to
+  /// wait for it to stop.
+  ///
+  /// So: pump in fixed steps and stop as soon as the thing being waited for is
+  /// on screen.
+  Future<void> pumpUntil(
+    WidgetTester tester,
+    Finder finder, {
+    Duration timeout = const Duration(seconds: 20),
+  }) async {
+    final deadline = DateTime.now().add(timeout);
+    while (DateTime.now().isBefore(deadline)) {
+      await tester.pump(const Duration(milliseconds: 100));
+      if (finder.evaluate().isNotEmpty) return;
+    }
+    fail('timed out after $timeout waiting for: $finder');
+  }
+
+  Future<void> pump(WidgetTester tester, ProviderContainer container, Widget screen) async {
+    await tester.pumpWidget(
+      UncontrolledProviderScope(
+        container: container,
+        child: MaterialApp(
+          localizationsDelegates: AppLocalizations.localizationsDelegates,
+          supportedLocales: AppLocalizations.supportedLocales,
+          home: screen,
+        ),
+      ),
+    );
+    // One frame, not a settle: the screen may be showing a skeleton.
+    await tester.pump();
+  }
+
+  /// Signs a brand-new account in through the real auth repository, and puts
+  /// the session where the router would have.
+  ///
+  /// ⚠️ BUDGET. F-001 throttles pre-auth requests per IP — `IP_WINDOW_MAX = 20`
+  /// per five minutes — and every signup and every login spends one. This file
+  /// spends ten (four accounts, two extra API logins), so it fits with room to
+  /// spare and needs no counter reset. A fifth account, or a retry loop around
+  /// one of these, puts it near the wall; the web lane had to add a Redis reset
+  /// for exactly that reason, and that reset is a bypass of a real control
+  /// rather than something to reach for casually.
+  Future<void> signUpAndSignIn(ProviderContainer container, String email) async {
+    final auth = container.read(authRepositoryProvider);
+    await auth.signup(email: email, password: password);
+    await auth.login(email: email, password: password);
+    container.read(sessionControllerProvider.notifier).signedIn(orgs: const []);
+  }
+
+  testWidgets('E-10 · creates a shop on a real API and lands inside it', (tester) async {
+    final container = bootApp();
+    await signUpAndSignIn(container, freshEmail('m-e10'));
+
+    CreatedOrganization? created;
+    await pump(tester, container, CreateOrgScreen(onCreated: (org) => created = org));
+
+    final name = 'ร้านมือถือ ${DateTime.now().millisecondsSinceEpoch}';
+    await tester.enterText(find.byType(TextField), name);
+    await tester.pump();
+    await tester.tap(find.text('สร้างร้าน'));
+
+    // A real request is in flight. Pump in steps until the screen has moved
+    // past "กำลังสร้างร้าน..." rather than settling — see `pumpUntil`.
+    final deadline = DateTime.now().add(const Duration(seconds: 25));
+    while (created == null && DateTime.now().isBefore(deadline)) {
+      await tester.pump(const Duration(milliseconds: 100));
+    }
+
+    expect(created, isNotNull, reason: 'POST /organizations did not come back');
+    expect(created!.name, name);
+
+    // ★ The session is ALREADY in the new shop — the screen's contract is that
+    // the caller does not have to re-fetch to enter (api-spec Q5), and this is
+    // the client half of it.
+    expect(container.read(activeOrgIdProvider), created!.id);
+  });
+
+  testWidgets('E-10 · the shop list and the members list come back from the server',
+      (tester) async {
+    final container = bootApp();
+    await signUpAndSignIn(container, freshEmail('m-e10-list'));
+
+    // Create one through the repository — this case is about READING.
+    final scoped = container.read(orgDirectoryProvider);
+    final org = await scoped.createOrganization(
+      name: 'ร้านรายชื่อ ${DateTime.now().millisecondsSinceEpoch}',
+    );
+    container.read(sessionControllerProvider.notifier).switchOrg(
+          ActiveOrg(orgId: org.id, name: org.name, capabilities: const {'full_access'}),
+        );
+
+    // AC-2.1 — the shop appears in the list the switcher reads. Read through
+    // the repository rather than `myOrganizationsProvider.future`: that one is
+    // autoDispose, and with no widget listening it can be torn down between
+    // the read and the await, which is a flake nobody enjoys diagnosing.
+    final mine = await container.read(orgDirectoryProvider).listMyOrganizations();
+    expect(mine.map((o) => o.id), contains(org.id));
+
+    await pump(tester, container, const MembersScreen());
+
+    // The creator is a member, and an Owner. Their capability list is
+    // `full_access` alone — the case that broke web's whole nav.
+    await pumpUntil(tester, find.textContaining('สมาชิกในร้าน'));
+    expect(find.textContaining('@omnistock.test'), findsWidgets);
+  });
+
+  testWidgets('★ M-07 · the tax id round trip against the real API', (tester) async {
+    // ⚠️ THIS CASE USED TO BE NAMED A ROUND TRIP AND NEVER REVEALED A NUMBER.
+    // The security review caught that: it declared nothing, so the success
+    // path — deserialising `taxId`/`revealedAt`, and the property that the
+    // profile endpoint STILL only carries a mask afterwards — was unproven
+    // against the real server. That success path is exactly where a
+    // deserialisation error would have stranded the screen in `loading`.
+    //
+    // It now declares a tax profile, reveals it, and checks both directions.
+    // What stays manual is what a person has to look at: the app-switcher
+    // thumbnail, and whether thirteen digits are readable and copyable in
+    // somebody's hand.
+    const validTaxId = '0105560123454'; // mod-11 checksum, weights 13…2
+    final api = Dio(BaseOptions(baseUrl: baseUrl, validateStatus: (_) => true));
+
+    final container = bootApp();
+    final email = freshEmail('m-tax');
+    await signUpAndSignIn(container, email);
+
+    final org = await container.read(orgDirectoryProvider).createOrganization(
+          name: 'ร้านภาษีมือถือ ${DateTime.now().millisecondsSinceEpoch}',
+        );
+    container.read(sessionControllerProvider.notifier).switchOrg(
+          ActiveOrg(orgId: org.id, name: org.name, capabilities: const {'full_access'}),
+        );
+
+    // ── before anything is declared ──────────────────────────────────────
+    final before = await container.read(orgScopedRepositoryProvider).getOrganization();
+    expect(before.taxProfileComplete, isFalse);
+    expect(before.taxIdMasked, isNull);
+
+    // ★ Revealing an undeclared shop fails loudly — the client must not paint
+    // "—" as though it were a number.
+    Object? undeclaredFailure;
+    try {
+      await container.read(orgScopedRepositoryProvider).revealTaxId();
+    } catch (e) {
+      undeclaredFailure = e;
+    }
+    expect(undeclaredFailure, isNotNull, reason: 'reveal on a shop with no declaration');
+
+    // ── declare it, through the API ──────────────────────────────────────
+    // Mobile has no tax form (§13 item 3, and M-07's screen is read-only), so
+    // the declaration goes the way it goes in real life: somebody does it on
+    // the web. Saying so beats pretending the phone can.
+    final auth = await api.post<Map<String, dynamic>>(
+      '/auth/login',
+      data: {'email': email, 'password': password, 'tokenTransport': 'body'},
+    );
+    expect(auth.statusCode, 200, reason: 'the API refused the login: ${auth.data}');
+    final headers = {
+      'Authorization': 'Bearer ${(auth.data!['accessToken'] as String)}',
+      'X-Organization-Id': org.id,
+    };
+
+    final declared = await api.put<Map<String, dynamic>>(
+      '/orgs/${org.id}/tax-profile',
+      data: {
+        'entityType': 'personal', // the case where the TIN IS a national ID
+        'taxId': validTaxId,
+        'vatRegistered': false,
+      },
+      options: Options(headers: headers),
+    );
+    expect(declared.statusCode, 200, reason: 'declaring the profile failed: ${declared.data}');
+    // ★ Even the WRITE does not echo it back (contract §3.3).
+    expect(declared.data.toString(), isNot(contains(validTaxId)));
+
+    // ── the profile now says "declared", still with no digits ────────────
+    final after = await container.read(orgScopedRepositoryProvider).getOrganization();
+    expect(after.taxProfileComplete, isTrue);
+    expect(after.taxIdMasked, isNotNull);
+    expect(
+      after.taxIdMasked,
+      isNot(contains(validTaxId)),
+      reason: 'the mask must not contain the whole number',
+    );
+    expect(after.capabilities, contains('full_access'),
+        reason: 'the tier is decided from this field — it was dropped once already');
+
+    // ── and the ONE endpoint that may say it, does ───────────────────────
+    final revealed = await container.read(orgScopedRepositoryProvider).revealTaxId();
+    expect(revealed.taxId, validTaxId, reason: 'the success path nobody had exercised');
+    expect(revealed.revealedAt, isA<DateTime>());
+
+    // ★ …and asking again does not change what the profile endpoint carries.
+    // If a reveal ever "warmed" the profile response, every screen showing the
+    // shop would start leaking the number.
+    final stillMasked = await container.read(orgScopedRepositoryProvider).getOrganization();
+    expect(stillMasked.taxIdMasked, isNot(equals(validTaxId)));
+
+    // A second look is a second request — nothing is cached anywhere in the
+    // chain, which is what makes the audit trail mean anything.
+    final again = await container.read(orgScopedRepositoryProvider).revealTaxId();
+    expect(again.taxId, validTaxId);
+  });
+
+  testWidgets('★ E-10 · removed mid-session: the shop goes, the session stays', (tester) async {
+    // AC-5.1/AC-5.2 on mobile.
+    //
+    // ⚠️ Two steps go through the raw API rather than the app, and not for
+    // convenience: F-002's mobile scope has no accept-invitation and no
+    // remove-member (the invite link opens on the web — D-012 — and §7's row
+    // actions are web-only). The mobile port has neither method, so a test
+    // that pretended otherwise would be testing something that does not
+    // exist. The removal coming from elsewhere is also what the AC describes:
+    // another session ends your membership while you are using the app.
+    final api = Dio(BaseOptions(baseUrl: baseUrl, validateStatus: (_) => true));
+
+    Future<String> apiLogin(String email) async {
+      final res = await api.post<Map<String, dynamic>>(
+        '/auth/login',
+        data: {'email': email, 'password': password, 'tokenTransport': 'body'},
+      );
+      expect(res.statusCode, 200, reason: 'the API refused a login: ${res.data}');
+      return res.data!['accessToken'] as String;
+    }
+
+    // ── the owner, on a real mobile stack ─────────────────────────────────
+    final ownerContainer = bootApp();
+    final ownerEmail = freshEmail('m-owner');
+    await signUpAndSignIn(ownerContainer, ownerEmail);
+
+    final org = await ownerContainer.read(orgDirectoryProvider).createOrganization(
+          name: 'ร้านถูกถอด ${DateTime.now().millisecondsSinceEpoch}',
+        );
+    ownerContainer.read(sessionControllerProvider.notifier).switchOrg(
+          ActiveOrg(orgId: org.id, name: org.name, capabilities: const {'full_access'}),
+        );
+
+    // ── a second person joins ─────────────────────────────────────────────
+    final staffEmail = freshEmail('m-staff');
+    final roles = await ownerContainer.read(orgScopedRepositoryProvider).listRoles();
+    final staffRole = roles.firstWhere((r) => r.key == 'staff', orElse: () => roles.last);
+    // Invited through the APP — this half mobile does support, and it is the
+    // one that exercises the org header and the one-shot link.
+    final issued = await ownerContainer.read(orgScopedRepositoryProvider).createInvitation(
+          email: staffEmail,
+          roleId: staffRole.id,
+        );
+    expect(issued.inviteUrl, contains('/invite?token='));
+
+    final staffContainer = bootApp();
+    await signUpAndSignIn(staffContainer, staffEmail);
+
+    final staffToken = await apiLogin(staffEmail);
+    final accepted = await api.post<Map<String, dynamic>>(
+      '/invitations/accept',
+      data: {'token': Uri.parse(issued.inviteUrl).queryParameters['token']},
+      options: Options(headers: {'Authorization': 'Bearer $staffToken'}),
+    );
+    expect(accepted.statusCode, 200, reason: 'accept failed: ${accepted.data}');
+
+    staffContainer.read(sessionControllerProvider.notifier).switchOrg(
+          ActiveOrg(orgId: org.id, name: org.name, capabilities: const {}),
+        );
+    // ── they are really in, proven with a call THEY may make ─────────────
+    //
+    // ⚠️ `listRoles`, not `listMembers`, and the first version got this wrong.
+    // `GET …/members` requires `manage_members`, so a พนักงาน asking for it
+    // gets `403 FORBIDDEN` — the server being right, and the opposite of what
+    // this line is trying to establish. `GET …/roles` is `@AnyActiveMember()`:
+    // it succeeds for exactly as long as they are a member, which is the
+    // property the removal is about to end.
+    final before = await staffContainer.read(orgScopedRepositoryProvider).listRoles();
+    expect(before, isNotEmpty, reason: 'the invited member cannot reach their own shop');
+
+    // ── the removal, from another session ─────────────────────────────────
+    final ownerToken = await apiLogin(ownerEmail);
+    final headers = {
+      'Authorization': 'Bearer $ownerToken',
+      'X-Organization-Id': org.id,
+    };
+    // Read through the OWNER's client — they hold `manage_members`.
+    final members = await ownerContainer.read(orgScopedRepositoryProvider).listMembers();
+    final target = members.items.firstWhere((m) => m.email == staffEmail);
+    final removed = await api.delete<Map<String, dynamic>>(
+      '/orgs/${org.id}/members/${target.userId}',
+      options: Options(headers: headers),
+    );
+    expect(removed.statusCode, 200, reason: 'remove failed: ${removed.data}');
+
+    // ── what the removed person's client does next ────────────────────────
+    // The next org-scoped request is refused. What must NOT happen is the
+    // session ending: being removed from one shop says nothing about the
+    // account (D-027), which is why `orgAccessDenied` is its own method and
+    // not a call to `sessionExpired`.
+    Object? failure;
+    try {
+      await staffContainer.read(orgScopedRepositoryProvider).listRoles();
+    } catch (e) {
+      failure = e;
+    }
+    expect(failure, isNotNull, reason: 'a removed member could still reach the shop');
+    expect(failure, isA<OrgAccessDeniedFailure>());
+
+    staffContainer.read(sessionControllerProvider.notifier).orgAccessDenied();
+    expect(staffContainer.read(activeOrgIdProvider), isNull, reason: 'the shop should be gone');
+    expect(
+      staffContainer.read(sessionControllerProvider),
+      isA<SessionAuthed>(),
+      reason: 'being removed from a shop must not log the person out',
+    );
+
+    // …and the shop is no longer in the list the switcher reads (AC-5.2).
+    final theirShops = await staffContainer.read(orgDirectoryProvider).listMyOrganizations();
+    expect(theirShops.map((o) => o.id), isNot(contains(org.id)));
+  });
+}

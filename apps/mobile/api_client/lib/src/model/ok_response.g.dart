@@ -6,55 +6,9 @@ part of 'ok_response.dart';
 // BuiltValueGenerator
 // **************************************************************************
 
-const OkResponseOkEnum _$okResponseOkEnum_true_ =
-    const OkResponseOkEnum._('true_');
-
-OkResponseOkEnum _$okResponseOkEnumValueOf(String name) {
-  switch (name) {
-    case 'true_':
-      return _$okResponseOkEnum_true_;
-    default:
-      throw ArgumentError(name);
-  }
-}
-
-final BuiltSet<OkResponseOkEnum> _$okResponseOkEnumValues =
-    BuiltSet<OkResponseOkEnum>(const <OkResponseOkEnum>[
-  _$okResponseOkEnum_true_,
-]);
-
-Serializer<OkResponseOkEnum> _$okResponseOkEnumSerializer =
-    _$OkResponseOkEnumSerializer();
-
-class _$OkResponseOkEnumSerializer
-    implements PrimitiveSerializer<OkResponseOkEnum> {
-  static const Map<String, Object> _toWire = const <String, Object>{
-    'true_': 'true',
-  };
-  static const Map<Object, String> _fromWire = const <Object, String>{
-    'true': 'true_',
-  };
-
-  @override
-  final Iterable<Type> types = const <Type>[OkResponseOkEnum];
-  @override
-  final String wireName = 'OkResponseOkEnum';
-
-  @override
-  Object serialize(Serializers serializers, OkResponseOkEnum object,
-          {FullType specifiedType = FullType.unspecified}) =>
-      _toWire[object.name] ?? object.name;
-
-  @override
-  OkResponseOkEnum deserialize(Serializers serializers, Object serialized,
-          {FullType specifiedType = FullType.unspecified}) =>
-      OkResponseOkEnum.valueOf(
-          _fromWire[serialized] ?? (serialized is String ? serialized : ''));
-}
-
 class _$OkResponse extends OkResponse {
   @override
-  final OkResponseOkEnum ok;
+  final bool ok;
 
   factory _$OkResponse([void Function(OkResponseBuilder)? updates]) =>
       (OkResponseBuilder()..update(updates))._build();
@@ -91,9 +45,9 @@ class _$OkResponse extends OkResponse {
 class OkResponseBuilder implements Builder<OkResponse, OkResponseBuilder> {
   _$OkResponse? _$v;
 
-  OkResponseOkEnum? _ok;
-  OkResponseOkEnum? get ok => _$this._ok;
-  set ok(OkResponseOkEnum? ok) => _$this._ok = ok;
+  bool? _ok;
+  bool? get ok => _$this._ok;
+  set ok(bool? ok) => _$this._ok = ok;
 
   OkResponseBuilder() {
     OkResponse._defaults(this);

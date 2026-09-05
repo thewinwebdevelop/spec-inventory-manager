@@ -4,7 +4,7 @@ import {
   loginErrorMessage,
   signupErrorMessage,
 } from "./error-messages";
-import { authTh } from "../i18n/auth";
+import { authTh } from "../features/auth/i18n";
 
 describe("error-messages", () => {
   describe("signupErrorMessage", () => {

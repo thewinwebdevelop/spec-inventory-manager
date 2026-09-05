@@ -5,7 +5,9 @@
 
 ## นี่คืออะไร
 
-NestJS API service ของ OmniStock — HTTP + webhooks + BullMQ workers (deploy เดียว, split-ready ผ่าน `APP_ROLE`)
+NestJS API service ของ OmniStock — HTTP + webhooks + BullMQ workers (**deploy เดียววันนี้**)
+· `APP_ROLE=api|worker|all` เป็น **target ยังไม่มีในโค้ด** (`grep APP_ROLE` ทั้ง `src/` + `packages/*/src` = 0 ครั้ง)
+— เกิดที่ F-021/F-023 ตามตาราง target patterns ด้านล่าง
 
 > **Architecture authority: [docs/architecture/backend.md](../../docs/architecture/backend.md)** —
 > module map เต็ม + pattern หลัก (§3) + playbook feature/connector (§5.3–5.4) + gap plan (§6)
