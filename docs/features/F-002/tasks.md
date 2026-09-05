@@ -2842,7 +2842,7 @@ user ถามว่า "ล็อกอินไว้แล้วแต่ย�
 | `apps/web/src/lib/session/root-redirect.ts` | `decideRoot(state)` — pure fn คืน `wait \| sign-in \| pick-shop` · การตัดสินใจแยกออกจาก React ทั้งหมด |
 | `apps/web/src/app/page.tsx` | client component: อ่าน session → `router.replace()` · ระหว่างรอแสดง skeleton ที่มี `role="status"` |
 | `root-redirect.test.ts` | 3 เคส |
-| `e2e/e10-root-route.spec.ts` | **E-15 / E-15b** — เบราว์เซอร์เดินเข้า `/` จริงทั้งสองสถานะ |
+| `e2e/e15-root-route.spec.ts` | **E-15 / E-15b** — เบราว์เซอร์เดินเข้า `/` จริงทั้งสองสถานะ |
 | `.github/workflows/ci.yml` | พื้นเลน browser `26 → 28` |
 
 **เคสที่สำคัญที่สุดคือเคสที่สาม — `unknown`**
@@ -2988,3 +2988,22 @@ mobile **451** เขียว · analyze สะอาด · boundary gate 85 �
   อยู่ห่างจากการเลือกสาขาผิดแค่ refactor เดียว · **ปิด nit ของ M-06 ไปด้วย** (CTA ที่ชี้หน้าเดิม)
 
 web **366** เขียว (+3) · mobile **451** · analyze สะอาด · browser lane **29/29** กับสแตกจริง
+
+### 🏁 Gate E + Gate F ออกแล้ว (qa · release · 2026-09-05)
+
+**qa → ❌ NOT DONE · บล็อกข้อเดียว: M-01** ([gate-e-verdict.md](gate-e-verdict.md))
+· รันเองทุก suite: web 366 · api 704 (+ int 212 ใน CI, ทุกไฟล์ 0 skipped) · core-domain 384 · db 161 · config 63 · contracts 12 · mobile 451 · Playwright 29 · CI run `33940886688` **headSha = HEAD จริง ไม่ใช่ run เก่า**
+· **AC ครบ 35/35 ไม่มีข้อไหนที่ไม่มีเคสแตะ** (นับใหม่จาก spec ต้นทาง ไม่ได้เชื่อ ID ในแผน) — 32 เต็ม · 3 บางส่วน (AC-1.2/5.4/7.3 = ผิวที่ไม่มีใน Phase 0, D-029(4) รับไว้แล้ว)
+· **M-01 บล็อกจริง ไม่ใช่เรื่องพิธีการ:** D-012 คือกลไกเชิญ*ทั้งหมด*ของ MVP (ไม่มี SMTP จนถึง F-081) และ §12.2 เขียนเองว่า *"ห้ามพิสูจน์แค่ใน CI"* — **qa ปฏิเสธที่จะแก้กติกาที่ตัวเองเขียนตอน Gate 2 เพื่อให้ฟีเจอร์ตัวเองผ่าน** · และมันมีเขี้ยวจริง: manual pass บันทึกว่า `WEB_APP_BASE_URL` ที่เป็น `localhost` ทำให้ลิงก์ตายบนมือถือ = รูปเดียวกับ B-17 เป๊ะ ซึ่งทุกเลนเขียวทับมาตลอด
+· **M-07ค ฝั่ง iOS = `n/a` ไม่ใช่ red** — devops ตัดสินเป็น forward-commitment พร้อม trigger แล้ว · ครึ่ง Android ปิดจริง · qa แนบเงื่อนไข: **ถ้า release จะ ship iOS เมื่อไร ข้อนี้กลับเป็นแดงทันทีและ verdict นี้ไม่ครอบ iOS**
+
+**release → 🔴 NO-GO ต่อการ merge** ([release-gate-f.md §4](release-gate-f.md)) — เหลือเงื่อนไขเดียวคือ M-01
+· แยกสามแบบของ NO-GO ไว้ชัด: *ไม่มีที่ให้ ship* (ไม่บล็อก merge) · *ยังพิสูจน์ไม่ได้ว่าไม่พัง* (บล็อก) · *ของพัง* (**ไม่มีข้อไหนอยู่กลุ่มนี้**)
+· rollout มีชื่อคนกำกับทุกขั้น · แผน merge: `claude/thai-language-output-4ea998` → PR `--base chore/agent-definitions` → merge ก้อนใหญ่เข้า `main` เป็น **Gate F แยกของ "ปิด Phase 1"**
+
+**ของที่ qa จับได้แล้วผมแก้ในรอบนี้:**
+1. **หมายเลข E ชนกัน** — `e10-root-route.spec.ts` มี **E-15/E-15b** ไม่ใช่ E-10 (E-10 จริงคือ `integration_test/org_flow_test.dart`) และ `e11-sign-out.spec.ts` มี **E-16** ไม่ใช่ E-11 (E-11 จริงคือ `copy-lint.test.ts`) ⇒ **rename เป็น `e15-` / `e16-`** ให้ชื่อไฟล์ตรงกับ case id ตามธรรมเนียมของโฟลเดอร์นี้ · lane ยังเขียว 29/29
+2. **เอกสารขัดกันเอง** — หัวตารางของ `manual-pass-results.md` บอกว่า B-18 ปิดแล้ว แต่ §B-18 ยังเขียนว่า "🔴 เปิดอยู่" พร้อมตัวเลือก (ก)/(ข) ที่ตัดสินไปแล้ว ⇒ แก้ให้ตรง
+3. **ของค้าง 3 ข้อของ qa ลง forward-commitments พร้อม trigger** — §10 gate 4 ตัวที่ไม่มี implementation (ก่อน F-003 เปิด role CRUD) · `--passWithNoTests` ที่เหลืออีก 2 workspace (commit แรกที่มีโค้ดจริงลง) · G-08 ที่ถูกละเมิดตามตัวอักษรตอน B-10 (ครั้งถัดไปที่แตะ `ledger-guard.ts`)
+
+**ตัวเลขที่ผมรันเองซ้ำหลังแก้ทั้งหมด:** web **366** · api **704** · mobile **451** · contracts **12** · analyze สะอาด · **browser lane 29/29 (floor 29)** กับสแตกจริง

@@ -290,7 +290,7 @@ export const BUILD_DEFECTS: readonly BuildDefect[] = Object.freeze([
         file: "apps/web/src/lib/session/root-redirect.test.ts",
         must: ["NOT YET KNOWN \u2192 wait", "pick-shop"],
       },
-      { file: "apps/web/e2e/e10-root-route.spec.ts", must: ["E-15", "apps/web placeholder shell"] },
+      { file: "apps/web/e2e/e15-root-route.spec.ts", must: ["E-15", "apps/web placeholder shell"] },
     ],
   },
   // ── the §12.2 manual pass, 2026-09-04 ────────────────────────────────────
@@ -344,7 +344,7 @@ export const BUILD_DEFECTS: readonly BuildDefect[] = Object.freeze([
         file: "apps/web/src/features/org/components/AppShell.logout.test.tsx",
         must: ["not every session on every device", "does not fake success"],
       },
-      { file: "apps/web/e2e/e11-sign-out.spec.ts", must: ["E-16", "does not walk back in"] },
+      { file: "apps/web/e2e/e16-sign-out.spec.ts", must: ["E-16", "does not walk back in"] },
     ],
   },
   {
