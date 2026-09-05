@@ -59,6 +59,41 @@ fvm flutter run --dart-define=API_BASE_URL=http://<LAN-IP-ของเครื�
 `10.0.2.2` ใช้ได้เฉพาะ Android emulator · **โทรศัพท์จริงต้องใช้ IP ในวง LAN** (`ipconfig getifaddr en0` บน mac)
 และเครื่องต้องอยู่ Wi-Fi เดียวกัน
 
+### ⛔ M-01: `WEB_APP_BASE_URL` เป็น LAN IP **ไม่ได้** — API จะไม่ยอมบูต (พบ 2026-09-05)
+
+คำแนะนำเดิมของ runbook นี้ (และของ `manual-pass-results.md` รอบแรก) บอกให้ตั้ง `WEB_APP_BASE_URL`
+เป็น host ที่โทรศัพท์เปิดได้ **ซึ่งทำไม่ได้จริง**:
+
+```
+$ WEB_APP_BASE_URL=http://10.0.2.2:3001 node dist/main.js
+Invalid environment variables:
+  - WEB_APP_BASE_URL: WEB_APP_BASE_URL must use https:// (F-002 §6.4) — plain http is
+    accepted only on localhost/127.0.0.1 outside production, because this origin carries
+    the invitation token
+```
+
+`packages/config/src/env.ts:103` ยอมรับแค่ `https:` หรือ `http:` ที่ host เป็น
+`localhost` / `127.0.0.1` / `[::1]` เท่านั้น — **และกฎนี้ถูก** (origin นี้ถือ token ของคำเชิญ)
+⇒ เส้นทาง "ตั้งเป็น LAN IP" ตายตั้งแต่ต้น · **นี่คือรูปเดียวกับ B-17 อีกครั้ง: คำสั่งใน runbook ที่ทำตามแล้วไม่ทำงาน**
+
+### ✅ วิธีที่ใช้ได้จริง — `adb reverse` (ยืนยันแล้วบน emulator, ใช้ได้กับเครื่องจริงต่อ USB ด้วย)
+
+ให้ `localhost` **ของตัวโทรศัพท์** ชี้กลับมาที่เครื่องคุณ ⇒ `WEB_APP_BASE_URL` คงเป็น
+`http://localhost:3001` ตามเดิม (ผ่าน guard) และลิงก์ที่ออกมาเปิดได้บนเครื่องนั้นจริง:
+
+```bash
+adb reverse tcp:3001 tcp:3001   # web
+adb reverse tcp:3000 tcp:3000   # api
+adb reverse --list              # ยืนยันว่าแมปแล้ว
+```
+
+- ใช้ได้ทั้ง **emulator** และ **โทรศัพท์จริงที่เสียบ USB + เปิด USB debugging**
+- ลิงก์คำเชิญจะเป็น `http://localhost:3001/invite?token=…` ซึ่งบนเครื่องนั้น**เปิดได้**
+- ⚠️ **ข้อจำกัดที่เหลือของ M-01:** ลิงก์ `localhost` ที่ส่งผ่าน LINE จะเปิดได้เฉพาะบนเครื่องที่ทำ
+  `adb reverse` ไว้ ⇒ ทดสอบ "LINE ห่อ/ตัดลิงก์ไหม" ได้ แต่ **ส่งข้ามเครื่องไม่ได้**
+  · ถ้าอยากทดสอบข้ามเครื่องจริง ๆ ต้องมี **origin ที่เป็น https** (tunnel/reverse proxy ที่มี TLS)
+  ซึ่งเป็นงานของ devops ไม่ใช่ของคนเดิน manual pass
+
 ---
 
 ## 1. รายการที่ต้องติ๊ก
