@@ -12,6 +12,10 @@ import type { ReactNode } from "react";
 const replace = vi.fn();
 vi.mock("next/navigation", () => ({
   useRouter: () => ({ replace, push: vi.fn(), refresh: vi.fn() }),
+  // `OrgGuard` only ever wraps `/o/{orgId}` — not on the invite journey, so
+  // `SessionProvider`'s route-mount guard (B-19 follow-up) drops any held
+  // invite here, same as production.
+  usePathname: () => "/o/org_1",
 }));
 
 import { OrgGuard, LOGIN_PATH, SELECT_ORG_PATH } from "./OrgGuard";

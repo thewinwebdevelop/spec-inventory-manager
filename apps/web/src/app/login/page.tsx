@@ -11,6 +11,7 @@ import { authTh } from "../../features/auth/i18n";
 import { ApiError, login } from "../../lib/auth-client";
 import { loginErrorMessage } from "../../lib/error-messages";
 import { useSession } from "../../lib/session/session-context";
+import { destinationAfterLogin } from "../../lib/session/pending-invite";
 
 function LoginPageInner() {
   const router = useRouter();
@@ -73,7 +74,10 @@ function LoginPageInner() {
       // login สำเร็จ → S1. The picker itself decides where to go from there —
       // it is the screen that knows whether the person has no shops, one, or
       // several.
-      router.push("/select-org");
+      //
+      // ★ B-19 — unless they came here FROM an invitation (§11.1), in which
+      // case they go back to it and press "เข้าร่วมร้านนี้" themselves.
+      router.push(destinationAfterLogin());
     } catch (err) {
       if (err instanceof ApiError) {
         if (err.status === 429) {

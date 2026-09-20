@@ -61,7 +61,8 @@ test("E-12 ★ · the token leaves the URL, the history and the browser's storag
   expect(visitorPage.url()).not.toContain("token=");
 
   // ── and out of storage ───────────────────────────────────────────────────
-  // The token lives in a ref for the life of the component and nowhere else.
+  // The token lives in a ref for the life of the component, and — only while
+  // the reader is away signing in (B-19) — in module memory. Never storage.
   // Asserted over EVERY key rather than a known one: a leak nobody intended
   // will not be called "inviteToken".
   const stored = await visitorPage.evaluate(() => ({
@@ -117,19 +118,15 @@ test("E-05 · somebody with no account can read the invitation, and is told what
   await expect(visitorPage.getByText("ใช้อีเมลเดียวกับที่ถูกเชิญเท่านั้น")).toBeVisible();
 });
 
-test("E-05 · they sign up with the invited address and join — the link is needed twice", async () => {
-  // ⚠️ THE DEVIATION, and it is deliberate on the app's side.
-  //
-  // §12.1 words E-05 as "holds the token through the whole flow". It does not:
-  // the token lives in a ref inside the `/invite` tree, so walking to /signup
-  // destroys it — which is exactly the property E-12 above just asserted. The
-  // two rows cannot both be satisfied by storing it; keeping the token through
-  // a signup means putting it in `sessionStorage` or in the URL of the signup
-  // page, and both are the leak.
-  //
-  // So the person opens the link again, which is what somebody who received it
-  // over LINE actually does. Filed in tasks.md for product/ux: the outcome of
-  // AC-4.2 is reached, the wording of §12.1 is not.
+test("E-05 ★ · they sign up with the invited address, and sign-in brings them BACK to the invitation", async () => {
+  // ★ B-19. This test used to be called "the link is needed twice" and
+  // reopened the link after login, with a note saying §12.1's "holds the token
+  // through the whole flow" could not be met without `sessionStorage` or the
+  // URL. It can: the token travels in module memory (`pending-invite`), the
+  // same way the access token lives. On a phone that note was not a deviation
+  // but a dead end — the reader who followed the screen came back to
+  // "ลิงก์คำเชิญนี้ใช้ไม่ได้", which was not true (M-01, 2026-09-05).
+  const token = new URL(inviteUrl).searchParams.get("token")!;
   await visitorPage.getByRole("button", { name: "สมัครบัญชีใหม่" }).click();
   await expect(visitorPage).toHaveURL(/\/signup/);
 
@@ -138,19 +135,33 @@ test("E-05 · they sign up with the invited address and join — the link is nee
   await visitorPage.getByRole("button", { name: "สมัครใช้งาน" }).click();
 
   await expect(visitorPage).toHaveURL(/\/login/);
+
+  // E-12 on the way past: holding the token for the trip must not have put it
+  // anywhere E-12 forbids — asserted on the auth screen, mid-journey.
+  expect(visitorPage.url()).not.toContain(token);
+  const midway = await visitorPage.evaluate(() => ({
+    local: JSON.stringify(window.localStorage),
+    session: JSON.stringify(window.sessionStorage),
+    cookie: document.cookie,
+  }));
+  expect(midway.local, "the token is in localStorage").not.toContain(token);
+  expect(midway.session, "the token is in sessionStorage").not.toContain(token);
+  expect(midway.cookie, "the token is in a cookie").not.toContain(token);
+  expect(await visitorPage.content(), "the token is in the DOM").not.toContain(token);
+
   await visitorPage.getByLabel("รหัสผ่าน", { exact: true }).fill(PASSWORD);
   await visitorPage.getByRole("button", { name: "เข้าสู่ระบบ" }).click();
 
-  // ★ A member of NOTHING yet. Signing up with an invited address must not
-  // join anything on its own — the invitation is accepted by a person, not by
-  // an address matching (AC-4.2 auto-links on ACCEPT, D-012 has no email step
-  // that could have confirmed anything).
-  await expect(visitorPage).toHaveURL(/\/select-org/);
-  await expect(visitorPage.getByRole("main").getByText(shopName)).toHaveCount(0);
+  // Back on the invitation — not the picker, and not "invalid link".
+  await expect(visitorPage).toHaveURL(/\/invite$/, { timeout: 20_000 });
+  await expect(visitorPage.getByText(shopName)).toBeVisible({ timeout: 20_000 });
 
-  // Back through the link they still have.
-  await visitorPage.goto(new URL(inviteUrl).pathname + new URL(inviteUrl).search);
-  await visitorPage.getByRole("button", { name: "เข้าร่วมร้านนี้" }).click();
+  // ★ A member of NOTHING yet. Signing up with an invited address must not
+  // join anything on its own, and coming back must not accept on their
+  // behalf — the person presses the button (§11.1, AC-4.2 links on ACCEPT).
+  const join = visitorPage.getByRole("button", { name: "เข้าร่วมร้านนี้" });
+  await expect(join).toBeVisible();
+  await join.click();
 
   await expect(
     visitorPage.getByRole("heading", { name: new RegExp(`เข้าร่วม .*${shopName}`) }),

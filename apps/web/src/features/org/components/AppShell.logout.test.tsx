@@ -34,6 +34,12 @@ import { AppShell } from "./AppShell";
 import { ToastProvider } from "../../../components/providers/ToastProvider";
 import { ActiveOrgProvider, type ActiveOrg } from "../../../lib/org/org-context";
 import { orgTh } from "../i18n";
+import { SessionProvider } from "../../../lib/session/session-context";
+import {
+  dropPendingInvite,
+  hasPendingInvite,
+  holdInviteToken,
+} from "../../../lib/session/pending-invite";
 
 const org: ActiveOrg = {
   orgId: "org_1",
@@ -46,17 +52,20 @@ const org: ActiveOrg = {
 
 function renderShell() {
   return render(
-    <ToastProvider>
-      <ActiveOrgProvider value={org}>
-        <AppShell>
-          <p>page</p>
-        </AppShell>
-      </ActiveOrgProvider>
-    </ToastProvider>,
+    <SessionProvider bootstrap={async () => true}>
+      <ToastProvider>
+        <ActiveOrgProvider value={org}>
+          <AppShell>
+            <p>page</p>
+          </AppShell>
+        </ActiveOrgProvider>
+      </ToastProvider>
+    </SessionProvider>,
   );
 }
 
 beforeEach(() => {
+  dropPendingInvite();
   replace.mockClear();
   logoutDevice.mockClear();
   logoutAll.mockClear();
@@ -105,5 +114,40 @@ describe("★ B-16 — signing out", () => {
     await userEvent.click(screen.getAllByRole("button", { name: orgTh.shell.nav.logout })[0]);
 
     await waitFor(() => expect(replace).toHaveBeenCalledWith("/login"));
+  });
+
+  it("★ B-19: the sidebar sign-out forgets an invitation held for a login nobody finished", async () => {
+    // Security review, Medium: `endSession` — the one place that dropped the
+    // held token — had no caller in the app, and `router.replace` is a soft
+    // navigation, so the heap (and the token) survived this very click. The
+    // earlier test "a held token does not survive sign-out" called
+    // `endSession` directly and was true only of a function nobody used.
+    // This one goes through the control a person actually presses.
+    //
+    // Held AFTER mount, not before: this screen's route (`/o/org_1/...`) is
+    // not on the invite journey, so the route-mount guard below would already
+    // have cleared anything held before render — which would make this case
+    // pass for the wrong reason. Holding it once the shell is already up
+    // isolates the thing this test is actually about: `endSession` itself.
+    renderShell();
+    holdInviteToken("tok-left-behind");
+    await userEvent.click(screen.getAllByRole("button", { name: orgTh.shell.nav.logout })[0]);
+
+    await waitFor(() => expect(replace).toHaveBeenCalledWith("/login"));
+    expect(hasPendingInvite(), "the next person to sign in here would be sent to it").toBe(false);
+  });
+
+  it("control: a FAILED sign-out keeps it — the session it belongs to is still alive", async () => {
+    // See the note above: held after mount so the route-mount guard (this
+    // screen is not on the invite journey) is not what makes this pass.
+    logoutDevice.mockRejectedValueOnce(new Error("network"));
+    renderShell();
+    holdInviteToken("tok");
+    await userEvent.click(screen.getAllByRole("button", { name: orgTh.shell.nav.logout })[0]);
+
+    await waitFor(() =>
+      expect(screen.getByText(orgTh.shell.nav.logoutFailed)).toBeInTheDocument(),
+    );
+    expect(hasPendingInvite()).toBe(true);
   });
 });

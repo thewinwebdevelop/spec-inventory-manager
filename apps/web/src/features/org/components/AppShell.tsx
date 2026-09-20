@@ -19,6 +19,7 @@ import { usePathname, useRouter } from "next/navigation";
 import { useActiveOrg, useCan } from "../../../lib/org/org-context";
 import { NavAction, NavItem } from "../../../components/ui/NavItem";
 import { logoutDevice } from "../../../lib/auth-client";
+import { useSession } from "../../../lib/session/session-context";
 import { IconButton } from "../../../components/ui/IconButton";
 import { Icon } from "../../../components/ui/Icon";
 import { orgTh } from "../i18n";
@@ -51,6 +52,7 @@ export function AppShell({ children }: { children: ReactNode }) {
   const pathname = usePathname();
   const router = useRouter();
   const toast = useToast();
+  const session = useSession();
   const [signingOut, setSigningOut] = useState(false);
   // §4 answers Q13 explicitly: HIDE it, do not disable it — a disabled entry
   // just raises a question the user cannot resolve.
@@ -120,6 +122,13 @@ export function AppShell({ children }: { children: ReactNode }) {
     setSigningOut(true);
     try {
       await logoutDevice();
+      // B-19 (security review, Medium): `endSession` had no caller in the
+      // app. Without it the provider still said "signed in" after this
+      // sign-out, and an invitation token held for a login nobody finished
+      // survived the soft navigation below — the next person to sign in at
+      // this tab would have been routed to it. `OrgGuard` sends `none` to
+      // `/login` too, so both agree on where this ends.
+      session.endSession();
       router.replace("/login");
     } catch {
       toast.error(orgTh.shell.nav.logoutFailed);

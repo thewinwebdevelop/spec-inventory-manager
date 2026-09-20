@@ -15,6 +15,7 @@
  */
 import { useLayoutEffect, useRef, useState } from "react";
 import { stripInviteToken } from "./invite-token";
+import { dropPendingInvite, takeInviteToken } from "../../lib/session/pending-invite";
 
 export interface InviteTokenHandle {
   /** The token, or `null` once we know the link carried none. */
@@ -30,13 +31,22 @@ export function useInviteToken(): InviteTokenHandle {
   useLayoutEffect(() => {
     if (typeof window === "undefined") return;
     const { token, cleanUrl } = stripInviteToken(window.location.href);
-    tokenRef.current = token;
 
     if (token !== null) {
+      // A link opened fresh is the one the person means; anything held from
+      // an earlier trip through sign-in is stale by definition.
+      dropPendingInvite();
+      tokenRef.current = token;
       // `replaceState`, never `pushState`: pushing would leave the
       // token-bearing entry in history, one Back press away — the opposite of
       // the point.
       window.history.replaceState(window.history.state, "", cleanUrl);
+    } else {
+      // ★ B-19 — back from login/signup: the token travelled in memory
+      // (`pending-invite`). `?? ` keeps a token this ref already holds, so an
+      // effect that runs twice (React strict mode) does not read the
+      // now-clean URL and throw it away.
+      tokenRef.current = tokenRef.current ?? takeInviteToken();
     }
     setReady(true);
   }, []);

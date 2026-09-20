@@ -408,4 +408,55 @@ export const BUILD_DEFECTS: readonly BuildDefect[] = Object.freeze([
       },
     ],
   },
+  {
+    finding: "B-19",
+    title:
+      "`/invite` dropped the token on the way to sign-up, then told the reader their link was broken",
+    tier: "smoke",
+    foundBy:
+      "M-01 on Android 13 Chrome: tapping สมัครบัญชีใหม่ and following the screen came back to \"ลิงก์อาจถูกคัดลอกมาไม่ครบ หรือถูกยกเลิกไปแล้ว\"",
+    // ux-wireframe §11.1 always said the door carries the token "in
+    // memory/state" and sign-in returns to `/invite`. The build kept it in a
+    // ref inside the `/invite` tree, and E-05 wrote the gap down as a
+    // deliberate deviation ("the link is needed twice") on the belief that
+    // carrying it meant `sessionStorage` or the URL. It meant module memory —
+    // the same place the access token lives — and E-12 holds unchanged.
+    //
+    // On a desktop the deviation cost a second click on a link still in the
+    // mail client. On the phone this screen was designed for, the reader is
+    // in a browser tab opened from LINE, and the only thing in front of them
+    // said the link itself was bad.
+    pins: [
+      {
+        file: "apps/web/src/lib/session/pending-invite.test.ts",
+        must: ["login returns to the invitation only while one is held", "forgotten after the hold window"],
+      },
+      {
+        // The pin that matters for sign-out: through the control a person
+        // presses. The security review found `endSession` had no caller, so
+        // the session-context test alone proved a function nobody used.
+        file: "apps/web/src/features/org/components/AppShell.logout.test.tsx",
+        must: ["the sidebar sign-out forgets an invitation held for a login nobody finished"],
+      },
+      {
+        file: "apps/web/src/lib/session/session-context.pending-invite.test.tsx",
+        must: ["a held token does not survive sign-out"],
+      },
+      {
+        file: "apps/web/src/features/invite/components/InviteScreen.test.tsx",
+        must: [
+          "B-19: leaving for sign-up and coming back",
+          "E-12 still holds",
+          // The copy half (ux-wireframe §11.5): the no-token state must stay
+          // SEPARATE from a real server refusal — that separation is the
+          // whole decision, and it is invisible to a screenshot.
+          "NO_TOKEN copy never appears for a REAL 404",
+        ],
+      },
+      {
+        file: "apps/web/e2e/e05-signup-through-invite.spec.ts",
+        must: ["sign-in brings them BACK to the invitation"],
+      },
+    ],
+  },
 ]);

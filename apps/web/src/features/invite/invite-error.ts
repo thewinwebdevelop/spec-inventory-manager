@@ -32,6 +32,12 @@ export interface InviteError {
   readonly next: InviteNextStep;
   /** Throttling gets the countdown banner instead of a plain message. */
   readonly retryAfterSeconds?: number;
+  /**
+   * §11.5 — a second, muted line explaining WHY, never the first thing read.
+   * Only `NO_TOKEN_ERROR` below sets this; every `BY_CODE` row leaves it
+   * unset, so this field changes nothing about the ten server-code rows.
+   */
+  readonly hint?: string;
 }
 
 const HOME: InviteNextStep = { kind: "home" };
@@ -156,3 +162,28 @@ export function toInviteError(error: unknown): InviteError {
 
 /** Codes this screen has bespoke copy for — exported so a test can enumerate them. */
 export const HANDLED_INVITE_CODES: readonly string[] = Object.freeze(Object.keys(BY_CODE));
+
+/**
+ * §11.5 — `/invite` opened with no token at all (reload, new tab, or the
+ * device dropping this screen's memory mid signup/login — the most common
+ * way to land here on a phone browser opening a LINE-shared link).
+ *
+ * ★ This is a LOCAL SCREEN STATE, not a server code — ux's instruction,
+ * verbatim: "เลิกแกล้งเป็น error ของ server". Kept OUT of `BY_CODE` on
+ * purpose (the whole point of the decision) and out of `toInviteError`, so
+ * nothing here can ever answer a real `404 INVITATION_INVALID` from the API
+ * — that row keeps its own copy, above, untouched.
+ *
+ * Tone: not an error the reader caused and nothing is broken, so no
+ * `danger`/`ErrorBanner` and no "ใช้ไม่ได้/ไม่สำเร็จ" opener (§11.5).
+ * `next` reuses `HOME` — §11.5 is explicit that this does NOT get a new
+ * `InviteNextStep` kind: a kind names where a button goes, and this button
+ * is not the thing that solves the problem (returning to the chat/email
+ * that has the real link is), so it stays secondary.
+ */
+export const NO_TOKEN_ERROR: InviteError = Object.freeze({
+  title: "ต้องเปิดจากลิงก์คำเชิญอีกครั้ง",
+  body: "ลิงก์เดิมที่เจ้าของร้านส่งให้ยังใช้ได้ กลับไปที่แชทหรืออีเมลที่ได้รับลิงก์ แล้วแตะลิงก์นั้นอีกครั้ง",
+  hint: "หน้านี้ไม่ได้เก็บลิงก์คำเชิญไว้เพื่อความปลอดภัย จึงต้องเปิดจากลิงก์ทุกครั้ง",
+  next: HOME,
+});

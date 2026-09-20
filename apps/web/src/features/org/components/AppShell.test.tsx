@@ -15,6 +15,7 @@ vi.mock("next/navigation", () => ({
 
 import { AppShell, CAPABILITY_MANAGE_MEMBERS } from "./AppShell";
 import { ActiveOrgProvider, type ActiveOrg } from "../../../lib/org/org-context";
+import { SessionProvider } from "../../../lib/session/session-context";
 import { orgTh } from "../i18n";
 
 function activeOrg(capabilities: string[]): ActiveOrg {
@@ -37,11 +38,13 @@ function renderShell(capabilities: string[]) {
   );
   return render(
     <QueryClientProvider client={queryClient}>
+      <SessionProvider bootstrap={async () => true}>
       <ActiveOrgProvider value={activeOrg(capabilities)}>
         <AppShell>
           <div>เนื้อหา</div>
         </AppShell>
       </ActiveOrgProvider>
+      </SessionProvider>
     </QueryClientProvider>,
   );
 }

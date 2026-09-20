@@ -21,8 +21,10 @@ import {
   useState,
   type ReactNode,
 } from "react";
+import { usePathname } from "next/navigation";
 import { silentRefresh } from "../auth-client";
 import { clearAccessToken } from "../token-store";
+import { dropPendingInvite, isInviteJourneyRoute } from "./pending-invite";
 import {
   SESSION_UNKNOWN,
   settledSession,
@@ -62,6 +64,19 @@ export function SessionProvider({
   bootstrap?: () => Promise<boolean>;
 }) {
   const [state, setState] = useState<SessionState>(SESSION_UNKNOWN);
+  const pathname = usePathname();
+
+  /**
+   * B-19 follow-up (security review, severity Low) — the hold must not
+   * outlive the reader wandering off the invite journey. `SessionProvider` is
+   * mounted once at the root (`AppProviders`) and stays mounted across every
+   * client-side navigation, so this effect re-runs on each route change
+   * without needing a router-level hook that does not exist yet elsewhere in
+   * the app.
+   */
+  useEffect(() => {
+    if (!isInviteJourneyRoute(pathname)) dropPendingInvite();
+  }, [pathname]);
 
   useEffect(() => {
     let alive = true;
@@ -91,6 +106,9 @@ export function SessionProvider({
       beginSession: () => setState(settledSession(true)),
       endSession: () => {
         clearAccessToken();
+        // B-19: an invitation held for the NEXT sign-in does not outlive this
+        // one ending — the next person at this browser is not its reader.
+        dropPendingInvite();
         setState(settledSession(false));
       },
     }),

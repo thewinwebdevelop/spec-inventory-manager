@@ -25,7 +25,7 @@ import {
   useInvitationPreview,
   type InvitationPreview,
 } from "../api/use-invitation";
-import { toInviteError, type InviteError } from "../invite-error";
+import { toInviteError, NO_TOKEN_ERROR, type InviteError } from "../invite-error";
 import { inviteScreenTh } from "../i18n";
 import { formatExpiry } from "../../org/expiry";
 import { roleLabel } from "../../org/i18n";
@@ -35,10 +35,15 @@ import { Button } from "../../../components/ui/Button";
 import { SkeletonRow } from "../../../components/ui/Skeleton";
 import { ThrottleBanner } from "../../../components/ui/ThrottleBanner";
 import { useThrottleCountdown } from "../../../hooks/use-throttle-countdown";
-import { ApiRequestError } from "../../../lib/api/error";
+import { holdInviteToken } from "../../../lib/session/pending-invite";
 
 export function InviteScreen() {
   const { token, ready } = useInviteToken();
+  // ★ B-19 — every door from here to an auth screen takes the token along
+  // (§11.1), in memory, so the person lands back on this invitation.
+  const holdForReturn = () => {
+    if (token) holdInviteToken(token);
+  };
   const { state } = useSession();
   const preview = useInvitationPreview();
   const accept = useAcceptInvitation();
@@ -64,14 +69,13 @@ export function InviteScreen() {
   useEffect(() => {
     if (!ready) return;
     if (token === null) {
-      // No token in the link at all. Same message as an unknown one, because
-      // from the reader's side it is the same event: the link they were sent
-      // does not work.
-      setError(
-        toInviteError(
-          new ApiRequestError(404, { error: { code: "INVITATION_INVALID", message: "" } }),
-        ),
-      );
+      // ★ §11.5 — no token in the link AT ALL is a LOCAL screen state
+      // (`NO_TOKEN`), not a server refusal: nothing was asked of the API, so
+      // nothing here should claim the API said no. Reload, a new tab, or the
+      // device dropping this screen's memory mid signup/login all land here
+      // — the same case the B-19 hold (`pending-invite.ts`) does NOT cover,
+      // because by definition the reader did not come back through it.
+      setError(NO_TOKEN_ERROR);
       return;
     }
     load(token);
@@ -99,7 +103,14 @@ export function InviteScreen() {
         {throttle.isActive && <ThrottleBanner remainingSeconds={throttle.remainingSeconds} />}
         <h1 className="m-0 text-heading-md">{error.title}</h1>
         <p className="m-0 text-body-sm text-text-muted">{error.body}</p>
-        <InviteNextStepButton step={error.next} onRetry={() => token && load(token)} />
+        {/* §11.5 — the "why", always SECOND: what to do comes before the
+            reason, styled like the existing `mobileHint` line. */}
+        {error.hint && <p className="m-0 text-body-sm text-text-muted">{error.hint}</p>}
+        <InviteNextStepButton
+          step={error.next}
+          onRetry={() => token && load(token)}
+          onLeaveForAuth={holdForReturn}
+        />
       </main>
     );
   }
@@ -146,10 +157,10 @@ export function InviteScreen() {
         </Button>
       ) : (
         <>
-          <Link href="/login">
+          <Link href="/login" onClick={holdForReturn}>
             <Button>{inviteScreenTh.loginToAccept}</Button>
           </Link>
-          <Link href="/signup">
+          <Link href="/signup" onClick={holdForReturn}>
             <Button variant="secondary">{inviteScreenTh.signup}</Button>
           </Link>
           <p className="m-0 text-body-sm text-text-muted">{inviteScreenTh.sameEmailOnly}</p>
@@ -162,22 +173,26 @@ export function InviteScreen() {
 function InviteNextStepButton({
   step,
   onRetry,
+  onLeaveForAuth,
 }: {
   step: InviteError["next"];
   onRetry: () => void;
+  onLeaveForAuth: () => void;
 }) {
   switch (step.kind) {
     case "retry":
       return <Button onClick={onRetry}>{inviteScreenTh.retry}</Button>;
     case "login":
       return (
-        <Link href="/login">
+        <Link href="/login" onClick={onLeaveForAuth}>
           <Button>{inviteScreenTh.login}</Button>
         </Link>
       );
     case "switch-account":
+      // §11.2: "คงลิงก์เดิมไว้ให้" — the other account is signing in to THIS
+      // invitation, so it comes back here too.
       return (
-        <Link href="/login">
+        <Link href="/login" onClick={onLeaveForAuth}>
           <Button>{inviteScreenTh.switchAccount}</Button>
         </Link>
       );
