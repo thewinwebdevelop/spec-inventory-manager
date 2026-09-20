@@ -68,6 +68,13 @@ export function MembersScreen() {
     | { kind: "leave" }
     | null
   >(null);
+  /**
+   * §7's "เชิญใหม่อีกครั้ง" — the row's email always carries over; the role
+   * carries over too UNLESS the row was an Owner invitation and the presser
+   * is not an Owner, in which case `roleId` stays `undefined` so S7 opens with
+   * no option pre-filled (⛔ never pre-fill a choice that cannot be submitted).
+   */
+  const [reinviting, setReinviting] = useState<{ email: string; roleId?: string } | null>(null);
 
   const members = useMembers(memberStatus);
   const invitations = useInvitations(invitationStatus);
@@ -162,7 +169,7 @@ export function MembersScreen() {
                       : undefined
                   }
                   right={
-                    invitation.status === "pending" && (
+                    invitation.status === "pending" ? (
                       <>
                         <Button
                       variant="secondary"
@@ -195,7 +202,30 @@ export function MembersScreen() {
                       {membersTh.cancelInvitation}
                         </Button>
                       </>
-                    )
+                    ) : invitation.status === "expired" || invitation.status === "cancelled" ? (
+                      // §7's table: ONLY these two statuses — never `accepted`,
+                      // where that person is already in the shop and "invite
+                      // again" would be a lie (the right path there is the
+                      // ordinary "เชิญสมาชิก" button).
+                      <Button
+                        variant="secondary"
+                        size="sm"
+                        onClick={() =>
+                          setReinviting({
+                            email: invitation.email,
+                            // ⛔ Never pre-fill a role the presser cannot submit
+                            // (§7): an Owner-role row stays unselected unless
+                            // the presser is themselves an Owner.
+                            roleId:
+                              ownerRoleIds.has(invitation.roleId) && !isOwner(org.capabilities)
+                                ? undefined
+                                : invitation.roleId,
+                          })
+                        }
+                      >
+                        {membersTh.inviteAgain}
+                      </Button>
+                    ) : undefined
                   }
                 />
               </li>
@@ -359,6 +389,24 @@ export function MembersScreen() {
           onClose={() => setInviting(false)}
           onIssued={(issued) => {
             setInviting(false);
+            setLink(openInviteLink(issued));
+          }}
+        />
+      )}
+
+      {/* §7's "เชิญใหม่อีกครั้ง" — same S7, pre-filled from the expired/
+          cancelled row that opened it. A stale row (already a member, or a
+          fresh invitation already pending) is not checked here: the server
+          refuses with `ALREADY_MEMBER`/`INVITATION_PENDING`, and S7 already
+          carries copy for both (`inviteFormTh.error`). */}
+      {reinviting && (
+        <InviteDialog
+          ownerRoleIds={ownerRoleIds}
+          defaultEmail={reinviting.email}
+          defaultRoleId={reinviting.roleId}
+          onClose={() => setReinviting(null)}
+          onIssued={(issued) => {
+            setReinviting(null);
             setLink(openInviteLink(issued));
           }}
         />

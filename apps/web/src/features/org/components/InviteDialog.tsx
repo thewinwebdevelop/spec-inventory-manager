@@ -37,6 +37,7 @@ import { ErrorBanner } from "../../../components/ui/ErrorBanner";
 export function InviteDialog({
   ownerRoleIds,
   defaultRoleId,
+  defaultEmail,
   onIssued,
   onClose,
 }: {
@@ -44,13 +45,19 @@ export function InviteDialog({
   ownerRoleIds: ReadonlySet<string>;
   /** D-030's "เชิญเจ้าของร้าน" arrives with the Owner role preselected. */
   defaultRoleId?: string;
+  /**
+   * §7's "เชิญใหม่อีกครั้ง" — pre-fills the invitee's email from the expired
+   * or cancelled row that opened this dialog. Still an editable default, not
+   * a fixed value: the field stays a normal `TextField`.
+   */
+  defaultEmail?: string;
   onIssued: (issued: { inviteUrl: string; email: string; expiresAt: string }) => void;
   onClose: () => void;
 }) {
   const org = useActiveOrg();
   const roles = useRoles();
   const create = useCreateInvitation();
-  const [email, setEmail] = useState("");
+  const [email, setEmail] = useState(defaultEmail ?? "");
   const [roleId, setRoleId] = useState(defaultRoleId ?? "");
   const [fieldError, setFieldError] = useState<{ email?: string; role?: string }>({});
   const [banner, setBanner] = useState<string | null>(null);
