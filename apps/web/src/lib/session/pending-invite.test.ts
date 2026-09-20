@@ -54,6 +54,30 @@ describe("★ B-19 — the invitation token held across sign-in", () => {
     expect(destinationAfterLogin(T0 + HOLD_MS)).toBe("/select-org");
   });
 
+  it("★ N-1: an abandoned hold does not route the NEXT person at a shared browser to it", () => {
+    // The scenario `pending-invite.ts` accepts in a comment ("they should not
+    // be shown it") but that nothing was named after — qa, 2026-09-20.
+    //
+    // A opens an invitation on the shop's counter machine, taps
+    // "เข้าสู่ระบบเพื่อรับคำเชิญ", and walks off without signing in. The hold
+    // survives: `/login` is ON the journey, so the route guard leaves it, and
+    // no session ever ends, so `endSession` never fires. B sits down and signs
+    // in with their OWN account. The only thing standing between B and A's
+    // invitation — shop name and masked address — is this clock.
+    holdInviteToken("a-tok", T0);
+    expect(destinationAfterLogin(T0 + HOLD_MS - 1)).toBe("/invite");
+    expect(destinationAfterLogin(T0 + HOLD_MS)).toBe("/select-org");
+  });
+
+  it("★ N-1: the window itself is the control — widening it must be a deliberate act", () => {
+    // Without this, `HOLD_MS` can be raised to a day for convenience and every
+    // test above still passes, because they all measure against the constant
+    // rather than against a bound. The number is a security parameter: it is
+    // the entire mitigation for the case above, on a machine OmniStock's own
+    // persona work says is shared (security-review-build-B.md).
+    expect(HOLD_MS).toBeLessThanOrEqual(30 * 60_000);
+  });
+
   it("asking where to go does not consume the token — `/invite` still needs it", () => {
     holdInviteToken("tok", T0);
     destinationAfterLogin(T0 + 1);

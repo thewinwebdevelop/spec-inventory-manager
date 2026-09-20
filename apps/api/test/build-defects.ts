@@ -459,4 +459,34 @@ export const BUILD_DEFECTS: readonly BuildDefect[] = Object.freeze([
       },
     ],
   },
+  {
+    finding: "N-1",
+    title:
+      "an invitation held for a sign-in nobody finished can route the NEXT person at a shared browser to it",
+    tier: "full",
+    foundBy: "qa, reading the B-19 code while re-issuing the Gate E verdict (2026-09-20)",
+    owner: "frontend + security-reviewer",
+    partial:
+      "OPEN, and deliberately recorded rather than fixed in the closing round. The window is " +
+      "`HOLD_MS` (30 min): A opens an invitation on a shared machine, taps sign-in, walks away " +
+      "without signing in — `/login` is ON the invite journey so the route guard keeps the hold, " +
+      "and no session ends so `endSession` never fires. B signs in with their own account and " +
+      "`destinationAfterLogin()` sends them to A's invitation: shop name plus masked address. " +
+      "Blast radius is small — B cannot accept (the server refuses on email mismatch) and the " +
+      "preview is public-by-token by design (api-spec §3.14) — which is why it is not blocking. " +
+      "What was actually wrong is that the trade-off lived ONLY in a code comment: no row, no " +
+      "test named after the scenario, and nothing that turns red if somebody widens the window " +
+      "for convenience. Both are now fixed; the behaviour itself still needs a decision (drop " +
+      "the hold when a session BEGINS for an account that is not the invited address? that " +
+      "needs the address, which the client deliberately never has in full).",
+    pins: [
+      {
+        file: "apps/web/src/lib/session/pending-invite.test.ts",
+        must: [
+          "an abandoned hold does not route the NEXT person at a shared browser to it",
+          "widening it must be a deliberate act",
+        ],
+      },
+    ],
+  },
 ]);
