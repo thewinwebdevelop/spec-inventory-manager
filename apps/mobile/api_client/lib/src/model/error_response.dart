@@ -9,7 +9,7 @@ import 'package:built_value/serializer.dart';
 
 part 'error_response.g.dart';
 
-/// The project-standard error envelope. `code` is a machine-readable uppercase enum; `message` is user-facing Thai copy. Every error response (401/403/404/409/415/422/429) references this schema. 
+/// The project-standard error envelope, produced by `DomainExceptionFilter` for every failure (F-001 §3.5, F-002 api-spec §1/§4). `code` is a machine-readable UPPER_SNAKE value the client switches on; `message` is user-facing Thai copy the client MUST NOT parse. 
 ///
 /// Properties:
 /// * [error] 

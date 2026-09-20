@@ -11,7 +11,13 @@
 
 generator client {
   provider = "prisma-client-js"
-  output   = "../src/generated/client"
+  // ★ B-10 — OUTSIDE `src/`, deliberately. `src/` and `dist/` are siblings, so
+  // `../generated/client` resolves to the same directory from a TypeScript
+  // source file and from its compiled output. That is what lets this package
+  // ship `dist/` (so plain `node` can load it) without copying the generated
+  // client into `dist/` as well — and a copy is the thing to avoid: two
+  // clients, one of them silently older than the schema.
+  output   = "../generated/client"
 }
 
 datasource db {
@@ -27,10 +33,14 @@ enum MembershipStatus {
   revoked
 }
 
+// F-002 (T-002-01) — `cancelled` added; `expired` is RESERVED and has NO write
+// path: "expired" is DERIVED at read time (pending && expiresAt <= now) by
+// core-domain's resolveInvitationStatus (data-model §3.2). Never write it.
 enum InvitationStatus {
   pending
   accepted
   expired
+  cancelled
 }
 
 enum ProductStatus {
@@ -100,6 +110,11 @@ model Organization {
   vatRegistered Boolean?
   taxBranchCode String?
 
+  // F-002 — who created this tenant (back-office/support must be able to answer
+  // it). Nullable + NO FK to User on purpose: User is org-agnostic and may be
+  // deleted/anonymized later (PDPA) — same pattern as StockMovement.createdBy.
+  createdByUserId String?
+
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
@@ -117,25 +132,49 @@ model Organization {
   channelListings  ChannelListing[]
   entitlement      OrgEntitlement?
   usageEvents      UsageEvent[]
+
+  // F-002 — back-office/support TIN lookup. Deliberately NOT @@unique: a
+  // system-wide unique TIN is a cross-tenant oracle (409 tells you "that
+  // company is our customer") and blocks legitimate multi-license entities.
+  // Reasoning in full: F-002 data-model §3.4.
+  @@index([taxId])
 }
 
+// Membership — F-002 deltas (data-model §1/§2). Revoking a member NEVER deletes
+// the row (AC US-5: revoked members must still resolve in old history).
 model Membership {
   id             String           @id @default(cuid())
   organizationId String
   userId         String
   roleId         String
   status         MembershipStatus @default(invited)
-  createdAt      DateTime         @default(now())
-  updatedAt      DateTime         @updatedAt
+
+  // F-002 NEW — lifecycle evidence. String user ids, NO FK (see Organization).
+  // `revokedAt` is not just an audit trail: it is a SECURITY INPUT. An
+  // invitation issued BEFORE revokedAt cannot be accepted — otherwise a removed
+  // member could rejoin with a link they kept (INVITATION_SUPERSEDED — I-1).
+  activatedAt     DateTime? // became active (org created / invitation accepted)
+  revokedAt       DateTime? // when the member was removed (row is never deleted)
+  revokedByUserId String? // who removed them (self-revoke allowed — D-029)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
 
   organization Organization @relation(fields: [organizationId], references: [id])
   user         User         @relation(fields: [userId], references: [id])
-  role         Role         @relation(fields: [roleId], references: [id])
+  // ★ B-1 — COMPOSITE on purpose. `withOrgScope` pins the `organizationId`
+  // COLUMN but never inspects `data.roleId`, so a scoped client could write
+  // another org's role here — and roles carry `capabilities`, so the role
+  // written could be one holding `full_access`. Referencing the PAIR makes
+  // Postgres refuse it, in both the scalar and the nested-`connect` form.
+  role         Role         @relation(fields: [organizationId, roleId], references: [organizationId, id])
 
   @@unique([organizationId, userId])
   @@index([organizationId])
   @@index([userId])
   @@index([roleId])
+  @@index([userId, status]) // NEW — GET /me/organizations + org-cap count (§3.5)
+  @@index([organizationId, status, createdAt]) // NEW — member list + count active owners (§3.5)
 }
 
 // Role — HAS organizationId (per-org editable, D-004)
@@ -145,14 +184,33 @@ model Role {
   name           String
   isSystem       Boolean  @default(false)
   capabilities   String[]
-  createdAt      DateTime @default(now())
-  updatedAt      DateTime @updatedAt
+
+  // F-002 (amend #3 · ux Q4) — STABLE slug used ONLY to translate the role name
+  // on screen ("owner" → "เจ้าของร้าน"). System roles created with the org:
+  // "owner" | "admin" | "staff" (part of the API contract — changing a value is
+  // a breaking change). Custom roles (F-003) = null.
+  // ⛔ NEVER use `key` to decide permissions. "is Owner" == capabilities
+  //    contains `full_access` (data-model §5.2). A `key === "owner"` check
+  //    re-opens finding C-1 the moment F-003 ships custom roles.
+  key String?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
 
   organization Organization @relation(fields: [organizationId], references: [id])
   memberships  Membership[]
   invitations  Invitation[]
 
   @@unique([organizationId, name])
+  // NEW — one `key` per org. Postgres treats each NULL as distinct, so any
+  // number of custom (key = null) roles coexist under this unique index.
+  @@unique([organizationId, key])
+  // ★ B-1 — looks redundant next to `@id`, and is not: it is the TARGET a
+  // composite foreign key needs. `Membership`/`Invitation` reference
+  // `(organizationId, id)` so Postgres itself refuses a role belonging to
+  // another org. Without it the pair is unreferenceable and the rule has to
+  // live in application code, where it was one `if` away from being forgotten.
+  @@unique([organizationId, id])
   @@index([organizationId])
 }
 
@@ -182,21 +240,58 @@ model RefreshToken {
 }
 
 // Invitation — HAS organizationId (belongs to an org)
+// F-002 deltas (data-model §1/§2): raw `token` REPLACED by `tokenHash`
+// (hash-at-rest, D-018) + full lifecycle columns.
 model Invitation {
   id             String           @id @default(cuid())
   organizationId String
-  email          String
+  email          String // normalized (lowercase + trim) ALWAYS
   roleId         String
   status         InvitationStatus @default(pending)
-  token          String           @unique
-  expiresAt      DateTime
-  createdAt      DateTime         @default(now())
+
+  // CHANGED (D-018) — HMAC-SHA-256(INVITATION_TOKEN_SECRET, token). The raw
+  // token exists only in the emailed link; it is NEVER stored. Lookup is by
+  // hash. Consequence (D-018 / §316): "re-send" cannot resend the old link.
+  tokenHash String @unique
+
+  // NEW — when the current token was issued/rotated. Compared against
+  // Membership.revokedAt by canAcceptInvitation (I-1). Rotating a link resets
+  // the TTL clock from the reissue time (D-027).
+  tokenIssuedAt DateTime @default(now())
+
+  // now + invitationTtlHours(role): 24h if the role has full_access |
+  // manage_members, else 168h (D-028).
+  expiresAt DateTime
+
+  invitedByUserId String? // NEW — who invited (string, no FK)
+
+  acceptedAt            DateTime? // NEW
+  acceptedByUserId      String? // NEW — user who accepted (string, no FK)
+  // NEW (D-028/I-7) — SNAPSHOT of User.createdAt at accept time, not a join:
+  // answers "was this account created after the invite was issued?" even after
+  // the user is deleted/anonymized (PDPA). Flag compares against `createdAt`,
+  // NOT `tokenIssuedAt` (which rotation overwrites) — NEW-9.
+  acceptedUserCreatedAt DateTime?
+
+  cancelledAt DateTime? // NEW
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt // NEW
 
   organization Organization @relation(fields: [organizationId], references: [id])
-  role         Role         @relation(fields: [roleId], references: [id])
+  // ★ B-1 — same composite FK as `Membership`, for the same reason: an
+  // invitation names the role the invitee will get, so a cross-org role here
+  // grants that org's capabilities on accept.
+  role         Role         @relation(fields: [organizationId, roleId], references: [organizationId, id])
+  // ALSO (raw SQL in migration `f002_expand` — Prisma's DSL has no partial
+  // unique index): UNIQUE ("organizationId", email) WHERE status = 'pending'
+  //   → "one pending invitation per (org, email)" enforced by the DB, not by an
+  //     `if` that loses to a concurrent request.
 
   @@index([organizationId])
   @@index([email])
+  @@index([organizationId, status, createdAt]) // NEW — invitation list + pending cap (§3.5)
+  @@index([organizationId, email, status]) // NEW — cancel pending invites on revoke (I-1)
 }
 
 // ─── Product / Inventory (5-layer) ───────────────────────────────────────────
@@ -290,6 +385,11 @@ model Warehouse {
   organization   Organization    @relation(fields: [organizationId], references: [id])
   stockLevels    StockLevel[]
   stockMovements StockMovement[]
+  // F-002 — ALSO (raw SQL in migration `f002_expand`, no Prisma DSL support):
+  // UNIQUE ("organizationId") WHERE "isDefault"
+  //   → invariant "1 org = exactly 1 default warehouse" enforced at DB level.
+  // NOTE: this table's columns are UNCHANGED by F-002 (index only) — no
+  // stock/money column is touched anywhere in this migration set.
 
   @@index([organizationId])
 }
@@ -333,12 +433,12 @@ model StockMovement {
   organization  Organization  @relation(fields: [organizationId], references: [id])
   inventoryItem InventoryItem @relation(fields: [inventoryItemId], references: [id])
   warehouse     Warehouse     @relation(fields: [warehouseId], references: [id])
+  // NO updatedAt — immutable. DB trigger (T-000-05) rejects UPDATE/DELETE.
 
   @@index([organizationId])
   @@index([inventoryItemId])
   @@index([warehouseId])
   @@index([refType, refId])
-  // NO updatedAt — immutable. DB trigger (T-000-05) rejects UPDATE/DELETE.
 }
 
 // ─── Channel (marketplace) ───────────────────────────────────────────────────
@@ -443,9 +543,9 @@ model UsageEvent {
   createdBy      String? // FK to User deferred (F-001)
 
   organization Organization @relation(fields: [organizationId], references: [id])
+  // NO updatedAt — immutable. DB trigger (T-000-05) rejects UPDATE/DELETE (AC8).
 
   @@index([organizationId])
   @@index([meter])
   @@index([occurredAt])
-  // NO updatedAt — immutable. DB trigger (T-000-05) rejects UPDATE/DELETE (AC8).
 }

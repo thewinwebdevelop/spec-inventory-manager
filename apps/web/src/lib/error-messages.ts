@@ -5,7 +5,7 @@
  * (unexpected drift from backend-api), we fall back to the generic message —
  * never render the raw machine code to the user.
  */
-import { authTh } from "../i18n/auth";
+import { authTh } from "../features/auth/i18n";
 
 export function signupErrorMessage(code: string | undefined): string {
   switch (code) {

@@ -1,0 +1,92 @@
+post:
+  operationId: previewInvitation
+  summary: Look at an invitation before signing in or signing up (public)
+  description: >
+    F-002 US-4 (api-spec §3.14). PUBLIC — the invite page has to render before
+    the person decides whether to sign in or sign up, so there is nobody to
+    authenticate. The quota is therefore the ONLY bound on this endpoint:
+    30/hour per IP (IPv6 collapsed to /64, so one subscriber cannot mint
+    unlimited buckets).
+
+
+    ⛔ THE TOKEN IS IN THE BODY, NOT THE QUERY STRING (I-6). It is the single
+    secret standing between a stranger and membership of a shop; in a URL it
+    would be written to access logs, to every proxy in front of us and to the
+    `Referer` of anything the invite page loads. A free side effect: a POST is
+    not cached by anything.
+
+
+    Returns no `organizationId`, no full email address and no member list.
+
+
+    `Cache-Control: no-store` + `Referrer-Policy: no-referrer`.
+
+
+    @frontend: read the token out of the URL, `history.replaceState` it away
+    immediately, and keep it in memory (never localStorage) for the whole
+    sign-up → sign-in → accept flow.
+  tags:
+    - invitations
+  security: []
+  requestBody:
+    required: true
+    content:
+      application/json:
+        schema:
+          $ref: "../components/orgs.yaml#/RedeemInvitationRequest"
+  responses:
+    "200":
+      description: The invitation, safe for an anonymous viewer.
+      headers:
+        Cache-Control:
+          $ref: "../components/headers.yaml#/CacheControlNoStore"
+        Pragma:
+          $ref: "../components/headers.yaml#/PragmaNoCache"
+        Referrer-Policy:
+          $ref: "../components/headers.yaml#/ReferrerPolicyNoReferrer"
+      content:
+        application/json:
+          schema:
+            $ref: "../components/orgs.yaml#/InvitationPreview"
+    "404":
+      description: >
+        `INVITATION_INVALID` — one answer, one body, for an unknown token, a
+        rotated one and a token that never existed. Anything more would turn
+        this public endpoint into an oracle that says "this secret used to be
+        real".
+      content:
+        application/json:
+          schema:
+            $ref: "../components/common.yaml#/ErrorResponse"
+    "409":
+      description: >
+        `INVITATION_EXPIRED` · `INVITATION_CANCELLED` ·
+        `INVITATION_ALREADY_ACCEPTED`. These ARE distinguished — the caller
+        already holds a token that matched a stored hash, so telling them what
+        happened to it leaks nothing and each answer sends them somewhere
+        different (AC US-4).
+      content:
+        application/json:
+          schema:
+            $ref: "../components/common.yaml#/ErrorResponse"
+    "415":
+      description: Non-JSON Content-Type (`UNSUPPORTED_MEDIA_TYPE`)
+      content:
+        application/json:
+          schema:
+            $ref: "../components/common.yaml#/ErrorResponse"
+    "422":
+      description: "`VALIDATION_FAILED` — no token in the body (`fieldErrors.token`)."
+      content:
+        application/json:
+          schema:
+            $ref: "../components/common.yaml#/ErrorResponse"
+    "429":
+      description: "`RATE_LIMITED` — 30/hour per IP (IPv6 /64)."
+      headers:
+        Retry-After:
+          $ref: "../components/headers.yaml#/RetryAfter"
+      content:
+        application/json:
+          schema:
+            $ref: "../components/common.yaml#/ErrorResponse"

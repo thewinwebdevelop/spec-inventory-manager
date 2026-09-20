@@ -1,0 +1,56 @@
+parameters:
+  - $ref: "../components/parameters.yaml#/OrgIdParam"
+  - $ref: "../components/parameters.yaml#/OrgIdHeader"
+
+get:
+  operationId: listOrgRoles
+  summary: List this shop's roles (the invite dropdown)
+  description: >
+    F-002 (api-spec §3.6). Any ACTIVE member may read it: the response carries
+    no personal data and nothing about anybody else — three role names the
+    caller can already see on their own membership. Requiring `manage_members`
+    would mean a Staff member could not be shown the name of their own role.
+
+
+    It exists because AC US-3 makes choosing a role MANDATORY when inviting
+    somebody: without this endpoint no client can populate that dropdown, so the
+    acceptance criterion could not be met at all.
+
+
+    Read-only in F-002. F-003 adds create/update/delete.
+  tags:
+    - organizations
+  security:
+    - bearerAuth: []
+  responses:
+    "200":
+      description: Every role of this shop, oldest first.
+      headers:
+        Cache-Control:
+          $ref: "../components/headers.yaml#/CacheControlNoStore"
+      content:
+        application/json:
+          schema:
+            $ref: "../components/orgs.yaml#/RoleListPage"
+    "401":
+      description: Missing/invalid access token (`UNAUTHENTICATED`)
+      content:
+        application/json:
+          schema:
+            $ref: "../components/common.yaml#/ErrorResponse"
+    "403":
+      description: >
+        `ORG_ACCESS_DENIED` — not an active member of this shop (including the
+        shop not existing: the two are indistinguishable on purpose, I-5).
+      content:
+        application/json:
+          schema:
+            $ref: "../components/common.yaml#/ErrorResponse"
+    "422":
+      description: >
+        `ORG_MISMATCH` — `X-Organization-Id` disagrees with the path (a client
+        bug; the server never picks a side).
+      content:
+        application/json:
+          schema:
+            $ref: "../components/common.yaml#/ErrorResponse"

@@ -63,6 +63,45 @@ describe("ThrottleService IP window", () => {
     for (let i = 0; i < IP_WINDOW_MAX + 1; i++) await svc.checkIp("1.1.1.1");
     expect(await svc.checkIp("2.2.2.2")).toBe(0);
   });
+
+  // ── N-3 (T-002-11): the bucket is the client-ip helper's key ───────────────
+  it("IPv4: the redis key is unchanged from F-001 (throttle:ip:<ip> verbatim)", async () => {
+    const { svc, redis } = make();
+    await svc.checkIp("1.2.3.4");
+    expect([...redis.store.keys()]).toEqual(["throttle:ip:1.2.3.4"]);
+  });
+
+  it("IPv6: two addresses in the SAME /64 share ONE window (rotation cannot bypass)", async () => {
+    const { svc, redis } = make();
+    // Spend the whole quota by rotating the low 64 bits — same subscriber.
+    for (let i = 0; i < IP_WINDOW_MAX; i++) {
+      expect(await svc.checkIp(`2001:db8:85a3:1::${i + 1}`)).toBe(0);
+    }
+    expect(await svc.checkIp("2001:db8:85a3:1:ffff:ffff:ffff:ffff")).toBeGreaterThan(0);
+    // …and all of it lived in a single /64 bucket.
+    expect([...redis.store.keys()]).toEqual(["throttle:ip:2001:db8:85a3:1::/64"]);
+  });
+
+  it("IPv6: a different /64 is a different bucket (not one global v6 bucket)", async () => {
+    const { svc } = make();
+    for (let i = 0; i < IP_WINDOW_MAX + 1; i++) await svc.checkIp("2001:db8:85a3:1::1");
+    expect(await svc.checkIp("2001:db8:85a3:2::1")).toBe(0);
+  });
+
+  it("IPv4-mapped IPv6 shares the plain-IPv4 bucket (one client, one quota)", async () => {
+    const { svc, redis } = make();
+    await svc.checkIp("::ffff:203.0.113.5");
+    await svc.checkIp("203.0.113.5");
+    expect([...redis.store.keys()]).toEqual(["throttle:ip:203.0.113.5"]);
+    expect(redis.store.get("throttle:ip:203.0.113.5")).toBe(2);
+  });
+
+  it("unparseable IPs fail CLOSED into one shared bucket (garbage cannot mint buckets)", async () => {
+    const { svc, redis } = make();
+    for (const bad of ["unknown", "not-an-ip", "999.1.1.1", ""]) await svc.checkIp(bad);
+    expect([...redis.store.keys()]).toEqual(["throttle:ip:unknown"]);
+    expect(redis.store.get("throttle:ip:unknown")).toBe(4);
+  });
 });
 
 describe("ThrottleService account backoff", () => {
@@ -108,6 +147,18 @@ describe("ThrottleService fail-open (M-7)", () => {
     expect(allowed).toBeGreaterThan(0); // fail-open: some allowed
     expect(blocked).toBeGreaterThan(0); // degraded limiter eventually bites
     expect(events).toContain("auth.throttle.fail_open");
+  });
+
+  it("the DEGRADED in-process limiter is also keyed on the /64 (no v6 bypass while Redis is down)", async () => {
+    const { svc, redis } = make();
+    redis.down = true;
+    let blocked = 0;
+    // Rotate the low 64 bits on every attempt: if the degraded bucket keyed on
+    // the full address, every attempt would be a fresh bucket → never blocked.
+    for (let i = 0; i < 40; i++) {
+      if ((await svc.checkIp(`2001:db8:85a3:7::${i + 1}`)) > 0) blocked++;
+    }
+    expect(blocked).toBeGreaterThan(0);
   });
 
   it("account backoff fails open (returns 0) when Redis is down", async () => {

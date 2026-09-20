@@ -1,0 +1,179 @@
+parameters:
+  - $ref: "../components/parameters.yaml#/OrgIdParam"
+  - $ref: "../components/parameters.yaml#/OrgIdHeader"
+
+get:
+  operationId: listInvitations
+  summary: List the shop's invitations
+  description: >
+    F-002 api-spec §3.10. Requires `manage_members` — every row carries somebody
+    else's email address (PDPA, D-028/I-8).
+
+
+    Never returns a token or a link: only an HMAC of the token is stored
+    (D-018), so there is nothing to return. Use
+    `POST /orgs/{orgId}/invitations/{invitationId}/link` to mint a new one.
+
+
+    The members screen is ONE screen with TWO sections, fetched from this
+    endpoint and `GET /orgs/{orgId}/members` separately and NOT merged (ux Q1):
+    the two sources have different states and different actions (reissue/cancel
+    vs change-role/remove), each with its own cursor and its own error states.
+
+
+    ⚠️ `?withTotal=true` is NOT supported here — see the T-002-21 report.
+
+
+    `Cache-Control: no-store` + `Referrer-Policy: no-referrer`.
+  tags:
+    - invitations
+  security:
+    - bearerAuth: []
+  parameters:
+    - name: status
+      in: query
+      required: false
+      description: Default `pending` — the actionable view. Any other value → `422`.
+      schema:
+        type: string
+        enum:
+          - pending
+          - accepted
+          - cancelled
+          - expired
+          - all
+        default: pending
+    - $ref: "../components/parameters.yaml#/CursorParam"
+    - $ref: "../components/parameters.yaml#/LimitParam"
+  responses:
+    "200":
+      description: One page, sorted `createdAt desc, id desc`.
+      headers:
+        Cache-Control:
+          $ref: "../components/headers.yaml#/CacheControlNoStore"
+        Pragma:
+          $ref: "../components/headers.yaml#/PragmaNoCache"
+      content:
+        application/json:
+          schema:
+            $ref: "../components/orgs.yaml#/InvitationListPage"
+    "401":
+      description: Missing/invalid access token (`UNAUTHENTICATED`)
+      content:
+        application/json:
+          schema:
+            $ref: "../components/common.yaml#/ErrorResponse"
+    "403":
+      description: "`FORBIDDEN` (no `manage_members`) or `ORG_ACCESS_DENIED`"
+      content:
+        application/json:
+          schema:
+            $ref: "../components/common.yaml#/ErrorResponse"
+    "422":
+      description: >
+        `VALIDATION_FAILED` (`status` / `cursor` / `limit`) or
+        `ORG_CONTEXT_REQUIRED` / `ORG_MISMATCH`.
+      content:
+        application/json:
+          schema:
+            $ref: "../components/common.yaml#/ErrorResponse"
+
+post:
+  operationId: createInvitation
+  summary: Invite somebody to the shop (returns the link once)
+  description: >
+    F-002 US-3 (api-spec §3.11, D-012). Requires `manage_members`, plus
+    `full_access` when the invited role itself holds `full_access` (D-028/C-1).
+
+
+    ⚠️ `token` and `inviteUrl` are shown THIS ONCE. Only an HMAC is stored
+    (D-018), so there is no "resend the same link" — and no email is sent
+    (D-012): the UI must offer a copy button and the user forwards it.
+
+
+    LIFETIME DEPENDS ON THE ROLE: 24 hours when the invited role holds
+    `full_access` or `manage_members`, 7 days otherwise (D-028/I-7).
+    ⛔ The UI must render `expiresAt` and never hard-code "7 days".
+
+
+    Inviting an address that already has a live invitation is
+    `409 INVITATION_PENDING` WITH `details.invitationId` (+ `expiresAt`,
+    `roleId`, `roleName`), so the UI can immediately offer "issue a new link" or
+    "cancel" instead of leaving the user in a dead end (D-027).
+
+
+    `Cache-Control: no-store` + `Referrer-Policy: no-referrer` — the body
+    carries a live credential.
+  tags:
+    - invitations
+  security:
+    - bearerAuth: []
+  requestBody:
+    required: true
+    content:
+      application/json:
+        schema:
+          $ref: "../components/orgs.yaml#/CreateInvitationRequest"
+  responses:
+    "201":
+      description: Invitation created — token and link included, once.
+      headers:
+        Cache-Control:
+          $ref: "../components/headers.yaml#/CacheControlNoStore"
+        Pragma:
+          $ref: "../components/headers.yaml#/PragmaNoCache"
+        Referrer-Policy:
+          $ref: "../components/headers.yaml#/ReferrerPolicyNoReferrer"
+      content:
+        application/json:
+          schema:
+            $ref: "../components/orgs.yaml#/IssuedInvitation"
+    "401":
+      description: Missing/invalid access token (`UNAUTHENTICATED`)
+      content:
+        application/json:
+          schema:
+            $ref: "../components/common.yaml#/ErrorResponse"
+    "403":
+      description: >
+        `FORBIDDEN` — missing `manage_members`, or inviting an Owner-capable
+        role without `full_access` — or `ORG_ACCESS_DENIED`.
+      content:
+        application/json:
+          schema:
+            $ref: "../components/common.yaml#/ErrorResponse"
+    "409":
+      description: >
+        `ALREADY_MEMBER` — that person is already an active member ·
+        `INVITATION_PENDING` (+`details.invitationId`) — a live invitation for
+        that address exists · `INVITATION_LIMIT_REACHED` — too many unexpired
+        pending invitations · `CONFLICT` + `details.reason = "busy"` (lock
+        contention, retry).
+      content:
+        application/json:
+          schema:
+            $ref: "../components/common.yaml#/ErrorResponse"
+    "415":
+      description: Non-JSON Content-Type (`UNSUPPORTED_MEDIA_TYPE`)
+      content:
+        application/json:
+          schema:
+            $ref: "../components/common.yaml#/ErrorResponse"
+    "422":
+      description: >
+        `VALIDATION_FAILED` (+`fieldErrors.email` / `fieldErrors.roleId`) ·
+        `ROLE_INVALID` — the role is not one of THIS shop's ·
+        `ORG_CONTEXT_REQUIRED` / `ORG_MISMATCH`.
+      content:
+        application/json:
+          schema:
+            $ref: "../components/common.yaml#/ErrorResponse"
+    "429":
+      description: "`RATE_LIMITED` — 30 invitations per hour per shop."
+      headers:
+        Retry-After:
+          $ref: "../components/headers.yaml#/RetryAfter"
+      content:
+        application/json:
+          schema:
+            $ref: "../components/common.yaml#/ErrorResponse"

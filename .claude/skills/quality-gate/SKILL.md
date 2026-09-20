@@ -61,6 +61,23 @@ but **state why** you skipped — never silently.
   its own stock; "edit stock" framed as recording a movement).
 - [ ] No money math on float in the client — displays server-computed values.
 - [ ] If both platforms: web and Flutter use shared design tokens (no visual drift).
+- [ ] **REACHABLE — every screen the feature claims to ship has a path to it from
+  the app's entry point, and a test walks that path.** Not "the screen renders":
+  a person signing in can arrive. Evidence: the route/nav change plus the test
+  that opens it, OR a one-line statement that the screen is deliberately
+  unreachable in this phase and what makes it reachable later.
+  - Cheap check first: `grep` the screen/route symbol across the production tree
+    — **zero references outside its own file = nobody can open it.**
+  - ⛔ A test that CONSTRUCTS the screen proves it works when somebody shows it;
+    it can never prove somebody can get there. Both of F-002's misses were this
+    exact shape, on both platforms: `/` sat on a placeholder because no test
+    opened it (B-14), and all four mobile screens had zero callers while the
+    changelog said they shipped (B-18) — with a green emulator lane driving two
+    of them every run.
+  - ⛔ Watch the direction machines are blind in: **a control that does not
+    exist renders nothing, asserts nothing and throws nothing** (B-16 — the app
+    had no sign-out at all). Nothing that runs the code can see an absence;
+    only comparing against the spec can.
 
 ## Gate E — Quality
 - [ ] **Money/stock code has passing unit tests before merge** (golden rule 4).

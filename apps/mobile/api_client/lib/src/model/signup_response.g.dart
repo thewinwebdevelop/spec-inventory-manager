@@ -6,60 +6,13 @@ part of 'signup_response.dart';
 // BuiltValueGenerator
 // **************************************************************************
 
-const SignupResponseVerifiedEnum _$signupResponseVerifiedEnum_false_ =
-    const SignupResponseVerifiedEnum._('false_');
-
-SignupResponseVerifiedEnum _$signupResponseVerifiedEnumValueOf(String name) {
-  switch (name) {
-    case 'false_':
-      return _$signupResponseVerifiedEnum_false_;
-    default:
-      throw ArgumentError(name);
-  }
-}
-
-final BuiltSet<SignupResponseVerifiedEnum> _$signupResponseVerifiedEnumValues =
-    BuiltSet<SignupResponseVerifiedEnum>(const <SignupResponseVerifiedEnum>[
-  _$signupResponseVerifiedEnum_false_,
-]);
-
-Serializer<SignupResponseVerifiedEnum> _$signupResponseVerifiedEnumSerializer =
-    _$SignupResponseVerifiedEnumSerializer();
-
-class _$SignupResponseVerifiedEnumSerializer
-    implements PrimitiveSerializer<SignupResponseVerifiedEnum> {
-  static const Map<String, Object> _toWire = const <String, Object>{
-    'false_': 'false',
-  };
-  static const Map<Object, String> _fromWire = const <Object, String>{
-    'false': 'false_',
-  };
-
-  @override
-  final Iterable<Type> types = const <Type>[SignupResponseVerifiedEnum];
-  @override
-  final String wireName = 'SignupResponseVerifiedEnum';
-
-  @override
-  Object serialize(Serializers serializers, SignupResponseVerifiedEnum object,
-          {FullType specifiedType = FullType.unspecified}) =>
-      _toWire[object.name] ?? object.name;
-
-  @override
-  SignupResponseVerifiedEnum deserialize(
-          Serializers serializers, Object serialized,
-          {FullType specifiedType = FullType.unspecified}) =>
-      SignupResponseVerifiedEnum.valueOf(
-          _fromWire[serialized] ?? (serialized is String ? serialized : ''));
-}
-
 class _$SignupResponse extends SignupResponse {
   @override
   final String userId;
   @override
   final String email;
   @override
-  final SignupResponseVerifiedEnum verified;
+  final bool verified;
 
   factory _$SignupResponse([void Function(SignupResponseBuilder)? updates]) =>
       (SignupResponseBuilder()..update(updates))._build();
@@ -115,10 +68,9 @@ class SignupResponseBuilder
   String? get email => _$this._email;
   set email(String? email) => _$this._email = email;
 
-  SignupResponseVerifiedEnum? _verified;
-  SignupResponseVerifiedEnum? get verified => _$this._verified;
-  set verified(SignupResponseVerifiedEnum? verified) =>
-      _$this._verified = verified;
+  bool? _verified;
+  bool? get verified => _$this._verified;
+  set verified(bool? verified) => _$this._verified = verified;
 
   SignupResponseBuilder() {
     SignupResponse._defaults(this);

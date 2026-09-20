@@ -1,0 +1,112 @@
+post:
+  operationId: acceptInvitation
+  summary: Accept an invitation and join the shop
+  description: >
+    F-002 US-4 (api-spec §3.15). USER-SCOPED: authenticated, but about the USER,
+    not about an org. The organization comes from the invitation ROW and from
+    nowhere else — `X-Organization-Id` is ignored entirely (I-3), which is a
+    structural property of this route rather than a check somebody must remember.
+
+
+    The signed-in account's normalized email must match the invited address,
+    otherwise `403 INVITATION_EMAIL_MISMATCH` with `details.emailMasked` so the
+    UI can say which account to use. ⚠️ Phase 0 cannot verify email addresses
+    (F-081), so this is defence in depth, NOT a control: whoever holds the link
+    can redeem it.
+
+
+    Somebody previously REMOVED from the shop comes back only if the invitation
+    was issued AFTER the removal; otherwise `409 INVITATION_SUPERSEDED`.
+
+
+    Already an active member → `409 ALREADY_MEMBER` and THE EXISTING ROLE IS NOT
+    TOUCHED (the invitation is marked cancelled so it does not linger). An
+    earlier draft upserted the role here, which opened "accepting an invitation
+    leaves the shop with zero Owners".
+
+
+    Decision order, pinned by unit test: unknown token → expired →
+    cancelled/accepted → email mismatch → role unavailable → already a member →
+    superseded → success. Every one of these is re-checked INSIDE the
+    transaction that holds the shop's row lock, so `accept` cannot slip between
+    a `revoke`/`cancel`/`reissue` and win.
+
+
+    `Cache-Control: no-store` + `Referrer-Policy: no-referrer`.
+  tags:
+    - invitations
+  security:
+    - bearerAuth: []
+  requestBody:
+    required: true
+    content:
+      application/json:
+        schema:
+          $ref: "../components/orgs.yaml#/RedeemInvitationRequest"
+  responses:
+    "200":
+      description: Joined — enough to enter the shop.
+      headers:
+        Cache-Control:
+          $ref: "../components/headers.yaml#/CacheControlNoStore"
+        Pragma:
+          $ref: "../components/headers.yaml#/PragmaNoCache"
+        Referrer-Policy:
+          $ref: "../components/headers.yaml#/ReferrerPolicyNoReferrer"
+      content:
+        application/json:
+          schema:
+            $ref: "../components/orgs.yaml#/InvitationAcceptResult"
+    "401":
+      description: Missing/invalid access token (`UNAUTHENTICATED`)
+      content:
+        application/json:
+          schema:
+            $ref: "../components/common.yaml#/ErrorResponse"
+    "403":
+      description: >
+        `INVITATION_EMAIL_MISMATCH` (+`details.emailMasked`) — this invitation
+        was issued to a different address.
+      content:
+        application/json:
+          schema:
+            $ref: "../components/common.yaml#/ErrorResponse"
+    "404":
+      description: "`INVITATION_INVALID` — unknown token (one answer for every reason)."
+      content:
+        application/json:
+          schema:
+            $ref: "../components/common.yaml#/ErrorResponse"
+    "409":
+      description: >
+        `INVITATION_EXPIRED` · `INVITATION_CANCELLED` ·
+        `INVITATION_ALREADY_ACCEPTED` · `ALREADY_MEMBER` ·
+        `INVITATION_SUPERSEDED` (the link predates your removal) ·
+        `INVITATION_ROLE_UNAVAILABLE` (the invited role was deleted — checked at
+        ACCEPT, not only at creation) · `CONFLICT` +
+        `details.reason = "busy"` (lock contention, retry).
+      content:
+        application/json:
+          schema:
+            $ref: "../components/common.yaml#/ErrorResponse"
+    "415":
+      description: Non-JSON Content-Type (`UNSUPPORTED_MEDIA_TYPE`)
+      content:
+        application/json:
+          schema:
+            $ref: "../components/common.yaml#/ErrorResponse"
+    "422":
+      description: "`VALIDATION_FAILED` — no token in the body (`fieldErrors.token`)."
+      content:
+        application/json:
+          schema:
+            $ref: "../components/common.yaml#/ErrorResponse"
+    "429":
+      description: "`RATE_LIMITED` — 30/hour per IP (IPv6 /64), shared with preview."
+      headers:
+        Retry-After:
+          $ref: "../components/headers.yaml#/RetryAfter"
+      content:
+        application/json:
+          schema:
+            $ref: "../components/common.yaml#/ErrorResponse"

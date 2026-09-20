@@ -12,4 +12,7 @@ export {
   type DomainErrorBody,
   type DomainExceptionOptions,
 } from "./domain-exception";
-export { DomainExceptionFilter, extractTraceId } from "./domain-exception.filter";
+// `extractTraceId` is gone on purpose (F-002 §15 row 2 / NEW-7): the trace id is
+// server-issued, never read from the request. What the caller sent is only an
+// upstream correlation id, and it is used for logging.
+export { DomainExceptionFilter, extractUpstreamRequestId } from "./domain-exception.filter";

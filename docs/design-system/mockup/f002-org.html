@@ -1,0 +1,1188 @@
+<!doctype html>
+<html lang="th">
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>OmniStock · F-002 ร้าน/สมาชิก — mockup sign-off</title>
+<style>
+/* ฟอนต์: ใช้ Sarabun ถ้าเครื่องมี (ตรงกับ design-system §1.2) ไม่งั้น fallback ที่อ่านไทยได้ — ไม่มี asset ภายนอก */
+:root,.t-light{
+  --primary:#0C6155;--primary-fg:#FFFFFF;--primary-hover:#094E45;
+  --accent:#F2A65A;--accent-soft:#FBEBD6;--accent-text:#9A631A;
+  --danger:#C0362C;--danger-bg:#FBEDEB;--danger-border:#EAB6B0;--danger-text:#8F291F;
+  --warning:#B5730E;--warning-bg:#FBF1DF;--warning-border:#EBCB8A;--warning-text:#7E5008;
+  --success:#2F7D57;--success-bg:#E7F3EC;--success-border:#B7DCC6;--success-text:#1F5D3D;
+  --info-bg:#E7EFEC;--info-border:#CFDCD7;--info-text:#112320;
+  --badge-neutral-bg:#E7EFEC;--badge-neutral-text:#566B65;
+  --surface:#FFFFFF;--surface-muted:#E7EFEC;--bg:#F3F7F5;
+  --text:#112320;--text-muted:#566B65;--border:#CFDCD7;--overlay:rgba(11,22,20,.45);
+  --btn-bg:#0C6155;--btn-fg:#FFFFFF;--btn-hover:#094E45;--btn-shadow:none;
+  --btn-danger-bg:#C0362C;--btn-danger-hover:#A52D24;
+  --shimmer-hi:rgba(255,255,255,.75);
+  --shadow-card:0 1px 3px rgba(16,24,40,.10),0 1px 2px rgba(16,24,40,.06);
+  --shadow-dialog:0 20px 24px -4px rgba(16,24,40,.10),0 8px 8px -4px rgba(16,24,40,.04);
+  --shadow-toast:0 8px 16px -4px rgba(16,24,40,.14);
+}
+@media (prefers-color-scheme:dark){:root:not([data-theme="light"]){
+  --primary:#2FBBA6;--primary-fg:#052421;--primary-hover:#45C7B3;
+  --accent:#EEB073;--accent-soft:#33291B;--accent-text:#F1C48C;
+  --danger:#E9897F;--danger-bg:#2C1A18;--danger-border:#5A322D;--danger-text:#F0A79E;
+  --warning:#E0B25A;--warning-bg:#2A2213;--warning-border:#544321;--warning-text:#EBC981;
+  --success:#6FC194;--success-bg:#16261D;--success-border:#2C4636;--success-text:#8FD3AD;
+  --info-bg:#2A2D2C;--info-border:#363A38;--info-text:#E9EEEB;
+  --badge-neutral-bg:#2A2D2C;--badge-neutral-text:#98A29D;
+  --surface:#212423;--surface-muted:#2A2D2C;--bg:#171918;
+  --text:#E9EEEB;--text-muted:#98A29D;--border:#363A38;--overlay:rgba(11,22,20,.45);
+  --btn-bg:#0A5A45;--btn-fg:#FFFFFF;--btn-hover:#0C6B52;--btn-shadow:0 3px 8px rgba(0,0,0,.55);
+  --btn-danger-bg:#A32D22;--btn-danger-hover:#BC3A2D;
+  --shimmer-hi:rgba(255,255,255,.14);
+  --shadow-card:0 1px 3px rgba(0,0,0,.4);
+  --shadow-dialog:0 20px 24px -4px rgba(0,0,0,.5),0 8px 10px -4px rgba(0,0,0,.35);
+  --shadow-toast:0 8px 16px -4px rgba(0,0,0,.5);
+}}
+:root[data-theme="dark"],.t-dark{
+  --primary:#2FBBA6;--primary-fg:#052421;--primary-hover:#45C7B3;
+  --accent:#EEB073;--accent-soft:#33291B;--accent-text:#F1C48C;
+  --danger:#E9897F;--danger-bg:#2C1A18;--danger-border:#5A322D;--danger-text:#F0A79E;
+  --warning:#E0B25A;--warning-bg:#2A2213;--warning-border:#544321;--warning-text:#EBC981;
+  --success:#6FC194;--success-bg:#16261D;--success-border:#2C4636;--success-text:#8FD3AD;
+  --info-bg:#2A2D2C;--info-border:#363A38;--info-text:#E9EEEB;
+  --badge-neutral-bg:#2A2D2C;--badge-neutral-text:#98A29D;
+  --surface:#212423;--surface-muted:#2A2D2C;--bg:#171918;
+  --text:#E9EEEB;--text-muted:#98A29D;--border:#363A38;--overlay:rgba(11,22,20,.45);
+  --btn-bg:#0A5A45;--btn-fg:#FFFFFF;--btn-hover:#0C6B52;--btn-shadow:0 3px 8px rgba(0,0,0,.55);
+  --btn-danger-bg:#A32D22;--btn-danger-hover:#BC3A2D;
+  --shimmer-hi:rgba(255,255,255,.14);
+  --shadow-card:0 1px 3px rgba(0,0,0,.4);
+  --shadow-dialog:0 20px 24px -4px rgba(0,0,0,.5),0 8px 10px -4px rgba(0,0,0,.35);
+  --shadow-toast:0 8px 16px -4px rgba(0,0,0,.5);
+}
+:root{
+  --font:'Sarabun','Noto Sans Thai','IBM Plex Sans Thai',system-ui,-apple-system,'Thonburi',sans-serif;
+  /* size token ใหม่ของ F-002 (ui.md §7 sync-back) */
+  --sidebar-w:240px;--dialog-max-w:480px;--list-row-min-h:56px;--tap:44px;--auth-card-max-w:400px;
+  /* focus ring — DS เดิมบอกแค่ "ใช้ color.primary" แต่ไม่เคยกำหนดหน้าตา (ui.md §7 sync-back) */
+  --focus-w:2.5px;--focus-offset:2px;
+  /* icon — outline/stroke เท่านั้น · grid 24 · stroke 2 · currentColor (ui.md §7 sync-back) */
+  --icon-sm:16px;--icon-md:20px;--icon-lg:24px;--icon-xl:40px;--icon-stroke:2;
+}
+
+/* base style + theme token ผูกกับ :root/body ไม่ใช่ container —
+   ของจริงบน Next.js ที่ portal ออกไป document.body (modal/toast/dropdown) จะหลุด
+   font/สี/ธีม ถ้าไปผูกไว้กับ container (บั๊กที่เจอตอนรีวิว mockup 2026-07-28) */
+body{margin:0;font-family:var(--font);background:var(--bg);color:var(--text);line-height:1.55;-webkit-font-smoothing:antialiased}
+.pg{padding:0 20px 72px;transition:background .3s,color .3s}
+/* บล็อกที่ล็อกธีมไว้ต้อง "แปลง token ใหม่ที่ตัวมันเอง" — ถ้าปล่อยให้สืบทอด color ที่ substitute
+   ไปแล้วจากชั้นบน จะได้สีตัวอักษรของอีกธีมติดมา (สืบทอดค่า computed ไม่ใช่ค่า var) */
+.t-light,.t-dark{color:var(--text)}
+.wrap{max-width:1120px;margin:0 auto}
+.pg h1,.pg h2,.pg h3,.pg h4,.pg p{margin:0}
+.tnum{font-variant-numeric:tabular-nums}
+/* :focus-visible เท่านั้น — คลิกเมาส์ต้องไม่ขึ้น ring · offset ให้ ring ไปอยู่บนพื้น ไม่ทับตัวปุ่ม
+   (ปุ่มหลักพื้น = color.primary สีเดียวกับ ring ⇒ offset 0 จะมองไม่เห็น) */
+:focus-visible{outline:var(--focus-w) solid var(--primary);outline-offset:var(--focus-offset);border-radius:6px}
+
+/* ---------- icon (inline SVG outline · ไม่มี emoji / ไม่มี asset ภายนอก) ---------- */
+.i{width:var(--icon-md);height:var(--icon-md);flex:0 0 auto;display:inline-block;vertical-align:-4px;
+   fill:none;stroke:currentColor;stroke-width:var(--icon-stroke);stroke-linecap:round;stroke-linejoin:round}
+.i-16{width:var(--icon-sm);height:var(--icon-sm);vertical-align:-2px}
+.i-24{width:var(--icon-lg);height:var(--icon-lg)}
+.i-40{width:var(--icon-xl);height:var(--icon-xl);stroke-width:1.5}
+
+/* ---------- chrome ของหน้า mockup เอง ---------- */
+.topbar{display:flex;align-items:center;gap:12px;flex-wrap:wrap;padding:18px 0 12px;position:sticky;top:0;background:var(--bg);z-index:60;border-bottom:1px solid var(--border)}
+.brandmark{display:flex;align-items:center;gap:9px;font-weight:700;font-size:18px}
+.logo{width:24px;height:24px;border-radius:7px;background:var(--primary);position:relative;flex:0 0 auto}
+.logo::before{content:"";position:absolute;inset:6px 6px auto 6px;height:3px;border-radius:2px;background:var(--primary-fg);box-shadow:0 5px 0 var(--primary-fg),0 10px 0 var(--accent)}
+.tag{font-size:12px;font-weight:500;color:var(--text-muted);padding:3px 9px;border:1px solid var(--border);border-radius:999px}
+.spacer{flex:1}
+.tbtn{display:inline-flex;align-items:center;gap:7px;min-height:var(--tap);font-family:inherit;font-size:13px;font-weight:600;color:var(--text);background:var(--surface);border:1px solid var(--border);border-radius:8px;padding:7px 12px;cursor:pointer}
+.tbtn:hover{border-color:var(--primary)}
+.hero{padding:34px 0 4px}
+.hero .eyebrow{font-size:13px;font-weight:600;letter-spacing:.08em;text-transform:uppercase;color:var(--accent-text)}
+.hero h1{font-size:clamp(24px,4vw,32px);font-weight:700;margin:10px 0 0;letter-spacing:-.01em}
+.hero p{font-size:15px;color:var(--text-muted);margin:10px 0 0;max-width:70ch}
+.legend{display:flex;flex-wrap:wrap;gap:8px;margin-top:16px}
+.legend span{font-size:12.5px;font-weight:600;color:var(--accent-text);background:var(--accent-soft);border-radius:999px;padding:4px 11px}
+section{margin-top:52px}
+.shead{display:flex;align-items:baseline;gap:12px;flex-wrap:wrap;margin-bottom:6px}
+.shead .num{font-size:13px;font-weight:700;color:var(--accent-text);font-variant-numeric:tabular-nums}
+.shead h2{font-size:20px;font-weight:700}
+.shead .ref{font-size:12.5px;color:var(--text-muted)}
+.shead p{flex-basis:100%;font-size:13.5px;color:var(--text-muted);margin-top:2px}
+.blk{margin-top:22px}
+.blabel{font-size:11.5px;font-weight:700;letter-spacing:.04em;text-transform:uppercase;color:var(--text-muted);margin-bottom:9px;display:flex;align-items:center;gap:9px;flex-wrap:wrap}
+.blabel .n{color:var(--accent-text)}
+.blabel .lite{font-weight:500;letter-spacing:0;text-transform:none;font-size:12.5px}
+.cols{display:flex;flex-wrap:wrap;gap:20px;align-items:flex-start}
+.note{font-size:13.5px;color:var(--text-muted);line-height:1.6;background:var(--surface-muted);border:1px solid var(--border);border-left:3px solid var(--accent);border-radius:0 10px 10px 0;padding:14px 16px;margin-top:22px}
+.note b{color:var(--text)}
+footer{margin-top:48px;padding-top:20px;border-top:1px solid var(--border);font-size:13px;color:var(--text-muted)}
+
+/* ---------- type tokens ---------- */
+.h-md{font-size:24px;line-height:32px;font-weight:600}
+.h-sm{font-size:18px;line-height:28px;font-weight:600}
+.b-md{font-size:16px;line-height:26px}
+.b-sm{font-size:14px;line-height:22px}
+.l-sm{font-size:14px;line-height:20px;font-weight:500}
+.muted{color:var(--text-muted)}
+
+/* ---------- component: Button ---------- */
+.btn{font-family:inherit;font-size:16px;font-weight:600;line-height:24px;border-radius:8px;padding:10px 18px;cursor:pointer;border:1px solid transparent;transition:.15s;display:inline-flex;align-items:center;justify-content:center;gap:8px;min-height:var(--tap)}
+.btn-p{background:var(--btn-bg);color:var(--btn-fg);box-shadow:var(--btn-shadow)}
+.btn-p:hover{background:var(--btn-hover)}
+.btn-o{background:transparent;color:var(--text);border-color:color-mix(in srgb,var(--text-muted) 60%,var(--border))}
+.btn-o:hover{border-color:var(--primary)}
+.btn-d{background:var(--btn-danger-bg);color:#fff;box-shadow:var(--btn-shadow)}
+.btn-d:hover{background:var(--btn-danger-hover)}
+/* btn-sm = "แน่นขึ้น" ที่ตัวอักษร + ระยะข้าง เท่านั้น — ความสูงยังต้อง ≥ tap 44px ทุก platform
+   (ไม่มีข้อยกเว้น pointer-only: web รองรับถึง tablet ที่เป็น touch และ Flutter ใช้ token ชุดเดียวกัน) */
+.btn-sm{font-size:14px;line-height:20px;padding:8px 12px;min-height:var(--tap)}
+.btn[disabled]{opacity:.45;cursor:not-allowed}
+.btn.full{width:100%}
+/* สถานะยืนยันชั่วคราวของปุ่มคัดลอก (2 วินาที) — ไม่ใช่ variant ใหม่ */
+.btn-ok{background:var(--success-bg);color:var(--success-text);border-color:var(--success-border)}
+.btn-ok:hover{border-color:var(--success)}
+/* ใช้เฉพาะใน mockup: "จำลอง" สถานะ :focus-visible ให้เห็นบนกระดาษ — ของจริงโชว์เมื่อ focus ด้วยคีย์บอร์ดเท่านั้น */
+.simfocus{outline:var(--focus-w) solid var(--primary);outline-offset:var(--focus-offset)}
+.kbdnote{display:inline-flex;align-items:center;gap:6px;font-size:12.5px;font-weight:600;color:var(--accent-text);background:var(--accent-soft);border-radius:999px;padding:4px 11px;margin-bottom:9px}
+.spin{width:16px;height:16px;border:2.5px solid currentColor;border-right-color:transparent;border-radius:50%;display:inline-block;animation:spin .7s linear infinite}
+@keyframes spin{to{transform:rotate(360deg)}}
+/* tlink = Button variant "tertiary" (ปุ่มข้อความ) — สี primary เสมอ, ขีดเส้นใต้ตอน hover/focus,
+   พื้นที่แตะเต็ม 44px (padding ข้างหักลบด้วย margin ติดลบ เพื่อให้ตัวอักษรยังชิดขอบเดิม) */
+.tlink{display:inline-flex;align-items:center;min-height:var(--tap);font-size:14px;line-height:20px;font-weight:600;color:var(--primary);background:none;border:0;border-radius:8px;padding:0 8px;margin:0 -8px;cursor:pointer;font-family:inherit;text-align:left;text-decoration:none}
+/* user เคาะ 2026-07-28: hover ของปุ่ม tertiary ไม่ต้องขีดเส้นใต้ — ใช้พื้นหลังจาง ๆ เป็น affordance แทน
+   (ยังมี feedback ตอน hover ครบ · focus ยังใช้ :focus-visible ring ตามปกติ) */
+.tlink:hover{background:var(--surface-muted)}
+
+/* ---------- component: Badge ---------- */
+.badge{display:inline-flex;align-items:center;font-size:14px;line-height:20px;font-weight:500;padding:2px 10px;border-radius:999px;white-space:nowrap}
+.badge.ok{background:var(--success-bg);color:var(--success-text)}
+.badge.warn{background:var(--warning-bg);color:var(--warning-text)}
+.badge.neu{background:var(--badge-neutral-bg);color:var(--badge-neutral-text)}
+.badge.bad{background:var(--danger-bg);color:var(--danger-text)}
+
+/* ---------- component: Banner ---------- */
+.banner{display:flex;gap:11px;padding:16px;border-radius:12px;border:1px solid;font-size:14px;line-height:22px;align-items:flex-start}
+.banner .ico{flex:0 0 auto;margin-top:1px}
+/* tone info = "กลาง/ให้ข้อมูล" ไม่ใช่สีสถานะ — ผูกกับ color.info.* ที่มีค่าเท่ากับ surface.muted / border.default / text */
+.banner.info{background:var(--info-bg);border-color:var(--info-border);color:var(--info-text)}
+.banner.warn{background:var(--warning-bg);border-color:var(--warning-border);color:var(--warning-text)}
+.banner.ok{background:var(--success-bg);border-color:var(--success-border);color:var(--success-text)}
+.banner.err{background:var(--danger-bg);border-color:var(--danger-border);color:var(--danger-text)}
+.banner .acts{display:flex;gap:12px;align-items:center;margin-top:12px;flex-wrap:wrap}
+/* user เคาะ 2026-07-28: ในแถวปุ่ม ห้ามใช้ negative margin ของ .tlink
+   (มันไปกินระยะ gap จนปุ่มดูติดกัน — gap 10px − margin -8px = เหลือ 2px จริง) */
+.acts .tlink{margin:0}
+/* ปุ่มในกล่องสถานะใช้ "โทนของกล่องนั้น" ไม่ใช่โทนกลาง — ไม่งั้นปุ่มดูหลุดออกจากกล่อง
+   ตัวอักษร = currentColor (= <tone>.text) · ขอบ = currentColor 65% (ผ่าน ≥3:1 บนพื้น tone ทั้ง 2 ธีม) */
+.banner .btn-o{color:currentColor;border-color:color-mix(in srgb,currentColor 65%,transparent)}
+.banner .btn-o:hover{border-color:currentColor;background:color-mix(in srgb,currentColor 10%,transparent)}
+/* user เคาะ 2026-07-28: text link แยกตัวจากข้อความรอบข้างด้วย "สี" ไม่ใช่เส้นใต้
+   → ใช้ color.primary (DS §1.1 ระบุว่า primary = สีของลิงก์อยู่แล้ว) แทน currentColor
+   สำคัญ: ถ้าเอาเส้นใต้ออกโดยคง currentColor ลิงก์จะกลืนกับข้อความจนแยกไม่ออกเลย */
+.banner .tlink{color:var(--primary);text-decoration:none}
+.banner .tlink:hover{background:color-mix(in srgb,currentColor 10%,transparent)}
+
+/* ---------- component: SectionCard ---------- */
+.card{background:var(--surface);border:1px solid var(--border);border-radius:12px;box-shadow:var(--shadow-card);padding:24px}
+.card+.card{margin-top:16px}
+.card>.chead{display:flex;align-items:flex-start;justify-content:space-between;gap:12px;margin-bottom:8px}
+.card>.chead h4{font-size:18px;line-height:28px;font-weight:600}
+.drow{display:flex;gap:16px;align-items:baseline;padding:10px 0;border-top:1px solid var(--border);flex-wrap:wrap}
+.drow:first-of-type{border-top:0}
+.drow .k{font-size:14px;line-height:20px;font-weight:500;color:var(--text-muted);flex:0 0 150px}
+.drow .v{font-size:16px;line-height:26px;flex:1;min-width:180px}
+.drow .go{color:var(--text-muted);font-weight:600}
+
+/* ---------- component: ListRow ---------- */
+.list{background:var(--surface);border:1px solid var(--border);border-radius:12px;overflow:visible}
+.lrow{display:flex;align-items:center;gap:12px;min-height:var(--list-row-min-h);padding:12px 16px;border-top:1px solid var(--border);position:relative}
+.lrow:first-child{border-top:0}
+.lrow:hover{background:var(--surface-muted)}
+.lrow.dim{opacity:.62}
+.lrow.dim:hover{background:transparent}
+.lrow .meta{flex:1;min-width:0}
+.lrow .main{font-size:16px;line-height:26px;display:flex;align-items:center;gap:8px;flex-wrap:wrap}
+.lrow .sub{font-size:14px;line-height:22px;color:var(--text-muted)}
+.lrow .right{display:flex;align-items:center;gap:10px;flex-wrap:wrap;justify-content:flex-end}
+.avatar{width:36px;height:36px;border-radius:999px;background:var(--surface-muted);color:var(--text-muted);display:flex;align-items:center;justify-content:center;font-weight:600;font-size:15px;flex:0 0 auto}
+.iconbtn{width:var(--tap);height:var(--tap);border:0;background:transparent;color:var(--text-muted);border-radius:8px;cursor:pointer;font-size:18px;display:flex;align-items:center;justify-content:center;flex:0 0 auto}
+.iconbtn:hover{background:var(--surface-muted);color:var(--text)}
+.menu{position:absolute;right:12px;top:calc(100% - 8px);min-width:200px;background:var(--surface);border:1px solid var(--border);border-radius:12px;box-shadow:var(--shadow-dialog);padding:6px;z-index:30}
+.menu button{display:block;width:100%;text-align:left;font:inherit;font-size:15px;background:none;border:0;color:var(--text);padding:11px 12px;border-radius:8px;cursor:pointer;min-height:var(--tap)}
+.menu button:hover{background:var(--surface-muted)}
+.menu button.danger{color:var(--danger-text)}
+.menu .sep{height:1px;background:var(--border);margin:5px 4px}
+/* utility ต้องชนะเสมอ — ไม่งั้นกฎที่ประกาศทีหลังด้วย specificity เท่ากัน (เช่น .modal{display:flex})
+   จะทับ แล้ว "ซ่อน" กลายเป็นไม่ทำงานเงียบ ๆ (บั๊กที่เจอตอนรีวิว mockup 2026-07-28) */
+.hidden{display:none!important}
+.secttitle{font-size:16px;line-height:26px;font-weight:600;margin:24px 0 10px}
+.secttitle:first-child{margin-top:0}
+
+/* ---------- component: CopyField ---------- */
+.copyfield{background:var(--surface-muted);border:1px solid var(--border);border-radius:8px;padding:12px 14px;font-size:14px;line-height:22px;word-break:break-all;color:var(--text);user-select:all}
+
+/* ---------- component: EmptyState ---------- */
+.empty{max-width:400px;margin:0 auto;text-align:center;padding:32px 8px}
+.empty .eico{line-height:0;color:var(--text-muted)}
+.empty h4{font-size:18px;line-height:28px;font-weight:600;margin-top:14px}
+.empty p{font-size:16px;line-height:26px;color:var(--text-muted);margin-top:8px}
+.empty .acts{margin-top:24px;display:flex;gap:12px;justify-content:center;flex-wrap:wrap}
+
+/* ---------- Skeleton (shimmer) ---------- */
+.sk{background:var(--surface-muted);border-radius:8px;position:relative;overflow:hidden}
+.sk::after{content:"";position:absolute;inset:0;background:linear-gradient(90deg,transparent,var(--shimmer-hi),transparent);transform:translateX(-100%);animation:shimmer 1.5s ease-in-out infinite}
+@keyframes shimmer{100%{transform:translateX(100%)}}
+.sk-line{height:12px;border-radius:6px}
+.sk-circle{width:36px;height:36px;border-radius:50%;flex:0 0 auto}
+
+/* ---------- Dialog / overlay ---------- */
+.ovl{background:var(--overlay);border-radius:14px;padding:28px 20px;display:flex;justify-content:center}
+.dialog{background:var(--surface);border-radius:12px;box-shadow:var(--shadow-dialog);padding:24px;width:100%;max-width:var(--dialog-max-w)}
+.dialog h4{font-size:24px;line-height:32px;font-weight:600}
+.dialog .body{font-size:16px;line-height:26px;margin-top:12px}
+.dialog .body p+p{margin-top:10px}
+.dialog .acts{display:flex;gap:12px;justify-content:flex-end;margin-top:24px;flex-wrap:wrap}
+.modal{position:fixed;inset:0;background:var(--overlay);display:flex;align-items:center;justify-content:center;padding:20px;z-index:100}
+.toast{display:inline-flex;align-items:center;gap:9px;padding:12px 16px;border-radius:12px;font-size:14px;font-weight:600;background:var(--success-bg);color:var(--success-text);box-shadow:var(--shadow-toast)}
+
+/* ---------- S3: AppShell (web) ---------- */
+.frame{border:1px solid var(--border);border-radius:14px;overflow:hidden;box-shadow:var(--shadow-card);background:var(--bg);width:100%}
+.frame .fcap{font-size:11.5px;font-weight:600;letter-spacing:.03em;color:var(--text-muted);background:var(--surface-muted);border-bottom:1px solid var(--border);padding:6px 12px}
+.shell{display:grid;grid-template-columns:var(--sidebar-w) 1fr;min-height:360px}
+.side{background:var(--surface);border-right:1px solid var(--border);padding:14px 12px;display:flex;flex-direction:column;gap:6px}
+.side .brand{display:flex;align-items:center;gap:9px;font-weight:700;font-size:17px;padding:2px 6px 10px}
+.orgwrap{position:relative}
+.orgbtn{display:flex;align-items:center;gap:10px;width:100%;min-height:var(--list-row-min-h);background:var(--surface);border:1px solid var(--border);border-radius:8px;padding:8px 10px;cursor:pointer;font:inherit;color:inherit;text-align:left}
+.orgbtn:hover{background:var(--surface-muted)}
+.orgbtn .oname{flex:1;min-width:0;font-size:15px;font-weight:600;line-height:20px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.orgbtn .osub{font-size:12.5px;font-weight:400;color:var(--text-muted);display:block}
+.orgbtn .car{color:var(--text-muted)}
+.dd{position:absolute;left:0;top:calc(100% + 6px);width:290px;background:var(--surface);border:1px solid var(--border);border-radius:12px;box-shadow:var(--shadow-dialog);padding:6px;z-index:40}
+.dd .ddrow{display:flex;align-items:center;gap:10px;min-height:var(--list-row-min-h);padding:8px 10px;border-radius:8px;cursor:pointer;background:none;border:0;font:inherit;color:inherit;width:100%;text-align:left}
+.dd .ddrow:hover{background:var(--surface-muted)}
+.dd .ddrow .nm{flex:1;min-width:0;font-size:15px;line-height:22px}
+.dd .ddrow .rl{font-size:13px;color:var(--text-muted);white-space:nowrap}
+.dd .ddrow .ck{width:20px;flex:0 0 auto;color:var(--primary);display:flex;align-items:center}
+.dd .sep{height:1px;background:var(--border);margin:5px 4px}
+.navlist{margin-top:14px;display:flex;flex-direction:column;gap:2px}
+.navi{display:flex;align-items:center;gap:10px;min-height:var(--tap);padding:0 10px;border-radius:8px;font-size:16px;color:var(--text);cursor:pointer;border:0;background:none;font-family:inherit;text-align:left;width:100%}
+.navi:hover{background:var(--surface-muted)}
+.navi.on{background:var(--surface-muted);color:var(--primary);font-weight:600}
+.side .bottom{margin-top:auto;padding-top:10px;border-top:1px solid var(--border)}
+.content{padding:24px;min-width:0}
+.tbar{display:flex;align-items:center;gap:4px;height:56px;padding:0 8px;background:var(--surface);border-bottom:1px solid var(--border);position:relative}
+.tbar .ib{width:var(--tap);height:var(--tap);border:0;background:transparent;color:var(--text);border-radius:8px;display:flex;align-items:center;justify-content:center;cursor:pointer;flex:0 0 auto}
+.tbar .ib:hover{background:var(--surface-muted)}
+.tbar .ib svg{width:22px;height:22px}
+.tabstage{position:relative;min-height:330px;background:var(--bg)}
+.drawer{position:absolute;inset:0 auto 0 0;width:280px;background:var(--surface);border-right:1px solid var(--border);padding:14px 12px;display:flex;flex-direction:column;gap:6px;z-index:20;box-shadow:var(--shadow-dialog)}
+.scrim{position:absolute;inset:0;background:var(--overlay);z-index:10}
+
+/* ---------- S11: mobile frames ---------- */
+.pframe{width:390px;max-width:100%;border:1px solid var(--border);border-radius:14px;overflow:hidden;box-shadow:var(--shadow-card);background:var(--bg)}
+.pbody{padding:20px 16px 24px;min-height:200px}
+.authcard{background:var(--surface);border:1px solid var(--border);border-radius:12px;box-shadow:var(--shadow-card);padding:24px;max-width:var(--auth-card-max-w);margin:0 auto}
+.authcard .brandrow{display:flex;align-items:center;justify-content:center;gap:9px;font-weight:700;font-size:17px;margin-bottom:18px}
+.stack{display:flex;flex-direction:column;gap:12px}
+.stack.s16{gap:16px}
+@media (prefers-reduced-motion:reduce){*{animation:none!important;transition:none!important}}
+</style>
+
+<!-- ============================================================================
+     ชุดไอคอน (mockup) — inline SVG **outline/stroke เท่านั้น** grid 24×24 · stroke 2 · currentColor
+     ไม่มี emoji · ไม่มีรูป · ไม่มี asset ภายนอก (ไฟล์นี้ยังเปิดออฟไลน์ได้เหมือนเดิม)
+     รูปที่วาดไว้เป็น "รูปกลาง" ที่ทั้ง Lucide / Material Symbols / Phosphor มีเหมือนกัน
+     ⇒ user เลือกชุดจริงทีหลังได้โดยความหมายบนจอไม่เปลี่ยน (ตัวเลือก + trade-off อยู่ที่ ui.md §7 ข้อ 5)
+     ============================================================================ -->
+<svg xmlns="http://www.w3.org/2000/svg" style="display:none" aria-hidden="true">
+  <symbol id="i-warn" viewBox="0 0 24 24"><path d="M12 3.6 2.8 19.4h18.4L12 3.6Z"/><path d="M12 9.6v4.1"/><path d="M12 17.1h.01"/></symbol>
+  <symbol id="i-info" viewBox="0 0 24 24"><circle cx="12" cy="12" r="8.8"/><path d="M12 11.2v5"/><path d="M12 7.9h.01"/></symbol>
+  <symbol id="i-error" viewBox="0 0 24 24"><circle cx="12" cy="12" r="8.8"/><path d="M12 7.4v5.4"/><path d="M12 16.4h.01"/></symbol>
+  <symbol id="i-check" viewBox="0 0 24 24"><path d="m4.8 12.6 4.9 4.9L19.4 7.8"/></symbol>
+  <symbol id="i-check-circle" viewBox="0 0 24 24"><circle cx="12" cy="12" r="8.8"/><path d="m8.1 12.2 2.7 2.7 5.3-5.3"/></symbol>
+  <symbol id="i-mail" viewBox="0 0 24 24"><rect x="3.2" y="5.6" width="17.6" height="12.8" rx="2"/><path d="m3.6 7 8.4 5.8L20.4 7"/></symbol>
+  <symbol id="i-users" viewBox="0 0 24 24"><path d="M15.5 20.4v-1.7a4 4 0 0 0-4-4H6.2a4 4 0 0 0-4 4v1.7"/><circle cx="8.85" cy="7.4" r="3.6"/><path d="M21.8 20.4v-1.7a4 4 0 0 0-3-3.86"/><path d="M16.2 4a4 4 0 0 1 0 7.75"/></symbol>
+  <symbol id="i-clock" viewBox="0 0 24 24"><circle cx="12" cy="12" r="8.8"/><path d="M12 7.2V12l3 1.9"/></symbol>
+  <symbol id="i-hourglass" viewBox="0 0 24 24"><path d="M7 3.4h10"/><path d="M7 20.6h10"/><path d="M7 3.4v3.3c0 1.4 1 2.6 2.2 3.4L12 12l-2.8 1.9c-1.2.8-2.2 2-2.2 3.4v3.3"/><path d="M17 3.4v3.3c0 1.4-1 2.6-2.2 3.4L12 12l2.8 1.9c1.2.8 2.2 2 2.2 3.4v3.3"/></symbol>
+  <symbol id="i-more" viewBox="0 0 24 24"><circle cx="5.2" cy="12" r="1.35" fill="currentColor" stroke="none"/><circle cx="12" cy="12" r="1.35" fill="currentColor" stroke="none"/><circle cx="18.8" cy="12" r="1.35" fill="currentColor" stroke="none"/></symbol>
+  <symbol id="i-chevron-right" viewBox="0 0 24 24"><path d="m9.5 5.5 6.5 6.5-6.5 6.5"/></symbol>
+  <symbol id="i-chevron-down" viewBox="0 0 24 24"><path d="m5.5 9.5 6.5 6.5 6.5-6.5"/></symbol>
+  <symbol id="i-plus" viewBox="0 0 24 24"><path d="M12 5.2v13.6"/><path d="M5.2 12h13.6"/></symbol>
+  <symbol id="i-circle" viewBox="0 0 24 24"><circle cx="12" cy="12" r="8.3"/></symbol>
+  <symbol id="i-menu" viewBox="0 0 24 24"><path d="M4 6h16"/><path d="M4 12h16"/><path d="M4 18h16"/></symbol>
+  <symbol id="i-close" viewBox="0 0 24 24"><path d="M6 6l12 12"/><path d="M18 6 6 18"/></symbol>
+  <symbol id="i-theme" viewBox="0 0 24 24"><circle cx="12" cy="12" r="8.5"/><path d="M12 3.5a8.5 8.5 0 0 1 0 17Z" fill="currentColor" stroke="none"/></symbol>
+  <symbol id="i-keyboard" viewBox="0 0 24 24"><rect x="2.5" y="6" width="19" height="12" rx="2"/><path d="M7 10h.01M11 10h.01M15 10h.01M17 10h.01M7 14h10"/></symbol>
+</svg>
+
+<div class="pg">
+<div class="wrap">
+
+  <div class="topbar">
+    <div class="brandmark"><span class="logo"></span>OmniStock</div>
+    <span class="tag">F-002 · ร้าน สมาชิก คำเชิญ</span>
+    <span class="tag">Mockup sign-off · D-026</span>
+    <span class="spacer"></span>
+    <button class="tbtn" id="themeBtn" type="button"><svg class="i i-16" aria-hidden="true"><use href="#i-theme"/></svg>สลับธีม</button>
+  </div>
+
+  <div class="hero">
+    <div class="eyebrow">Screens · เห็นของจริงก่อนเซ็น ux-wireframe.md + ui.md</div>
+    <h1>F-002 — 5 จอที่ตัดสิน pattern ของทั้งระบบ</h1>
+    <p>ทุกสีในหน้านี้มาจาก token กลางใน <b>docs/design-system.md §1.1–1.1c</b> (Calm Teal deep · D-026) ไม่มีสีนอก token ·
+      ข้อความไทยทุกบรรทัดมาจาก <b>ui.md §3</b> (i18n key <code>org.*</code>) ไม่มี placeholder ·
+      กด <b>"สลับธีม"</b> มุมขวาบนเพื่อดูทั้ง light และ dark (บล็อกที่ติดป้าย "ธีมมืด" จะมืดค้างไว้เพื่อเทียบคู่กัน)</p>
+    <div class="legend">
+      <span>01 · S3 โครงหน้าจอ + ตัวสลับร้าน — wireframe §4</span>
+      <span>02 · S6 สมาชิก — §7</span>
+      <span>03 · S8 ลิงก์คำเชิญ — §9</span>
+      <span>04 · S4 ข้อมูลร้าน — §5</span>
+      <span>05 · S11 /invite — §11</span>
+    </div>
+  </div>
+
+  <!-- ============================================================ 01 · S3 -->
+  <section>
+    <div class="shead">
+      <span class="num">01</span><h2>S3 — โครงหน้าจอของร้าน + ตัวสลับร้าน</h2>
+      <span class="ref">ux-wireframe.md §4 · ui.md §2.2 (AppShell / OrgSwitcher)</span>
+      <p>chrome ที่ทุก feature หลังจากนี้ใช้ต่อ · sidebar <code>size.sidebar.w</code> 240px · เมนู item สูง 44px ·
+        active = พื้น <code>surface.muted</code> + ตัวอักษร <code>color.primary</code> · ชื่อร้านต้องเห็นตลอดเวลา (org context ชัดเสมอ)</p>
+    </div>
+
+    <div class="blk">
+      <div class="blabel"><span class="n">S3-1</span> เดสก์ท็อป ≥1024px · ตัวสลับร้าน "ปิด" <span class="lite">(กดกล่องชื่อร้านเพื่อเปิดจริงได้)</span></div>
+      <div class="frame t-light">
+        <div class="fcap">ธีมสว่าง · desktop (≥lg)</div>
+        <div class="shell">
+          <div class="side">
+            <div class="brand"><span class="logo"></span>OmniStock</div>
+            <div class="orgwrap">
+              <button class="orgbtn" type="button" data-switch aria-expanded="false">
+                <span class="avatar">ห</span>
+                <span class="oname">ร้านหอมกรุ่นเบเกอรี่<span class="osub">เจ้าของร้าน</span></span>
+                <svg class="i i-16 car" aria-hidden="true"><use href="#i-chevron-down"/></svg>
+              </button>
+              <div class="dd hidden">
+                <button class="ddrow" type="button"><span class="ck"><svg class="i" aria-hidden="true"><use href="#i-check"/></svg></span><span class="nm">ร้านหอมกรุ่นเบเกอรี่</span><span class="rl">เจ้าของร้าน</span></button>
+                <button class="ddrow" type="button"><span class="ck"></span><span class="nm">คลังของฝากเชียงใหม่</span><span class="rl">พนักงาน</span></button>
+                <div class="sep"></div>
+                <button class="ddrow" type="button"><span class="ck"><svg class="i" aria-hidden="true"><use href="#i-plus"/></svg></span><span class="nm">สร้างร้านใหม่</span></button>
+              </div>
+            </div>
+            <div class="navlist">
+              <button class="navi on" type="button">ข้อมูลร้าน</button>
+              <button class="navi" type="button">สมาชิก</button>
+              <button class="navi" type="button">ความปลอดภัย</button>
+            </div>
+            <div class="bottom"><button class="navi" type="button">ออกจากระบบ</button></div>
+          </div>
+          <div class="content">
+            <h3 class="h-md">ข้อมูลร้าน</h3>
+            <div class="card" style="margin-top:16px">
+              <div class="drow"><span class="k">ชื่อร้าน</span><span class="v">ร้านหอมกรุ่นเบเกอรี่</span><button class="btn btn-o btn-sm" type="button">แก้ไข</button></div>
+              <div class="drow"><span class="k">เวลา/สกุลเงิน</span><span class="v">เวลาไทย · บาท (฿)</span></div>
+            </div>
+            <p class="b-sm muted" style="margin-top:14px">เมนู "สมาชิก" แสดงเฉพาะผู้ที่ดูแลทีมงาน — คนที่ไม่มีสิทธิ์จะไม่เห็นเมนูนี้เลย (ไม่ใช่กดไม่ได้)</p>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div class="blk">
+      <div class="blabel"><span class="n">S3-2</span> เดสก์ท็อป · ตัวสลับร้าน "เปิด" <span class="lite">— แถวปัจจุบันมีเครื่องหมายถูก + บอกสิทธิ์เป็นข้อความ ไม่ใช่สีอย่างเดียว</span></div>
+      <div class="frame t-light">
+        <div class="fcap">ธีมสว่าง · dropdown (elevation.dialog)</div>
+        <div class="shell">
+          <div class="side">
+            <div class="brand"><span class="logo"></span>OmniStock</div>
+            <div class="orgwrap">
+              <button class="orgbtn" type="button" data-switch aria-expanded="true">
+                <span class="avatar">ห</span>
+                <span class="oname">ร้านหอมกรุ่นเบเกอรี่<span class="osub">เจ้าของร้าน</span></span>
+                <svg class="i i-16 car" aria-hidden="true"><use href="#i-chevron-down"/></svg>
+              </button>
+              <div class="dd">
+                <button class="ddrow" type="button"><span class="ck"><svg class="i" aria-hidden="true"><use href="#i-check"/></svg></span><span class="nm">ร้านหอมกรุ่นเบเกอรี่</span><span class="rl">เจ้าของร้าน</span></button>
+                <button class="ddrow" type="button"><span class="ck"></span><span class="nm">คลังของฝากเชียงใหม่</span><span class="rl">พนักงาน</span></button>
+                <div class="sep"></div>
+                <button class="ddrow" type="button"><span class="ck"><svg class="i" aria-hidden="true"><use href="#i-plus"/></svg></span><span class="nm">สร้างร้านใหม่</span></button>
+              </div>
+            </div>
+            <div class="navlist">
+              <button class="navi on" type="button">ข้อมูลร้าน</button>
+              <button class="navi" type="button">สมาชิก</button>
+              <button class="navi" type="button">ความปลอดภัย</button>
+            </div>
+            <div class="bottom"><button class="navi" type="button">ออกจากระบบ</button></div>
+          </div>
+          <div class="content">
+            <h3 class="h-md">ข้อมูลร้าน</h3>
+            <p class="b-sm muted" style="margin-top:10px">สลับร้านบน web = เปลี่ยน URL <code>/o/{orgId}/…</code> → เปิดคนละร้านในคนละแท็บได้</p>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div class="blk">
+      <div class="blabel"><span class="n">S3-3</span> ธีมมืด · ตัวสลับร้าน "เปิด" <span class="lite">(บล็อกนี้มืดค้างไว้ให้เทียบกับสว่างด้านบน)</span></div>
+      <div class="frame t-dark">
+        <div class="fcap">ธีมมืด · desktop (≥lg)</div>
+        <div class="shell">
+          <div class="side">
+            <div class="brand"><span class="logo"></span>OmniStock</div>
+            <div class="orgwrap">
+              <button class="orgbtn" type="button" data-switch aria-expanded="true">
+                <span class="avatar">ห</span>
+                <span class="oname">ร้านหอมกรุ่นเบเกอรี่<span class="osub">เจ้าของร้าน</span></span>
+                <svg class="i i-16 car" aria-hidden="true"><use href="#i-chevron-down"/></svg>
+              </button>
+              <div class="dd">
+                <button class="ddrow" type="button"><span class="ck"><svg class="i" aria-hidden="true"><use href="#i-check"/></svg></span><span class="nm">ร้านหอมกรุ่นเบเกอรี่</span><span class="rl">เจ้าของร้าน</span></button>
+                <button class="ddrow" type="button"><span class="ck"></span><span class="nm">คลังของฝากเชียงใหม่</span><span class="rl">พนักงาน</span></button>
+                <div class="sep"></div>
+                <button class="ddrow" type="button"><span class="ck"><svg class="i" aria-hidden="true"><use href="#i-plus"/></svg></span><span class="nm">สร้างร้านใหม่</span></button>
+              </div>
+            </div>
+            <div class="navlist">
+              <button class="navi on" type="button">ข้อมูลร้าน</button>
+              <button class="navi" type="button">สมาชิก</button>
+              <button class="navi" type="button">ความปลอดภัย</button>
+            </div>
+            <div class="bottom"><button class="navi" type="button">ออกจากระบบ</button></div>
+          </div>
+          <div class="content">
+            <h3 class="h-md">ข้อมูลร้าน</h3>
+            <div class="card" style="margin-top:16px">
+              <div class="drow"><span class="k">ชื่อร้าน</span><span class="v">ร้านหอมกรุ่นเบเกอรี่</span><button class="btn btn-o btn-sm" type="button">แก้ไข</button></div>
+              <div class="drow"><span class="k">เวลา/สกุลเงิน</span><span class="v">เวลาไทย · บาท (฿)</span></div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div class="blk">
+      <div class="blabel"><span class="n">S3-4</span> แท็บเล็ต 768px · sidebar ยุบเป็น top bar + ลิ้นชัก (ปิด / เปิด) <span class="lite">— design-system §8.2</span></div>
+      <div class="cols">
+        <div class="frame t-light" style="max-width:520px">
+          <div class="fcap">ธีมสว่าง · tablet (md) · ลิ้นชักปิด</div>
+          <div class="tbar">
+            <button class="ib" type="button" aria-label="เปิดเมนู"><svg class="i i-24" aria-hidden="true"><use href="#i-menu"/></svg></button>
+            <button class="orgbtn" type="button" style="border:0;background:none;min-height:44px;width:auto">
+              <span class="avatar" style="width:28px;height:28px;font-size:13px">ห</span>
+              <span class="oname">ร้านหอมกรุ่นเบเกอรี่</span><svg class="i i-16 car" aria-hidden="true"><use href="#i-chevron-down"/></svg>
+            </button>
+          </div>
+          <div class="tabstage" style="padding:16px">
+            <h3 class="h-md">ข้อมูลร้าน</h3>
+            <p class="b-sm muted" style="margin-top:8px">เนื้อหาเต็มความกว้าง · ชื่อร้านยังอยู่บน top bar (org context ไม่หาย)</p>
+          </div>
+        </div>
+        <div class="frame t-light" style="max-width:520px">
+          <div class="fcap">ธีมสว่าง · tablet (md) · ลิ้นชักเปิด — ตัวสลับร้านอยู่บนสุด</div>
+          <div class="tbar">
+            <button class="ib" type="button" aria-label="ปิดเมนู"><svg class="i i-24" aria-hidden="true"><use href="#i-close"/></svg></button>
+            <span class="l-sm muted" style="padding-left:6px">เมนู</span>
+          </div>
+          <div class="tabstage">
+            <div class="scrim"></div>
+            <div class="drawer">
+              <div class="brand" style="display:flex;align-items:center;gap:9px;font-weight:700;font-size:17px;padding:2px 6px 10px"><span class="logo"></span>OmniStock</div>
+              <button class="orgbtn" type="button">
+                <span class="avatar">ห</span>
+                <span class="oname">ร้านหอมกรุ่นเบเกอรี่<span class="osub">เจ้าของร้าน</span></span>
+                <svg class="i i-16 car" aria-hidden="true"><use href="#i-chevron-down"/></svg>
+              </button>
+              <div class="navlist">
+                <button class="navi on" type="button">ข้อมูลร้าน</button>
+                <button class="navi" type="button">สมาชิก</button>
+                <button class="navi" type="button">ความปลอดภัย</button>
+              </div>
+              <div class="bottom"><button class="navi" type="button">ออกจากระบบ</button></div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div class="blk">
+      <div class="blabel"><span class="n">S3-5</span> สถานะของกล่องร้าน: กำลังโหลด / โหลดรายการร้านไม่สำเร็จ <span class="lite">— พังเฉพาะในกล่อง ไม่ทำให้ทั้งจอพัง</span></div>
+      <div class="cols">
+        <div class="card t-light" style="width:300px">
+          <div class="orgbtn" style="cursor:default">
+            <span class="sk sk-circle"></span>
+            <span class="oname" style="display:flex;flex-direction:column;gap:7px">
+              <span class="sk sk-line" style="width:80%"></span>
+              <span class="sk sk-line" style="width:45%;height:10px"></span>
+            </span>
+          </div>
+          <p class="b-sm muted" style="margin-top:12px">loading · skeleton ตาม layout จริงของกล่อง (ไม่ใช่ spinner)</p>
+        </div>
+        <div class="card t-light" style="width:330px">
+          <div class="banner err"><svg class="i ico" aria-hidden="true"><use href="#i-error"/></svg><span>โหลดรายการร้านไม่สำเร็จ<span class="acts"><button class="btn btn-o btn-sm" type="button">ลองใหม่</button></span></span></div>
+          <p class="b-sm muted" style="margin-top:12px">error เฉพาะใน dropdown — ร้านที่เปิดอยู่ยังใช้งานต่อได้ตามปกติ</p>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ============================================================ 02 · S6 -->
+  <section>
+    <div class="shead">
+      <span class="num">02</span><h2>S6 — สมาชิก</h2>
+      <span class="ref">ux-wireframe.md §7 · ui.md §2.1 (ListRow / Badge / Banner / EmptyState)</span>
+      <p>จอเดียว 2 ส่วน (คำเชิญที่รอตอบรับ + สมาชิกในร้าน) · แถวสูงขั้นต่ำ <code>size.list-row.min-h</code> 56px ·
+        ป้ายสถานะมีข้อความเสมอ ไม่สื่อด้วยสีอย่างเดียว · <b>ทุกบล็อกคือพื้นที่เนื้อหาใน AppShell (S3)</b></p>
+    </div>
+
+    <div class="blk">
+      <div class="blabel"><span class="n">S6-1</span> มีข้อมูล (data) <span class="lite">— เมนูการกระทำของแถว "malee" เปิดค้างไว้ให้เห็น (กดปิด/เปิดได้)</span></div>
+      <div class="card t-light" style="background:var(--bg);box-shadow:none;padding:24px">
+        <div style="display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap">
+          <h3 class="h-md">สมาชิก</h3>
+          <button class="btn btn-p" type="button"><svg class="i" aria-hidden="true"><use href="#i-plus"/></svg>เชิญสมาชิก</button>
+        </div>
+
+        <div class="secttitle" style="margin-top:20px">คำเชิญที่รอตอบรับ (1)</div>
+        <div class="list">
+          <div class="lrow">
+            <span class="avatar"><svg class="i" aria-hidden="true"><use href="#i-mail"/></svg></span>
+            <span class="meta">
+              <span class="main">new@example.com <span class="badge warn">รอตอบรับ</span></span>
+              <span class="sub">ผู้ดูแล · ลิงก์ใช้ได้ถึง <span class="tnum">29 ก.ค. 2026, 14:30</span> (อีกประมาณ 24 ชั่วโมง)</span>
+            </span>
+            <span class="right">
+              <button class="btn btn-o btn-sm" type="button">ออกลิงก์ใหม่</button>
+              <button class="iconbtn" type="button" aria-label="เพิ่มเติม"><svg class="i i-24" aria-hidden="true"><use href="#i-more"/></svg></button>
+            </span>
+          </div>
+        </div>
+        <button class="tlink" type="button">ดูคำเชิญที่หมดอายุ/ยกเลิกแล้ว</button>
+
+        <div class="secttitle">สมาชิกในร้าน (3)</div>
+        <div class="list">
+          <div class="lrow">
+            <span class="avatar">ส</span>
+            <span class="meta">
+              <span class="main">somchai@shop.com <span class="muted b-sm">(คุณ)</span></span>
+              <span class="sub">เจ้าของร้าน</span>
+            </span>
+            <span class="right"><span class="badge ok">ใช้งานอยู่</span><button class="iconbtn" type="button" aria-label="เพิ่มเติม"><svg class="i i-24" aria-hidden="true"><use href="#i-more"/></svg></button></span>
+          </div>
+          <div class="lrow">
+            <span class="avatar">ม</span>
+            <span class="meta">
+              <span class="main">malee@shop.com</span>
+              <span class="sub">ผู้ดูแล</span>
+            </span>
+            <span class="right"><span class="badge ok">ใช้งานอยู่</span><button class="iconbtn" type="button" data-menu aria-label="เพิ่มเติม"><svg class="i i-24" aria-hidden="true"><use href="#i-more"/></svg></button></span>
+            <div class="menu">
+              <button type="button">เปลี่ยนสิทธิ์</button>
+              <div class="sep"></div>
+              <button type="button" class="danger">ถอดออกจากร้าน</button>
+            </div>
+          </div>
+          <div class="lrow">
+            <span class="avatar">น</span>
+            <span class="meta">
+              <span class="main">noi@shop.com</span>
+              <span class="sub">พนักงาน</span>
+            </span>
+            <span class="right"><span class="badge ok">ใช้งานอยู่</span><button class="iconbtn" type="button" aria-label="เพิ่มเติม"><svg class="i i-24" aria-hidden="true"><use href="#i-more"/></svg></button></span>
+          </div>
+        </div>
+        <button class="tlink" type="button">แสดงสมาชิกที่ถูกถอดออกแล้ว</button>
+      </div>
+    </div>
+
+    <div class="blk">
+      <div class="blabel"><span class="n">S6-2</span> กำลังโหลด (skeleton ตาม layout จริง: 1 แถวคำเชิญ + 3 แถวสมาชิก)</div>
+      <div class="card t-light" style="background:var(--bg);box-shadow:none;padding:24px">
+        <div style="display:flex;align-items:center;justify-content:space-between;gap:12px">
+          <h3 class="h-md">สมาชิก</h3>
+          <button class="btn btn-p" type="button"><svg class="i" aria-hidden="true"><use href="#i-plus"/></svg>เชิญสมาชิก</button>
+        </div>
+        <div class="secttitle" style="margin-top:20px">คำเชิญที่รอตอบรับ</div>
+        <div class="list">
+          <div class="lrow"><span class="sk sk-circle"></span><span class="meta" style="display:flex;flex-direction:column;gap:9px"><span class="sk sk-line" style="width:46%"></span><span class="sk sk-line" style="width:64%;height:10px"></span></span><span class="sk sk-line" style="width:104px;height:44px;border-radius:8px"></span></div>
+        </div>
+        <div class="secttitle">สมาชิกในร้าน</div>
+        <div class="list">
+          <div class="lrow"><span class="sk sk-circle"></span><span class="meta" style="display:flex;flex-direction:column;gap:9px"><span class="sk sk-line" style="width:40%"></span><span class="sk sk-line" style="width:22%;height:10px"></span></span><span class="sk sk-line" style="width:78px;height:22px;border-radius:999px"></span></div>
+          <div class="lrow"><span class="sk sk-circle"></span><span class="meta" style="display:flex;flex-direction:column;gap:9px"><span class="sk sk-line" style="width:34%"></span><span class="sk sk-line" style="width:18%;height:10px"></span></span><span class="sk sk-line" style="width:78px;height:22px;border-radius:999px"></span></div>
+          <div class="lrow"><span class="sk sk-circle"></span><span class="meta" style="display:flex;flex-direction:column;gap:9px"><span class="sk sk-line" style="width:37%"></span><span class="sk sk-line" style="width:20%;height:10px"></span></span><span class="sk sk-line" style="width:78px;height:22px;border-radius:999px"></span></div>
+        </div>
+      </div>
+    </div>
+
+    <div class="blk">
+      <div class="blabel"><span class="n">S6-3</span> ว่าง — มีคุณอยู่คนเดียว <span class="lite">+ แถบชวนตั้งเจ้าของร้านสำรอง (D-030) · ส่วนคำเชิญถูกซ่อนทั้งส่วนเพราะไม่มีคำเชิญค้าง</span></div>
+      <div class="card t-light" style="background:var(--bg);box-shadow:none;padding:24px">
+        <div style="display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap">
+          <h3 class="h-md">สมาชิก</h3>
+          <button class="btn btn-p" type="button"><svg class="i" aria-hidden="true"><use href="#i-plus"/></svg>เชิญสมาชิก</button>
+        </div>
+        <div class="banner info" style="margin-top:16px">
+          <svg class="i ico" aria-hidden="true"><use href="#i-info"/></svg>
+          <span>ตอนนี้ร้านนี้มีเจ้าของร้านคนเดียวคือคุณ — ถ้าวันหนึ่งคุณเข้าระบบไม่ได้ จะไม่มีใครในร้านช่วยตั้งรหัสผ่านใหม่ให้ได้ แนะนำให้ตั้งคนที่คุณไว้ใจอีก 1 คนเป็นเจ้าของร้านไว้
+            <span class="acts">
+              <button class="btn btn-o btn-sm" type="button">เชิญเจ้าของร้านอีกคน</button>
+              <button class="tlink" type="button">ไว้ทีหลัง</button>
+            </span>
+          </span>
+        </div>
+        <div class="secttitle">สมาชิกในร้าน (1)</div>
+        <div class="list">
+          <div class="lrow">
+            <span class="avatar">ส</span>
+            <span class="meta"><span class="main">somchai@shop.com <span class="muted b-sm">(คุณ)</span></span><span class="sub">เจ้าของร้าน</span></span>
+            <span class="right"><span class="badge ok">ใช้งานอยู่</span><button class="iconbtn" type="button" aria-label="เพิ่มเติม"><svg class="i i-24" aria-hidden="true"><use href="#i-more"/></svg></button></span>
+          </div>
+        </div>
+        <div class="empty">
+          <div class="eico"><svg class="i i-40" aria-hidden="true"><use href="#i-users"/></svg></div>
+          <h4>ตอนนี้มีคุณอยู่คนเดียวในร้านนี้</h4>
+          <p>ชวนทีมงานเข้ามาช่วยกันได้เลย</p>
+          <div class="acts"><button class="btn btn-p" type="button">เชิญสมาชิก</button></div>
+        </div>
+      </div>
+    </div>
+
+    <div class="blk">
+      <div class="blabel"><span class="n">S6-3ก</span> เทียบโทนของแถบ D-030 <span class="lite">— ต้องอ่านแล้วรู้สึกว่า "คำแนะนำ" ไม่ใช่ "เตือนภัย"</span></div>
+      <div class="cols">
+        <div style="flex:1 1 420px;min-width:300px">
+          <div class="blabel" style="color:var(--success-text)"><svg class="i i-16" aria-hidden="true"><use href="#i-check"/></svg> ที่เลือกใช้ — tone info (พื้น color.info.bg = surface.muted · ตัวอักษร color.info.text · ไอคอน info)</div>
+          <div class="banner info t-light"><svg class="i ico" aria-hidden="true"><use href="#i-info"/></svg><span>ตอนนี้ร้านนี้มีเจ้าของร้านคนเดียวคือคุณ — ถ้าวันหนึ่งคุณเข้าระบบไม่ได้ จะไม่มีใครในร้านช่วยตั้งรหัสผ่านใหม่ให้ได้ แนะนำให้ตั้งคนที่คุณไว้ใจอีก 1 คนเป็นเจ้าของร้านไว้</span></div>
+        </div>
+        <div style="flex:1 1 420px;min-width:300px">
+          <div class="blabel" style="color:var(--danger-text)"><svg class="i i-16" aria-hidden="true"><use href="#i-close"/></svg> ไม่ใช้ — tone warning (ผู้ใช้ยังไม่ได้ทำอะไรผิด และร้านยังไม่ได้มีปัญหา)</div>
+          <div class="banner warn t-light"><svg class="i ico" aria-hidden="true"><use href="#i-warn"/></svg><span>ตอนนี้ร้านนี้มีเจ้าของร้านคนเดียวคือคุณ — ถ้าวันหนึ่งคุณเข้าระบบไม่ได้ จะไม่มีใครในร้านช่วยตั้งรหัสผ่านใหม่ให้ได้ แนะนำให้ตั้งคนที่คุณไว้ใจอีก 1 คนเป็นเจ้าของร้านไว้</span></div>
+        </div>
+      </div>
+    </div>
+
+    <div class="blk">
+      <div class="blabel"><span class="n">S6-4</span> ผิดพลาดแยกต่อส่วน <span class="lite">— คำเชิญโหลดไม่ได้ แต่รายชื่อสมาชิกยังใช้งานได้ (ไม่พังทั้งจอ)</span></div>
+      <div class="card t-light" style="background:var(--bg);box-shadow:none;padding:24px">
+        <div style="display:flex;align-items:center;justify-content:space-between;gap:12px">
+          <h3 class="h-md">สมาชิก</h3>
+          <button class="btn btn-p" type="button"><svg class="i" aria-hidden="true"><use href="#i-plus"/></svg>เชิญสมาชิก</button>
+        </div>
+        <div class="secttitle" style="margin-top:20px">คำเชิญที่รอตอบรับ</div>
+        <div class="banner err"><svg class="i ico" aria-hidden="true"><use href="#i-error"/></svg><span>โหลดคำเชิญไม่สำเร็จ<span class="acts"><button class="btn btn-o btn-sm" type="button">ลองใหม่</button></span></span></div>
+        <div class="secttitle">สมาชิกในร้าน (3)</div>
+        <div class="list">
+          <div class="lrow"><span class="avatar">ส</span><span class="meta"><span class="main">somchai@shop.com <span class="muted b-sm">(คุณ)</span></span><span class="sub">เจ้าของร้าน</span></span><span class="right"><span class="badge ok">ใช้งานอยู่</span><button class="iconbtn" type="button" aria-label="เพิ่มเติม"><svg class="i i-24" aria-hidden="true"><use href="#i-more"/></svg></button></span></div>
+          <div class="lrow"><span class="avatar">ม</span><span class="meta"><span class="main">malee@shop.com</span><span class="sub">ผู้ดูแล</span></span><span class="right"><span class="badge ok">ใช้งานอยู่</span><button class="iconbtn" type="button" aria-label="เพิ่มเติม"><svg class="i i-24" aria-hidden="true"><use href="#i-more"/></svg></button></span></div>
+          <div class="lrow"><span class="avatar">น</span><span class="meta"><span class="main">noi@shop.com</span><span class="sub">พนักงาน</span></span><span class="right"><span class="badge ok">ใช้งานอยู่</span><button class="iconbtn" type="button" aria-label="เพิ่มเติม"><svg class="i i-24" aria-hidden="true"><use href="#i-more"/></svg></button></span></div>
+        </div>
+      </div>
+    </div>
+
+    <div class="blk">
+      <div class="blabel"><span class="n">S6-5</span> ป้ายสถานะครบชุด + แถวพิเศษ <span class="lite">— หลังกด "แสดงสมาชิกที่ถูกถอดออกแล้ว" / "ดูคำเชิญที่หมดอายุ/ยกเลิกแล้ว"</span></div>
+      <div class="card t-light" style="background:var(--bg);box-shadow:none;padding:24px">
+        <div class="list">
+          <div class="lrow dim">
+            <span class="avatar">ก</span>
+            <span class="meta"><span class="main">kanya@shop.com</span><span class="sub">พนักงาน</span></span>
+            <span class="right"><span class="badge neu">ถูกถอดแล้ว</span></span>
+          </div>
+          <div class="lrow dim">
+            <span class="avatar"><svg class="i" aria-hidden="true"><use href="#i-mail"/></svg></span>
+            <span class="meta"><span class="main">old@example.com</span><span class="sub">พนักงาน · <span class="tnum">27 ก.ค. 2026, 09:10</span></span></span>
+            <span class="right"><span class="badge neu">หมดอายุแล้ว</span><button class="btn btn-o btn-sm" type="button">เชิญใหม่อีกครั้ง</button></span>
+          </div>
+          <div class="lrow dim">
+            <span class="avatar"><svg class="i" aria-hidden="true"><use href="#i-mail"/></svg></span>
+            <span class="meta"><span class="main">wrong@example.com</span><span class="sub">ผู้ดูแล</span></span>
+            <span class="right"><span class="badge neu">ยกเลิกแล้ว</span><button class="btn btn-o btn-sm" type="button">เชิญใหม่อีกครั้ง</button></span>
+          </div>
+          <div class="lrow">
+            <span class="avatar"><svg class="i" aria-hidden="true"><use href="#i-mail"/></svg></span>
+            <span class="meta">
+              <span class="main">malee@shop.com <span class="badge neu">รับแล้วเมื่อ 26 ก.ค. 2026, 20:05</span></span>
+              <span class="sub"><svg class="i i-16" aria-hidden="true"><use href="#i-info"/></svg> บัญชีที่กดรับถูกสร้างขึ้นหลังจากออกลิงก์ ตรวจสอบว่าเป็นคนที่คุณตั้งใจเชิญ</span>
+            </span>
+          </div>
+        </div>
+        <p class="b-sm muted" style="margin-top:12px">แถวที่จบแล้วเป็นสีจาง + ไม่มีปุ่มการกระทำ นอกจาก "เชิญใหม่อีกครั้ง" · ธงข้อมูลใช้ถ้อยคำกลาง ไม่กล่าวหา</p>
+      </div>
+    </div>
+
+    <div class="blk">
+      <div class="blabel"><span class="n">S6-6</span> ธีมมืด <span class="lite">— แถบ D-030 + รายการ + ป้ายสถานะ บนพื้นมืด</span></div>
+      <div class="card t-dark" style="background:var(--bg);box-shadow:none;padding:24px;border-color:var(--border)">
+        <div style="display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap">
+          <h3 class="h-md">สมาชิก</h3>
+          <button class="btn btn-p" type="button"><svg class="i" aria-hidden="true"><use href="#i-plus"/></svg>เชิญสมาชิก</button>
+        </div>
+        <div class="banner info" style="margin-top:16px">
+          <svg class="i ico" aria-hidden="true"><use href="#i-info"/></svg>
+          <span>ตอนนี้ร้านนี้มีเจ้าของร้านคนเดียวคือคุณ — ถ้าวันหนึ่งคุณเข้าระบบไม่ได้ จะไม่มีใครในร้านช่วยตั้งรหัสผ่านใหม่ให้ได้ แนะนำให้ตั้งคนที่คุณไว้ใจอีก 1 คนเป็นเจ้าของร้านไว้
+            <span class="acts"><button class="btn btn-o btn-sm" type="button">เชิญเจ้าของร้านอีกคน</button><button class="tlink" type="button">ไว้ทีหลัง</button></span>
+          </span>
+        </div>
+        <div class="secttitle">สมาชิกในร้าน (3)</div>
+        <div class="list">
+          <div class="lrow"><span class="avatar">ส</span><span class="meta"><span class="main">somchai@shop.com <span class="muted b-sm">(คุณ)</span></span><span class="sub">เจ้าของร้าน</span></span><span class="right"><span class="badge ok">ใช้งานอยู่</span><button class="iconbtn" type="button" aria-label="เพิ่มเติม"><svg class="i i-24" aria-hidden="true"><use href="#i-more"/></svg></button></span></div>
+          <div class="lrow"><span class="avatar">ม</span><span class="meta"><span class="main">malee@shop.com</span><span class="sub">ผู้ดูแล</span></span><span class="right"><span class="badge ok">ใช้งานอยู่</span><button class="iconbtn" type="button" aria-label="เพิ่มเติม"><svg class="i i-24" aria-hidden="true"><use href="#i-more"/></svg></button></span></div>
+          <div class="lrow dim"><span class="avatar">ก</span><span class="meta"><span class="main">kanya@shop.com</span><span class="sub">พนักงาน</span></span><span class="right"><span class="badge neu">ถูกถอดแล้ว</span></span></div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ============================================================ 03 · S8 -->
+  <section>
+    <div class="shead">
+      <span class="num">03</span><h2>S8 — แผ่นลิงก์คำเชิญ (แสดงครั้งเดียว) + ยืนยันออกลิงก์ใหม่</h2>
+      <span class="ref">ux-wireframe.md §9 · D-027</span>
+      <p>จุดเสี่ยงสูงสุด: ถ้าผู้ใช้ปิดแผ่นนี้โดยยังไม่คัดลอก ลิงก์หายถาวร ⇒ คำเตือน <b>"ลิงก์นี้แสดงครั้งเดียว"</b> ต้องอยู่ในสายตาตอนกำลังจะปิด
+        (<b>แถบเตือนคือด่านเดียว</b> — user เคาะ 2026-07-28 ให้ตัด dialog กันปิดออก) · วันหมดอายุอ่านจาก <code>expiresAt</code> เสมอ (ห้ามเขียน "24 ชั่วโมง" ตายตัว)</p>
+    </div>
+
+    <div class="blk">
+      <div class="blabel"><span class="n">S8-1</span> เปิดครั้งแรก (ยังไม่ได้คัดลอก) <span class="lite">— แถบเตือน "แสดงครั้งเดียว" คือด่านเดียว (user เคาะ 2026-07-28: ไม่ต้องมี dialog กันปิดซ้อนอีกชั้น)</span></div>
+      <div class="ovl t-light">
+        <div class="dialog">
+          <h4>ลิงก์คำเชิญพร้อมแล้ว</h4>
+          <p class="b-md" style="margin-top:10px;color:var(--text-muted)">ส่งลิงก์นี้ให้ malee@shop.com ทางแชต (เช่น LINE) — ระบบไม่ได้ส่งอีเมลให้อัตโนมัติ</p>
+          <div class="copyfield" style="margin-top:16px">https://app.omnistock.co/invite?token=9f2b7c41e8a04d5fb3c6d9a71e5f0b28</div>
+          <button class="btn btn-p full" type="button" style="margin-top:12px">คัดลอกลิงก์</button>
+          <div class="stack" style="margin-top:16px">
+            <div class="banner info"><svg class="i ico" aria-hidden="true"><use href="#i-clock"/></svg><span>ลิงก์ใช้ได้ถึง <span class="tnum">29 ก.ค. 2026, 14:30</span> (อีกประมาณ 24 ชั่วโมง)</span></div>
+            <div class="banner warn"><svg class="i ico" aria-hidden="true"><use href="#i-warn"/></svg><span><b>ลิงก์นี้แสดงครั้งเดียว</b> — ปิดหน้านี้แล้วเปิดดูซ้ำไม่ได้ ถ้าทำลิงก์หาย กด "ออกลิงก์ใหม่" ที่รายการคำเชิญ</span></div>
+          </div>
+          <div class="acts"><button class="btn btn-o" type="button">เสร็จแล้ว</button></div>
+        </div>
+      </div>
+    </div>
+
+    <div class="blk">
+      <div class="blabel"><span class="n">S8-2</span> หลังกดคัดลอกแล้ว <span class="lite">— ปุ่มเปลี่ยนเป็น "คัดลอกแล้ว" 2 วินาที + toast · ปุ่มปิดกลายเป็นปุ่มหลัก (ทางออกที่ปลอดภัยแล้ว)</span></div>
+      <div class="cols">
+        <div class="ovl t-light" style="flex:1 1 520px">
+          <div class="dialog">
+            <h4>ลิงก์คำเชิญพร้อมแล้ว</h4>
+            <p class="b-md" style="margin-top:10px;color:var(--text-muted)">ส่งลิงก์นี้ให้ malee@shop.com ทางแชต (เช่น LINE) — ระบบไม่ได้ส่งอีเมลให้อัตโนมัติ</p>
+            <div class="copyfield" style="margin-top:16px">https://app.omnistock.co/invite?token=9f2b7c41e8a04d5fb3c6d9a71e5f0b28</div>
+            <button class="btn btn-o btn-ok full" type="button" style="margin-top:12px"><svg class="i" aria-hidden="true"><use href="#i-check"/></svg>คัดลอกแล้ว</button>
+            <div class="stack" style="margin-top:16px">
+              <div class="banner info"><svg class="i ico" aria-hidden="true"><use href="#i-clock"/></svg><span>ลิงก์ใช้ได้ถึง <span class="tnum">29 ก.ค. 2026, 14:30</span> (อีกประมาณ 24 ชั่วโมง)</span></div>
+              <div class="banner warn"><svg class="i ico" aria-hidden="true"><use href="#i-warn"/></svg><span><b>ลิงก์นี้แสดงครั้งเดียว</b> — ปิดหน้านี้แล้วเปิดดูซ้ำไม่ได้ ถ้าทำลิงก์หาย กด "ออกลิงก์ใหม่" ที่รายการคำเชิญ</span></div>
+            </div>
+            <div class="acts"><button class="btn btn-p" type="button">เสร็จแล้ว</button></div>
+          </div>
+        </div>
+        <div style="flex:1 1 300px;min-width:280px">
+          <div class="blabel">toast (มุมบนขวาบน web · ล่างจอบน mobile)</div>
+          <div class="t-light"><span class="toast"><svg class="i" aria-hidden="true"><use href="#i-check-circle"/></svg>คัดลอกลิงก์แล้ว</span></div>
+          <div class="blabel" style="margin-top:24px">คัดลอกอัตโนมัติไม่สำเร็จ (clipboard ถูกปฏิเสธ)</div>
+          <div class="card t-light">
+            <div class="copyfield">https://app.omnistock.co/invite?token=9f2b7c41e8a04d5fb3c6d9a71e5f0b28</div>
+            <button class="btn btn-p full" type="button" style="margin-top:12px">คัดลอกลิงก์</button>
+            <p class="b-sm" style="margin-top:8px;color:var(--danger-text)">คัดลอกอัตโนมัติไม่สำเร็จ — กดค้างที่ลิงก์เพื่อคัดลอกเอง</p>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div class="blk">
+      <div class="blabel"><span class="n">S8-3</span> ยืนยันก่อนออกลิงก์ใหม่ <span class="lite">— ไม่ใช่ปุ่มแดง แต่ย้อนไม่ได้ ⇒ โฟกัสเริ่มที่ "ยกเลิก" (prop <code>focusCancel</code>)</span></div>
+      <div class="cols">
+        <div style="flex:1 1 440px;min-width:300px">
+          <div class="blabel lite" style="text-transform:none;letter-spacing:0;font-size:12.5px">ตอนเปิดด้วยเมาส์ — <b>ไม่มี focus ring</b> (ปุ่มหลักมีตัวเดียวคือ "ออกลิงก์ใหม่")</div>
+          <div class="ovl t-light">
+            <div class="dialog">
+              <h4>ออกลิงก์ใหม่?</h4>
+              <div class="body">
+                <p>ลิงก์เดิมที่ส่งไปแล้วจะใช้ไม่ได้ทันที ถ้าคุณส่งลิงก์เดิมให้ใครไว้ ต้องส่งลิงก์ใหม่ให้เขาแทน</p>
+                <p class="muted">อีเมลและสิทธิ์ของคำเชิญไม่เปลี่ยน (malee@shop.com · ผู้ดูแล)</p>
+              </div>
+              <div class="acts">
+                <button class="btn btn-o" type="button">ยกเลิก</button>
+                <button class="btn btn-p" type="button">ออกลิงก์ใหม่</button>
+              </div>
+            </div>
+          </div>
+        </div>
+        <div style="flex:1 1 440px;min-width:300px">
+          <span class="kbdnote"><svg class="i i-16" aria-hidden="true"><use href="#i-keyboard"/></svg>ภาพจำลอง <code>:focus-visible</code> — โฟกัสเริ่มต้นอยู่ที่ "ยกเลิก" (<code>focusCancel</code>)</span>
+          <div class="ovl t-light">
+            <div class="dialog">
+              <h4>ออกลิงก์ใหม่?</h4>
+              <div class="body">
+                <p>ลิงก์เดิมที่ส่งไปแล้วจะใช้ไม่ได้ทันที ถ้าคุณส่งลิงก์เดิมให้ใครไว้ ต้องส่งลิงก์ใหม่ให้เขาแทน</p>
+                <p class="muted">อีเมลและสิทธิ์ของคำเชิญไม่เปลี่ยน (malee@shop.com · ผู้ดูแล)</p>
+              </div>
+              <div class="acts">
+                <button class="btn btn-o simfocus" type="button">ยกเลิก</button>
+                <button class="btn btn-p" type="button">ออกลิงก์ใหม่</button>
+              </div>
+            </div>
+          </div>
+        </div>
+        <div style="flex:1 1 440px;min-width:300px">
+          <span class="kbdnote"><svg class="i i-16" aria-hidden="true"><use href="#i-keyboard"/></svg>ภาพจำลองเดียวกันบนธีมมืด (ring = <code>color.primary</code> ของธีมนั้น)</span>
+          <div class="ovl t-dark">
+            <div class="dialog">
+              <h4>ออกลิงก์ใหม่?</h4>
+              <div class="body">
+                <p>ลิงก์เดิมที่ส่งไปแล้วจะใช้ไม่ได้ทันที ถ้าคุณส่งลิงก์เดิมให้ใครไว้ ต้องส่งลิงก์ใหม่ให้เขาแทน</p>
+                <p class="muted">อีเมลและสิทธิ์ของคำเชิญไม่เปลี่ยน (malee@shop.com · ผู้ดูแล)</p>
+              </div>
+              <div class="acts">
+                <button class="btn btn-o simfocus" type="button">ยกเลิก</button>
+                <button class="btn btn-p" type="button">ออกลิงก์ใหม่</button>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+      <p class="b-sm muted" style="margin-top:12px"><b>กติกา focus ring:</b> ขึ้นเมื่อ <code>:focus-visible</code> เท่านั้น (คลิกเมาส์ไม่ขึ้น) ·
+        หนา <code>focus.ring.w</code> 2.5px · ห่างขอบ <code>focus.ring.offset</code> 2px (ให้ ring ไม่ทับปุ่มที่พื้นเป็นสี primary) ·
+        <b>ห้ามใช้ ring แทน "ปุ่มเด่น" และห้ามโชว์ค้าง</b> — ลำดับความสำคัญของปุ่มสื่อด้วย variant เท่านั้น</p>
+    </div>
+
+    <!-- S8-4 "กันปิดก่อนคัดลอก" ถูกตัดออกตามที่ user เคาะ 2026-07-28:
+         เหลือแค่แถบเตือนใน S8-1/S8-2 พอ (2 ชั้นถือว่ามากเกินไป)
+         → ux ต้องอัปเดต ux-wireframe.md §9.1 + ui.md §3 ให้ตรง (ลบ state + i18n key ของ dialog นี้) -->
+
+    <div class="blk">
+      <div class="blabel"><span class="n">S8-4</span> ธีมมืด · แผ่นลิงก์เต็มแผ่น</div>
+      <div class="ovl t-dark">
+        <div class="dialog">
+          <h4>ลิงก์คำเชิญพร้อมแล้ว</h4>
+          <p class="b-md" style="margin-top:10px;color:var(--text-muted)">ส่งลิงก์นี้ให้ malee@shop.com ทางแชต (เช่น LINE) — ระบบไม่ได้ส่งอีเมลให้อัตโนมัติ</p>
+          <div class="copyfield" style="margin-top:16px">https://app.omnistock.co/invite?token=9f2b7c41e8a04d5fb3c6d9a71e5f0b28</div>
+          <button class="btn btn-p full" type="button" style="margin-top:12px">คัดลอกลิงก์</button>
+          <div class="stack" style="margin-top:16px">
+            <div class="banner info"><svg class="i ico" aria-hidden="true"><use href="#i-clock"/></svg><span>ลิงก์ใช้ได้ถึง <span class="tnum">29 ก.ค. 2026, 14:30</span> (อีกประมาณ 24 ชั่วโมง)</span></div>
+            <div class="banner warn"><svg class="i ico" aria-hidden="true"><use href="#i-warn"/></svg><span><b>ลิงก์นี้แสดงครั้งเดียว</b> — ปิดหน้านี้แล้วเปิดดูซ้ำไม่ได้ ถ้าทำลิงก์หาย กด "ออกลิงก์ใหม่" ที่รายการคำเชิญ</span></div>
+          </div>
+          <div class="acts"><button class="btn btn-o" type="button">เสร็จแล้ว</button></div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ============================================================ 04 · S4 -->
+  <section>
+    <div class="shead">
+      <span class="num">04</span><h2>S4 — ข้อมูลร้าน (บล็อกภาษี 3 แบบ)</h2>
+      <span class="ref">ux-wireframe.md §5 · D-028 (PDPA) · ui.md §2.1 SectionCard</span>
+      <p><code>SectionCard</code> = พื้น <code>surface</code> · radius 12 · เงา <code>elevation.card</code> · padding 24 ·
+        แถวข้อมูล label ซ้าย (<code>type.label.sm</code> สีจาง) ค่าขวา (<code>type.body.md</code>) ·
+        <b>ผู้ไม่มีสิทธิ์ต้องไม่เห็นตัวเลขใด ๆ แม้แต่ 4 ตัวท้าย</b></p>
+    </div>
+
+    <div class="blk">
+      <div class="blabel"><span class="n">S4-1</span> มีสิทธิ์ดูแลข้อมูลร้าน + ประกาศข้อมูลผู้เสียภาษีแล้ว <span class="lite">— ไม่มีการ์ด "เริ่มต้นใช้งาน" เพราะทำครบแล้ว</span></div>
+      <div class="card t-light" style="background:var(--bg);box-shadow:none;padding:24px">
+        <h3 class="h-md">ข้อมูลร้าน</h3>
+        <div style="margin-top:16px">
+          <div class="card">
+            <div class="drow"><span class="k">ชื่อร้าน</span><span class="v">ร้านหอมกรุ่นเบเกอรี่</span><button class="btn btn-o btn-sm" type="button">แก้ไข</button></div>
+            <div class="drow"><span class="k">เวลา/สกุลเงิน</span><span class="v">เวลาไทย · บาท (฿)</span></div>
+            <div class="drow"><span class="k">ทีมงาน</span><span class="v">สมาชิก 4 คน · คำเชิญค้าง 1 ใบ</span><svg class="i go" aria-hidden="true"><use href="#i-chevron-right"/></svg></div>
+          </div>
+          <div class="card">
+            <div class="chead">
+              <h4>ข้อมูลผู้เสียภาษี</h4>
+              <button class="btn btn-o btn-sm" type="button">แก้ไข</button>
+            </div>
+            <div class="drow"><span class="k">ประเภทผู้เสียภาษี</span><span class="v">นิติบุคคล</span></div>
+            <div class="drow">
+              <span class="k">เลขประจำตัวผู้เสียภาษี</span>
+              <span class="v">
+                <span class="tnum">•••••••••4567</span>
+                <button class="btn btn-o btn-sm" type="button" style="margin-left:10px">แสดงเลขเต็ม</button>
+                <span class="b-sm muted" style="display:block;margin-top:6px">การกดดูเลขเต็มถูกบันทึกไว้เพื่อความปลอดภัยของร้าน</span>
+              </span>
+            </div>
+            <div class="drow"><span class="k">จดทะเบียน VAT</span><span class="v">จดทะเบียน VAT</span></div>
+            <div class="drow"><span class="k">รหัสสาขา</span><span class="v tnum">00000 (สำนักงานใหญ่)</span></div>
+          </div>
+          <div style="display:flex;justify-content:flex-end;margin-top:20px"><button class="tlink" type="button" style="color:var(--text-muted)">ออกจากร้านนี้</button></div>
+        </div>
+      </div>
+    </div>
+
+    <div class="blk">
+      <div class="blabel"><span class="n">S4-1ก</span> ปุ่ม "แสดงเลขเต็ม" — 4 สถานะ <span class="lite">(ทุกครั้งที่กด = ยิง API + ถูกบันทึก · จำกัด 20 ครั้ง/ชม.)</span></div>
+      <div class="cols">
+        <div class="card t-light" style="flex:1 1 330px">
+          <div class="blabel">ปกติ (ปิดไว้เป็นค่าตั้งต้น)</div>
+          <span class="tnum b-md">•••••••••4567</span>
+          <button class="btn btn-o btn-sm" type="button" style="margin-left:10px">แสดงเลขเต็ม</button>
+          <p class="b-sm muted" style="margin-top:8px">การกดดูเลขเต็มถูกบันทึกไว้เพื่อความปลอดภัยของร้าน</p>
+        </div>
+        <div class="card t-light" style="flex:1 1 330px">
+          <div class="blabel">กำลังขอเลข (ปุ่ม loading + disabled)</div>
+          <span class="tnum b-md">•••••••••4567</span>
+          <button class="btn btn-o btn-sm" type="button" style="margin-left:10px" disabled><span class="spin"></span>กำลังขอเลข...</button>
+          <p class="b-sm muted" style="margin-top:8px">การกดดูเลขเต็มถูกบันทึกไว้เพื่อความปลอดภัยของร้าน</p>
+        </div>
+        <div class="card t-light" style="flex:1 1 330px">
+          <div class="blabel">เผยแล้ว (กดซ้ำ = ทิ้งค่าจริง)</div>
+          <span class="tnum b-md">0 1055 12345 67 8</span>
+          <button class="btn btn-o btn-sm" type="button" style="margin-left:10px">ซ่อนเลข</button>
+          <p class="b-sm muted" style="margin-top:8px">การกดดูเลขเต็มถูกบันทึกไว้เพื่อความปลอดภัยของร้าน</p>
+        </div>
+        <div class="card t-light" style="flex:1 1 330px">
+          <div class="blabel">ขอถี่เกินไป (429) — เฉพาะในการ์ดภาษี ไม่ล็อกทั้งจอ</div>
+          <div class="banner warn"><svg class="i ico" aria-hidden="true"><use href="#i-hourglass"/></svg><span>ขอดูเลขเต็มบ่อยเกินไป กรุณารอสักครู่แล้วลองใหม่ · เหลือ <b class="tnum">04:58</b><br><span class="muted" style="color:inherit;opacity:.85">ระหว่างนี้ยังแก้ไขข้อมูลอื่นของร้านได้ตามปกติ</span></span></div>
+        </div>
+      </div>
+    </div>
+
+    <div class="blk">
+      <div class="blabel"><span class="n">S4-2</span> มีสิทธิ์ + ยังไม่ประกาศข้อมูลผู้เสียภาษี <span class="lite">— ร้านเพิ่งสร้าง มีคนเดียว ⇒ การ์ด "เริ่มต้นใช้งาน" ครบ 3 ข้อ (ข้อ 3 = D-030)</span></div>
+      <div class="card t-light" style="background:var(--bg);box-shadow:none;padding:24px">
+        <h3 class="h-md">ข้อมูลร้าน</h3>
+        <div style="margin-top:16px">
+          <div class="card">
+            <div class="chead"><h4>เริ่มต้นใช้งาน</h4></div>
+            <div class="drow"><span class="v" style="flex:1 1 auto"><svg class="i" aria-hidden="true"><use href="#i-circle"/></svg> ชวนทีมงานเข้าร้าน</span><button class="btn btn-o btn-sm" type="button">เชิญสมาชิก</button></div>
+            <div class="drow"><span class="v" style="flex:1 1 auto"><svg class="i" aria-hidden="true"><use href="#i-circle"/></svg> ประกาศข้อมูลผู้เสียภาษี เพื่อออกใบกำกับภาษีได้</span><button class="btn btn-o btn-sm" type="button">กรอกข้อมูล</button></div>
+            <div class="drow"><span class="v" style="flex:1 1 auto"><svg class="i" aria-hidden="true"><use href="#i-circle"/></svg> ตั้งเจ้าของร้านสำรองไว้อีก 1 คน เผื่อวันหนึ่งคุณเข้าระบบไม่ได้</span><button class="btn btn-o btn-sm" type="button">เชิญเจ้าของร้าน</button></div>
+          </div>
+          <div class="card">
+            <div class="drow"><span class="k">ชื่อร้าน</span><span class="v">ร้านหอมกรุ่นเบเกอรี่</span><button class="btn btn-o btn-sm" type="button">แก้ไข</button></div>
+            <div class="drow"><span class="k">เวลา/สกุลเงิน</span><span class="v">เวลาไทย · บาท (฿)</span></div>
+            <div class="drow"><span class="k">ทีมงาน</span><span class="v">สมาชิก 1 คน</span><svg class="i go" aria-hidden="true"><use href="#i-chevron-right"/></svg></div>
+          </div>
+          <div class="card">
+            <div class="chead"><h4>ข้อมูลผู้เสียภาษี</h4></div>
+            <div class="banner info"><svg class="i ico" aria-hidden="true"><use href="#i-info"/></svg><span>ยังไม่ได้ประกาศข้อมูลผู้เสียภาษี — ตอนนี้ร้านนี้ยังออกใบกำกับภาษีไม่ได้
+              <span class="acts"><button class="btn btn-p btn-sm" type="button">กรอกข้อมูลผู้เสียภาษี</button></span></span></div>
+          </div>
+          <div style="display:flex;justify-content:flex-end;margin-top:20px"><button class="tlink" type="button" style="color:var(--text-muted)">ออกจากร้านนี้</button></div>
+        </div>
+      </div>
+    </div>
+
+    <div class="blk">
+      <div class="blabel"><span class="n">S4-3</span> พนักงาน (ไม่มีสิทธิ์ดูแลข้อมูลร้าน/ทีมงาน) <span class="lite">— ไม่มีปุ่มแก้ไข · ไม่มีเลข · ไม่มีลูกศรเข้าหน้าสมาชิก · ยังออกจากร้านเองได้</span></div>
+      <div class="cols">
+        <div class="card t-light" style="flex:1 1 480px;background:var(--bg);box-shadow:none;padding:24px">
+          <h3 class="h-md">ข้อมูลร้าน</h3>
+          <div style="margin-top:16px">
+            <div class="card">
+              <div class="drow"><span class="k">ชื่อร้าน</span><span class="v">ร้านหอมกรุ่นเบเกอรี่</span></div>
+              <div class="drow"><span class="k">เวลา/สกุลเงิน</span><span class="v">เวลาไทย · บาท (฿)</span></div>
+              <div class="drow"><span class="k">ทีมงาน</span><span class="v">สมาชิก 4 คน</span></div>
+            </div>
+            <div class="card">
+              <div class="chead"><h4>ข้อมูลผู้เสียภาษี</h4></div>
+              <div class="banner ok"><svg class="i ico" aria-hidden="true"><use href="#i-check-circle"/></svg><span>ร้านนี้ประกาศข้อมูลผู้เสียภาษีแล้ว · จดทะเบียน VAT<br><span style="opacity:.9">รายละเอียดเปิดให้เฉพาะผู้ที่ดูแลข้อมูลร้าน</span></span></div>
+            </div>
+            <div style="display:flex;justify-content:flex-end;margin-top:20px"><button class="tlink" type="button" style="color:var(--text-muted)">ออกจากร้านนี้</button></div>
+          </div>
+        </div>
+        <div class="card t-dark" style="flex:1 1 480px;background:var(--bg);box-shadow:none;padding:24px;border-color:var(--border)">
+          <div class="blabel">ธีมมืด · มุมมองพนักงาน + เคสยังไม่ประกาศ</div>
+          <div class="card">
+            <div class="drow"><span class="k">ชื่อร้าน</span><span class="v">ร้านหอมกรุ่นเบเกอรี่</span></div>
+            <div class="drow"><span class="k">ทีมงาน</span><span class="v">สมาชิก 4 คน</span></div>
+          </div>
+          <div class="card">
+            <div class="chead"><h4>ข้อมูลผู้เสียภาษี</h4></div>
+            <div class="banner info"><svg class="i ico" aria-hidden="true"><use href="#i-info"/></svg><span>ร้านนี้ยังไม่ได้ประกาศข้อมูลผู้เสียภาษี</span></div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ============================================================ 05 · S11 -->
+  <section>
+    <div class="shead">
+      <span class="num">05</span><h2>S11 — รับคำเชิญ <code>/invite</code> (สาธารณะ · เบราว์เซอร์มือถือเป็นหลัก)</h2>
+      <span class="ref">ux-wireframe.md §11 · ข้อยกเว้นเดียวของ design-system §8</span>
+      <p>ทุกกรอบด้านล่างกว้าง <b>390px</b> (ขนาดจริงของมือถือ) · การ์ดเดียว 1 คอลัมน์ · ปุ่มเต็มความกว้าง · ทุกปุ่มสูง ≥44px ·
+        จอเดียวที่คนนอกเห็นก่อนเป็นลูกค้า</p>
+    </div>
+
+    <div class="blk">
+      <div class="cols">
+        <div class="pframe t-light">
+          <div class="fcap">S11-1 · ก่อนล็อกอิน (คำเชิญยังใช้ได้) · 390px</div>
+          <div class="pbody">
+            <div class="authcard">
+              <div class="brandrow"><span class="logo"></span>OmniStock</div>
+              <h4 class="h-sm" style="text-align:center">คำเชิญเข้าร่วมร้าน</h4>
+              <p class="b-md" style="text-align:center;margin-top:8px">ร้านหอมกรุ่นเบเกอรี่ ชวนคุณเข้าร่วมเป็น "ผู้ดูแล"</p>
+              <div class="banner info" style="margin-top:16px"><svg class="i ico" aria-hidden="true"><use href="#i-mail"/></svg><span>คำเชิญนี้ออกให้ m***@shop.com<br>ลิงก์ใช้ได้ถึง <span class="tnum">29 ก.ค. 2026, 14:30</span></span></div>
+              <div class="stack" style="margin-top:16px">
+                <button class="btn btn-p full" type="button">เข้าสู่ระบบเพื่อรับคำเชิญ</button>
+                <button class="btn btn-o full" type="button">สมัครบัญชีใหม่</button>
+              </div>
+              <p class="b-sm muted" style="text-align:center;margin-top:12px">ใช้อีเมลเดียวกับที่ถูกเชิญเท่านั้น</p>
+            </div>
+          </div>
+        </div>
+
+        <div class="pframe t-light">
+          <div class="fcap">S11-2 · ล็อกอินแล้ว บัญชีถูกต้อง · 390px</div>
+          <div class="pbody">
+            <div class="authcard">
+              <div class="brandrow"><span class="logo"></span>OmniStock</div>
+              <h4 class="h-sm" style="text-align:center">คำเชิญเข้าร่วมร้าน</h4>
+              <p class="b-md" style="text-align:center;margin-top:8px">ร้านหอมกรุ่นเบเกอรี่ ชวนคุณเข้าร่วมเป็น "ผู้ดูแล"</p>
+              <div class="banner info" style="margin-top:16px"><svg class="i ico" aria-hidden="true"><use href="#i-clock"/></svg><span>ลิงก์ใช้ได้ถึง <span class="tnum">29 ก.ค. 2026, 14:30</span></span></div>
+              <button class="btn btn-p full" type="button" style="margin-top:16px">เข้าร่วมร้านนี้</button>
+              <p class="b-sm muted" style="text-align:center;margin-top:14px">คุณกำลังใช้บัญชี malee@shop.com</p>
+              <div style="text-align:center"><button class="tlink" type="button">ใช้บัญชีอื่น</button></div>
+            </div>
+          </div>
+        </div>
+
+        <div class="pframe t-light">
+          <div class="fcap">S11-3 · ล็อกอินผิดบัญชี (403 mismatch) · 390px</div>
+          <div class="pbody">
+            <div class="authcard">
+              <div class="brandrow"><span class="logo"></span>OmniStock</div>
+              <div class="banner warn"><svg class="i ico" aria-hidden="true"><use href="#i-warn"/></svg><span><b>บัญชีไม่ตรงกับคำเชิญ</b><br>คำเชิญนี้ออกให้ m***@shop.com · ตอนนี้คุณเข้าสู่ระบบด้วย noi@shop.com — กรุณาเข้าสู่ระบบด้วยบัญชีที่ถูกเชิญ</span></div>
+              <div class="stack" style="margin-top:16px">
+                <button class="btn btn-p full" type="button">ออกจากระบบแล้วเข้าด้วยบัญชีนั้น</button>
+                <button class="btn btn-o full" type="button">กลับหน้าแรก</button>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <div class="pframe t-light">
+          <div class="fcap">S11-4 · ลิงก์หมดอายุ (409 expired) · 390px</div>
+          <div class="pbody">
+            <div class="authcard">
+              <div class="brandrow"><span class="logo"></span>OmniStock</div>
+              <div class="empty" style="padding:12px 0 0">
+                <div class="eico"><svg class="i i-40" aria-hidden="true"><use href="#i-clock"/></svg></div>
+                <h4>ลิงก์คำเชิญหมดอายุแล้ว</h4>
+                <p>ขอให้เจ้าของร้านกด "ออกลิงก์ใหม่" แล้วส่งลิงก์ใหม่ให้คุณ</p>
+                <div class="acts"><button class="btn btn-o full" type="button">กลับหน้าแรก</button></div>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <div class="pframe t-light">
+          <div class="fcap">S11-5 · เข้าร่วมสำเร็จ · 390px</div>
+          <div class="pbody">
+            <div class="authcard">
+              <div class="brandrow"><span class="logo"></span>OmniStock</div>
+              <div class="empty" style="padding:12px 0 0">
+                <div class="eico" style="color:var(--success)"><svg class="i i-40" aria-hidden="true"><use href="#i-check-circle"/></svg></div>
+                <h4>เข้าร่วม "ร้านหอมกรุ่นเบเกอรี่" เรียบร้อย</h4>
+                <p>สิทธิ์ของคุณ: ผู้ดูแล</p>
+                <div class="acts"><button class="btn btn-p full" type="button">เริ่มใช้งานร้านนี้</button></div>
+              </div>
+              <p class="b-sm muted" style="text-align:center;margin-top:14px">ถ้าคุณใช้แอปบนมือถือ เปิดแอปแล้วสลับมาที่ร้านนี้ได้เลย</p>
+            </div>
+          </div>
+        </div>
+
+        <div class="pframe t-dark">
+          <div class="fcap">S11-1 · ธีมมืด (เบราว์เซอร์มือถือตั้งค่าโหมดมืด) · 390px</div>
+          <div class="pbody">
+            <div class="authcard">
+              <div class="brandrow"><span class="logo"></span>OmniStock</div>
+              <h4 class="h-sm" style="text-align:center">คำเชิญเข้าร่วมร้าน</h4>
+              <p class="b-md" style="text-align:center;margin-top:8px">ร้านหอมกรุ่นเบเกอรี่ ชวนคุณเข้าร่วมเป็น "ผู้ดูแล"</p>
+              <div class="banner info" style="margin-top:16px"><svg class="i ico" aria-hidden="true"><use href="#i-mail"/></svg><span>คำเชิญนี้ออกให้ m***@shop.com<br>ลิงก์ใช้ได้ถึง <span class="tnum">29 ก.ค. 2026, 14:30</span></span></div>
+              <div class="stack" style="margin-top:16px">
+                <button class="btn btn-p full" type="button">เข้าสู่ระบบเพื่อรับคำเชิญ</button>
+                <button class="btn btn-o full" type="button">สมัครบัญชีใหม่</button>
+              </div>
+              <p class="b-sm muted" style="text-align:center;margin-top:12px">ใช้อีเมลเดียวกับที่ถูกเชิญเท่านั้น</p>
+            </div>
+          </div>
+        </div>
+
+        <div class="pframe t-light">
+          <div class="fcap">S11-0 · กำลังโหลดคำเชิญ (skeleton การ์ด) · 390px</div>
+          <div class="pbody">
+            <div class="authcard">
+              <div class="brandrow"><span class="logo"></span>OmniStock</div>
+              <div class="stack">
+                <span class="sk sk-line" style="width:60%;height:18px;margin:0 auto"></span>
+                <span class="sk sk-line" style="width:85%;margin:0 auto"></span>
+                <span class="sk sk-line" style="width:70%;margin:0 auto"></span>
+                <span class="sk sk-line" style="height:44px;border-radius:8px;margin-top:8px"></span>
+                <span class="sk sk-line" style="height:44px;border-radius:8px"></span>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <div class="note" style="border-left-color:var(--warning)">
+    <b>รอบแก้ 2026-07-28 (หลังรีวิว) — ของที่ "ไม่เคยประกาศ" ถูกดึงกลับเข้า design system</b><br>
+    รอบแรกมี variant/ขนาด/สถานะที่ mockup เดาค่าเอง ไม่มีใน <code>docs/design-system.md</code> ⇒ แก้แล้วทั้งหมด และเขียน diff ไว้ที่ <code>ui.md §7</code>:
+    <br>1) <b>ปุ่มในกล่องสถานะใช้โทนของกล่องนั้น</b> (ตัวอักษร = <code>&lt;tone&gt;.text</code> · ขอบ = currentColor 65%) — เดิมเป็นเทากลาง+ตัวอักษรสีปกติ จึงดูหลุดออกจากกล่องแดง
+    <br>2) <b>focus ring มี token แล้ว</b> (<code>focus.ring.w</code> 2.5px · <code>offset</code> 2px · <code>:focus-visible</code> เท่านั้น) และเลิกโชว์ค้างใน mockup — ใช้ป้าย "ภาพจำลอง" แทน (S8-3)
+    <br>3) <b><code>color.info.*</code> เป็น role จริง</b> (bg/border/text) ทั้ง light+dark — เดิม tone info ถูกประกาศไว้ใน <code>ui.md §2</code> แต่ไม่มี token
+    <br>4) <b>ไอคอน = inline SVG outline ทั้งหมด</b> (grid 24 · stroke 2 · currentColor · ขนาด 16/20/24/40) — <b>ไม่มี emoji เหลือในจอแล้ว</b> · ชุดไอคอนจริงรอ user เคาะ (<code>ui.md §7 ข้อ 5</code>)
+    <br>5) <b><code>tlink</code> = <code>Button variant="tertiary"</code></b> สี <code>color.primary</code> + ขีดเส้นใต้ตอน hover/focus + พื้นที่แตะ 44px
+    <br>6) <b>tap target: 27 จุดที่เคยต่ำกว่า 44px ถูกแก้หมด</b> — <code>btn-sm</code> นิยามใหม่ว่า "แน่นที่ตัวอักษร/ระยะข้าง แต่สูง ≥44px เสมอ" (ไม่มีข้อยกเว้น pointer-only)
+    <br>7) <b>base style + theme token ย้ายไปที่ <code>body</code></b> (เดิมผูกกับ <code>.pg</code>) — กันบั๊กแบบเดียวกับที่เจอ เมื่อ Next.js portal ออกไป <code>document.body</code>
+  </div>
+
+  <div class="note">
+    <b>สิ่งที่เซ็นในไฟล์นี้</b> = หน้าตาระดับ component/จอ ของ F-002 (chrome ของแอปทั้งใบ + pattern รายการ/การ์ด/ป้ายสถานะ/แผ่นลิงก์)
+    ที่ทุก feature หลังจากนี้จะลอกต่อ · <b>ไม่ได้เซ็นสีแบรนด์</b> (ล็อกไปแล้วที่ D-026) และ<b>ไม่ได้เซ็นกติกาธุรกิจ</b> (อยู่ที่ Gate 1) ·
+    เซ็นแล้ว → ux เติม sync-back (<code>ui.md §7</code>) เข้า <code>docs/design-system.md</code> แล้ว frontend จึงเริ่ม build
+  </div>
+  <footer>OmniStock · F-002 mockup · token จาก design-system.md §1.1–1.1c + ของใหม่ที่ประกาศไว้ครบใน ui.md §7 (ไม่มีค่าที่ไม่มีเจ้าของ) ·
+    copy จาก ui.md §3 · ไอคอน outline inline SVG · ทุกองค์ประกอบที่กดได้ ≥44px · light + dark · ตรวจ responsive ที่ desktop / tablet 768 / mobile 390</footer>
+
+</div>
+</div>
+
+<!-- modal "กันปิดก่อนคัดลอก" ถูกลบออก (user เคาะ 2026-07-28 — เหลือแค่แถบเตือน)
+     บันทึกบั๊กที่เจอตอนรีวิว mockup ไว้กันเกิดซ้ำตอน build จริง:
+     (1) `.hidden` ประกาศก่อน `.modal` + specificity เท่ากัน ⇒ `.modal` ชนะ ⇒ ซ่อนไม่ได้เลย (แก้ที่ .hidden แล้ว)
+     (2) modal ถูกวางเป็นพี่น้องของ `.pg` ⇒ หลุดจาก font/color/theme ที่ผูกไว้กับ `.pg`
+         ⇒ ได้ Times + สีดำ + token ชุด dark บนหน้า light · ของจริงบน Next.js ที่ portal ไป document.body
+         จะเจอปัญหาเดียวกัน → base style/theme ต้องอยู่ที่ :root/body ไม่ใช่ container -->
+
+<script>
+(function(){
+  // 1) สลับธีมทั้งหน้า (บล็อกที่ติดป้าย "ธีมมืด/ธีมสว่าง" ถูกล็อกไว้ด้วย .t-dark/.t-light)
+  document.getElementById('themeBtn').addEventListener('click',function(){
+    var r=document.documentElement,cur=r.getAttribute('data-theme');
+    if(!cur)cur=matchMedia('(prefers-color-scheme:dark)').matches?'dark':'light';
+    r.setAttribute('data-theme',cur==='dark'?'light':'dark');
+  });
+
+  // 2) ตัวสลับร้าน (เปิด/ปิด dropdown)
+  document.querySelectorAll('[data-switch]').forEach(function(b){
+    b.addEventListener('click',function(e){
+      e.stopPropagation();
+      var dd=b.parentNode.querySelector('.dd');
+      if(!dd)return;
+      var open=dd.classList.toggle('hidden');
+      b.setAttribute('aria-expanded',open?'false':'true');
+    });
+  });
+
+  // 3) เมนูการกระทำของแถวรายการ
+  document.querySelectorAll('[data-menu]').forEach(function(b){
+    b.addEventListener('click',function(e){
+      e.stopPropagation();
+      var m=b.closest('.lrow').querySelector('.menu');
+      if(m)m.classList.toggle('hidden');
+    });
+  });
+
+  // 4) (ลบแล้ว) dialog กันปิดก่อนคัดลอก — user เคาะให้เหลือแค่แถบเตือน 2026-07-28
+})();
+</script>
+</html>

@@ -44,6 +44,108 @@ describe("ERROR_CODES registry", () => {
     }
   });
 
+  // F-002 · api-spec §4. ORG_MISMATCH is 422 (a client bug), NOT 403 — and
+  // ORG_ACCESS_DENIED must stay a code of its own, separate from FORBIDDEN (I-5):
+  // "not a member of this org" sends the client back to the org picker, while
+  // "member without the capability" keeps it on the page. Collapsing them
+  // guarantees the client does the wrong one.
+  it("pins the F-002 org-context codes → status (api-spec §4)", () => {
+    expect(ERROR_CODES.ORG_CONTEXT_REQUIRED.status).toBe(422);
+    expect(ERROR_CODES.ORG_MISMATCH.status).toBe(422);
+    expect(ERROR_CODES.ORG_ACCESS_DENIED.status).toBe(403);
+    expect(ERROR_CODES.FORBIDDEN.status).toBe(403);
+    expect(ERROR_CODES.ORG_ACCESS_DENIED.code).not.toBe(ERROR_CODES.FORBIDDEN.code);
+  });
+
+  // T-002-15 — the two codes `POST /organizations` introduces (api-spec §4).
+  it("pins the org-creation codes → status (api-spec §4)", () => {
+    // 409, not 403: the caller is fine, the request conflicts with a state they
+    // can resolve (architecture §6.3 / I-10).
+    expect(ERROR_CODES.ORG_LIMIT_REACHED.status).toBe(409);
+    // 503, not 500: "we have no plan configured" is our misconfiguration and it
+    // is RETRYABLE once ops fixes it — and it must never be silently replaced by
+    // a free-tier fallback (architecture §6.2).
+    expect(ERROR_CODES.ORG_PROVISIONING_UNAVAILABLE.status).toBe(503);
+  });
+
+  // T-002-18 ★ — the two codes the membership endpoints introduce (api-spec §4).
+  it("pins the membership codes → status (api-spec §4)", () => {
+    // 409: the caller may be allowed to do it; the resulting STATE is illegal.
+    // Same code for `DELETE …/members/{userId}` and `DELETE …/membership`
+    // (D-029) — leaving is a revoke whose target is the actor, not a second rule.
+    expect(ERROR_CODES.LAST_OWNER.status).toBe(409);
+    // 422 (validation), not 403/404: the body named a role this shop does not
+    // have. It must NOT distinguish "no such role" from "another org's role" —
+    // that difference would be a cross-tenant existence oracle (I-8).
+    expect(ERROR_CODES.ROLE_INVALID.status).toBe(422);
+    // D-029 wording — both messages are what the user sees if the client does
+    // not override the copy.
+    for (const def of [ERROR_CODES.LAST_OWNER, ERROR_CODES.ROLE_INVALID]) {
+      expect(def.message).toContain("ร้าน");
+      expect(def.message).not.toContain("องค์กร");
+    }
+  });
+
+  // T-002-20 ★ — the seven codes redeeming an invitation introduces (api-spec §4).
+  it("pins the invitation-redemption codes → status (api-spec §4)", () => {
+    expect(ERROR_CODES.INVITATION_INVALID.status).toBe(404);
+    expect(ERROR_CODES.INVITATION_EXPIRED.status).toBe(409);
+    expect(ERROR_CODES.INVITATION_CANCELLED.status).toBe(409);
+    expect(ERROR_CODES.INVITATION_ALREADY_ACCEPTED.status).toBe(409);
+    expect(ERROR_CODES.INVITATION_SUPERSEDED.status).toBe(409);
+    expect(ERROR_CODES.INVITATION_ROLE_UNAVAILABLE.status).toBe(409);
+    // 403, not 404: the token IS valid, the account is not the invited one.
+    expect(ERROR_CODES.INVITATION_EMAIL_MISMATCH.status).toBe(403);
+  });
+
+  it("★ the four 'your token is real' outcomes are four DISTINCT codes", () => {
+    // Each sends the user somewhere different (ask for a new link / it was
+    // withdrawn / you already joined / you were removed). Collapsing any two
+    // guarantees the client shows the wrong recovery path (AC US-4).
+    const codes = [
+      ERROR_CODES.INVITATION_EXPIRED.code,
+      ERROR_CODES.INVITATION_CANCELLED.code,
+      ERROR_CODES.INVITATION_ALREADY_ACCEPTED.code,
+      ERROR_CODES.INVITATION_SUPERSEDED.code,
+    ];
+    expect(new Set(codes).size).toBe(4);
+    // …and none of them is the "we will not say" answer.
+    expect(codes).not.toContain(ERROR_CODES.INVITATION_INVALID.code);
+  });
+
+  it("★ no redemption message reveals an address, a token or a shop name", () => {
+    // These bodies are returned to an UNAUTHENTICATED caller (preview) or to
+    // somebody who may not be the invitee (accept). The default copy must carry
+    // no identifier at all — the only per-request datum any of them adds is
+    // `details.emailMasked`, attached at the throw site.
+    for (const def of [
+      ERROR_CODES.INVITATION_INVALID,
+      ERROR_CODES.INVITATION_EXPIRED,
+      ERROR_CODES.INVITATION_CANCELLED,
+      ERROR_CODES.INVITATION_ALREADY_ACCEPTED,
+      ERROR_CODES.INVITATION_SUPERSEDED,
+      ERROR_CODES.INVITATION_ROLE_UNAVAILABLE,
+      ERROR_CODES.INVITATION_EMAIL_MISMATCH,
+    ]) {
+      expect(def.message).not.toContain("@");
+      expect(def.message).not.toMatch(/[A-Za-z0-9_-]{20,}/);
+      expect(def.message).not.toContain("องค์กร"); // D-029 wording
+    }
+  });
+
+  it("uses the D-029 wording ('ร้าน', not 'องค์กร') in the org-context messages", () => {
+    for (const def of [
+      ERROR_CODES.ORG_CONTEXT_REQUIRED,
+      ERROR_CODES.ORG_MISMATCH,
+      ERROR_CODES.ORG_ACCESS_DENIED,
+      ERROR_CODES.ORG_LIMIT_REACHED,
+      ERROR_CODES.ORG_PROVISIONING_UNAVAILABLE,
+    ]) {
+      expect(def.message).toContain("ร้าน");
+      expect(def.message).not.toContain("องค์กร");
+    }
+  });
+
   it("pins the exact shipped Thai messages (client shows them verbatim)", () => {
     expect(ERROR_CODES.INVALID_CREDENTIALS.message).toBe("อีเมลหรือรหัสผ่านไม่ถูกต้อง");
     expect(ERROR_CODES.EMAIL_TAKEN.message).toBe("อีเมลนี้ถูกใช้แล้ว");

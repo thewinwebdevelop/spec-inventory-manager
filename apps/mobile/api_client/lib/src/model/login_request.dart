@@ -15,7 +15,7 @@ part 'login_request.g.dart';
 /// * [email] 
 /// * [password] 
 /// * [deviceId] - Client session label (arch §4). Not a security boundary.
-/// * [tokenTransport] - Refresh-token delivery channel (api-spec §0). Web sends \"cookie\"; mobile omits or sends \"body\". 
+/// * [tokenTransport] - Refresh-token delivery channel (api-spec §0). Web sends \"cookie\"; mobile omits it or sends \"body\", and the SERVER treats absent as \"body\". 
 @BuiltValue()
 abstract class LoginRequest implements Built<LoginRequest, LoginRequestBuilder> {
   @BuiltValueField(wireName: r'email')
@@ -28,7 +28,7 @@ abstract class LoginRequest implements Built<LoginRequest, LoginRequestBuilder> 
   @BuiltValueField(wireName: r'deviceId')
   String? get deviceId;
 
-  /// Refresh-token delivery channel (api-spec §0). Web sends \"cookie\"; mobile omits or sends \"body\". 
+  /// Refresh-token delivery channel (api-spec §0). Web sends \"cookie\"; mobile omits it or sends \"body\", and the SERVER treats absent as \"body\". 
   @BuiltValueField(wireName: r'tokenTransport')
   LoginRequestTokenTransportEnum? get tokenTransport;
   // enum tokenTransportEnum {  cookie,  body,  };
@@ -38,8 +38,7 @@ abstract class LoginRequest implements Built<LoginRequest, LoginRequestBuilder> 
   factory LoginRequest([void updates(LoginRequestBuilder b)]) = _$LoginRequest;
 
   @BuiltValueHook(initializeBuilder: true)
-  static void _defaults(LoginRequestBuilder b) => b
-      ..tokenTransport = LoginRequestTokenTransportEnum.valueOf('body');
+  static void _defaults(LoginRequestBuilder b) => b;
 
   @BuiltValueSerializer(custom: true)
   static Serializer<LoginRequest> get serializer => _$LoginRequestSerializer();
@@ -163,10 +162,10 @@ class _$LoginRequestSerializer implements PrimitiveSerializer<LoginRequest> {
 
 class LoginRequestTokenTransportEnum extends EnumClass {
 
-  /// Refresh-token delivery channel (api-spec §0). Web sends \"cookie\"; mobile omits or sends \"body\". 
+  /// Refresh-token delivery channel (api-spec §0). Web sends \"cookie\"; mobile omits it or sends \"body\", and the SERVER treats absent as \"body\". 
   @BuiltValueEnumConst(wireName: r'cookie')
   static const LoginRequestTokenTransportEnum cookie = _$loginRequestTokenTransportEnum_cookie;
-  /// Refresh-token delivery channel (api-spec §0). Web sends \"cookie\"; mobile omits or sends \"body\". 
+  /// Refresh-token delivery channel (api-spec §0). Web sends \"cookie\"; mobile omits it or sends \"body\", and the SERVER treats absent as \"body\". 
   @BuiltValueEnumConst(wireName: r'body')
   static const LoginRequestTokenTransportEnum body = _$loginRequestTokenTransportEnum_body;
 

@@ -1,0 +1,13 @@
+{
+  // Typecheck-only project covering `test/` (the F-002 kits, T-002-22).
+  // `tsconfig.json` stays `include: ["src"]` with `rootDir: "src"` so the BUILD
+  // output can never contain a test fixture — including the deliberate-500
+  // controller. This project exists purely so `pnpm --filter api typecheck`
+  // covers the kits too; it emits nothing.
+  "extends": "./tsconfig.json",
+  "compilerOptions": {
+    "rootDir": ".",
+    "noEmit": true
+  },
+  "include": ["src", "test"]
+}

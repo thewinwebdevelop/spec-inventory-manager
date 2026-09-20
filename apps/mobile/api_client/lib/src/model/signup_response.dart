@@ -3,7 +3,6 @@
 //
 
 // ignore_for_file: unused_element
-import 'package:built_collection/built_collection.dart';
 import 'package:built_value/built_value.dart';
 import 'package:built_value/serializer.dart';
 
@@ -24,8 +23,7 @@ abstract class SignupResponse implements Built<SignupResponse, SignupResponseBui
   String get email;
 
   @BuiltValueField(wireName: r'verified')
-  SignupResponseVerifiedEnum get verified;
-  // enum verifiedEnum {  false,  };
+  bool get verified;
 
   SignupResponse._();
 
@@ -63,7 +61,7 @@ class _$SignupResponseSerializer implements PrimitiveSerializer<SignupResponse> 
     yield r'verified';
     yield serializers.serialize(
       object.verified,
-      specifiedType: const FullType(SignupResponseVerifiedEnum),
+      specifiedType: const FullType(bool),
     );
   }
 
@@ -105,8 +103,8 @@ class _$SignupResponseSerializer implements PrimitiveSerializer<SignupResponse> 
         case r'verified':
           final valueDes = serializers.deserialize(
             value,
-            specifiedType: const FullType(SignupResponseVerifiedEnum),
-          ) as SignupResponseVerifiedEnum;
+            specifiedType: const FullType(bool),
+          ) as bool;
           result.verified = valueDes;
           break;
         default:
@@ -136,18 +134,5 @@ class _$SignupResponseSerializer implements PrimitiveSerializer<SignupResponse> 
     );
     return result.build();
   }
-}
-
-class SignupResponseVerifiedEnum extends EnumClass {
-
-  @BuiltValueEnumConst(wireName: r'false')
-  static const SignupResponseVerifiedEnum false_ = _$signupResponseVerifiedEnum_false_;
-
-  static Serializer<SignupResponseVerifiedEnum> get serializer => _$signupResponseVerifiedEnumSerializer;
-
-  const SignupResponseVerifiedEnum._(String name): super(name);
-
-  static BuiltSet<SignupResponseVerifiedEnum> get values => _$signupResponseVerifiedEnumValues;
-  static SignupResponseVerifiedEnum valueOf(String name) => _$signupResponseVerifiedEnumValueOf(name);
 }
 

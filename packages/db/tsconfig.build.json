@@ -1,0 +1,22 @@
+{
+  // ★ B-10 — the EMITTING config. `tsconfig.json` stays `noEmit` and includes
+  // the test files, because that is what typecheck and vitest read; this one
+  // ships. Keeping them apart is what stops a `*.test.ts` or a
+  // `*.compile-test.ts` (files that exist to fail on purpose) from reaching
+  // `dist/` and being loaded by the API.
+  "extends": "../config/tsconfig/base.json",
+  "compilerOptions": {
+    "outDir": "dist",
+    "rootDir": "src",
+    // ⚠️ EXPLICIT, and the reason is a trap worth writing down. `tsconfig.json`
+    // uses `"types": []` and still resolves `process`, because a `*.test.ts` is
+    // in its program and vitest's types reference Node. This config must not
+    // ship test files, so it loses that path — and when I first built it with
+    // no `types` key at all it PASSED, resolving @types/node from
+    // `/Users/tar/node_modules`, outside the repository. That would have been
+    // green on my machine and red on every other one.
+    "types": ["node"]
+  },
+  "include": ["src/index.ts", "src/ledger-guard.ts", "src/tenancy.ts", "src/org-lock.ts", "src/invitation-token.ts"],
+  "exclude": ["src/generated", "node_modules", "dist", "**/*.test.ts", "**/*.compile-test.ts"]
+}

@@ -1,0 +1,96 @@
+parameters:
+  - $ref: "../components/parameters.yaml#/OrgIdParam"
+  - $ref: "../components/parameters.yaml#/OrgIdHeader"
+
+post:
+  operationId: revealTaxId
+  summary: Reveal the shop's full tax id (deliberate, recorded, rate-limited)
+  description: >
+    F-002 api-spec §3.16 (ux Q7/Q13, D-030/NEW-11). Requires
+    `manage_org_settings` — which Admin also holds, decided deliberately: the
+    person who files the shop's tax documents has to be able to read the number.
+    It is fenced by CONTROLS rather than by hiding it:
+      (a) a deliberate action, never a side effect of opening the shop page;
+      (b) `org.tax_profile.revealed` on every success (the event carries NO TIN);
+      (c) 20/hour per (user, shop);
+      (d) `no-store` + `no-cache` + `no-referrer`;
+      (e) `TAX_ID_RESPONSE_ALLOWLIST` = this route and nothing else, CI-pinned.
+
+
+    `POST` with an empty body `{}`, not `GET`: a GET would record a national-ID
+    lookup in browser history, in proxy access logs and in the `Referer` of the
+    next outbound link.
+
+
+    `200`, not `201` — nothing is created.
+
+
+    Known limitation (forward-commitment): the Owner has no screen showing these
+    reveal events until F-005.
+  tags:
+    - organizations
+  security:
+    - bearerAuth: []
+  requestBody:
+    required: false
+    description: Empty object. There is no input — the shop comes from the context.
+    content:
+      application/json:
+        schema:
+          type: object
+  responses:
+    "200":
+      description: The full tax id, this once.
+      headers:
+        Cache-Control:
+          $ref: "../components/headers.yaml#/CacheControlNoStore"
+        Pragma:
+          $ref: "../components/headers.yaml#/PragmaNoCache"
+        Referrer-Policy:
+          $ref: "../components/headers.yaml#/ReferrerPolicyNoReferrer"
+      content:
+        application/json:
+          schema:
+            $ref: "../components/orgs.yaml#/TaxIdReveal"
+    "401":
+      description: Missing/invalid access token (`UNAUTHENTICATED`)
+      content:
+        application/json:
+          schema:
+            $ref: "../components/common.yaml#/ErrorResponse"
+    "403":
+      description: "`FORBIDDEN` (no `manage_org_settings`) or `ORG_ACCESS_DENIED` (not a member)"
+      content:
+        application/json:
+          schema:
+            $ref: "../components/common.yaml#/ErrorResponse"
+    "404":
+      description: "`NOT_FOUND` — this shop has not declared a tax identity."
+      content:
+        application/json:
+          schema:
+            $ref: "../components/common.yaml#/ErrorResponse"
+    "415":
+      description: Non-JSON Content-Type (`UNSUPPORTED_MEDIA_TYPE`)
+      content:
+        application/json:
+          schema:
+            $ref: "../components/common.yaml#/ErrorResponse"
+    "422":
+      description: "`ORG_CONTEXT_REQUIRED` / `ORG_MISMATCH`"
+      content:
+        application/json:
+          schema:
+            $ref: "../components/common.yaml#/ErrorResponse"
+    "429":
+      description: >
+        `RATE_LIMITED` — 20 reveals per hour per (user, shop). This is what makes
+        "a stolen session cannot be used to harvest the number" true; the
+        capability check alone would let one compromised token read it in a loop.
+      headers:
+        Retry-After:
+          $ref: "../components/headers.yaml#/RetryAfter"
+      content:
+        application/json:
+          schema:
+            $ref: "../components/common.yaml#/ErrorResponse"

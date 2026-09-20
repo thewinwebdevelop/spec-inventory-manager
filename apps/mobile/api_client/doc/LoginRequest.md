@@ -11,7 +11,7 @@ Name | Type | Description | Notes
 **email** | **String** |  | 
 **password** | **String** |  | 
 **deviceId** | **String** | Client session label (arch §4). Not a security boundary. | [optional] 
-**tokenTransport** | **String** | Refresh-token delivery channel (api-spec §0). Web sends \"cookie\"; mobile omits or sends \"body\".  | [optional] [default to 'body']
+**tokenTransport** | **String** | Refresh-token delivery channel (api-spec §0). Web sends \"cookie\"; mobile omits it or sends \"body\", and the SERVER treats absent as \"body\".  | [optional] 
 
 [[Back to Model list]](../README.md#documentation-for-models) [[Back to API list]](../README.md#documentation-for-api-endpoints) [[Back to README]](../README.md)
 

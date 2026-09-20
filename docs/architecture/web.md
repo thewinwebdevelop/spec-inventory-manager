@@ -83,7 +83,7 @@ apps/web/
 ├── src/
 │   ├── app/                              # App Router — routing/composition เท่านั้น
 │   │   ├── layout.tsx                    # RootLayout: html/body + QueryClientProvider + SessionBootstrap + Toaster
-│   │   ├── page.tsx                      # "/" → redirect ตาม SessionState (none→/login · authed→/o/[defaultOrg])
+│   │   ├── page.tsx                      # "/" → redirect ตาม SessionState (none→/login · authed→/select-org · unknown→รอ) — B-14
 │   │   ├── login/page.tsx                # KEEP (F-001 มีแล้ว) — "use client", ไม่ต้อง org
 │   │   ├── login/help/page.tsx           # KEEP
 │   │   ├── signup/page.tsx               # KEEP

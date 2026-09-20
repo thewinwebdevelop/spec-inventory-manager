@@ -1,5 +1,6 @@
 "use client";
 
+import { Icon } from "./Icon";
 import { cn } from "./utils";
 
 export type ToastVariant = "success" | "danger";
@@ -27,7 +28,13 @@ export function Toast({ toast }: { toast: ToastData | null }) {
           : "border-danger-border bg-danger-bg text-danger-text",
       )}
     >
-      {(isSuccess ? "✓ " : "⚠ ") + toast.message}
+      {/* `icon.check-circle` / `icon.warn` (§1.6.2) — these were the glyphs
+          "✓ " and "⚠ " concatenated onto the message, so they rendered in
+          whatever font the reader has and could not be sized or aligned. */}
+      <span className="flex items-start gap-2">
+        <Icon role={isSuccess ? "check-circle" : "warn"} size="md" className="mt-0.5" />
+        <span className="min-w-0 flex-1">{toast.message}</span>
+      </span>
     </div>
   );
 }

@@ -11,6 +11,15 @@
 /** Capability required to reset a member's password (admin-reset, api-spec §2.8). */
 export const CAPABILITY_MANAGE_MEMBERS = "manage_members" as const;
 
+/**
+ * Capability guarding the org profile + tax profile (F-002 · api-spec §3.4/§3.5/§3.16).
+ *
+ * Moved here by T-002-08c. T-002-05 had to declare it inside `apps/api` because
+ * that task was fenced out of `packages/**`; the string value is what must never
+ * move, so the move is mechanical and the literal is pinned by a test below.
+ */
+export const CAPABILITY_MANAGE_ORG_SETTINGS = "manage_org_settings" as const;
+
 /** Full-access capability (Owner). Present so a capability check can honor the
  *  system Owner role without listing every capability (F-000 Role.isSystem). */
 export const CAPABILITY_FULL_ACCESS = "full_access" as const;

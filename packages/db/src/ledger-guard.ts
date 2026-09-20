@@ -19,7 +19,7 @@
 // file exposes create/createMany + reads for the ledger by simply not blocking
 // them; it does not implement the write path itself.
 
-import { Prisma } from "./generated/client";
+import { Prisma } from "../generated/client";
 
 /**
  * The append-only ledger models. Golden rule 2: correct a balance by INSERTing a

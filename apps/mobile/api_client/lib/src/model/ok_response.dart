@@ -3,7 +3,6 @@
 //
 
 // ignore_for_file: unused_element
-import 'package:built_collection/built_collection.dart';
 import 'package:built_value/built_value.dart';
 import 'package:built_value/serializer.dart';
 
@@ -16,8 +15,7 @@ part 'ok_response.g.dart';
 @BuiltValue()
 abstract class OkResponse implements Built<OkResponse, OkResponseBuilder> {
   @BuiltValueField(wireName: r'ok')
-  OkResponseOkEnum get ok;
-  // enum okEnum {  true,  };
+  bool get ok;
 
   OkResponse._();
 
@@ -45,7 +43,7 @@ class _$OkResponseSerializer implements PrimitiveSerializer<OkResponse> {
     yield r'ok';
     yield serializers.serialize(
       object.ok,
-      specifiedType: const FullType(OkResponseOkEnum),
+      specifiedType: const FullType(bool),
     );
   }
 
@@ -73,8 +71,8 @@ class _$OkResponseSerializer implements PrimitiveSerializer<OkResponse> {
         case r'ok':
           final valueDes = serializers.deserialize(
             value,
-            specifiedType: const FullType(OkResponseOkEnum),
-          ) as OkResponseOkEnum;
+            specifiedType: const FullType(bool),
+          ) as bool;
           result.ok = valueDes;
           break;
         default:
@@ -104,18 +102,5 @@ class _$OkResponseSerializer implements PrimitiveSerializer<OkResponse> {
     );
     return result.build();
   }
-}
-
-class OkResponseOkEnum extends EnumClass {
-
-  @BuiltValueEnumConst(wireName: r'true')
-  static const OkResponseOkEnum true_ = _$okResponseOkEnum_true_;
-
-  static Serializer<OkResponseOkEnum> get serializer => _$okResponseOkEnumSerializer;
-
-  const OkResponseOkEnum._(String name): super(name);
-
-  static BuiltSet<OkResponseOkEnum> get values => _$okResponseOkEnumValues;
-  static OkResponseOkEnum valueOf(String name) => _$okResponseOkEnumValueOf(name);
 }
 

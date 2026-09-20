@@ -1,7 +1,8 @@
 "use client";
 
 import { useId, useState } from "react";
-import { authTh } from "../../i18n/auth";
+import { authTh } from "../../features/auth/i18n";
+import { Icon } from "./Icon";
 import { cn } from "./utils";
 
 export interface PasswordFieldProps {
@@ -79,7 +80,7 @@ export function PasswordField({
             disabled ? "cursor-default" : "cursor-pointer",
           )}
         >
-          {visible ? "🙈" : "👁"}
+          <Icon role={visible ? "eye-off" : "eye"} size="md" />
         </button>
       </div>
       {hasError ? (

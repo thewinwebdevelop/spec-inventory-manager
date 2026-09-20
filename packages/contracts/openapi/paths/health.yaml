@@ -1,0 +1,27 @@
+get:
+  operationId: getHealth
+  summary: Liveness/readiness probe
+  description: >
+    F-000 seed endpoint — proves the contracts codegen pipeline end to
+    end. Implemented by apps/api in T-000-08 (incl. redis/bullmq probe,
+    AC15). Response shape here covers the minimal AC11 seam; richer probe
+    detail is added by T-000-08 without breaking this shape (additive
+    only, see contract-evolution skill).
+  tags:
+    - system
+  security: []
+  responses:
+    "200":
+      description: Service is healthy
+      content:
+        application/json:
+          schema:
+            $ref: "../components/common.yaml#/HealthResponse"
+    "503":
+      description: >
+        Service is unhealthy — one or more dependencies (e.g. Redis/BullMQ,
+        see T-000-08) failed their readiness check.
+      content:
+        application/json:
+          schema:
+            $ref: "../components/common.yaml#/HealthResponse"

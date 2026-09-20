@@ -1,0 +1,999 @@
+# F-002 — organizations, members, invitations, tax profile.
+#
+# ⚠️ THESE SHAPES DESCRIBE WHAT apps/api ACTUALLY RETURNS TODAY, not what a
+# design document hopes it returns. `apps/api/test/openapi-parity.int.test.ts`
+# walks the live Nest router and refuses a spec that lists a path the server
+# does not serve (and vice versa). Where the implementation and
+# docs/features/F-002/api-spec.md differed, the implementation is encoded and
+# the difference is reported in the T-002-21 handoff.
+#
+# Conventions (api-spec §1): timestamps are ISO-8601 UTC strings; `roleKey` is
+# `owner|admin|staff` for system roles and `null` for an F-003 custom role and
+# is FOR DISPLAY ONLY — never for an authorization decision; every list is
+# `{ items, nextCursor }` sorted `createdAt desc, id desc`.
+
+# ── shared building blocks ─────────────────────────────────────────────────
+
+EntitlementSummary:
+  type: object
+  description: The plan bound to a shop (`OrgEntitlement`), flattened for the wire.
+  required:
+    - planKey
+    - tierLabel
+  properties:
+    planKey:
+      type: string
+      example: comp_full
+    tierLabel:
+      type:
+        - string
+        - "null"
+      example: Full (comp)
+
+OrganizationSummary:
+  type: object
+  description: The three fields an org switcher row needs.
+  required:
+    - id
+    - name
+    - logo
+  properties:
+    id:
+      type: string
+      example: org_01H…
+    name:
+      type: string
+    logo:
+      type:
+        - string
+        - "null"
+      description: >
+        Phase 0: always `null`. Uploads arrive with F-040; until then `PATCH
+        /orgs/{orgId}` accepts `null` and nothing else (M-4).
+
+TaxProfileView:
+  type: object
+  description: >
+    The shop's tax identity AS THIS CALLER MAY SEE IT (api-spec §3.3, three
+    tiers). EVERY field is optional and a client MUST work when any of them is
+    absent:
+      • caller with `manage_org_settings` → `entityType`, `taxIdMasked`,
+        `vatRegistered`, `branchCode`;
+      • any other active member → `vatRegistered` ONLY (no digits at all, not
+        even the last four — ux Q13);
+      • nothing declared yet → the whole object is `null` (for every tier).
+    ⛔ There is no `taxId` here and there never will be. The full number comes
+    from `POST /orgs/{orgId}/tax-profile/reveal` alone.
+    ⛔ Do NOT read "no `taxIdMasked`" as "not declared" — `taxProfileComplete`
+    on the parent answers that question.
+  properties:
+    entityType:
+      type: string
+      enum:
+        - personal
+        - company
+    taxIdMasked:
+      type: string
+      description: Last four digits only, e.g. `•••••••••4567`.
+      example: •••••••••4567
+    vatRegistered:
+      type: boolean
+    branchCode:
+      type: string
+      description: 5 digits; `"00000"` is head office.
+      example: "00000"
+
+OrgCounts:
+  type: object
+  description: >
+    Totals, never a list. Every active member may see HOW MANY colleagues they
+    have; only `manage_members` may see WHO they are (D-028, PDPA).
+  required:
+    - activeMembers
+    - pendingInvitations
+  properties:
+    activeMembers:
+      type: integer
+    pendingInvitations:
+      type: integer
+
+OrgMyMembership:
+  type: object
+  description: The CALLER's own membership in this shop.
+  required:
+    - roleId
+    - roleName
+    - roleKey
+    - capabilities
+    - status
+  properties:
+    roleId:
+      type: string
+    roleName:
+      type: string
+    roleKey:
+      type:
+        - string
+        - "null"
+      description: >
+        `owner|admin|staff` for a system role, `null` for an F-003 custom one.
+        Open set — an unknown value MUST fall back to showing `roleName`.
+        ⛔ Never use it to decide permissions; use `capabilities`.
+    capabilities:
+      type: array
+      items:
+        type: string
+      description: >
+        What the client may OFFER. Not enforcement — the server refuses the
+        call regardless (architecture §3.1).
+    status:
+      type: string
+      description: Always `active` here — a non-member cannot reach this endpoint.
+
+# ── §3.3 / §3.4 / §3.5 — the org profile body ──────────────────────────────
+
+OrgProfile:
+  type: object
+  description: >
+    `GET /orgs/{orgId}`, and the `200` of `PATCH /orgs/{orgId}` and
+    `PUT /orgs/{orgId}/tax-profile` — one mapper, one shape (api-spec §3.3).
+  required:
+    - id
+    - name
+    - logo
+    - timezone
+    - currency
+    - taxProfile
+    - taxProfileComplete
+    - entitlement
+    - myMembership
+    - counts
+  properties:
+    id:
+      type: string
+    name:
+      type: string
+    logo:
+      type:
+        - string
+        - "null"
+    timezone:
+      type: string
+      example: Asia/Bangkok
+    currency:
+      type: string
+      description: Fixed `THB` in Phase 0 (D-013). Never accepted from a client.
+      example: THB
+    taxProfile:
+      description: >
+        `null` when the shop has declared nothing — at EVERY permission tier, so
+        "not declared" is not a permission signal either.
+      oneOf:
+        - $ref: "./orgs.yaml#/TaxProfileView"
+        - type: "null"
+    taxProfileComplete:
+      type: boolean
+      description: >
+        Derived (entity type + tax id + VAT flag all present). Visible to every
+        member. F-002 only reports it; F-007 is what gates features on it.
+    entitlement:
+      description: "`null` only if the shop somehow has no entitlement row."
+      oneOf:
+        - $ref: "./orgs.yaml#/EntitlementSummary"
+        - type: "null"
+    myMembership:
+      $ref: "./orgs.yaml#/OrgMyMembership"
+    counts:
+      $ref: "./orgs.yaml#/OrgCounts"
+
+UpdateOrganizationRequest:
+  type: object
+  description: >
+    `PATCH /orgs/{orgId}` (api-spec §3.4). An absent key means "leave alone"; an
+    empty body is a valid no-op that returns the current profile.
+  properties:
+    name:
+      type: string
+      minLength: 1
+      maxLength: 120
+    logo:
+      # The schema says `string | null` because a bare `type: "null"` makes the
+      # Dart generator emit a field it cannot build (built_value refuses a
+      # `null`-only type). The REAL accepted domain is `null` alone — enforced
+      # by the server and stated below, not by this type.
+      type:
+        - string
+        - "null"
+      description: >
+        ⛔ Phase 0 accepts `null` and NOTHING ELSE (M-4). Any string →
+        `422 VALIDATION_FAILED` with
+        `fieldErrors.logo = "ยังไม่รองรับการตั้งโลโก้ในเวอร์ชันนี้"`. An
+        arbitrary URL here would make every member of the shop fetch a
+        resource chosen by whoever holds `manage_org_settings`.
+    timezone:
+      type: string
+      description: IANA zone from `Intl.supportedValuesOf('timeZone')`; anything else is 422.
+      example: Asia/Bangkok
+
+# ── §3.1 — create a shop ───────────────────────────────────────────────────
+
+CreateOrganizationRequest:
+  type: object
+  required:
+    - name
+  properties:
+    name:
+      type: string
+      minLength: 1
+      maxLength: 120
+      description: Not unique — two shops may share a name.
+    timezone:
+      type: string
+      # ⛔ No `default:` here — see `generator-hostile-shapes.test.ts`. An
+      # optional REQUEST property with a default is emitted as REQUIRED by
+      # openapi-typescript and pre-filled by dart-dio's builder, so the
+      # server's default becomes unreachable and clients must send a value
+      # they were told they could omit.
+      description: >
+        Optional IANA zone. Omit it and the SERVER applies Asia/Bangkok
+        (architecture §6) — stated here rather than as `default:` so the
+        generators leave the field optional.
+  # ⛔ No `planKey`, `currency` or `id`: the plan is resolved server-side from
+  # the env seam (architecture §6.2) and the currency is fixed by D-013.
+  # Accepting either would let a caller grant itself a tier.
+
+NewOrganization:
+  type: object
+  required:
+    - id
+    - name
+    - logo
+    - timezone
+    - currency
+    - taxProfileComplete
+    - createdAt
+  properties:
+    id:
+      type: string
+    name:
+      type: string
+    logo:
+      type:
+        - string
+        - "null"
+    timezone:
+      type: string
+    currency:
+      type: string
+    taxProfileComplete:
+      type: boolean
+      description: Always `false` on a brand-new shop.
+    createdAt:
+      type: string
+      format: date-time
+
+NewOrganizationMembership:
+  type: object
+  required:
+    - userId
+    - roleId
+    - roleName
+    - roleKey
+    - status
+  properties:
+    userId:
+      type: string
+    roleId:
+      type: string
+    roleName:
+      type: string
+    roleKey:
+      type:
+        - string
+        - "null"
+      description: "`owner` for the creator's system role."
+    status:
+      type: string
+      example: active
+
+WarehouseSummary:
+  type: object
+  required:
+    - id
+    - name
+  properties:
+    id:
+      type: string
+    name:
+      type: string
+
+CreatedOrganization:
+  type: object
+  description: >
+    `201` of `POST /organizations`. Deliberately complete enough to enter the new
+    shop immediately (ux Q5): a client seeds its cache from this body and does
+    NOT need to refetch `GET /me/organizations` first.
+
+
+    ⛔ `capabilities` is deliberately NOT here, and this is the second time that
+    absence has had to be stated: a client once filled the field in itself with
+    a literal `full_access` under a comment claiming the response said so
+    (B-13). It does not. What the creator MAY DO has exactly ONE publisher in
+    this contract — `GET /orgs/{orgId}` → `myMembership.capabilities` — and
+    entering a shop you just created is not a special case that gets a second
+    one. Adding it here would make the create path the only way into a shop
+    whose permissions came from somewhere different from every other way in;
+    when the two eventually disagreed, the create path would be the one that
+    failed OPEN (offering Owner actions the server then refuses).
+
+
+    `membership.roleKey` is `"owner"` here and MUST NOT be used to decide what to
+    offer (api-spec §1 item 17): ownership is a capability, never a role key.
+    Ask, like every other entrance does. Full reasoning: api-spec §3.1.
+  required:
+    - organization
+    - membership
+    - entitlement
+    - defaultWarehouse
+  properties:
+    organization:
+      $ref: "./orgs.yaml#/NewOrganization"
+    membership:
+      $ref: "./orgs.yaml#/NewOrganizationMembership"
+    entitlement:
+      $ref: "./orgs.yaml#/EntitlementSummary"
+    defaultWarehouse:
+      $ref: "./orgs.yaml#/WarehouseSummary"
+
+# ── §3.2 — the org switcher ────────────────────────────────────────────────
+
+MyOrganizationMembership:
+  type: object
+  description: >
+    THE SHAPE DEPENDS ON `status` (M-10). For an `active` membership the role
+    fields are present. For a shop the caller has been removed from (only
+    reachable via `?status=all`) the server returns `status` + `revokedAt` and
+    NOTHING else — the role they held is an internal fact about an org they are
+    no longer part of.
+  required:
+    - status
+  properties:
+    status:
+      type: string
+      enum:
+        - active
+        - invited
+        - revoked
+    roleId:
+      type: string
+      description: Present only on the `active` (full) shape.
+    roleName:
+      type: string
+      description: Present only on the `active` (full) shape.
+    roleKey:
+      type:
+        - string
+        - "null"
+      description: Present only on the `active` (full) shape.
+    revokedAt:
+      type:
+        - string
+        - "null"
+      format: date-time
+      description: Present only on the revoked (short) shape.
+
+MyOrganizationItem:
+  type: object
+  required:
+    - organization
+    - membership
+  properties:
+    organization:
+      $ref: "./orgs.yaml#/OrganizationSummary"
+    membership:
+      $ref: "./orgs.yaml#/MyOrganizationMembership"
+    entitlement:
+      description: Present only on the `active` (full) shape; absent on a revoked row.
+      oneOf:
+        - $ref: "./orgs.yaml#/EntitlementSummary"
+        - type: "null"
+
+MyOrganizationsPage:
+  type: object
+  required:
+    - items
+    - nextCursor
+  properties:
+    items:
+      type: array
+      items:
+        $ref: "./orgs.yaml#/MyOrganizationItem"
+    nextCursor:
+      type:
+        - string
+        - "null"
+      description: "`null` means there is no next page."
+
+# ── §3.5 / §3.16 — tax profile ─────────────────────────────────────────────
+
+TaxProfileRequest:
+  type: object
+  description: >
+    `PUT /orgs/{orgId}/tax-profile` — THE WHOLE SET OR NOTHING (data-model
+    §3.3). An empty body `{}` is legitimate and CLEARS the declaration; a
+    partial one is `422` with a message on every missing field. `branchCode`
+    alone is a partial declaration, not an update.
+  properties:
+    entityType:
+      type: string
+      enum:
+        - personal
+        - company
+    taxId:
+      type: string
+      description: >
+        13 digits + checksum (data-model §6). Separators are stripped before
+        storage, so `1-1017-00207-36-6` and `1101700207366` are one value.
+        Rejected → `422 TAX_ID_INVALID` + `fieldErrors.taxId`.
+        ⚠️ With `entityType: personal` this IS the owner's national ID. It is
+        never logged, never echoed back, and never appears in any response
+        except `POST /orgs/{orgId}/tax-profile/reveal`.
+      example: "0105551234567"
+    vatRegistered:
+      type: boolean
+      description: A real boolean — the string `"true"` is refused, not coerced.
+    branchCode:
+      type: string
+      pattern: "^[0-9]{5}$"
+      description: Optional. `"00000"` = head office.
+      example: "00000"
+
+TaxIdReveal:
+  type: object
+  description: >
+    `200` of `POST /orgs/{orgId}/tax-profile/reveal` — the ONLY response in the
+    entire system that carries a full tax id (`TAX_ID_RESPONSE_ALLOWLIST` has
+    exactly one row and CI pins its length). Every call emits
+    `org.tax_profile.revealed` (with no TIN in the event) and counts against
+    20/hour per (user, shop).
+    @frontend: hold this in screen memory only — never persist it, never log it,
+    and re-request it if the user hides and re-shows the number.
+  required:
+    - taxId
+    - revealedAt
+  properties:
+    taxId:
+      type: string
+      description: The full 13-digit number, as stored.
+    entityType:
+      type: string
+      enum:
+        - personal
+        - company
+      description: Absent on a legacy row that holds a TIN but no entity type.
+    revealedAt:
+      type: string
+      format: date-time
+
+# ── §3.7–§3.9 / §3.17 — members ────────────────────────────────────────────
+
+MemberRow:
+  type: object
+  description: >
+    One row of `GET /orgs/{orgId}/members`, and the `200` body of
+    `PATCH /orgs/{orgId}/members/{userId}` (api-spec §3.7/§3.8) — so a client
+    never has to refetch the list to render the new state.
+  required:
+    - userId
+    - email
+    - roleId
+    - roleName
+    - roleKey
+    - status
+    - activatedAt
+    - revokedAt
+    - createdAt
+    - isMe
+    - isOwner
+  properties:
+    userId:
+      type: string
+    email:
+      type: string
+      description: >
+        PII under PDPA — the reason this READ requires `manage_members` and the
+        reason the response is `no-store`.
+    roleId:
+      type: string
+    roleName:
+      type: string
+    roleKey:
+      type:
+        - string
+        - "null"
+    status:
+      type: string
+      enum:
+        - active
+        - invited
+        - revoked
+      description: >
+        `invited` is a dead state: memberships are created at ACCEPT time only
+        (data-model §7). It is listed because the column allows it, not because
+        a write path produces it.
+    activatedAt:
+      type:
+        - string
+        - "null"
+      format: date-time
+    revokedAt:
+      type:
+        - string
+        - "null"
+      format: date-time
+    createdAt:
+      type: string
+      format: date-time
+    isMe:
+      type: boolean
+      description: Decided server-side, so the client never compares ids itself.
+    isOwner:
+      type: boolean
+      description: >
+        This row's role holds `full_access`. Computed from CAPABILITIES, never
+        from the role's name or key. Use it to hide buttons; the server enforces.
+
+MemberListPage:
+  type: object
+  required:
+    - items
+    - nextCursor
+  properties:
+    items:
+      type: array
+      items:
+        $ref: "./orgs.yaml#/MemberRow"
+    nextCursor:
+      type:
+        - string
+        - "null"
+    total:
+      type: integer
+      description: Present ONLY when the request asked with `?withTotal=true`.
+
+UpdateMemberRoleRequest:
+  type: object
+  required:
+    - roleId
+  properties:
+    roleId:
+      type: string
+      description: >
+        Must be a role OF THIS SHOP — otherwise `422 ROLE_INVALID`. A role id
+        from another tenant and one that never existed are indistinguishable by
+        construction (no cross-tenant existence oracle).
+  # ⛔ Deliberately no `status`. "Remove this member" is its own endpoint with
+  # its own capability row, Owner-only rule and event.
+
+RevokeMemberResult:
+  type: object
+  description: "`200` of `DELETE /orgs/{orgId}/members/{userId}` (api-spec §3.9)."
+  required:
+    - userId
+    - status
+    - revokedAt
+    - cancelledInvitations
+  properties:
+    userId:
+      type: string
+    status:
+      type: string
+      enum:
+        - revoked
+      description: Soft delete — the row stays, so history and `revokedAt` survive.
+    revokedAt:
+      type: string
+      format: date-time
+    cancelledInvitations:
+      type: integer
+      description: >
+        Pending invitations for that email that were cancelled in the SAME
+        transaction (normally 0 or 1) — so the UI can say "their pending
+        invitation was withdrawn too".
+
+LeaveOrgResult:
+  type: object
+  description: "`200` of `DELETE /orgs/{orgId}/membership` (api-spec §3.17, D-029)."
+  required:
+    - organizationId
+    - status
+    - revokedAt
+    - cancelledInvitations
+  properties:
+    organizationId:
+      type: string
+    status:
+      type: string
+      enum:
+        - revoked
+    revokedAt:
+      type: string
+      format: date-time
+    cancelledInvitations:
+      type: integer
+
+# ── §3.10–§3.15 — invitations ──────────────────────────────────────────────
+
+Invitation:
+  type: object
+  description: >
+    One row of `GET /orgs/{orgId}/invitations`, and the `invitation` of the
+    `201` from `POST /orgs/{orgId}/invitations` (api-spec §3.10/§3.11).
+    ⛔ Never carries a token: only an HMAC of it is stored (D-018), so there is
+    no "resend the same link" — see `POST …/invitations/{invitationId}/link`.
+  required:
+    - id
+    - email
+    - roleId
+    - roleName
+    - roleKey
+    - status
+    - expiresAt
+    - tokenIssuedAt
+    - invitedByUserId
+    - createdAt
+    - acceptedAt
+    - acceptedByUserId
+    - acceptedUserCreatedAfterInvite
+  properties:
+    id:
+      type: string
+      example: inv_01H…
+    email:
+      type: string
+      description: Normalized (lower-cased, trimmed) at creation.
+    roleId:
+      type: string
+    roleName:
+      type: string
+    roleKey:
+      type:
+        - string
+        - "null"
+    status:
+      type: string
+      enum:
+        - pending
+        - accepted
+        - cancelled
+        - expired
+      description: >
+        Resolved at read time — a stored `pending` row past `expiresAt` reads as
+        `expired`.
+    expiresAt:
+      type: string
+      format: date-time
+      description: >
+        NON-NULL ON EVERY ROW, accepted and cancelled ones included (ux Q14).
+        ⛔ UI must render the remaining time FROM THIS VALUE — never hard-code
+        "7 days": an elevated role's invitation lives 24 hours, and reissuing a
+        link restarts the clock (D-027).
+    tokenIssuedAt:
+      type: string
+      format: date-time
+      description: When the CURRENT link was minted. Moves on every reissue.
+    invitedByUserId:
+      type: string
+    createdAt:
+      type: string
+      format: date-time
+      description: When the invitation first existed. Does NOT move on reissue.
+    acceptedAt:
+      type:
+        - string
+        - "null"
+      format: date-time
+    acceptedByUserId:
+      type:
+        - string
+        - "null"
+    acceptedUserCreatedAfterInvite:
+      type:
+        - boolean
+        - "null"
+      description: >
+        Was the accepting ACCOUNT created after `createdAt`? `null` until
+        somebody accepts — "we do not know yet" is not "no". Phase 0 cannot
+        verify email addresses, so this is the only signal that a link may have
+        been redeemed by whoever found it. Render it as a soft flag, not an
+        accusation.
+
+InvitationListPage:
+  type: object
+  required:
+    - items
+    - nextCursor
+  properties:
+    items:
+      type: array
+      items:
+        $ref: "./orgs.yaml#/Invitation"
+    nextCursor:
+      type:
+        - string
+        - "null"
+
+CreateInvitationRequest:
+  type: object
+  required:
+    - email
+    - roleId
+  properties:
+    email:
+      type: string
+      format: email
+      description: Normalized server-side (lower-cased + trimmed).
+    roleId:
+      type: string
+      description: Mandatory (AC US-3) — there is no default role.
+  # ⛔ Deliberately no `expiresAt`/`ttl`: the lifetime is decided by the ROLE
+  # being invited (24h for an elevated role, 7 days otherwise). A
+  # caller-supplied expiry would let somebody mint a year-long Owner link.
+
+IssuedInvitation:
+  type: object
+  description: >
+    `201` of `POST /orgs/{orgId}/invitations`. ⚠️ `token` and `inviteUrl` are
+    shown THIS ONCE — only an HMAC is stored. No email is sent (D-012), so the
+    UI must offer a copy button.
+  required:
+    - invitation
+    - token
+    - inviteUrl
+  properties:
+    invitation:
+      $ref: "./orgs.yaml#/Invitation"
+    token:
+      type: string
+      description: The raw invitation token. Never retrievable again.
+    inviteUrl:
+      type: string
+      format: uri
+      description: Ready-to-share link containing the token.
+
+ReissuedLink:
+  type: object
+  description: >
+    `200` of `POST /orgs/{orgId}/invitations/{invitationId}/link` — 200 and not
+    201: nothing was created, an existing invitation's token was rotated.
+    ⚠️ THE PREVIOUS LINK STOPS WORKING IMMEDIATELY and the expiry restarts from
+    now (D-027), so the UI needs a confirmation dialog and must not say
+    "copy the existing link".
+  required:
+    - token
+    - inviteUrl
+    - expiresAt
+    - tokenIssuedAt
+    - rotated
+  properties:
+    token:
+      type: string
+    inviteUrl:
+      type: string
+      format: uri
+    expiresAt:
+      type: string
+      format: date-time
+      description: "`now + TTL(role)` — recomputed, not inherited."
+    tokenIssuedAt:
+      type: string
+      format: date-time
+    rotated:
+      # Same reason as `SignupResponse.verified`: a boolean with an `enum`
+      # is unusable from the generated Dart client.
+      type: boolean
+
+CancelledInvitation:
+  type: object
+  description: "`200` of `DELETE /orgs/{orgId}/invitations/{invitationId}`."
+  required:
+    - id
+    - status
+  properties:
+    id:
+      type: string
+    status:
+      type: string
+      enum:
+        - cancelled
+
+RedeemInvitationRequest:
+  type: object
+  description: >
+    Body of `POST /invitations/preview` and `POST /invitations/accept`.
+    ⛔ THE TOKEN TRAVELS IN THE BODY AND ONLY IN THE BODY (I-6) — that is why
+    both routes are POSTs. In a query string it would land in access logs, in
+    every proxy in front of us, and in the `Referer` of anything the invite page
+    loads. @frontend: read it out of the URL, `history.replaceState` it away
+    immediately, and keep it in memory (never localStorage).
+  required:
+    - token
+  properties:
+    token:
+      type: string
+
+InvitationPreview:
+  type: object
+  description: >
+    `200` of `POST /invitations/preview` — public, for somebody who may not have
+    an account yet (api-spec §3.14). Carries no `organizationId`, no full email
+    address and no member list.
+  required:
+    - organizationName
+    - roleName
+    - roleKey
+    - emailMasked
+    - expiresAt
+    - status
+  properties:
+    organizationName:
+      type: string
+    roleName:
+      type: string
+    roleKey:
+      type:
+        - string
+        - "null"
+    emailMasked:
+      type: string
+      description: "`u***@example.com` — enough to pick the right account, not an address."
+      example: n***@example.com
+    expiresAt:
+      type: string
+      format: date-time
+    status:
+      type: string
+      enum:
+        - pending
+        - accepted
+        - cancelled
+        - expired
+      description: Always `pending` on a `200`; the other states answer `409`.
+
+AcceptedMembership:
+  type: object
+  required:
+    - roleId
+    - roleName
+    - roleKey
+    - status
+  properties:
+    roleId:
+      type: string
+    roleName:
+      type: string
+    roleKey:
+      type:
+        - string
+        - "null"
+    status:
+      type: string
+      enum:
+        - active
+
+InvitationAcceptResult:
+  type: object
+  description: >
+    `200` of `POST /invitations/accept` (api-spec §3.15). Carries no email, no
+    invitation id and no token — the response is the last place a redeemed
+    credential could still leak.
+  required:
+    - organization
+    - membership
+  properties:
+    organization:
+      type: object
+      required:
+        - id
+        - name
+      properties:
+        id:
+          type: string
+        name:
+          type: string
+    membership:
+      $ref: "./orgs.yaml#/AcceptedMembership"
+
+RoleRow:
+  type: object
+  description: >
+    One role of a shop (api-spec §3.6). Read-only in F-002; F-003 adds
+    create/update/delete and per-role capability editing.
+
+
+    ⛔ `capabilities` is deliberately NOT published here. It is the field that
+    decides authorization (`full_access` ⇒ Owner), and putting it on a list any
+    active member can read invites a client to compute permissions from it. The
+    server refuses an over-privileged invitation itself (C-1/D-028), so the
+    invite dropdown never needs to filter.
+
+
+    `grantsOwnership` is the ONE derived bit that is published, added for B-9.
+    Without it a client cannot tell which role is the Owner role unless the
+    VIEWER holds it, so ux-wireframe §10.1's rule — show the Owner option,
+    disabled, with the reason — was unimplementable for an Admin, and S7's
+    filter silently filtered nothing. The alternative a client reaches for is
+    `key === "owner"`, which is exactly what the golden rule forbids and what
+    F-003's custom roles break. Publishing the bit keeps the capability list
+    private while removing the temptation.
+  required:
+    - id
+    - name
+    - key
+    - isSystem
+  properties:
+    id:
+      type: string
+    name:
+      type: string
+      description: >
+        Display name. F-003 lets people rename roles, so do NOT map this to
+        Thai copy — use `key`, and fall back to this string.
+    key:
+      type:
+        - string
+        - "null"
+      description: >
+        Stable slug for TRANSLATION ONLY (ux Q4). Guaranteed `owner`, `admin`
+        or `staff` for the three system roles — those values are part of the
+        contract and changing one is a breaking change. `null` for any role
+        F-003 lets a user create, because `key` is the system's namespace.
+
+
+        OPEN SET: on `null` or an unrecognised value the client MUST fall back
+        to `name`. Never `switch` without a default.
+
+
+        ⛔ NEVER a permission input, on either side. "Is this the Owner?" is
+        answered by capabilities alone (architecture §3.2 / data-model §5.2);
+        @qa's I-45 flips a Staff role's `key` to `"owner"` in the database to
+        prove a client that trusted it would be wrong.
+    grantsOwnership:
+      type: boolean
+      description: >
+        Does granting this role grant OWNERSHIP? Derived server-side from
+        `capabilities` (`full_access`), never from `key` — @qa's I-45 flips a
+        Staff role's key to `"owner"` in the database precisely to prove the
+        difference.
+
+
+        ⚠️ OPTIONAL on purpose (contract-evolution): a client newer than the
+        server must not fail to parse a role list, so absent means "this server
+        does not say" and the client falls back to its previous behaviour. It is
+        a UX input — which option to disable, and why — never a permission
+        check: the server refuses an over-privileged grant regardless
+        (C-1/D-028).
+    isSystem:
+      type: boolean
+      description: >
+        True for roles the system provisions with the shop. F-003 will refuse to
+        delete these.
+
+RoleListPage:
+  type: object
+  required:
+    - items
+    - nextCursor
+  properties:
+    items:
+      type: array
+      items:
+        $ref: "./orgs.yaml#/RoleRow"
+    nextCursor:
+      type:
+        - string
+        - "null"
+      description: >
+        Always `null` in F-002 — a shop has exactly its three system roles until
+        F-003. The field is present so a client written today does not need
+        rewriting the day a fourth role exists.

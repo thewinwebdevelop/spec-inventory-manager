@@ -76,6 +76,37 @@ module.exports = {
       },
       to: { path: DB_TARGETS },
     },
+    {
+      name: "api-prisma-service-allowlisted",
+      comment:
+        "`PrismaService`/`PrismaModule` expose the ledger-guarded but NOT " +
+        "org-scoped client (`.client`). They may only be imported from the " +
+        "same allowlist as the raw client: prisma/, tenancy/, health/, auth/ " +
+        "(backend.md §3.3, architecture §2.1). Security review A-1: this was " +
+        "the door the DB-client rule did not cover — `PrismaModule` is " +
+        "`@Global()`, so a feature module could inject the service and read " +
+        "across every tenant while the allowlist test, depcruise, lint and " +
+        "the unit suite all reported clean. Feature modules inject ORG_PRISMA; " +
+        "the three reviewed system operations inject SYSTEM_PRISMA from " +
+        "tenancy/. Note this targets prisma.service/prisma.module ONLY — " +
+        "prisma/org-busy and prisma/invitation-token are deliberate shims that " +
+        "feature modules are meant to use. `app.module.ts` is exempt because " +
+        "registering PrismaModule is what a composition root does — and that " +
+        "exemption is safe because it covers the MODULE only: if that file " +
+        "ever names `PrismaService`, the textual allowlist test " +
+        "(orgs/system/system-prisma-allowlist.test.ts) flags it, since the " +
+        "src root is not an allowed prefix there.",
+      severity: "error",
+      from: {
+        path: "^apps/api/src/",
+        pathNot: [
+          "^apps/api/src/(prisma|tenancy|health|auth)/",
+          "^apps/api/src/app\\.module\\.ts$",
+          "\\.(test|int\\.test)\\.ts$",
+        ],
+      },
+      to: { path: "^apps/api/src/prisma/prisma\\.(service|module)(\\.ts)?$" },
+    },
   ],
   options: {
     doNotFollow: { path: "node_modules" },

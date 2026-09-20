@@ -4,12 +4,14 @@
   "version": "0.0.0",
   "scripts": {
     "build": "tsc -p tsconfig.json",
-    "lint": "eslint \"src/**/*.{ts,tsx}\"",
-    "typecheck": "tsc -p tsconfig.json --noEmit",
+    "lint": "eslint \"src/**/*.{ts,tsx}\" \"test/**/*.ts\"",
+    "typecheck": "tsc -p tsconfig.json --noEmit && tsc -p tsconfig.test.json",
     "test": "vitest run",
     "test:integration": "vitest run int.test",
     "depcruise": "omnistock-api-boundaries",
-    "dev": "tsx watch src/main.ts",
+    "dev": "tsc -p tsconfig.json && node dist/main.js",
+    "dev:compile:watch": "tsc -p tsconfig.json --watch --preserveWatchOutput",
+    "dev:run:watch": "node --watch dist/main.js",
     "start": "node dist/main.js",
     "check-env": "tsx scripts/check-env.ts"
   },
@@ -19,9 +21,9 @@
     "@nestjs/jwt": "^11.0.0",
     "@nestjs/platform-express": "^11.1.27",
     "@omnistock/config": "workspace:*",
+    "@omnistock/contracts": "workspace:*",
     "@omnistock/core-domain": "workspace:*",
     "@omnistock/db": "workspace:*",
-    "@omnistock/contracts": "workspace:*",
     "argon2": "^0.41.1",
     "bullmq": "^5.34.10",
     "class-transformer": "^0.5.1",
@@ -39,9 +41,10 @@
     "@types/node": "^22.10.2",
     "@types/supertest": "^6.0.2",
     "supertest": "^7.0.0",
-    "typescript": "^5.7.2",
     "tsx": "^4.19.2",
+    "typescript": "^5.7.2",
     "unplugin-swc": "^1.5.1",
-    "vitest": "^2.1.8"
+    "vitest": "^2.1.8",
+    "yaml": "^2.9.0"
   }
 }

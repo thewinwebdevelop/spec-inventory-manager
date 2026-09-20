@@ -1,7 +1,7 @@
 import Link from "next/link";
 import { AuthCard } from "../../../components/ui/AuthCard";
 import { Button } from "../../../components/ui/Button";
-import { authTh } from "../../../i18n/auth";
+import { authTh } from "../../../features/auth/i18n";
 
 /**
  * `/login/help` — static "ลืมรหัสผ่าน?" help screen (ux-wireframe §3.3,

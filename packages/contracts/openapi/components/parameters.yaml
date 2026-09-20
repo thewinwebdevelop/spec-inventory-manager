@@ -1,0 +1,80 @@
+# Reusable parameters. `redocly bundle` hoists each into
+# `#/components/parameters/<key>`.
+
+OrgIdParam:
+  name: orgId
+  in: path
+  required: true
+  description: >
+    Organization id. On F-002 org-scoped routes this is one of the two accepted
+    sources of org context (the other is the `X-Organization-Id` header, D-025);
+    sending both with different values is `422 ORG_MISMATCH`.
+  schema:
+    type: string
+
+UserIdParam:
+  name: userId
+  in: path
+  required: true
+  description: Target member's user id.
+  schema:
+    type: string
+
+InvitationIdParam:
+  name: invitationId
+  in: path
+  required: true
+  description: Invitation id (`inv_…`).
+  schema:
+    type: string
+
+# ── org context header (D-025) ─────────────────────────────────────────────
+OrgIdHeader:
+  name: X-Organization-Id
+  in: header
+  required: false
+  description: >
+    Org context (api-spec §1). Optional on routes that already carry `{orgId}`
+    in the path; if both are sent they MUST match, otherwise `422 ORG_MISMATCH`.
+    User-scoped and public routes ignore this header entirely (I-3).
+  schema:
+    type: string
+
+# ── cursor pagination (api-spec §1) ────────────────────────────────────────
+CursorParam:
+  name: cursor
+  in: query
+  required: false
+  description: >
+    Opaque keyset cursor from the previous page's `nextCursor`. Base64url —
+    clients MUST NOT decode or construct one. Unreadable value → `422
+    VALIDATION_FAILED` with `fieldErrors.cursor`.
+  schema:
+    type: string
+
+LimitParam:
+  name: limit
+  in: query
+  required: false
+  description: >
+    Page size. Default 25, clamped to 100. Non-integer / < 1 → `422
+    VALIDATION_FAILED` with `fieldErrors.limit` (a bug is not silently corrected).
+  schema:
+    type: integer
+    minimum: 1
+    default: 25
+
+WithTotalParam:
+  name: withTotal
+  in: query
+  required: false
+  description: >
+    Opt in to the `total` count on this page. OPT-IN PER ENDPOINT: only the
+    endpoints that declare this parameter compute a total — see the endpoint's
+    own documentation. (`GET /me/organizations` and `GET
+    /orgs/{orgId}/invitations` do NOT support it today; api-spec §1 states the
+    convention generally, the server implements it on `GET
+    /orgs/{orgId}/members` only.)
+  schema:
+    type: boolean
+    default: false

@@ -1,0 +1,128 @@
+# Shared, feature-agnostic schemas. Anything referenced from more than one
+# feature lives here so there is exactly one definition of the error envelope.
+#
+# Bundling note (T-002-21): `redocly bundle` hoists each pointer below into
+# `#/components/schemas/<last pointer segment>`, so the key names in this file
+# ARE the names the generated TS/Dart clients use. Renaming a key here renames a
+# generated type — treat it as a contract change (see the contract-evolution
+# skill).
+
+HealthResponse:
+  type: object
+  required:
+    - status
+  properties:
+    status:
+      type: string
+      enum:
+        - ok
+        - error
+      description: >
+        Literal "ok" when the service is healthy, "error" when one or
+        more dependency checks fail (returned with HTTP 503).
+    checks:
+      type: object
+      description: >
+        Additive (T-000-08): per-dependency readiness detail backing
+        `status`. Optional so existing consumers of the AC11 minimal seam
+        are unaffected (contract-evolution: additive-only against an
+        already-shipped surface).
+      properties:
+        db:
+          type: string
+          enum:
+            - ok
+            - fail
+          description: Postgres reachability via PrismaService's `SELECT 1`.
+        redis:
+          type: string
+          enum:
+            - ok
+            - fail
+          description: >
+            Redis/BullMQ reachability via the ioredis connection's PING +
+            a BullMQ queue call.
+
+# ── THE ONE ERROR ENVELOPE ─────────────────────────────────────────────────
+# Every error response in this contract references this schema and nothing else.
+# A per-endpoint copy is how `details`/`fieldErrors`/`traceId` drift apart, and
+# the client is required to switch on `error.code` alone (api-spec §1).
+ErrorResponse:
+  type: object
+  description: >
+    The project-standard error envelope, produced by `DomainExceptionFilter`
+    for every failure (F-001 §3.5, F-002 api-spec §1/§4). `code` is a
+    machine-readable UPPER_SNAKE value the client switches on; `message` is
+    user-facing Thai copy the client MUST NOT parse.
+  required:
+    - error
+  properties:
+    error:
+      type: object
+      required:
+        - code
+        - message
+      properties:
+        code:
+          type: string
+          description: >
+            Machine-readable error code (e.g. `INVALID_CREDENTIALS`,
+            `ORG_ACCESS_DENIED`, `RATE_LIMITED`). A shipped value never changes.
+
+
+            Every code a response can carry is named in that response's
+            `description` — an error code IS contract, because clients branch on
+            it to choose which sentence a person reads (contract-evolution:
+            adding a code is additive, changing or removing one is breaking).
+
+
+            TWO CODES BELONG TO NO SINGLE ENDPOINT and are therefore documented
+            here instead: `INTERNAL` (`500`) — the filter's fallback for any
+            unrecognised error, carrying no detail by design — and
+            `UNSUPPORTED_MEDIA_TYPE` (`415`), which the transport guard can
+            answer on any JSON route before the handler runs.
+
+
+            A client MUST tolerate a code it does not recognise (show the
+            `message`), and MUST NOT parse the `message` to recover one.
+        message:
+          type: string
+          description: >
+            User-facing Thai message. F-002 copy says "ร้าน" rather than
+            "องค์กร" (D-029); identifiers and enum values stay English.
+        details:
+          type: object
+          additionalProperties: true
+          description: >
+            Optional, code-specific context. Documented cases (F-002):
+            `INVITATION_PENDING` → `{ invitationId, expiresAt, roleId, roleName }`
+            (§3.11) · `ORG_LIMIT_REACHED` → `{ limit }` (§3.1) ·
+            `INVITATION_EMAIL_MISMATCH` → `{ emailMasked }` (§3.15) ·
+            `CONFLICT` → `{ reason: "busy" }` when the request lost the race for
+            the shop's row lock (amend #4 / NEW-4 — retryable, never a 500).
+            A client that does not recognise a key MUST still behave correctly.
+        fieldErrors:
+          type: object
+          additionalProperties:
+            type: string
+          description: >
+            Per-field Thai messages on a `422` (e.g. `{ "taxId": "…" }`).
+        traceId:
+          type: string
+          description: >
+            Opaque random UUID v4 issued by the SERVER for this request, echoed
+            in `X-Request-Id`. Present on EVERY error response in practice; it
+            stays optional in the schema so already-shipped clients are not
+            broken (api-spec §1, NEW-7). Never derived from client input.
+
+OkResponse:
+  type: object
+  required:
+    - ok
+  properties:
+    ok:
+      # Same reason as `SignupResponse.verified` — a boolean with an `enum`
+      # generates a string-valued EnumClass for Dart. This one is on every
+      # `OkResponse` route (logout, logout-all, …), so it would have broken
+      # those the moment mobile called them for real.
+      type: boolean

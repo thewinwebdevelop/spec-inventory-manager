@@ -1,0 +1,60 @@
+# Reusable RESPONSE headers. `redocly bundle` hoists each into
+# `#/components/headers/<key>`.
+#
+# The `no-store` / `no-referrer` rows below mirror `RESPONSE_HEADER_POLICY`
+# (apps/api/src/orgs/response-headers.ts), which is the production table the
+# integration tests import. This file documents the same policy for consumers;
+# the table enforces it.
+
+RetryAfter:
+  description: >
+    Seconds until the backoff window clears (UX countdown source). The server
+    GUARANTEES an integer ≥ 1 — rounded up, never `0`, never fractional, never
+    an HTTP-date — so mobile can compute a backoff from it directly (api-spec
+    §1, qa Q11); `org-rate-limit.guard.ts` enforces it and a unit test pins it.
+
+
+    ⚠️ `minimum` stays `0` deliberately. F-001 shipped it that way, and
+    tightening a constraint on an already-published surface is a change
+    `oasdiff` may judge, for a guarantee that changes nothing in any generated
+    client. The promise lives in the sentence above and in the test, which is
+    where it can actually be enforced.
+  schema:
+    type: integer
+    minimum: 0
+
+SetAuthCookies:
+  description: >
+    On the cookie transport, sets `omni_rt` (httpOnly, Secure,
+    SameSite=Strict, Path=/auth) and `omni_csrf` (readable, Secure,
+    SameSite=Strict, Path=/auth). Absent on the body transport.
+  schema:
+    type: string
+
+CacheControlNoStore:
+  description: >
+    Always `no-store` — this response carries a token, an email address, a tax
+    id (masked or full) or a membership fact about a person (api-spec §1
+    "Cache / PII").
+  schema:
+    type: string
+    enum:
+      - no-store
+
+PragmaNoCache:
+  description: "HTTP/1.0 twin of `Cache-Control: no-store`. Always `no-cache`."
+  schema:
+    type: string
+    enum:
+      - no-cache
+
+ReferrerPolicyNoReferrer:
+  description: >
+    Always `no-referrer` on the invitation routes and on
+    `POST /orgs/{orgId}/tax-profile/reveal` (I-6 / §3.16): the PAGE these
+    responses render on holds a token in its URL, and without this header that
+    URL travels to whatever the page loads next.
+  schema:
+    type: string
+    enum:
+      - no-referrer

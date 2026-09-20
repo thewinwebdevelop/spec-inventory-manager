@@ -1,0 +1,545 @@
+// OmniStock — Prisma schema (F-000 · T-000-04)
+// Authoritative spec: docs/features/F-000/data-model.md (schema-only contract),
+// canonical model: docs/01-data-model.md §2.
+// Schema-only: tables + columns + enums + unique + FK + indexes.
+// NO computed/generated columns for derived values (available, onHand−reserved,
+// weighted-average, COGS, resolved entitlement). StockMovement.balanceAfter is a
+// stored audit snapshot (spec §2.1 exception), NOT derived.
+// Ledger immutability trigger (StockMovement/UsageEvent) is NOT declarative Prisma:
+// it ships as the raw-SQL migration `*_ledger_immutability` (T-000-05), which
+// rejects UPDATE/DELETE/TRUNCATE. App-side Layer-1 guard: src/ledger-guard.ts.
+
+generator client {
+  provider = "prisma-client-js"
+  output   = "../src/generated/client"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+// ─── Enums ────────────────────────────────────────────────────────────────────
+
+enum MembershipStatus {
+  active
+  invited
+  revoked
+}
+
+// F-002 (T-002-01) — `cancelled` added; `expired` is RESERVED and has NO write
+// path: "expired" is DERIVED at read time (pending && expiresAt <= now) by
+// core-domain's resolveInvitationStatus (data-model §3.2). Never write it.
+enum InvitationStatus {
+  pending
+  accepted
+  expired
+  cancelled
+}
+
+enum ProductStatus {
+  active
+  archived
+}
+
+enum StockMovementType {
+  PURCHASE_IN
+  SALE_OUT
+  ADJUST
+  TRANSFER
+  RETURN
+  ASSEMBLY
+}
+
+enum ChannelKey {
+  shopee
+  lazada
+  tiktok
+}
+
+enum ChannelAccountStatus {
+  active
+  expired
+  revoked
+}
+
+enum ChannelListingStatus {
+  active
+  inactive
+  error
+}
+
+enum AllocationMode {
+  FULL
+  BUFFER
+  FIXED
+  DYNAMIC
+}
+
+// ─── Tenancy & Auth ──────────────────────────────────────────────────────────
+
+// User — allowlist: NO organizationId (auth is org-agnostic; joins orgs via Membership)
+model User {
+  id           String   @id @default(cuid())
+  email        String   @unique
+  passwordHash String
+  verified     Boolean  @default(false)
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  memberships   Membership[]
+  refreshTokens RefreshToken[]
+}
+
+model Organization {
+  id       String  @id @default(cuid())
+  name     String
+  logo     String?
+  timezone String  @default("Asia/Bangkok")
+  currency String  @default("THB")
+
+  // taxProfile — STUB (nullable, flattened). Enforced when Full tier opens (F-007/accounting).
+  taxEntityType String? // "personal" | "company"
+  taxId         String? // 13-digit TIN — 1 org = 1 TIN
+  vatRegistered Boolean?
+  taxBranchCode String?
+
+  // F-002 — who created this tenant (back-office/support must be able to answer
+  // it). Nullable + NO FK to User on purpose: User is org-agnostic and may be
+  // deleted/anonymized later (PDPA) — same pattern as StockMovement.createdBy.
+  createdByUserId String?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  memberships      Membership[]
+  roles            Role[]
+  invitations      Invitation[]
+  products         Product[]
+  sellableSkus     SellableSku[]
+  inventoryItems   InventoryItem[]
+  bundleComponents BundleComponent[]
+  warehouses       Warehouse[]
+  stockLevels      StockLevel[]
+  stockMovements   StockMovement[]
+  channelAccounts  ChannelAccount[]
+  channelListings  ChannelListing[]
+  entitlement      OrgEntitlement?
+  usageEvents      UsageEvent[]
+
+  // F-002 — back-office/support TIN lookup. Deliberately NOT @@unique: a
+  // system-wide unique TIN is a cross-tenant oracle (409 tells you "that
+  // company is our customer") and blocks legitimate multi-license entities.
+  // Reasoning in full: F-002 data-model §3.4.
+  @@index([taxId])
+}
+
+// Membership — F-002 deltas (data-model §1/§2). Revoking a member NEVER deletes
+// the row (AC US-5: revoked members must still resolve in old history).
+model Membership {
+  id             String           @id @default(cuid())
+  organizationId String
+  userId         String
+  roleId         String
+  status         MembershipStatus @default(invited)
+
+  // F-002 NEW — lifecycle evidence. String user ids, NO FK (see Organization).
+  // `revokedAt` is not just an audit trail: it is a SECURITY INPUT. An
+  // invitation issued BEFORE revokedAt cannot be accepted — otherwise a removed
+  // member could rejoin with a link they kept (INVITATION_SUPERSEDED — I-1).
+  activatedAt     DateTime? // became active (org created / invitation accepted)
+  revokedAt       DateTime? // when the member was removed (row is never deleted)
+  revokedByUserId String? // who removed them (self-revoke allowed — D-029)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  organization Organization @relation(fields: [organizationId], references: [id])
+  user         User         @relation(fields: [userId], references: [id])
+  // ★ B-1 — COMPOSITE on purpose. `withOrgScope` pins the `organizationId`
+  // COLUMN but never inspects `data.roleId`, so a scoped client could write
+  // another org's role here — and roles carry `capabilities`, so the role
+  // written could be one holding `full_access`. Referencing the PAIR makes
+  // Postgres refuse it, in both the scalar and the nested-`connect` form.
+  role         Role         @relation(fields: [organizationId, roleId], references: [organizationId, id])
+
+  @@unique([organizationId, userId])
+  @@index([organizationId])
+  @@index([userId])
+  @@index([roleId])
+  @@index([userId, status]) // NEW — GET /me/organizations + org-cap count (§3.5)
+  @@index([organizationId, status, createdAt]) // NEW — member list + count active owners (§3.5)
+}
+
+// Role — HAS organizationId (per-org editable, D-004)
+model Role {
+  id             String   @id @default(cuid())
+  organizationId String
+  name           String
+  isSystem       Boolean  @default(false)
+  capabilities   String[]
+
+  // F-002 (amend #3 · ux Q4) — STABLE slug used ONLY to translate the role name
+  // on screen ("owner" → "เจ้าของร้าน"). System roles created with the org:
+  // "owner" | "admin" | "staff" (part of the API contract — changing a value is
+  // a breaking change). Custom roles (F-003) = null.
+  // ⛔ NEVER use `key` to decide permissions. "is Owner" == capabilities
+  //    contains `full_access` (data-model §5.2). A `key === "owner"` check
+  //    re-opens finding C-1 the moment F-003 ships custom roles.
+  key String?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  organization Organization @relation(fields: [organizationId], references: [id])
+  memberships  Membership[]
+  invitations  Invitation[]
+
+  @@unique([organizationId, name])
+  // NEW — one `key` per org. Postgres treats each NULL as distinct, so any
+  // number of custom (key = null) roles coexist under this unique index.
+  @@unique([organizationId, key])
+  // ★ B-1 — looks redundant next to `@id`, and is not: it is the TARGET a
+  // composite foreign key needs. `Membership`/`Invitation` reference
+  // `(organizationId, id)` so Postgres itself refuses a role belonging to
+  // another org. Without it the pair is unreferenceable and the rule has to
+  // live in application code, where it was one `if` away from being forgotten.
+  @@unique([organizationId, id])
+  @@index([organizationId])
+}
+
+// RefreshToken — allowlist: NO organizationId (bound to User; auth org-agnostic)
+// F-001 deltas (T-001-02, data-model §2.1): familyId (rotation chain), tokenHash
+// (HMAC-SHA-256 keyed, unique), expiresAt (60d, slides), familyExpiresAt (90d cap,
+// inherited unchanged — D-007), lastUsedAt?, rotatedFrom now @unique (I-5).
+model RefreshToken {
+  id              String    @id @default(cuid())
+  userId          String
+  familyId        String // NEW — rotation-chain / session id (arch §3)
+  tokenHash       String    @unique // NEW — HMAC-SHA-256(JWT_REFRESH_SECRET, tokenValue) (L-3)
+  deviceId        String? // client-supplied session label (arch §4)
+  rotatedFrom     String?   @unique // NEW @unique (I-5) — ≤1 successor per token, DB-enforced
+  expiresAt       DateTime // NEW — per-token 60d expiry, SLIDES on rotation
+  familyExpiresAt DateTime // NEW — absolute family cap, login+90d, INHERITED unchanged (D-007)
+  lastUsedAt      DateTime? // NEW (optional) — session-list UX (arch §4)
+  revokedAt       DateTime? // reuse/logout/admin revoke
+  createdAt       DateTime  @default(now())
+
+  user User @relation(fields: [userId], references: [id])
+
+  @@index([userId])
+  @@index([rotatedFrom])
+  @@index([familyId]) // NEW — family-wide revoke + session list
+  @@index([userId, revokedAt]) // NEW — list live sessions + D-017 cap-20 count
+}
+
+// Invitation — HAS organizationId (belongs to an org)
+// F-002 deltas (data-model §1/§2): raw `token` REPLACED by `tokenHash`
+// (hash-at-rest, D-018) + full lifecycle columns.
+model Invitation {
+  id             String           @id @default(cuid())
+  organizationId String
+  email          String // normalized (lowercase + trim) ALWAYS
+  roleId         String
+  status         InvitationStatus @default(pending)
+
+  // CHANGED (D-018) — HMAC-SHA-256(INVITATION_TOKEN_SECRET, token). The raw
+  // token exists only in the emailed link; it is NEVER stored. Lookup is by
+  // hash. Consequence (D-018 / §316): "re-send" cannot resend the old link.
+  tokenHash String @unique
+
+  // NEW — when the current token was issued/rotated. Compared against
+  // Membership.revokedAt by canAcceptInvitation (I-1). Rotating a link resets
+  // the TTL clock from the reissue time (D-027).
+  tokenIssuedAt DateTime @default(now())
+
+  // now + invitationTtlHours(role): 24h if the role has full_access |
+  // manage_members, else 168h (D-028).
+  expiresAt DateTime
+
+  invitedByUserId String? // NEW — who invited (string, no FK)
+
+  acceptedAt            DateTime? // NEW
+  acceptedByUserId      String? // NEW — user who accepted (string, no FK)
+  // NEW (D-028/I-7) — SNAPSHOT of User.createdAt at accept time, not a join:
+  // answers "was this account created after the invite was issued?" even after
+  // the user is deleted/anonymized (PDPA). Flag compares against `createdAt`,
+  // NOT `tokenIssuedAt` (which rotation overwrites) — NEW-9.
+  acceptedUserCreatedAt DateTime?
+
+  cancelledAt DateTime? // NEW
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt // NEW
+
+  organization Organization @relation(fields: [organizationId], references: [id])
+  // ★ B-1 — same composite FK as `Membership`, for the same reason: an
+  // invitation names the role the invitee will get, so a cross-org role here
+  // grants that org's capabilities on accept.
+  role         Role         @relation(fields: [organizationId, roleId], references: [organizationId, id])
+  // ALSO (raw SQL in migration `f002_expand` — Prisma's DSL has no partial
+  // unique index): UNIQUE ("organizationId", email) WHERE status = 'pending'
+  //   → "one pending invitation per (org, email)" enforced by the DB, not by an
+  //     `if` that loses to a concurrent request.
+
+  @@index([organizationId])
+  @@index([email])
+  @@index([organizationId, status, createdAt]) // NEW — invitation list + pending cap (§3.5)
+  @@index([organizationId, email, status]) // NEW — cancel pending invites on revoke (I-1)
+}
+
+// ─── Product / Inventory (5-layer) ───────────────────────────────────────────
+
+model Product {
+  id             String        @id @default(cuid())
+  organizationId String
+  code           String
+  name           String
+  status         ProductStatus @default(active)
+  createdAt      DateTime      @default(now())
+  updatedAt      DateTime      @updatedAt
+
+  organization Organization  @relation(fields: [organizationId], references: [id])
+  sellableSkus SellableSku[]
+
+  @@unique([organizationId, code])
+  @@index([organizationId])
+}
+
+// SellableSku — holds no stock (available computed in core-domain)
+model SellableSku {
+  id             String   @id @default(cuid())
+  organizationId String
+  productId      String
+  code           String
+  name           String
+  barcode        String?
+  basePrice      Decimal  @db.Decimal(18, 4) // money
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+
+  organization     Organization      @relation(fields: [organizationId], references: [id])
+  product          Product           @relation(fields: [productId], references: [id])
+  bundleComponents BundleComponent[]
+  channelListings  ChannelListing[]
+
+  @@unique([organizationId, code])
+  @@index([organizationId])
+  @@index([productId])
+}
+
+// InventoryItem — holds stock (via StockLevel) + weighted-average cost
+model InventoryItem {
+  id                String   @id @default(cuid())
+  organizationId    String
+  sku               String
+  name              String
+  avgUnitCost       Decimal  @db.Decimal(18, 4) // money — weighted-average (write path F-011)
+  trackStock        Boolean  @default(true)
+  lowStockThreshold Int? // qty
+  createdAt         DateTime @default(now())
+  updatedAt         DateTime @updatedAt
+
+  organization     Organization      @relation(fields: [organizationId], references: [id])
+  stockLevels      StockLevel[]
+  bundleComponents BundleComponent[]
+  stockMovements   StockMovement[]
+
+  @@unique([organizationId, sku])
+  @@index([organizationId])
+}
+
+// BundleComponent — M:N SellableSku ↔ InventoryItem (composition line)
+model BundleComponent {
+  id              String   @id @default(cuid())
+  organizationId  String
+  sellableSkuId   String
+  inventoryItemId String
+  quantity        Int // qty per sellable unit
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  organization  Organization  @relation(fields: [organizationId], references: [id])
+  sellableSku   SellableSku   @relation(fields: [sellableSkuId], references: [id])
+  inventoryItem InventoryItem @relation(fields: [inventoryItemId], references: [id])
+
+  @@unique([sellableSkuId, inventoryItemId])
+  @@index([organizationId])
+  @@index([inventoryItemId])
+}
+
+model Warehouse {
+  id             String   @id @default(cuid())
+  organizationId String
+  name           String
+  isDefault      Boolean  @default(false)
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+
+  organization   Organization    @relation(fields: [organizationId], references: [id])
+  stockLevels    StockLevel[]
+  stockMovements StockMovement[]
+  // F-002 — ALSO (raw SQL in migration `f002_expand`, no Prisma DSL support):
+  // UNIQUE ("organizationId") WHERE "isDefault"
+  //   → invariant "1 org = exactly 1 default warehouse" enforced at DB level.
+  // NOTE: this table's columns are UNCHANGED by F-002 (index only) — no
+  // stock/money column is touched anywhere in this migration set.
+
+  @@index([organizationId])
+}
+
+// StockLevel — projection of the ledger (onHand/reserved stored; available derived)
+model StockLevel {
+  id              String   @id @default(cuid())
+  organizationId  String
+  warehouseId     String
+  inventoryItemId String
+  onHand          Int      @default(0) // stock
+  reserved        Int      @default(0) // stock
+  updatedAt       DateTime @updatedAt
+
+  organization  Organization  @relation(fields: [organizationId], references: [id])
+  warehouse     Warehouse     @relation(fields: [warehouseId], references: [id])
+  inventoryItem InventoryItem @relation(fields: [inventoryItemId], references: [id])
+
+  @@unique([warehouseId, inventoryItemId])
+  @@index([organizationId])
+  @@index([inventoryItemId])
+}
+
+// ─── Stock ledger (immutable) ────────────────────────────────────────────────
+// UPDATE/DELETE rejected by DB trigger installed in T-000-05 (AC8). No trigger here.
+
+model StockMovement {
+  id              String            @id @default(cuid())
+  organizationId  String
+  inventoryItemId String
+  warehouseId     String
+  type            StockMovementType
+  quantity        Int // stock (+/-)
+  unitCost        Decimal?          @db.Decimal(18, 4) // money (nullable — e.g. ADJUST w/o cost)
+  refType         String? // open-ended: ORDER | PURCHASE | ADJUSTMENT | ...
+  refId           String?
+  balanceAfter    Int // stored audit snapshot (NOT derived — spec §2.1 exception)
+  createdAt       DateTime          @default(now())
+  createdBy       String? // FK to User deferred (auth wiring F-001); string for now
+
+  organization  Organization  @relation(fields: [organizationId], references: [id])
+  inventoryItem InventoryItem @relation(fields: [inventoryItemId], references: [id])
+  warehouse     Warehouse     @relation(fields: [warehouseId], references: [id])
+  // NO updatedAt — immutable. DB trigger (T-000-05) rejects UPDATE/DELETE.
+
+  @@index([organizationId])
+  @@index([inventoryItemId])
+  @@index([warehouseId])
+  @@index([refType, refId])
+}
+
+// ─── Channel (marketplace) ───────────────────────────────────────────────────
+
+// Channel — allowlist: NO organizationId (system-level master)
+model Channel {
+  id          String     @id @default(cuid())
+  key         ChannelKey @unique
+  displayName String
+
+  channelAccounts ChannelAccount[]
+}
+
+// ChannelAccount — stub-structure (authData encrypted; real auth in F-004/F-005)
+model ChannelAccount {
+  id             String               @id @default(cuid())
+  organizationId String
+  channelKey     ChannelKey
+  shopName       String
+  externalShopId String
+  authData       String? // STUB — encrypted token blob (impl F-004+). Nullable in F-000.
+  status         ChannelAccountStatus @default(active)
+  createdAt      DateTime             @default(now())
+  updatedAt      DateTime             @updatedAt
+
+  organization    Organization     @relation(fields: [organizationId], references: [id])
+  channel         Channel          @relation(fields: [channelKey], references: [key])
+  channelListings ChannelListing[]
+
+  @@unique([organizationId, channelKey, externalShopId])
+  @@index([organizationId])
+}
+
+// ChannelListing — fully specified structure; sync fields are stub state
+model ChannelListing {
+  id               String               @id @default(cuid())
+  organizationId   String
+  channelAccountId String
+  sellableSkuId    String
+  externalItemId   String
+  externalSkuId    String
+  externalStatus   ChannelListingStatus @default(active)
+  allocationMode   AllocationMode       @default(FULL)
+  allocationValue  Int? // qty (buffer/fixed amount) — mode-dependent
+  priceOverride    Decimal?             @db.Decimal(18, 4) // money — empty = use basePrice
+  lastSyncedStock  Int? // stock — sync state (written by F-004+)
+  lastSyncedPrice  Decimal?             @db.Decimal(18, 4) // money — sync state
+  lastSyncedAt     DateTime?
+  createdAt        DateTime             @default(now())
+  updatedAt        DateTime             @updatedAt
+
+  organization   Organization   @relation(fields: [organizationId], references: [id])
+  channelAccount ChannelAccount @relation(fields: [channelAccountId], references: [id])
+  sellableSku    SellableSku    @relation(fields: [sellableSkuId], references: [id])
+
+  @@unique([channelAccountId, externalSkuId])
+  @@index([organizationId])
+  @@index([sellableSkuId])
+}
+
+// ─── Entitlements & Usage (scale-seam) — stub-structure ──────────────────────
+
+// PlanDefinition — allowlist: NO organizationId (system catalog)
+model PlanDefinition {
+  id        String   @id @default(cuid())
+  key       String   @unique // comp_full | full | sync | free
+  name      String
+  version   Int      @default(1)
+  tierLabel String?
+  features  Json // open-ended map (boolean / static cap / metered)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  orgEntitlements OrgEntitlement[]
+}
+
+model OrgEntitlement {
+  id               String   @id @default(cuid())
+  organizationId   String
+  planDefinitionId String
+  grants           Json? // itemized add-on/comp/grandfather grants
+  createdAt        DateTime @default(now())
+  updatedAt        DateTime @updatedAt
+
+  organization   Organization   @relation(fields: [organizationId], references: [id])
+  planDefinition PlanDefinition @relation(fields: [planDefinitionId], references: [id])
+
+  @@unique([organizationId]) // 1 org = 1 active entitlement
+  @@index([planDefinitionId])
+}
+
+// UsageEvent — immutable append (golden rule 2); UPDATE/DELETE rejected by trigger (T-000-05, AC8)
+model UsageEvent {
+  id             String   @id @default(cuid())
+  organizationId String
+  meter          String // orders | sync | ai.text | ai.image | ... (open-ended)
+  quantity       Int // stock/count
+  cost           Decimal? @db.Decimal(18, 4) // money — Decimal, never float
+  refType        String?
+  refId          String?
+  occurredAt     DateTime @default(now())
+  createdBy      String? // FK to User deferred (F-001)
+
+  organization Organization @relation(fields: [organizationId], references: [id])
+  // NO updatedAt — immutable. DB trigger (T-000-05) rejects UPDATE/DELETE (AC8).
+
+  @@index([organizationId])
+  @@index([meter])
+  @@index([occurredAt])
+}

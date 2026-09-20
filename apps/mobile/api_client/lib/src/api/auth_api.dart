@@ -30,11 +30,11 @@ class AuthApi {
   const AuthApi(this._dio, this._serializers);
 
   /// Admin resets a member&#39;s password
-  /// US-5. Bearer-authed. The capability check is INLINE application logic (F-001-owned): the caller must have an ACTIVE Membership(orgId) whose role grants &#x60;manage_members&#x60;, AND the target must be an ACTIVE member of orgId (H-2). Any failure → the same-shape 404 (never 403 — no org-existence/status/capability oracle). On success: sets the target&#39;s password and revokes all the target&#39;s families. The capability check is not expressible as an OpenAPI security requirement. 
+  /// US-5. Bearer-authed. The capability check is INLINE application logic (F-001-owned): the caller must have an ACTIVE Membership(orgId) whose role grants &#x60;manage_members&#x60;, AND the target must be an ACTIVE member of orgId (H-2). Any failure → the same-shape 404 (never 403 — no org-existence/status/capability oracle). On success: sets the target&#39;s password and revokes all the target&#39;s families. The capability check is not expressible as an OpenAPI security requirement.  ⚠️ THE WIRE SHAPE IS UNCHANGED SINCE F-001, BUT THE BEHAVIOUR NARROWED TWICE — cases that used to answer &#x60;200&#x60; now answer the SAME &#x60;404&#x60;, and no diff tool can see it (api-spec §2 note / architecture §15):   • D-028/C-2 — the target also holds an active membership in ANOTHER shop;   • D-030/NEW-1 — the target is an Owner (role holds &#x60;full_access&#x60;) and the     caller does not hold &#x60;full_access&#x60;. Accepted consequence (D-030): a shop with a single Owner who forgets their password cannot self-recover until F-081. 
   ///
   /// Parameters:
-  /// * [orgId] - Organization id (the caller's authority derives from a shared membership)
-  /// * [userId] - Target member's user id
+  /// * [orgId] - Organization id. On F-002 org-scoped routes this is one of the two accepted sources of org context (the other is the `X-Organization-Id` header, D-025); sending both with different values is `422 ORG_MISMATCH`. 
+  /// * [userId] - Target member's user id.
   /// * [adminResetRequest] 
   /// * [cancelToken] - A [CancelToken] that can be used to cancel the operation
   /// * [headers] - Can be used to add additional headers to the request

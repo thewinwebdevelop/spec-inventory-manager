@@ -1,0 +1,59 @@
+parameters:
+  - $ref: "../components/parameters.yaml#/OrgIdParam"
+  - $ref: "../components/parameters.yaml#/InvitationIdParam"
+  - $ref: "../components/parameters.yaml#/OrgIdHeader"
+
+delete:
+  operationId: cancelInvitation
+  summary: Cancel a pending invitation
+  description: >
+    F-002 api-spec §3.13. Requires `manage_members`. Any link already sent stops
+    working immediately.
+  tags:
+    - invitations
+  security:
+    - bearerAuth: []
+  responses:
+    "200":
+      description: Cancelled.
+      headers:
+        Cache-Control:
+          $ref: "../components/headers.yaml#/CacheControlNoStore"
+        Pragma:
+          $ref: "../components/headers.yaml#/PragmaNoCache"
+      content:
+        application/json:
+          schema:
+            $ref: "../components/orgs.yaml#/CancelledInvitation"
+    "401":
+      description: Missing/invalid access token (`UNAUTHENTICATED`)
+      content:
+        application/json:
+          schema:
+            $ref: "../components/common.yaml#/ErrorResponse"
+    "403":
+      description: "`FORBIDDEN` (no `manage_members`) or `ORG_ACCESS_DENIED`"
+      content:
+        application/json:
+          schema:
+            $ref: "../components/common.yaml#/ErrorResponse"
+    "404":
+      description: "`NOT_FOUND` — no such invitation in this shop."
+      content:
+        application/json:
+          schema:
+            $ref: "../components/common.yaml#/ErrorResponse"
+    "409":
+      description: >
+        `CONFLICT` — the invitation is not pending (already accepted or
+        cancelled) · or `CONFLICT` + `details.reason = "busy"` (lock contention).
+      content:
+        application/json:
+          schema:
+            $ref: "../components/common.yaml#/ErrorResponse"
+    "422":
+      description: "`ORG_CONTEXT_REQUIRED` / `ORG_MISMATCH`"
+      content:
+        application/json:
+          schema:
+            $ref: "../components/common.yaml#/ErrorResponse"

@@ -1,0 +1,21 @@
+{
+  // ★ B-10 — the EMITTING config; `tsconfig.json` stays `noEmit` for typecheck
+  // and vitest. This package shipping TypeScript source is what made
+  // `node dist/main.js` die with "Unexpected token 'export'" inside
+  // `packages/config/src/index.ts`.
+  "extends": "./tsconfig/base.json",
+  "compilerOptions": {
+    "outDir": "dist",
+    "rootDir": "src",
+    // ⚠️ EXPLICIT, and the reason is a trap worth writing down. `tsconfig.json`
+    // uses `"types": []` and still resolves `process`, because a `*.test.ts` is
+    // in its program and vitest's types reference Node. This config must not
+    // ship test files, so it loses that path — and when I first built it with
+    // no `types` key at all it PASSED, resolving @types/node from
+    // `/Users/tar/node_modules`, outside the repository. That would have been
+    // green on my machine and red on every other one.
+    "types": ["node"]
+  },
+  "include": ["src/index.ts", "src/env.ts"],
+  "exclude": ["node_modules", "dist", "**/*.test.ts"]
+}

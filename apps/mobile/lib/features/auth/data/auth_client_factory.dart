@@ -65,6 +65,34 @@ AuthRepositoryImpl createAuthClient({
   OmnistockApiClient? apiClient,
   TokenStore? tokenStore,
   String? deviceId,
+}) =>
+    createAuthStack(
+      baseUrl: baseUrl,
+      apiClient: apiClient,
+      tokenStore: tokenStore,
+      deviceId: deviceId,
+    ).repository;
+
+/// The same wiring, returning the [Dio] as well.
+///
+/// ★ T-002-M5 — additive, and it exists because `core/api/api_providers.dart`
+/// says so in as many words: `baseDioProvider` "has no default … the
+/// composition root overrides this … with the wired client from
+/// createAuthClient()". There was no way to obtain that client. So F-002's
+/// org repositories had no wiring at all — the screens, the controllers and
+/// the repository impls all existed and `orgDirectoryProvider` still threw
+/// `UnimplementedError` in the real app.
+///
+/// The Dio handed out here is the SAME instance the auth repository uses, on
+/// purpose: it carries the refresh chain bound to that repository's
+/// `RefreshCoordinator`, and single-flight dedupe is per-instance. A second
+/// base client would mean two refresh policies in one app, which is the
+/// drift `api_providers.dart` warns about.
+({AuthRepositoryImpl repository, Dio dio}) createAuthStack({
+  required String baseUrl,
+  OmnistockApiClient? apiClient,
+  TokenStore? tokenStore,
+  String? deviceId,
 }) {
   guardBaseUrlForRelease(baseUrl);
   final store = tokenStore ?? TokenStore();
@@ -100,8 +128,11 @@ AuthRepositoryImpl createAuthClient({
       dio.interceptors.length - 1,
       RefreshInterceptor(retryDio: retryDio, refreshCoordinator: repo.refreshCoordinator),
     );
-    return repo;
+    return (repository: repo, dio: dio);
   }
 
-  return AuthRepositoryImpl(authApi: authApi, tokenStore: store, deviceId: deviceId);
+  return (
+    repository: AuthRepositoryImpl(authApi: authApi, tokenStore: store, deviceId: deviceId),
+    dio: dio,
+  );
 }

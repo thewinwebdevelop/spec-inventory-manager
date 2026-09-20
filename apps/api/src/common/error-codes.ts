@@ -63,6 +63,49 @@ export const ERROR_CODES = {
     message: "รหัสผ่านนี้อยู่ในรายการที่ถูกเปิดเผยแล้ว กรุณาใช้รหัสอื่น",
   },
 
+  // ── 422 org context (F-002 · api-spec §4) ─────────────────────────────────
+  // Both are VALIDATION-class on purpose: they say "this request was addressed
+  // wrong", not "you may not". Answering 403 here would bounce a perfectly
+  // valid member out of the org they are looking at (N-1).
+  ORG_CONTEXT_REQUIRED: {
+    code: "ORG_CONTEXT_REQUIRED",
+    status: HttpStatus.UNPROCESSABLE_ENTITY,
+    message: "ต้องระบุร้านที่ต้องการเข้าถึง",
+  },
+  ORG_MISMATCH: {
+    code: "ORG_MISMATCH",
+    status: HttpStatus.UNPROCESSABLE_ENTITY,
+    message: "ร้านใน header กับใน URL ไม่ตรงกัน",
+  },
+
+  // ── 422 tax profile (F-002 · api-spec §4 / §3.5 · T-002-17) ───────────────
+  // A DISTINCT code from VALIDATION_FAILED because the client shows different
+  // copy for it: "that is not a real tax id" points at one field the user can
+  // fix, while VALIDATION_FAILED on this endpoint usually means "you have not
+  // finished filling the form" (the all-or-nothing rule, data-model §3.3).
+  //
+  // ⚠️ The message never contains the rejected value — with
+  // `entityType='personal'` a Thai TIN is the owner's national ID (M-7ค), and
+  // an error message is the one string that gets copied into a bug report.
+  TAX_ID_INVALID: {
+    code: "TAX_ID_INVALID",
+    status: HttpStatus.UNPROCESSABLE_ENTITY,
+    message: "เลขผู้เสียภาษีไม่ถูกต้อง",
+  },
+  // F-002 · T-002-18 — api-spec §4 / §3.8: the `roleId` in the body is not a
+  // role of THIS shop (it does not exist, or it belongs to another tenant).
+  //
+  // ⚠️ 422, and the message says nothing about which of the two it was. The
+  // lookup runs through `ORG_PRISMA`, so a role id from another org and a role
+  // id that never existed are indistinguishable here BY CONSTRUCTION — which is
+  // the point: a distinguishable answer would turn this endpoint into an oracle
+  // for "does this role id exist somewhere in the platform?" (I-8).
+  ROLE_INVALID: {
+    code: "ROLE_INVALID",
+    status: HttpStatus.UNPROCESSABLE_ENTITY,
+    message: "บทบาทนี้ไม่ใช่บทบาทของร้านนี้",
+  },
+
   // ── 409 conflict ──────────────────────────────────────────────────────────
   EMAIL_TAKEN: {
     code: "EMAIL_TAKEN",
@@ -73,6 +116,119 @@ export const ERROR_CODES = {
     code: "CONFLICT",
     status: HttpStatus.CONFLICT,
     message: "ข้อมูลขัดแย้งกับสถานะปัจจุบัน",
+  },
+  // F-002 · api-spec §3.11 (D-027) — this email already has a live invitation.
+  // It carries `details.invitationId` so the UI can offer "reissue" or "cancel"
+  // instead of a dead end: without the id the only thing a user can do with
+  // this error is retype the address and get it again.
+  INVITATION_PENDING: {
+    code: "INVITATION_PENDING",
+    status: HttpStatus.CONFLICT,
+    message: "อีเมลนี้มีคำเชิญค้างอยู่แล้ว",
+  },
+  // F-002 · api-spec §3.11 / §10 (M-3) — cap on invitations that are pending
+  // AND not yet expired. Counting expired ones too would let a shop lock itself
+  // out of inviting anybody by leaving old links to rot.
+  INVITATION_LIMIT_REACHED: {
+    code: "INVITATION_LIMIT_REACHED",
+    status: HttpStatus.CONFLICT,
+    message: "คำเชิญที่ค้างอยู่ครบจำนวนสูงสุดแล้ว",
+  },
+  // F-002 · api-spec §3.11/§3.15 — the invitee is already in this shop.
+  ALREADY_MEMBER: {
+    code: "ALREADY_MEMBER",
+    status: HttpStatus.CONFLICT,
+    message: "ผู้ใช้นี้เป็นสมาชิกของร้านนี้อยู่แล้ว",
+  },
+
+  // ── F-002 · T-002-20 — redeeming an invitation (api-spec §3.14/§3.15) ─────
+  //
+  // WHY FOUR SEPARATE 409s AND NOT ONE.
+  // Each one sends the user somewhere different: `EXPIRED` and `SUPERSEDED` say
+  // "ask for a new link", `CANCELLED` says "that link was withdrawn",
+  // `ALREADY_ACCEPTED` says "you are done, sign in". A single code would make
+  // the client guess, and the guess would be wrong most of the time (AC US-4).
+  //
+  // ⚠️ They are only safe to distinguish because the caller ALREADY HOLDS a
+  // token that matched a stored hash (architecture §7.6 "Enumeration"). The line
+  // between them and `INVITATION_INVALID` below is the whole enumeration story:
+  // "your secret is right, here is what happened to it" versus "no".
+  //
+  // F-002 · api-spec §3.15 (I-1/D-028) — the link predates the removal.
+  INVITATION_SUPERSEDED: {
+    code: "INVITATION_SUPERSEDED",
+    status: HttpStatus.CONFLICT,
+    message: "คำเชิญนี้ออกก่อนที่คุณจะถูกถอดจากร้าน กรุณาขอคำเชิญใหม่",
+  },
+  // F-002 · api-spec §3.15 (M-6) — the invited role was deleted, or is no longer
+  // a role of that shop. Checked AT ACCEPT, not only at creation: F-003 lets a
+  // shop delete roles, and a membership pointing at a role from another tenant
+  // is a hole no foreign key would refuse (`roleId` is a single-column key).
+  INVITATION_ROLE_UNAVAILABLE: {
+    code: "INVITATION_ROLE_UNAVAILABLE",
+    status: HttpStatus.CONFLICT,
+    message: "คำเชิญนี้ใช้ไม่ได้แล้ว โปรดขอลิงก์ใหม่",
+  },
+  INVITATION_EXPIRED: {
+    code: "INVITATION_EXPIRED",
+    status: HttpStatus.CONFLICT,
+    message: "ลิงก์คำเชิญหมดอายุแล้ว กรุณาขอลิงก์ใหม่",
+  },
+  INVITATION_CANCELLED: {
+    code: "INVITATION_CANCELLED",
+    status: HttpStatus.CONFLICT,
+    message: "คำเชิญนี้ถูกยกเลิกแล้ว",
+  },
+  INVITATION_ALREADY_ACCEPTED: {
+    code: "INVITATION_ALREADY_ACCEPTED",
+    status: HttpStatus.CONFLICT,
+    message: "คำเชิญนี้ถูกใช้ไปแล้ว",
+  },
+  // 404, and the message says nothing more. An unknown token, a rotated one and
+  // a token that never existed are ONE answer with ONE body: anything else turns
+  // the public preview into an oracle that says "this secret used to be real",
+  // which is the only fact a token-mining attempt could ever collect (I-5/I-6).
+  INVITATION_INVALID: {
+    code: "INVITATION_INVALID",
+    status: HttpStatus.NOT_FOUND,
+    message: "ลิงก์คำเชิญไม่ถูกต้อง",
+  },
+  // 403, with `details.emailMasked` attached at the throw site so the UI can say
+  // "this invitation was issued to u***@example.com — please sign in with that
+  // account" instead of leaving the user to guess which of their addresses it is.
+  //
+  // ⚠️ Defence in depth, NOT a control (architecture §7.6): Phase 0 cannot verify
+  // an email address, so whoever holds the link can sign up AS the invitee. Do
+  // not let this code's existence be read as "invitations are bound to an owner".
+  INVITATION_EMAIL_MISMATCH: {
+    code: "INVITATION_EMAIL_MISMATCH",
+    status: HttpStatus.FORBIDDEN,
+    message: "คำเชิญนี้ออกให้บัญชีอื่น กรุณาเข้าสู่ระบบด้วยบัญชีที่ถูกเชิญ",
+  },
+
+  // F-002 · api-spec §4 / architecture §6.3 (I-10) — the per-user shop cap.
+  // 409 rather than 403: nothing about the CALLER is wrong, the request simply
+  // conflicts with a state they can resolve (leave a shop, or ask us to raise
+  // it). The throw site attaches `details: { limit }` so the UI can show the
+  // real number instead of hard-coding "50" (which would then drift from env).
+  ORG_LIMIT_REACHED: {
+    code: "ORG_LIMIT_REACHED",
+    status: HttpStatus.CONFLICT,
+    message: "คุณมีร้านครบจำนวนสูงสุดแล้ว",
+  },
+  // F-002 · T-002-18 ★ — api-spec §4 / architecture §5. The change would leave
+  // the shop with ZERO active Owners, which is unrecoverable in Phase 0 (there
+  // is no back-office until F-085 and no "delete shop"), so it is refused rather
+  // than warned about. Raised by `assertOwnerRemains` INSIDE the org-locked
+  // transaction — the answer is only true if it was computed under the lock.
+  //
+  // 409, not 403: the caller may well have the right to do this; it is the
+  // resulting STATE that is illegal, and they can fix it (promote someone first).
+  // Covers leaving voluntarily too (§3.17 / D-029) — same rule, same code.
+  LAST_OWNER: {
+    code: "LAST_OWNER",
+    status: HttpStatus.CONFLICT,
+    message: "ร้านต้องมีเจ้าของอย่างน้อย 1 คน",
   },
 
   // ── 401 unauthenticated / credential / refresh ───────────────────────────
@@ -108,6 +264,17 @@ export const ERROR_CODES = {
     status: HttpStatus.FORBIDDEN,
     message: "ไม่มีสิทธิ์เข้าถึง",
   },
+  // F-002 · I-5 — deliberately SEPARATE from FORBIDDEN. "You are not an active
+  // member of this org" (incl. the org not existing, or you having been removed)
+  // must be distinguishable by the client from "you are a member but lack this
+  // capability": the first sends the user back to the org picker + refetches
+  // /me/organizations, the second keeps them on the page with a toast. One code
+  // for both guarantees the client does the wrong one of the two.
+  ORG_ACCESS_DENIED: {
+    code: "ORG_ACCESS_DENIED",
+    status: HttpStatus.FORBIDDEN,
+    message: "คุณไม่ได้เป็นสมาชิกของร้านนี้",
+  },
 
   // ── 404 not found (same-shape auth 404-never-403) ─────────────────────────
   NOT_FOUND: {
@@ -121,6 +288,20 @@ export const ERROR_CODES = {
     code: "RATE_LIMITED",
     status: HttpStatus.TOO_MANY_REQUESTS,
     message: "รอสักครู่แล้วลองใหม่",
+  },
+
+  // ── 503 provisioning (F-002 · api-spec §4 / architecture §6.2) ────────────
+  // The system has no default plan to bind a new shop to. It is OUR
+  // misconfiguration, never the user's input, so it is a 5xx and the message
+  // says "try again / contact us" rather than blaming the request.
+  //
+  // ⛔ The alternative — quietly falling back to the `free` plan — is the bug
+  // this code exists to prevent: it would grant a tier nobody authorised, and
+  // it would do so silently (AC US-1).
+  ORG_PROVISIONING_UNAVAILABLE: {
+    code: "ORG_PROVISIONING_UNAVAILABLE",
+    status: HttpStatus.SERVICE_UNAVAILABLE,
+    message: "ระบบยังเปิดร้านใหม่ไม่ได้ในขณะนี้ กรุณาติดต่อทีมงาน",
   },
 
   // ── 500 unknown fallback (filter maps ANY unrecognized error here) ────────

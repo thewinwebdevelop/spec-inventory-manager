@@ -9,6 +9,10 @@
 //   in-process IP limiter still bites, (b) emit auth.throttle.fail_open.
 //
 // The backoff CURVE is the core-domain pure fn `backoffSeconds` (golden rule #6).
+//
+// T-002-11 (N-3): the IP bucket is NOT the raw address — it is
+// `clientIpKey()` from common/client-ip.ts (IPv6 collapsed to /64, IPv4
+// unchanged). Same helper as the F-002 org rate-limit guard; never inline it.
 import { Injectable, Logger } from "@nestjs/common";
 import type { Redis } from "ioredis";
 import { backoffSeconds } from "@omnistock/core-domain";
@@ -22,6 +26,7 @@ import {
   DEGRADED_IP_WINDOW_MS,
 } from "./auth.constants";
 import { SecurityEventsService } from "./security-events.service";
+import { clientIpKey } from "../common/client-ip";
 
 /** In-process degraded IP limiter state (per API instance). */
 interface DegradedBucket {
@@ -44,9 +49,13 @@ export class ThrottleService {
    * Check + increment the IP sliding window for a pre-auth endpoint. Returns
    * `retryAfter` seconds (>0 ⇒ the caller must 429) or 0 (allowed).
    * Fail-open on Redis error, but the degraded in-process limiter still applies.
+   *
+   * `ip` is the express-resolved client address (TRUST_PROXY_HOPS decides which
+   * one that is); the bucket it maps to is `clientIpKey`'s business.
    */
   async checkIp(ip: string): Promise<number> {
-    const key = `${THROTTLE_IP_PREFIX}${ip}`;
+    const bucket = clientIpKey(ip);
+    const key = `${THROTTLE_IP_PREFIX}${bucket}`;
     try {
       const count = await this.redis.incr(key);
       if (count === 1) {
@@ -58,7 +67,7 @@ export class ThrottleService {
       }
       return 0;
     } catch (err) {
-      return this.failOpenIp(ip, err);
+      return this.failOpenIp(ip, bucket, err);
     }
   }
 
@@ -104,15 +113,19 @@ export class ThrottleService {
 
   // ─── fail-open degraded in-process IP limiter (M-7) ────────────────────────
 
-  private failOpenIp(ip: string, err: unknown): number {
-    this.logger.warn(`redis down — throttle failing open for ip=${ip}: ${String(err)}`);
+  private failOpenIp(ip: string, ipBucket: string, err: unknown): number {
+    this.logger.warn(`redis down — throttle failing open for ip=${ip} bucket=${ipBucket}: ${String(err)}`);
+    // Event payload stays `{ ip }` (the shipped F-001 registry field) = the raw
+    // client address, which is what incident response wants; the bucket is a
+    // derived detail and lives in the log line above.
     this.securityEvents.emit("auth.throttle.fail_open", { ip });
     // Degraded, per-process best-effort IP cap so an outage is not a fully
-    // unthrottled brute-force window.
+    // unthrottled brute-force window. Keyed on the SAME bucket as Redis,
+    // otherwise IPv6 rotation would walk straight through this fallback too.
     const nowMs = this.now();
-    const bucket = this.degraded.get(ip);
+    const bucket = this.degraded.get(ipBucket);
     if (!bucket || nowMs - bucket.windowStart > DEGRADED_IP_WINDOW_MS) {
-      this.degraded.set(ip, { count: 1, windowStart: nowMs });
+      this.degraded.set(ipBucket, { count: 1, windowStart: nowMs });
       return 0;
     }
     bucket.count += 1;

@@ -1,0 +1,75 @@
+parameters:
+  - $ref: "../components/parameters.yaml#/OrgIdParam"
+  - $ref: "../components/parameters.yaml#/OrgIdHeader"
+
+put:
+  operationId: putTaxProfile
+  summary: Declare (or clear) the shop's legal tax identity
+  description: >
+    F-002 US-7 (api-spec §3.5). Requires `manage_org_settings`. `PUT` of the
+    WHOLE set: send the complete declaration, or `{}` to clear it. There is no
+    half-declared state (data-model §3.3), so a partial body is `422` with a
+    message on every field that is missing.
+
+
+    ⚠️ THE RESPONSE DOES NOT ECHO `taxId` BACK. It is the ordinary §3.3 profile
+    body — `taxIdMasked` at most. The caller typed the number, so returning it
+    adds nothing and only multiplies the places a full TIN appears. The value is
+    never logged either; the security event records `taxIdPresent` and
+    `entityType` only.
+
+
+    F-002 stores the declaration and exposes `taxProfileComplete`. Gating
+    features on it is F-007's job, not this endpoint's.
+  tags:
+    - organizations
+  security:
+    - bearerAuth: []
+  requestBody:
+    required: true
+    content:
+      application/json:
+        schema:
+          $ref: "../components/orgs.yaml#/TaxProfileRequest"
+  responses:
+    "200":
+      description: >
+        Stored — answers with the §3.3 profile body (`taxProfileComplete: true`
+        once the trio is present).
+      headers:
+        Cache-Control:
+          $ref: "../components/headers.yaml#/CacheControlNoStore"
+        Pragma:
+          $ref: "../components/headers.yaml#/PragmaNoCache"
+      content:
+        application/json:
+          schema:
+            $ref: "../components/orgs.yaml#/OrgProfile"
+    "401":
+      description: Missing/invalid access token (`UNAUTHENTICATED`)
+      content:
+        application/json:
+          schema:
+            $ref: "../components/common.yaml#/ErrorResponse"
+    "403":
+      description: "`FORBIDDEN` (no `manage_org_settings`) or `ORG_ACCESS_DENIED` (not a member)"
+      content:
+        application/json:
+          schema:
+            $ref: "../components/common.yaml#/ErrorResponse"
+    "415":
+      description: Non-JSON Content-Type (`UNSUPPORTED_MEDIA_TYPE`)
+      content:
+        application/json:
+          schema:
+            $ref: "../components/common.yaml#/ErrorResponse"
+    "422":
+      description: >
+        `TAX_ID_INVALID` when the NUMBER itself failed the 13-digit checksum
+        (+`fieldErrors.taxId`) · `VALIDATION_FAILED` for everything else,
+        including a half-filled declaration · `ORG_CONTEXT_REQUIRED` /
+        `ORG_MISMATCH`. The message never quotes the rejected value.
+      content:
+        application/json:
+          schema:
+            $ref: "../components/common.yaml#/ErrorResponse"

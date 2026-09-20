@@ -79,7 +79,7 @@ void main() {
       adapter.enqueue(FakeResponse(statusCode: 201, jsonBody: {
         'userId': 'u1',
         'email': 'somchai@shop.com',
-        'verified': 'false',
+        'verified': false,
       }));
       final client = buildClient(adapter);
       final container = buildContainer(client);

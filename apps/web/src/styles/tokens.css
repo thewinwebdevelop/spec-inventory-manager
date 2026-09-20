@@ -24,6 +24,20 @@
   --color-primary: #0c6155;
   --color-primary-fg: #ffffff;
   --color-primary-hover: #094e45;
+
+  /* §1.1c — the PRIMARY BUTTON has its own tokens, separate from
+   * `color.primary`. In light they are the same value; in dark they must not
+   * be, and design-system.md spends a paragraph saying so: `color.primary`
+   * has to be light enough to read as a link on charcoal (#2FBBA6) while a
+   * button on the same background has to be deep and solid (#0A5A45).
+   * Forcing them equal gives either a 1.91:1 link nobody can read or the
+   * pastel mint button D-026 rejected. ⛔ Do not "fix" this into one token. */
+  --color-btn-bg: #0c6155;
+  --color-btn-fg: #ffffff;
+  --color-btn-hover: #094e45;
+  --color-btn-danger-bg: #c0362c;
+  --color-btn-danger-hover: #a32d22;
+  --shadow-btn: none;
   --color-accent: #f2a65a;
   --color-accent-soft: #fbebd6;
   --color-accent-text: #9a631a;
@@ -42,6 +56,9 @@
   --color-success-text: #1f5d3d;
   --color-badge-current-bg: #e7f3ec;
   --color-badge-current-text: #1f5d3d;
+  /* `Badge` variant `neutral` — a neutral status such as "ยกเลิกแล้ว". */
+  --color-badge-neutral-bg: #e7efec;
+  --color-badge-neutral-text: #566b65;
   --color-surface: #ffffff;
   --color-surface-muted: #e7efec;
   --color-bg: #f3f7f5;
@@ -49,6 +66,15 @@
   --color-text-muted: #566b65;
   --color-border-default: #cfdcd7;
   --color-overlay: rgb(11 22 20 / 45%);
+
+  /* `color.info.*` (§1.1) — a SEPARATE role even though the light values equal
+   * surface.muted / border.default / text. design-system.md says so explicitly:
+   * an info Banner is "neutral / here is some information", not a status
+   * colour, and collapsing it onto surface.muted would lose that distinction
+   * the day the two need to diverge. */
+  --color-info-bg: #e7efec;
+  --color-info-border: #cfdcd7;
+  --color-info-text: #112320;
 
   /* 1.2 Typography */
   --font-thai: "Sarabun", "Noto Sans Thai", system-ui, sans-serif;
@@ -77,6 +103,13 @@
   --text-button-md--line-height: 24px;
   --text-button-md--font-weight: 600;
 
+  /* `type.button.sm` (§1.1c-3) — for `size="sm"` and `variant="tertiary"`.
+   * "ตัวอักษรเล็กลง ปุ่มไม่เตี้ยลง": the text shrinks, the 44px tap target
+   * does not. */
+  --text-button-sm: 14px;
+  --text-button-sm--line-height: 20px;
+  --text-button-sm--font-weight: 600;
+
   /* 1.3 Spacing / radius (4pt grid) — Tailwind v4's default `--spacing`
    * multiplier is 4px (`p-1` = 4px), which already matches this grid 1:1
    * (space.1=4px..space.8=32px = p-1..p-8). Named `--spacing-*` keys below
@@ -92,6 +125,64 @@
 
   --size-auth-card-max-w: 400px;
   --size-tap-target-min: 44px;
+
+  /* ⚠️ 480px, and deliberately NOT the same token as the 400px auth card —
+   * design-system.md §1.2 spells that out. Six F-002 screens had `480px`
+   * typed in by hand and `ConfirmDialog` had `400px`, i.e. every confirm
+   * dialog rendered 80px narrower than the design (audit, 2026-09-01). */
+  --size-dialog-max-w: 480px;
+  /* The width a dialog takes when the viewport is NARROWER than the max —
+   * 5% of the page stays visible down each side, which is what says "this is
+   * a layer you can dismiss" rather than "the page changed". */
+  --size-dialog-inline-w: 90%;
+  --size-sidebar-w: 240px;
+
+  /* ⚠️ The DRAWER (<lg, §8.2) is NOT the permanent sidebar and deliberately
+   * not the same token: it floats over the page, so it is wider, and it is
+   * capped at 85% because the scrim behind it must stay visible — a drawer
+   * that fills the screen reads as a navigation, not as something you close. */
+  --size-drawer-w: 280px;
+  --size-drawer-max-w: 85%;
+
+  --size-list-row-min-h: 56px;
+  /* `DataRow` — the fixed label column that makes four facts line up as four
+   * facts instead of eight loose lines. */
+  --size-data-row-label-w: 150px;
+  --size-data-row-value-min-w: 180px;
+
+  --size-content-max-w: 1280px;
+  /* Single-column pages that are mostly READ (settings, security). Wider than
+   * this and the eye loses the start of the next line. ⛔ Not the dialog
+   * width: 480px is for something floating on a scrim, a different job. */
+  --size-content-narrow-max-w: 640px;
+  --size-toast-max-w: 360px;
+  --size-dropdown-w: 290px;
+
+  /* A row that is present, legible, and plainly not actionable any more
+   * (a revoked member, a dead invitation). Checked against AA in BOTH themes
+   * before it was given a name — ⛔ do not lower it to "look more faded". */
+  --opacity-dim: 0.62;
+
+  /* Three layers, and no numbers outside this ladder (§1.3). Hand-picked
+   * z-indexes per component is the standard way a modal ends up underneath a
+   * header with nobody noticing. Toast sits ABOVE the overlay on purpose: it
+   * reports the result of what the user just pressed inside a dialog. */
+  --z-dropdown: 40;
+  --z-overlay: 50;
+  --z-toast: 100;
+
+  /* `size.icon.*` (§1.2). `md` is the default: banner, button, list row. */
+  --size-icon-sm: 16px;
+  --size-icon-md: 20px;
+  --size-icon-lg: 24px;
+  --size-icon-xl: 40px;
+
+  /* `focus.ring.*` (§1.1c-1). The offset is REQUIRED, never 0: the primary
+   * button's background is `color.primary`, the same colour as the ring, so a
+   * 0-offset ring disappears into the button it is meant to mark. */
+  --focus-ring-color: var(--color-primary);
+  --focus-ring-w: 2.5px;
+  --focus-ring-offset: 2px;
 
   /* 1.4 Elevation */
   --shadow-card: 0 1px 3px rgb(16 24 40 / 10%), 0 1px 2px rgb(16 24 40 / 6%);
@@ -115,5 +206,77 @@
   }
   100% {
     opacity: 0.6;
+  }
+}
+
+/**
+ * ★ 1.1b — Dark theme. Same semantic roles, different values.
+ *
+ * `tokens.css` used to say "dark theme lands at the web restart", and §8.4
+ * item 3 requires every sign-off to be checked in BOTH themes, so that box was
+ * simply unticked. The palette had been fully specified the whole time.
+ *
+ * Ground is neutral charcoal rather than a green-tinted dark, on purpose: the
+ * brand colour has to pop against it.
+ *
+ * ⚠️ SCOPE: the OS preference only. §1.1b says dark opens "ผ่าน
+ * `prefers-color-scheme` + toggle (`data-theme`)" and there is no toggle in
+ * the web app — that UI belongs to the web restart. My first attempt wrote a
+ * `:root[data-theme="dark"]` selector INSIDE the media query, which would have
+ * looked like a working toggle while only ever applying when the OS was
+ * already dark. A dead selector that reads as a live one is worse than an
+ * absent one, so `data-theme` is left out until something sets it.
+ */
+@layer base {
+  @media (prefers-color-scheme: dark) {
+    :root {
+      color-scheme: dark;
+
+      --color-primary: #2fbba6;
+      --color-primary-hover: #45c7b3;
+      --color-accent: #eeb073;
+      --color-accent-soft: #33291b;
+      --color-accent-text: #f1c48c;
+
+      --color-danger: #e9897f;
+      --color-danger-bg: #2c1a18;
+      --color-danger-border: #5a322d;
+      --color-danger-text: #f0a79e;
+      --color-warning: #e0b25a;
+      --color-warning-bg: #2a2213;
+      --color-warning-border: #544321;
+      --color-warning-text: #ebc981;
+      --color-success: #6fc194;
+      --color-success-bg: #16261d;
+      --color-success-border: #2c4636;
+      --color-success-text: #8fd3ad;
+      --color-info-bg: #2a2d2c;
+      --color-info-border: #363a38;
+      --color-info-text: #e9eeeb;
+      --color-badge-neutral-bg: #2a2d2c;
+      --color-badge-neutral-text: #98a29d;
+      --color-badge-current-bg: #16261d;
+      --color-badge-current-text: #8fd3ad;
+
+      --color-surface: #212423;
+      --color-surface-muted: #2a2d2c;
+      --color-bg: #171918;
+      --color-text: #e9eeeb;
+      --color-text-muted: #98a29d;
+      --color-border-default: #363a38;
+      --color-overlay: rgb(0 0 0 / 62%);
+
+      /* §1.1c — solid and deep, lifted by a shadow rather than outlined in
+       * bright mint, which is what would read as pastel. */
+      --color-btn-bg: #0a5a45;
+      --color-btn-hover: #0c6b52;
+      --color-btn-danger-bg: #a32d22;
+      --color-btn-danger-hover: #8f2419;
+      --shadow-btn: 0 3px 8px rgb(0 0 0 / 55%);
+
+      --shadow-card: 0 1px 3px rgb(0 0 0 / 55%), 0 1px 2px rgb(0 0 0 / 40%);
+      --shadow-dialog: 0 20px 24px -4px rgb(0 0 0 / 60%), 0 8px 8px -4px rgb(0 0 0 / 40%);
+      --shadow-toast: 0 8px 16px -4px rgb(0 0 0 / 60%);
+    }
   }
 }

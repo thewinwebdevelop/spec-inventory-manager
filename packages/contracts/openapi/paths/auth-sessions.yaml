@@ -1,0 +1,25 @@
+get:
+  operationId: authSessions
+  summary: List the user's live sessions/devices
+  description: >
+    US-3. Bearer-authed. Lists live (non-revoked, non-expired) families for
+    the user — bounded at 20 (D-017). The family matching the `omni_rt`
+    cookie (if present) is marked current. Also reads the cookie to mark
+    current — that is an input, not an auth requirement.
+  tags:
+    - auth
+  security:
+    - bearerAuth: []
+  responses:
+    "200":
+      description: Live sessions
+      content:
+        application/json:
+          schema:
+            $ref: "../components/auth.yaml#/SessionsResponse"
+    "401":
+      description: "`UNAUTHENTICATED` — missing/invalid access token"
+      content:
+        application/json:
+          schema:
+            $ref: "../components/common.yaml#/ErrorResponse"

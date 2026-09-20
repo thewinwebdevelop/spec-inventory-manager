@@ -62,6 +62,7 @@ export {
 
 export {
   CAPABILITY_MANAGE_MEMBERS,
+  CAPABILITY_MANAGE_ORG_SETTINGS,
   CAPABILITY_FULL_ACCESS,
   hasCapability,
 } from "./capabilities";

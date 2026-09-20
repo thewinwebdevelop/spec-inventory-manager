@@ -53,7 +53,7 @@ void main() {
 
     test('success -> outcome success, submitting flips back to false', () async {
       final adapter = FakeHttpClientAdapter();
-      adapter.enqueue(FakeResponse(statusCode: 200, jsonBody: {'ok': 'true'}));
+      adapter.enqueue(FakeResponse(statusCode: 200, jsonBody: {'ok': true}));
       final client = await buildClient(adapter);
       final container = buildContainer(client);
 

@@ -1,0 +1,179 @@
+# F-001 authentication schemas. Moved verbatim out of the single-file
+# openapi.yaml by T-002-21 — no shape changed, only the file it lives in.
+
+SignupRequest:
+  type: object
+  required:
+    - email
+    - password
+  properties:
+    email:
+      type: string
+      format: email
+    password:
+      type: string
+
+SignupResponse:
+  type: object
+  required:
+    - userId
+    - email
+    - verified
+  properties:
+    userId:
+      type: string
+    email:
+      type: string
+    verified:
+      # ⚠️ NO `enum: [false]` here, and it is not a style choice. That
+      # constraint is documentation ("a new account is never verified") that
+      # openapi-generator's dart-dio target reads as an ENUM: it emitted an
+      # `EnumClass` whose wire value is the STRING "false", so deserializing
+      # the API's JSON `false` threw and every mobile signup failed with
+      # `ApiError(status: 201)`. Found by E-10 on a real emulator against the
+      # real API (tasks.md, 2026-08-17); no unit test on either side could
+      # see it, because each mocked the other's half.
+      type: boolean
+
+LoginRequest:
+  type: object
+  required:
+    - email
+    - password
+  properties:
+    email:
+      type: string
+      format: email
+    password:
+      type: string
+    deviceId:
+      type: string
+      maxLength: 64
+      pattern: "^[A-Za-z0-9_-]+$"
+      description: Client session label (arch §4). Not a security boundary.
+    tokenTransport:
+      type: string
+      enum:
+        - cookie
+        - body
+      # ⛔ No `default:` — it made this REQUIRED in the generated TS type, so
+      # "mobile omits" was something no generated client could do.
+      description: >
+        Refresh-token delivery channel (api-spec §0). Web sends "cookie";
+        mobile omits it or sends "body", and the SERVER treats absent as
+        "body".
+
+RefreshRequest:
+  type: object
+  description: >
+    Body-transport clients (mobile) send `refreshToken`. Cookie-transport
+    clients (web) send it via the `omni_rt` cookie and omit the body field.
+  properties:
+    refreshToken:
+      type:
+        - string
+        - "null"
+    deviceId:
+      type: string
+      maxLength: 64
+      pattern: "^[A-Za-z0-9_-]+$"
+
+LogoutRequest:
+  type: object
+  properties:
+    refreshToken:
+      type:
+        - string
+        - "null"
+      description: Body-transport refresh token (mobile). Web uses the cookie.
+    familyId:
+      type: string
+      description: Optional — revoke a specific LISTED family owned by the caller (M-3).
+
+ChangePasswordRequest:
+  type: object
+  required:
+    - currentPassword
+    - newPassword
+  properties:
+    currentPassword:
+      type: string
+    newPassword:
+      type: string
+    refreshToken:
+      type:
+        - string
+        - "null"
+      description: Optional mobile refresh token to identify the current family to spare (N-1).
+
+AdminResetRequest:
+  type: object
+  required:
+    - newPassword
+  properties:
+    newPassword:
+      type: string
+
+TokenResponse:
+  type: object
+  required:
+    - accessToken
+    - refreshToken
+    - expiresIn
+    - tokenType
+  properties:
+    accessToken:
+      type: string
+      description: HS256 JWT access token (Bearer). 15-minute TTL.
+    refreshToken:
+      type:
+        - string
+        - "null"
+      description: >
+        The rotated refresh token on the BODY transport; `null` on the
+        cookie transport (the token is in the httpOnly `omni_rt` cookie,
+        never JS-readable — H-1).
+    expiresIn:
+      type: integer
+      description: Access-token TTL in seconds (900).
+    tokenType:
+      type: string
+      enum:
+        - Bearer
+
+SessionsResponse:
+  type: object
+  required:
+    - sessions
+  properties:
+    sessions:
+      type: array
+      items:
+        $ref: "./auth.yaml#/Session"
+
+Session:
+  type: object
+  required:
+    - familyId
+    - deviceId
+    - createdAt
+    - lastUsedAt
+    - current
+  properties:
+    familyId:
+      type: string
+    deviceId:
+      type:
+        - string
+        - "null"
+    createdAt:
+      type: string
+      format: date-time
+    lastUsedAt:
+      type:
+        - string
+        - "null"
+      format: date-time
+    current:
+      type: boolean
+      description: True for the family matching the caller's omni_rt cookie (C-1).
