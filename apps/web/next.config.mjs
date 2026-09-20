@@ -55,6 +55,41 @@ const nextConfig = {
     };
     return config;
   },
+  async headers() {
+    // Security review of B-19 (devops, F-002 tasks.md "ที่ยังเหลือ" — this row
+    // predates B-19) — api-spec.md §3.14/I-6: the invitation token is "the one
+    // secret that keeps a stranger out of an organisation", and the API side
+    // already refuses it in a query string and sets
+    // `Referrer-Policy: no-referrer` on every invitation response
+    // (`apps/api/src/orgs/response-headers.ts`, `INVITATION_RESPONSE_HEADERS`).
+    // `/invite?token=…` (`apps/web/src/app/invite/page.tsx`, S11) is the one
+    // web route that carries that token in `location.href` on its FIRST
+    // load, before `InviteScreen`'s layout effect strips it from the URL
+    // (E-12) — any subresource or outbound-link request racing that first
+    // paint can leak the token via `Referer`. This header closes exactly
+    // that gap, matching the header the API already chose rather than
+    // inventing a new policy here.
+    //
+    // Scope: `/invite` only, not the whole app. Every other route in this
+    // app runs after the auth boundary (`/o/[orgId]/...`, `/settings`,
+    // `/login`, `/signup`) and carries no bearer credential in its URL, so a
+    // referrer header there carries no secret — and this project's own
+    // response-header policy on the API side is the same shape: a per-route
+    // table keyed to WHICH routes carry a token/email/TIN
+    // (`RESPONSE_HEADER_POLICY`, api-spec §1), not a blanket header on every
+    // response. No current or planned web flow reads `document.referrer` or
+    // relies on an outbound `Referer` from any of these pages, so there is
+    // no trade-off being given up by scoping this to `/invite` — if that
+    // ever changes for `/invite` specifically (e.g. an outbound link that
+    // wants attribution), it needs a new decision, not a silent removal of
+    // this header.
+    return [
+      {
+        source: "/invite",
+        headers: [{ key: "Referrer-Policy", value: "no-referrer" }],
+      },
+    ];
+  },
   async rewrites() {
     // Dev-only same-origin proxy: the browser calls these paths on the web
     // origin; Next.js forwards them server-side to the real API origin. This
