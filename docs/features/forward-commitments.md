@@ -222,6 +222,43 @@ F-000 final whole-branch review (2026-07-05): AC3 (api `/health`+web 200+flutter
 | **`hashInvitationToken` ยังไม่มีใน `packages/**`** (architecture §12.2 item 2ก) ⇒ 3 invite scenario ของ test kit ยัง throw `MissingProductionDependencyError` | backend-api | **T-002-19** (คำเชิญฝั่ง org) — kit มีเทสต์ที่จะเขียวเองวันที่ export ลง | qa จงใจไม่คำนวณ hash เอง (ไม่งั้น I-14 พิสูจน์แค่ว่า kit เห็นด้วยกับ kit) |
 | ~~**export `RESPONSE_HEADER_POLICY` / `TOKEN_RESPONSE_ALLOWLIST` / `TAX_ID_RESPONSE_ALLOWLIST`**~~ (architecture §12.2 items 4, 7) — **✅ ปิดครบทั้งสาม 2026-09-05** (backend-api, release-gate-f §5): สองตัวแรกลงที่ T-002-17 แล้ว · `TOKEN_RESPONSE_ALLOWLIST` เป็นตัวสุดท้ายและ**ค้างมานานที่สุดแบบมองไม่เห็น** — เอกสาร 3 ที่ (architecture §12.2 item 4, test-plan I-04, api-spec §592) อ้างถึงมันเหมือนมันมีอยู่ ขณะที่ `test/assertions.kit.ts` เขียนไว้ในคอมเมนต์ว่ามันยังไม่มี ⇒ กฎ "มีแค่ 2 เส้นที่คืน token ได้" ถูกเขียนไว้ 3 ที่และไม่มีใครบังคับ · ตอนนี้อยู่ที่ `apps/api/src/common/authz/route-capabilities.ts` (2 แถวตัวอักษร ไม่ใช่ regex) + `isTokenAllowedOnRoute()` และถูกใช้จริงใน `auditSweep` ของ `org-leak.kit.ts` (finding `token-on-disallowed-route`, สแกน nested + array) | backend-api | ~~T-002-17~~ **ปิดแล้ว** | `assertResponseHeaders` รับ policy เป็น argument อยู่แล้ว ไม่มีสำเนาที่สอง |
 
+## F-002 M-01 (devops) — คำเชิญข้ามเครื่องจริงต้องการ origin ที่เป็น https (2026-09-20)
+
+`release-gate-f.md` §5 บันทึกไว้ว่าเป็นแถวของ devops: `packages/config/src/env.ts:103` รับ plain
+`http:` เฉพาะ host ที่เป็น `localhost`/`127.0.0.1`/`[::1]` เท่านั้น — **กฎนี้ถูก** (origin ของลิงก์คำเชิญ
+ถือ token ที่ยังไม่ถูกถอดจาก URL ตอน first load, api-spec §3.14/I-6) ⇒ ลิงก์ที่ตั้ง `WEB_APP_BASE_URL`
+เป็น LAN IP ตรงๆ ตายตั้งแต่ต้น `adb reverse tcp:3001 tcp:3001` (`manual-pass-runbook.md`) ปิดเคส
+"เครื่องต่อ USB" ได้จริง แต่ทำให้ลิงก์เป็น `http://localhost:3001/...` ซึ่งเปิดได้เฉพาะเครื่องที่ทำ
+`adb reverse` ไว้เท่านั้น — **ทดสอบข้ามเครื่องจริง (เช่น ส่งลิงก์ผ่าน LINE ไปมือถือเครื่องอื่นที่ไม่ได้เสียบ USB
+กับเครื่อง dev) ยังทำไม่ได้**
+
+ตัวเลือกจริงที่มี (ต้นทุน/trade-off):
+
+1. **Tunnel ที่มี https** (เช่น ngrok, Cloudflare Tunnel, tailscale funnel) — ตั้งเร็วที่สุด (นาทีเดียว)
+   ไม่ต้องแก้ infra ถาวร แต่ **ทราฟฟิกทั้งเส้น (รวม token คำเชิญ) วิ่งผ่าน edge ของ third party** — ขัดกับ
+   เจตนาเดียวกับที่ทำให้ §3.14/I-6 ห้าม token ใน query string/`Referer` ตั้งแต่แรก (token คือ "ความลับตัวเดียว
+   ที่กันคนนอกออกจาก org") ต้นทุนคือความเสี่ยงด้าน trust boundary ไม่ใช่เงินหรือเวลา — ใช้ได้สำหรับ manual
+   pass ครั้งเดียวที่มีคนคุมอยู่ (สร้าง org/ลิงก์ทดสอบ แล้วปิด tunnel ทันที) แต่ไม่ควรตั้งค้างไว้เป็น dev setup ปกติ
+2. **LAN cert ของตัวเอง** (`mkcert` ออก root CA ในเครื่อง dev → issue cert ให้ LAN IP →
+   `WEB_APP_BASE_URL=https://<LAN-IP>:3001`) — ไม่มีทราฟฟิกออกนอกเครือข่ายบ้าน/ออฟฟิศเลย ต้นทุนคือ
+   ต้อง **ติดตั้ง root CA ลงมือถือทดสอบทุกเครื่อง** (บน iOS ต้องเข้า Settings ไปเปิด "Enable full trust"
+   เพิ่มอีกขั้นหนึ่ง) และ LAN IP ต้อง fix (DHCP reservation) ไม่งั้น cert ใช้ไม่ตรง host — เป็นงาน setup
+   ครั้งเดียวต่อเครื่อง ทำซ้ำได้เรื่อยๆ โดยไม่มีความเสี่ยงด้าน third party
+3. **Staging deploy จริงที่มี domain https** — ตรงกับ prod topology ที่สุด (เจอบั๊กที่เกี่ยวกับ origin/cookie
+   จริงก่อน ไม่ใช่แค่บั๊กของ dev proxy) แต่ต้นทุนคือ infra ถาวร (hosting + DNS + cert renewal + ต้อง seed/reset
+   ข้อมูลทดสอบแยกจาก dogfood) — งานระดับ feature ไม่ใช่ workaround ของ manual pass ข้อเดียว
+
+**ข้อเสนอ:** ใช้ตัวเลือก **2 (LAN cert)** เป็นวิธีมาตรฐานสำหรับ manual pass ข้ามเครื่องที่ทำเป็นประจำ
+(ต้นทุนจ่ายครั้งเดียว ไม่มีความเสี่ยงด้าน third party ที่แตะ token) และเก็บตัวเลือก 3 (staging deploy)
+ไว้เป็นสิ่งที่ต้องมีอยู่แล้วก่อนเปิด external customer ด้วยเหตุผลอื่น (ไม่ใช่เพื่อ M-01 ข้อนี้ข้อเดียว) —
+**ไม่แนะนำตัวเลือก 1 (tunnel)** เป็น setup ประจำ เพราะขัดกับเหตุผลเดียวกับที่ §3.14 ห้าม token ในที่ที่มี
+third party มองเห็น
+
+| งานเปิดค้าง | เจ้าของ | **TRIGGER** | binding |
+| --- | --- | --- | --- |
+| **ตั้ง LAN cert (`mkcert`) เป็นวิธีมาตรฐานของการทดสอบคำเชิญข้ามเครื่อง** — เขียนลง `manual-pass-runbook.md` เป็นวิธีที่สองต่อจาก `adb reverse` | devops | **ครั้งถัดไปที่ M-01 (หรือ manual pass อื่นที่ต้องใช้สองเครื่องจริงคนละเครือข่าย USB) ต้องเดินจริง** — วันนี้ยังไม่ต้องทำเพราะยังไม่มีคนรอเดินเคสข้ามเครื่องแบบนั้น | ไม่บล็อกอะไรตอนนี้ — `adb reverse` ปิดเคส USB ได้พอสำหรับ M-01 รอบที่ผ่านมาแล้ว (B-19, 2026-09-15) |
+| **ประเมิน staging deploy ที่มี https domain จริง** | devops + release | **ก่อนเปิด external customer** (launch-readiness bucket เดียวกับ M-01/M-07ค-iOS ใน `release-gate-f.md` §3/§4) | เป็น infra ที่ต้องมีอยู่แล้วด้วยเหตุผลอื่น (deploy จริง, F-081 onboarding) — ทดสอบคำเชิญข้ามเครื่องได้ "ฟรี" ไปด้วยเมื่อของนี้มีอยู่ ไม่ต้องสร้างแค่เพื่อ M-01 |
+
 ## F-003 · ช่องบน last-Owner invariant ที่ยังไม่มีวันนี้ แต่จะมีวันที่ F-003 เปิดให้แก้ role (พบตอน delta review 2026-08-06)
 
 `assertOwnerRemains` ตัดสิน "ใครเป็น Owner" จาก **capabilities** ถูกต้องแล้ว (`isOwnerRole(membership.capabilities)`

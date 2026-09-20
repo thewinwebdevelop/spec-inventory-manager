@@ -3007,3 +3007,38 @@ web **366** เขียว (+3) · mobile **451** · analyze สะอาด ·
 3. **ของค้าง 3 ข้อของ qa ลง forward-commitments พร้อม trigger** — §10 gate 4 ตัวที่ไม่มี implementation (ก่อน F-003 เปิด role CRUD) · `--passWithNoTests` ที่เหลืออีก 2 workspace (commit แรกที่มีโค้ดจริงลง) · G-08 ที่ถูกละเมิดตามตัวอักษรตอน B-10 (ครั้งถัดไปที่แตะ `ledger-guard.ts`)
 
 **ตัวเลขที่ผมรันเองซ้ำหลังแก้ทั้งหมด:** web **366** · api **704** · mobile **451** · contracts **12** · analyze สะอาด · **browser lane 29/29 (floor 29)** กับสแตกจริง
+
+### ✅ B-19 ปิด: `/invite` ทำ token หายระหว่างสมัคร แล้วบอกคนอ่านว่าลิงก์ของเขาพัง (2026-09-15)
+
+**เจอจาก M-01** บน Chrome ของ Android 13: แตะ "สมัครบัญชีใหม่" → ทำตามจอ → กลับมาเจอ *"ลิงก์อาจถูกคัดลอกมาไม่ครบ หรือถูกยกเลิกไปแล้ว"*
+
+**ผมยกผิดคนไปก่อน** — รอบ M-01 ผมเขียนว่าเป็นคำถามของ ux + product · อ่านสเปกจริงแล้ว **§11.1 ตอบไว้ตั้งแต่ Gate 2**: ปุ่ม login/สมัคร พา token ไปใน memory แล้วกลับ `/invite` · ข้อความใน E-05 (*"the link is needed twice"* — อุ้มได้ต้องใช้ `sessionStorage`/URL) คือความเชื่อที่ผิด ไม่ใช่ข้อจำกัดจริง และถูกบันทึกเป็น "deviation" ที่ไม่มีใครกลับมาตัดสิน (ข้อ 1 ของ "3 ช่องว่าง" 2026-08-16)
+
+| | |
+|---|---|
+| ที่แก้ | `lib/session/pending-invite.ts` (module memory · hold ตอนออกไปหน้า auth · take=อ่าน+ลบ · TTL 30 นาที) · `use-invite-token` ใช้ของที่ hold ไว้เมื่อ URL ไม่มี token (ลิงก์ใหม่ชนะเสมอ) · `InviteScreen` hold บน 4 ประตู (login · สมัคร · next-step login · สลับบัญชี) · login ไป `destinationAfterLogin()` · `endSession` ทิ้ง |
+| security-reviewer (opus) | **ready-with-recommendations** · E-12 ไม่รั่วเพิ่ม · open redirect เป็นไปไม่ได้ (return type ตายตัว) · **Medium: `endSession` ไม่มีผู้เรียกในแอปเลย** — ปุ่มออกจากระบบใน sidebar เรียก `logoutDevice()` + `router.replace` (soft nav) ⇒ token ค้างข้าม sign-out → คนถัดไปที่ล็อกอินในแท็บเดียวกันถูกพาไปคำเชิญของคนก่อน · **ผมตรวจยืนยันเอง (`grep endSession` นอกเทสต์ = 0) แล้วแก้: `AppShell` เรียก `session.endSession()`** — ปิดบั๊กเก่าที่ provider ยังบอก "ล็อกอินอยู่" หลังออกจากระบบไปด้วย · Low: เทสต์ storage ของผมผ่านได้แม้ไม่ hold อะไรเลย → เพิ่ม non-vacuity · comment เก่าใน E-05 แก้แล้ว |
+| **บทเรียนซ้ำ ([[test-name-overclaims]])** | เทสต์ชื่อ *"a held token does not survive sign-out"* เรียก `endSession` ตรง ๆ — **จริงเฉพาะฟังก์ชันที่ไม่มีใครใช้** · เพิ่มเทสต์ที่กดปุ่มจริงใน `AppShell.logout.test.tsx` และให้มันเป็น pin หลักของ B-19 |
+| red run | ถอด hold → เทสต์ B-19 แดง 1/11 · ถอด drop ใน `endSession` → แดง 1/2 (control เขียว) · ถอด `endSession()` ใน AppShell → แดง 1/6 |
+| E-05 | เขียนใหม่: สมัคร → ล็อกอิน → **กลับมาที่คำเชิญเอง** → กดเข้าร่วม · ตรวจ URL/storage/cookie/DOM **ระหว่างทาง** · รันบนสแตกจริง **4/4** |
+| ที่ยังเหลือ | reload ระหว่างสมัคร = token หาย (ตั้งใจ) → ข้อความยังพูดว่า "อาจถูกยกเลิก" (ux copy) · `Referrer-Policy` บนหน้า `/invite` (devops — มีมาก่อน B-19) · หลุดทิ้ง hold เมื่อไปหน้าที่ไม่ใช่ auth (Low, รอได้) |
+
+web **380** (+14) · typecheck/eslint exit 0 · build-defects gate เขียว · **browser lane 29/29** กับสแตกจริง บน build ที่มี B-19 + AppShell fix
+
+> ⚠️ ระหว่างทางมีสองรอบที่แดง (10 และ 7 เคส) — **ทั้งคู่เป็นความผิดของการรันของผม ไม่ใช่โค้ด:** รอบแรกผมรัน E-05 แยกไปก่อนแล้วกินงบ pre-auth 20/5 นาทีหมด · รอบสองผมไม่ได้ตั้ง `E2E_REDIS_URL` ทำให้ `resetIpThrottle()` no-op เงียบ ๆ (วิธีรันที่ถูกเขียนไว้แล้วใน [gate-e-verdict.md:81](gate-e-verdict.md) — ผมไม่ได้เปิดอ่าน) · หลักฐาน: ทุกเคสที่แดงค้างที่หน้า login พร้อมแถบ "ลองเข้าสู่ระบบถี่เกินไป" + API log `429 RATE_LIMITED` · ไม่นับทั้งสองรอบเป็นหลักฐานทั้งทางเขียวและทางแดง
+
+### ✅ ส่งงานที่เหลือให้ ux · devops · frontend แล้วปิดครบในรอบเดียว (2026-09-20)
+
+user สั่ง: *"ส่งต่อทีมอื่นจัดการงานที่เหลือ · ทำเสร็จแล้วถึง push"* ⇒ ส่ง 3 ทีมพร้อมกัน แบ่งตามไฟล์ที่ไม่ทับกัน (ux=เอกสาร · devops=config · frontend=component) · **ตัวเลขทุกตัวด้านล่างผมรันเองซ้ำ ไม่ได้เชื่อรายงานของ agent**
+
+| ทีม | ผล |
+|---|---|
+| **ux** | ตัดสินว่า **แยก copy** ของเคส "ไม่มี token" ออกจาก `INVITATION_INVALID` — เหตุผลไม่ใช่ถ้อยคำแต่คือ**ทางไปต่อคนละทาง**: `INVITATION_INVALID` = ลิงก์ในมือตายแล้ว ต้องขอใหม่จากเจ้าของร้าน · เคสนี้ = ลิงก์เดิมยังเป็น ๆ อยู่ในแชท ⇒ ใช้คำร่วมกัน = ส่งคนครึ่งหนึ่งไปทางที่ผิดและไปกวนเจ้าของร้านฟรี ๆ · เขียน §11.5 ใหม่ทั้งหัวข้อ + ปักธง ⛔ ในแถวเดิม · **ไม่เพิ่ม token ใหม่ · ไม่แตะโค้ด** |
+| **devops** | `Referrer-Policy: no-referrer` **เฉพาะ route `/invite`** (ไม่เหมารวมทั้งแอป) เพราะเป็น route เดียวที่ URL มี token ตอนโหลดครั้งแรก ก่อน layout effect ถอดออก (E-12) · ทำตามที่ฝั่ง API ตัดสินไว้แล้ว (`INVITATION_RESPONSE_HEADERS`) ไม่คิดนโยบายใหม่ · เทสต์อ่าน `next.config.mjs` **ตัวจริง** + เคสดักการขยายเป็น wildcard · เสนอ CSP ไว้เป็นคำแนะนำ **ไม่ลงมือเอง** (ถูกต้อง — blast radius คนละขนาด) |
+| **frontend** | ปุ่ม **"เชิญใหม่อีกครั้ง"** ตาม §7 (+7 เคส, red run) · **ทิ้ง token ที่พักไว้เมื่อ mount route นอกเส้นทาง** — เทียบ path แบบ**ตรงตัว** `/login/help` จึงไม่นับเป็น `/login` (Low ของ security review) · wire `NO_TOKEN` ของ ux โดย**เลิกปลอมเป็น `ApiRequestError(404)`** และ**ไม่ยัดลงตาราง `BY_CODE`** ที่ map จาก code จริงของ server |
+
+**สิ่งที่ผมตรวจแล้วไม่ตรงกับเอกสาร:** แถว "literal→token 8 ไฟล์" ใน release-gate **ค้างไว้เกินจริง** — `grep` เองแล้วเหลือ **0 จุด** และ token มีอยู่จริงใน `tokens.css` มาตั้งแต่รอบก่อน ⇒ ปิดแถว ไม่ใช่ทำงานซ้ำ
+
+**จุดที่ frontend แก้เทสต์ของผมแล้วผมตรวจว่าถูก:** พอมีกฎ "ออกนอกเส้นทางแล้วทิ้ง token" การ `holdInviteToken` **ก่อน** render ใน `AppShell.logout.test.tsx` จะถูกกฎใหม่ล้างให้ ⇒ เทสต์จะผ่านด้วยเหตุผลผิด · เขาย้ายไป hold หลัง mount พร้อมคอมเมนต์เหตุผล ⇒ เทสต์ยังวัด `endSession` ตามชื่อจริง
+
+web **397** (+17 จาก 380) · typecheck/eslint exit 0 · protected path ไม่ถูกแตะเลยสักไฟล์
