@@ -4,14 +4,36 @@
 # direct pushes — that part is a GitHub repo-admin setting, not in this file.
 name: CI
 
+# F-002 post-merge finding (release-gate-f.md §7, row "ยืนยัน CI เขียวอีกครั้งหลัง merge"):
+# `chore/agent-definitions` is the Phase 1 trunk every feature merges into, and
+# it was missing from `push.branches` — every run this project has ever had on
+# that branch was `event: pull_request` (testing GitHub's synthetic merge ref,
+# see below), never `event: push` (testing the branch tip after merge landed).
+# `09ee14c` merged with zero check-runs and zero statuses on the merge commit
+# itself — not a reused badge, no run at all. Added here, `main` unchanged
+# (already covered). `workflow_dispatch` added too: the one manual escape
+# hatch this file never had, e.g. to re-verify trunk on demand without waiting
+# for the next merge.
 on:
   pull_request:
   push:
-    branches: [main]
+    branches: [main, chore/agent-definitions]
+  workflow_dispatch:
 
+# `github.ref` for a `pull_request` run is `refs/pull/<N>/merge` (unique per
+# PR), so PR runs already cancel only their OWN stale runs — unaffected by
+# this change. For a `push` run `github.ref` is `refs/heads/<branch>`, shared
+# by every push to that branch: two merges landing close together on
+# `chore/agent-definitions` would fall into the SAME group, and
+# `cancel-in-progress: true` would kill the first merge's in-flight run mid-way
+# — including the emulator lane, which this project has already lost to
+# cancel-in-progress twice. That defeats the point of a post-merge run (each
+# merge needs ITS OWN proof, not just the latest one's), so cancellation is
+# now scoped to `pull_request` only; a `push` run queues behind an
+# in-progress one on the same ref instead of killing it.
 concurrency:
   group: ci-${{ github.ref }}
-  cancel-in-progress: true
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 jobs:
   # AC2 (build covers all workspaces), lint (real TS lint), typecheck, test — Node only.
