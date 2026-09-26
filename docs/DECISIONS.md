@@ -386,3 +386,32 @@ Decision:
 Rationale: D-026 ตั้ง mockup-signoff step ขึ้นมาเพื่อจับ "เห็นของจริงแล้วไม่ตรง" ก่อน build — รอบนี้พิสูจน์ว่าคุ้ม: จับได้ทั้งของที่มองเห็น (5 ข้อ), ของที่มองไม่เห็นถ้าไม่วัด (tap target 27 จุด), และบั๊กเชิงโครงสร้างที่จะตามไปถึงโค้ดจริงบน Next.js (portal + specificity) · ต้นทุนถ้าเจอหลัง build = รื้อทุก feature ที่ลอก pattern ไปแล้ว ไม่ใช่รื้อจอเดียว
 Affects: **`docs/design-system.md`** — §1.1/§1.1b (+`color.info.*`) · §1.2 (+`type.button.sm`) · §1.3 (+`size.icon.*`, `focus.ring.*`, กฎ tap-target ไม่มีข้อยกเว้น) · **§1.6 Iconography (หัวข้อใหม่)** · §2 · §6 · §9 (Component library + นิยาม "ประกาศแล้ว") · `ui.md §7` = diff ที่รอ sync-back · `docs/design-system/mockup/f002-org.html` · **ทุก feature หลังจากนี้** (icon + tap target + focus ring) · apps/web + apps/mobile ตอน build
 Status: decided
+
+---
+
+### D-032 · 2026-09-26 · F-003
+
+Q: F-003 เปิดให้สร้าง/แก้ role ราย org ได้ — นโยบาย capability registry และกฎการมอบสิทธิ์ต้องเป็นอย่างไร เพื่อปิด NEW-10 (privilege-superset), ช่อง last-Owner (forward-commitments) และส่วนค้างของ D-030
+Asked by: @product (F-003 Gate 1 re-baseline) Owner: @user (Type 1 — ความปลอดภัย + เปลี่ยนพฤติกรรม route ที่ ship แล้ว)
+Decision:
+**(1) `full_access` อยู่ได้เฉพาะ role Owner ที่ล็อก** (ชื่อ/สิทธิ์แก้ไม่ได้ ลบไม่ได้) — custom/แก้ role ใดๆ ถือ `full_access` ไม่ได้ ⇒ ช่อง "แก้ role จนร้านเหลือ Owner 0 คน" ปิดด้วยโครงสร้าง (ยังต้องมี defensive check ใน tx + เทสต์)
+**(2) registry:** default deny สำหรับ capability ใหม่ · กฎ `manage_X ⇒ view_X` · ทุก key มี tier tag (Full-only ซ่อนจนกว่า F-007 enforce) + สถานะ live/upcoming (upcoming แสดง "เร็ว ๆ นี้" ติ๊กล่วงหน้าได้)
+**(3) `manage_roles` ใหม่** = ออกแบบ role (สร้าง/โคลน/แก้/ลบ) · การมอบ/เชิญ/ถอด ยัง gate ด้วย `manage_members` เดิม · Admin ได้ `manage_roles` ใน seed + backfill ร้านเดิม
+**(4) กฎ ⊆ (NEW-10) เป็นกฎกลางทุกเส้นทางมอบสิทธิ์** — actor จัดการ/มอบได้เฉพาะ role ที่ capabilities ⊆ ของตัวเอง; role ที่เกินสิทธิ์ = อ่านอย่างเดียวสำหรับ actor นั้น
+**(5) รีเซ็ตรหัสได้เฉพาะเมื่อสิทธิ์เป้าหมาย ⊊ ผู้รีเซ็ต** (Owner ตาม D-030) — ⚠️ **เปลี่ยนพฤติกรรม route ที่ F-002 ship แล้ว:** Admin→Admin สิทธิ์เท่ากันได้ 404 รูปเดิม · ต้องมี regression test
+**(6) role ตั้งต้น 3 ตัวตามที่ ship (ตัด Accountant)** · ชื่อที่ร้านตั้งเองชนะคำแปลจาก `key` · custom role `key = null`
+Rationale: ถ้อยคำเดิม "ห้ามรีเซ็ตคนที่สิทธิ์ ⊇ ตัวเอง" มีช่องเมื่อสิทธิ์ไม่ครอบกัน (รีเซ็ตแล้วสวมรอยได้สิทธิ์ที่ตัวเองไม่มี) ⇒ ⊊ ปิดได้ทั้งหมด · กฎ ⊆ ตรงกับ pattern ตลาด (Shopify, Google Workspace, AWS permission boundary) · จำกัด `full_access` ไว้ที่ Owner ถูกกว่าการไล่เช็ค last-Owner ทุกเส้นทางแก้ role
+Affects: `packages/core-domain` (registry, `member-authz`, `isElevatedRole` ต้องนับ `manage_roles`) · `apps/api` roles/members/auth (`adminResetPassword`) · seed + backfill migration · tripwire G-15 (ปลดใน PR เดียวกับกฎจริง) · [F-003 spec](features/F-003/F-003.md) §4, §8.5
+Status: decided
+
+---
+
+### D-033 · 2026-09-26 · cross-feature (F-003 → F-010/F-011/รายงาน)
+
+Q: preset Staff ที่ ship แล้วมี `manage_products` — เมื่อ F-010 เพิ่มช่องต้นทุน พนักงานจะเห็น/แก้ต้นทุนและกำไรได้ จะกันอย่างไรโดยไม่ย้อนเปลี่ยนสิทธิ์ของร้านจริง?
+Asked by: @product (F-003 advisory) Owner: @user (Type 1 — ข้อมูลเงินของร้าน)
+Decision: ช่อง **ต้นทุน / กำไร / COGS / มาร์จิ้น บนทุกจอทุก feature (อ่านและเขียน · API + web + mobile) gate ด้วย `view_financials`** · preset คงตามโค้ดที่ ship (ไม่ย้อนแก้ Staff)
+Rationale: เปลี่ยน preset ย้อนหลัง = เปลี่ยนสิทธิ์คนจริงเงียบ ๆ · แยกแกน "จัดการสินค้า" กับ "เห็นเงิน" ทำให้ Staff แก้สินค้าได้โดยไม่เห็นต้นทุน
+Affects: Gate 1 ของ feature แรกที่มีช่องต้นทุน (คาด F-010) ต้องมี AC + test ว่า Staff preset ไม่เห็น · F-011 · รายงาน/dashboard (F-030) · forward-commitments
+Status: decided
+
