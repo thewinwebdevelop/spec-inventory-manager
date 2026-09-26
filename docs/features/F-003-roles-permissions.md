@@ -1,5 +1,7 @@
 # F-003 Roles & Permissions (RBAC)
 
+> ⚠️ **SUPERSEDED 2026-09-27** — Gate 1 ฉบับนี้ (ก.ค. 2026) ถูกแทนที่ด้วย [F-003/F-003.md](F-003/F-003.md) (re-baseline หลัง F-002 build · D-032/D-033) · เก็บไว้เป็นประวัติ ห้ามใช้เป็น spec อ้างอิง
+
 > สถานะ: `gate1-approved` · Phase: 0 · ขึ้นกับ (depends on): F-002, F-007 (tier), F-005 (audit) · เจ้าของ: product
 > **Platform:** both (จัดการ role เต็มบนมือถือด้วย — checklist แนวตั้ง) · **ขนาดงาน:** full (cross-cutting — บังคับใช้ทุก API)
 
