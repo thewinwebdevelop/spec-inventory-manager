@@ -80,9 +80,9 @@
 | --- | --- | --- | --- |
 | **F-081 — ทางกู้บัญชี Owner (ทางเดียว)** ⚠️ | หลัง D-030 **ไม่มีใครในระบบรีเซ็ตรหัสให้ Owner ได้** (Admin ได้ 404) ⇒ ร้านที่มี Owner คนเดียวแล้วลืมรหัส **กู้เองไม่ได้** · F-081 ต้องส่งมอบ **self-serve password reset ทาง email** + **"must change password on next login" หลัง admin-reset** (ปิด NEW-5ข) | **ทันทีที่มี SMTP** — และ **บล็อกการเปิดขายจริง (non-dogfood)**: ระบบที่ผู้ใช้กู้บัญชีเองไม่ได้ ห้ามมีลูกค้าจริง | D-030 · NEW-1/NEW-5 |
 | **F-081 — email verification** | จนกว่าจะมี การผูกคำเชิญกับ email เป็น **defense-in-depth ไม่ใช่ control** (`User.verified` ไม่เคยเป็น true + login ไม่เช็ค) ⇒ ใครได้ลิงก์ก็สมัครด้วย email นั้นแล้ว accept ได้ | มี SMTP | D-028 · I-7 |
-| **F-003 — privilege-superset** | `canAssignRole` ของ F-002 เทียบเฉพาะ `full_access` ⇒ ต้องเพิ่ม "actor มอบได้เฉพาะ capability ที่ตัวเองถือ" + **"ห้ามรีเซ็ตรหัสของคนที่สิทธิ์ ⊇ ตัวเอง"** พร้อม capability registry จริง · มี tripwire `G-15` รออยู่แล้ว | **feature ใดก็ตามที่เปิดให้สร้าง/แก้ `capabilities` ของ role** | NEW-10 · D-030 |
-| **F-003 — `Role.key` ของ custom role** | F-002 ตอบว่า `null` · F-003 ตัดสินว่าจะเปิดให้ตั้งเองไหม (ถ้าเปิด ต้องกันชนค่าสงวน `owner\|admin\|staff`) | F-003 Gate 2 | amend #3 |
-| **F-003 — cache membership** | ถ้าเปิด cache ต้อง **invalidate ตอน revoke** + มี test ว่า revoke แล้ว request ถัดไป 403 ทันที ไม่งั้น AC US-5 พังเงียบ | เมื่อ resolve แพงขึ้น (capabilities+entitlements) | arch §1.5 |
+| ~~**F-003 — privilege-superset**~~ ✅ **ปิดในการออกแบบ — F-003 Gate 2 (2026-09-27)**: กฎ ⊆ (grant) + ⊊ (target) ใน `decideMemberAuthority` ตัวเดียว — D-032/D-034 · [architecture §1](F-003/architecture.md) · พิสูจน์ตอน build (★) | `canAssignRole` ของ F-002 เทียบเฉพาะ `full_access` ⇒ ต้องเพิ่ม "actor มอบได้เฉพาะ capability ที่ตัวเองถือ" + **"ห้ามรีเซ็ตรหัสของคนที่สิทธิ์ ⊇ ตัวเอง"** พร้อม capability registry จริง · มี tripwire `G-15` รออยู่แล้ว | **feature ใดก็ตามที่เปิดให้สร้าง/แก้ `capabilities` ของ role** | NEW-10 · D-030 |
+| ~~**F-003 — `Role.key` ของ custom role**~~ ✅ **ปิดในการออกแบบ — F-003 Gate 2 (2026-09-27)**: `null` เสมอ ตั้งเองไม่ได้ (AC-1.4) | F-002 ตอบว่า `null` · F-003 ตัดสินว่าจะเปิดให้ตั้งเองไหม (ถ้าเปิด ต้องกันชนค่าสงวน `owner\|admin\|staff`) | F-003 Gate 2 | amend #3 |
+| ~~**F-003 — cache membership**~~ ✅ **ปิดในการออกแบบ — F-003 Gate 2 (2026-09-27)**: ไม่มี cache (AC-6.5) · เงื่อนไข invalidate ย้ายไป `docs/architecture/backend.md` caching allowlist | ถ้าเปิด cache ต้อง **invalidate ตอน revoke** + มี test ว่า revoke แล้ว request ถัดไป 403 ทันที ไม่งั้น AC US-5 พังเงียบ | เมื่อ resolve แพงขึ้น (capabilities+entitlements) | arch §1.5 |
 | **F-005 — จอ audit ของ Owner** | event `org.tax_profile.revealed` / `org.member.role_changed` / `auth.password.admin_reset_blocked_*` ต้องมี **จอที่ Owner เห็นจริง** — "ให้ Admin ดู TIN ได้แต่ตรวจสอบได้" ยังเป็นจริงครึ่งเดียวจนกว่าจะมีจอนี้ | F-005 เริ่ม | NEW-11 |
 | **F-011 — `Idempotency-Key`** | F-002 ไม่มี ⇒ กดสร้างร้าน/เชิญซ้ำเร็ว ๆ อาจได้ 2 รายการ (คุมด้วย cap 50 + UI disable ปุ่มไปพลาง) | interceptor กลางเกิดที่ F-011 | api-spec §Contract |
 | **PDPA — retention ของคำเชิญ** | email ของผู้ถูกเชิญที่**ไม่เคยรับ** ค้างในตาราง `Invitation` ตลอดกาล = ข้อมูลส่วนบุคคลของคนที่ไม่เคยเป็นผู้ใช้เรา ⇒ ต้องมี job ลบ/anonymize คำเชิญ `cancelled`/expired ที่เก่ากว่า N เดือน (ค่า N = product/legal) | launch-readiness | M-11 |
@@ -280,7 +280,7 @@ role ถูกสร้างครั้งเดียวตอน `POST /orga
 
 | งานเปิดค้าง | เจ้าของ | **TRIGGER** | binding |
 | --- | --- | --- | --- |
-| **ขยาย `OwnerChange` ให้มีรูปที่สาม** (เช่น `{ kind: "role_capabilities_change"; roleId; newCapabilities }`) แล้วบังคับให้ทุกเส้นทางที่แก้ capabilities ของ role เรียก `assertOwnerRemains` ใน tx เดียวกับการเขียน | backend-api | **เมื่อ F-003 เข้า Gate 2** — ต้องเป็นหัวข้อใน architecture ของ F-003 ไม่ใช่ข้อสังเกตตอน build | ผลถ้าไม่ทำ: ร้านเหลือ Owner 0 คน ซึ่งใน Phase 0 **กู้ไม่ได้** (ไม่มี back-office F-085, ไม่มี "ลบร้าน") — เหตุผลเดียวกับที่ §5 ทั้งหัวข้อมีอยู่ |
+| ~~**ขยาย `OwnerChange` ให้มีรูปที่สาม**~~ ✅ **ปิดในการออกแบบ — F-003 Gate 2 (2026-09-27)**: รูป `role_capabilities_change` + `role_delete` ใน tx + Owner ≥ 1 สี่ชั้น — [architecture §2](F-003/architecture.md) ·  (เช่น `{ kind: "role_capabilities_change"; roleId; newCapabilities }`) แล้วบังคับให้ทุกเส้นทางที่แก้ capabilities ของ role เรียก `assertOwnerRemains` ใน tx เดียวกับการเขียน | backend-api | **เมื่อ F-003 เข้า Gate 2** — ต้องเป็นหัวข้อใน architecture ของ F-003 ไม่ใช่ข้อสังเกตตอน build | ผลถ้าไม่ทำ: ร้านเหลือ Owner 0 คน ซึ่งใน Phase 0 **กู้ไม่ได้** (ไม่มี back-office F-085, ไม่มี "ลบร้าน") — เหตุผลเดียวกับที่ §5 ทั้งหัวข้อมีอยู่ |
 
 ---
 
@@ -300,7 +300,7 @@ user มอบให้ตัดสินแทน (2026-09-05) · สามข�
 
 | งานเปิดค้าง | เจ้าของ | **TRIGGER** | binding |
 | --- | --- | --- | --- |
-| **§10 gate 4 ตัวไม่มี implementation เลย** — G-06 · G-09 · G-11 · G-12 · qa ตรวจ *คุณสมบัติ* ด้วยมือแล้วผ่านวันนี้ (ไม่มี mailer dependency ที่ไหน · `role.key ===` ที่เจอทั้งหมดเป็นคอมเมนต์ที่**ปฏิเสธ**วิธีนั้น เช่น `roles.service.ts:36`) แต่ **gate ที่ไม่มีอยู่ ไม่มีวันแดง** — รูปเดียวกับ NEW-1/B-14 | qa + devops | **ก่อน F-003 เปิด role CRUD** (F-003 ทำให้ role แก้ได้ ⇒ คุณสมบัติที่วันนี้จริงโดยบังเอิญ จะเลิกจริงโดยไม่มีใครรู้) | ตอนนี้พึ่งชั้นที่แข็งกว่าอยู่ (I-45 พิสูจน์ G-12 เชิงพฤติกรรม) |
+| ~~**§10 gate 4 ตัวไม่มี implementation เลย**~~ ✅ **ปิดในการออกแบบ — F-003 Gate 2 (2026-09-27)**: เป็น task จริงที่ต้อง merge ก่อน/พร้อม route เขียน role แรก + เงื่อนไขเปิด flag — [architecture §14](F-003/architecture.md) · [test-plan](F-003/test-plan.md) ·  — G-06 · G-09 · G-11 · G-12 · qa ตรวจ *คุณสมบัติ* ด้วยมือแล้วผ่านวันนี้ (ไม่มี mailer dependency ที่ไหน · `role.key ===` ที่เจอทั้งหมดเป็นคอมเมนต์ที่**ปฏิเสธ**วิธีนั้น เช่น `roles.service.ts:36`) แต่ **gate ที่ไม่มีอยู่ ไม่มีวันแดง** — รูปเดียวกับ NEW-1/B-14 | qa + devops | **ก่อน F-003 เปิด role CRUD** (F-003 ทำให้ role แก้ได้ ⇒ คุณสมบัติที่วันนี้จริงโดยบังเอิญ จะเลิกจริงโดยไม่มีใครรู้) | ตอนนี้พึ่งชั้นที่แข็งกว่าอยู่ (I-45 พิสูจน์ G-12 เชิงพฤติกรรม) |
 | **`--passWithNoTests` เหลืออยู่ 2 workspace** — `packages/connectors` · `apps/back-office` (ทั้งคู่มีไฟล์ source 1 ไฟล์, ยังไม่มีโค้ดจริง) ⇒ วันที่โค้ดลง จะเขียวโดยพิสูจน์อะไรไม่ได้เลย — **รูปเดียวกับ I-37 เป๊ะ** ซึ่งเคยถอดออกจาก `web`/`contracts` ไปแล้วรอบหนึ่ง | devops | **commit แรกที่เพิ่มโค้ดจริงลงสอง workspace นี้** (connectors = F-020) | ถอด flag แล้วต้องมีเทสต์อย่างน้อย 1 ตัว ไม่ใช่ `echo ok` (D-014) |
 | **G-08 ถูกละเมิดตามตัวอักษร** — `packages/db/src/ledger-guard.ts` เปลี่ยน import path (`./generated/client` → `../generated/client`) ตอน B-10 · **semantics ของ ledger ไม่ขยับ** (`ledger-guard.test.ts` 6/6 + ขั้น ledger-immutability ของ `db-migrate` เขียว) — บันทึกไว้ไม่ให้กลายเป็นบรรทัดฐานเงียบ ๆ ว่า "แตะไฟล์นี้ได้ถ้าเทสต์ยังเขียว" | backend-api | **ครั้งถัดไปที่มีคนแตะ `ledger-guard.ts`** | เจตนาของ G-08 คือ "ไฟล์นี้ห้ามขยับโดยไม่มีคนดู" — ครั้งนี้มีคนดูแล้ว (qa) |
 
@@ -332,3 +332,22 @@ user ตัดสินให้ปิด F-002 โดยรับ M-01 เป�
 | **role ∩ tier enforcement จริง** — F-003 วางแค่ tier tag + ซ่อน key Full-only | backend-api | **F-007 build** | D-032 (2) |
 | **ประวัติการแก้ role เต็ม** — F-003 ใช้ security-events (log) + "แก้ไขล่าสุดโดย" | backend-api + product | **F-005 Gate 1** | F-003 AC-9.7 |
 | **อัปเดต `apps/web/CLAUDE.md`** — ยังเขียนว่า web track "พักไว้" ขัดกับ F-002/F-003 ที่ทำ both | frontend + release | **ก่อน frontend เริ่ม task web ตัวแรกของ F-003** | F-003 §7 |
+
+---
+
+## → จาก F-003 Gate 2 (2026-09-27 · D-034..D-037) — ผูก trigger ทุกแถว
+
+| งานเปิดค้าง | เจ้าของ | **TRIGGER** | ที่มา |
+| --- | --- | --- | --- |
+| บังคับ `role ∩ tier` จริง + แสดง capability tier `full` เมื่อ entitlement เปิด | backend-api + frontend | **F-007 build** | F-003 AC-7.4 |
+| ย้าย event `role.*` ไป store ถาวร + จอประวัติเต็มของการเปลี่ยน role (แสดงตัวบุคคลของผู้แก้) | backend-api + ux | **F-005 เริ่ม** | AC-9.1 · 9.6 · 9.7 |
+| สลับ "แก้ไขล่าสุดโดย" จากชื่อบทบาทเป็นชื่อคน (`displayName?` additive) | product | **Gate 1 ของ feature profile / `User.displayName`** (ยังไม่มี F-XXX) | AC-9.6 (user 2026-09-27) |
+| ทุก feature ที่เพิ่ม capability: key + ป้ายไทย (ux เป็นเจ้าของ D-037) + tier + live/upcoming + `view_*` คู่ · เปลี่ยน upcoming → live เมื่อ feature เปิด | owner ของ feature นั้น | **Gate 2 ของ feature นั้น** | AC-7.2 · 7.5 · D-037 |
+| ช่องต้นทุน/กำไร/COGS/มาร์จิ้น ทุกจอ gate `view_financials` + เทสต์ Staff preset ไม่เห็น | product | **Gate 1 ของ feature แรกที่มีช่องต้นทุน** (คาด F-010) | D-033 |
+| mobile ถอดสมาชิก/ยกเลิกคำเชิญ + ปุ่มรีเซ็ตรหัส (web+mobile) · เคารพแกน target ⊊ · `viewerCanResetPassword` มีใน contract แล้ว | product → ทุกทีม | **F-002b Gate 1** | user 2026-09-27 |
+| อัปเดต `apps/web/CLAUDE.md` ("web พักไว้" ไม่จริงแล้ว) | frontend + release | **ก่อน task web ตัวแรกของ F-003** | F-003 §7 |
+| **เปิด `ROLE_WRITES_ENABLED`** — แนบ image digest ว่าไม่มี instance F-002 เหลือทุก process/region + G-06/09/11/12 + I-45 int อยู่ใน commit ที่ deploy และรันจริงใน CI · release notes ห้ามประกาศ D-034/D-035 ก่อนนั้น | devops (+ release) | **หลัง F-003 deploy ครบทุก instance** | SR-03 · SR-10 · architecture §12/§14 |
+| **ถอด bridge trigger ของ backfill** (migration ถัดไป — G-12 บังคับวันถอด) | backend-api | **migration ถัดไปหลังเปิด flag** | data-model §4.2 · SR-10 |
+| deploy strategy rolling vs stop-start (F-003 ออกแบบให้รอดทั้งสองแบบแล้ว) | devops | **ตั้ง production deploy pipeline ครั้งแรก** | devops consult 2026-09-27 |
+| known risk N-2: reissue บน instance F-002 ระหว่าง rollout ไม่เขียน `issuedByUserId` ⇒ accept เช็คผู้ออกลิงก์คนก่อน (reissue เปลี่ยนอีเมล/role ไม่ได้ · ช่องเล็กกว่าช่อง rolling เดิม) | security-reviewer | **ปิดเองเมื่อไม่มี instance F-002** — ตรวจตอน review ★ | security-review delta |
+| seed kit `custom-role-null-key` สร้าง role ที่ `capabilities` ว่าง — ชน CHECK ใหม่ของ F-003 | qa + backend-api | **ก่อน task migration ของ F-003** | test-plan R3-03 |

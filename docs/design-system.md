@@ -203,6 +203,7 @@
 | `radius.button` | 8px | มุมโค้งปุ่ม, input field |
 | `radius.card` | 12px | มุมโค้ง auth card, dialog, banner |
 | `radius.badge` | 9999px (pill) | badge "อุปกรณ์นี้" |
+| `radius.checkbox` | 4px | มุมกล่อง `Checkbox` — เล็กกว่า `radius.button` เพราะกล่อง 20px มุม 8px จะอ่านเป็นวงกลม (ชนกับ radio) (F-003) |
 | `size.auth-card.max-w` | 400px | max-width auth card (web); mobile ไม่ใช้ (เต็มจอ) |
 | `size.tap-target.min` | 44px | **ความสูงขั้นต่ำของทุกอย่างที่กดได้** (ดูกติกาใต้ตาราง) |
 | `size.dialog.max-w` | 480px | ความกว้างสูงสุดของ dialog / การ์ดกึ่งกลางทั่วไป (web) — **คนละตัวกับ** `size.auth-card.max-w` (400px) |
@@ -211,6 +212,8 @@
 | `size.drawer.w` | 280px | **drawer ที่ลอยทับหน้า** (web <lg, §8.2) — **คนละตัวกับ** `size.sidebar.w` โดยเจตนา: ของที่ทับหน้าอยู่ต้องกว้างกว่าเพื่อให้อ่านเป็นชั้นแยก และไม่ควรขยับตามเวลา sidebar ถาวรเปลี่ยนความกว้าง |
 | `size.drawer.max-w` | 85% | เพดานของ drawer บนจอแคบ — **ต้องเหลือ scrim ให้เห็น** ไม่งั้นผู้ใช้ไม่รู้ว่ากดตรงไหนให้มันหายไป |
 | `size.list-row.min-h` | 56px | ความสูงขั้นต่ำของแถวรายการ / แถวเมนู (ทั้ง web + mobile) |
+| `size.checkbox` | 20px | กล่อง `Checkbox` — **ไม่ใช่พื้นที่แตะ** (แถว `CheckboxRow` ≥ `size.list-row.min-h` คือพื้นที่แตะ) (F-003) |
+| `checkbox.border.w` | 2px | ขอบกล่อง `Checkbox` ทุกสถานะ (F-003) |
 | `size.data-row.label-w` | 150px | คอลัมน์ label ของแถว "ป้าย → ค่า" (`DataRow`) — ค่าคงที่เพื่อให้ label ทุกแถวเรียงเป็นคอลัมน์เดียวกัน |
 | `size.data-row.value-min-w` | 180px | ความกว้างขั้นต่ำของคอลัมน์ค่า ก่อนที่ค่าจะตัดลงบรรทัดใหม่ใต้ label |
 | `size.content.max-w` | 1280px | ความกว้างสูงสุดของเนื้อหาที่จัดกึ่งกลาง (§8.1) |
@@ -339,11 +342,14 @@ mechanical restyle.
 | `icon.circle` | `<Circle />` | `PhosphorIconsRegular.circle` | จุดหัวข้อ/ตัวเลือกที่ยังไม่เลือก (`RadioCardGroup`) |
 | `icon.menu` | `<List />` | `PhosphorIconsRegular.list` | hamburger เปิด drawer (tablet) |
 | `icon.close` | `<X />` | `PhosphorIconsRegular.x` | ปิด dialog / sheet / แผ่นข้อมูล |
-| `icon.lock` | `<Lock />` | `PhosphorIconsRegular.lock` | `EmptyState` preset `ForbiddenPanel`, ของที่ล็อกตาม tier (§5) |
+| `icon.lock` | `<Lock />` | `PhosphorIconsRegular.lock` | `EmptyState` preset `ForbiddenPanel`, ของที่ล็อกตาม tier (§5), **เหตุผล "ดูได้อย่างเดียว" ตามสิทธิ์** (F-003: แถบ, บรรทัดเหตุผลใต้แถว, แถว checklist ที่ล็อก) |
 | `icon.copy` | `<Copy />` | `PhosphorIconsRegular.copy` | ปุ่มคัดลอกใน `CopyField` |
 | `icon.back` | `<ArrowLeft />` | `PhosphorIconsRegular.arrowLeft` | ปุ่มย้อนกลับของ `ScreenHeader`/AppBar (§7) |
 | `icon.eye` | `<Eye />` | `PhosphorIconsRegular.eye` | ปุ่มแสดงค่าที่ถูกปิดบัง (รหัสผ่าน, เลขผู้เสียภาษี) |
 | `icon.eye-off` | `<EyeSlash />` | `PhosphorIconsRegular.eyeSlash` | ปุ่มซ่อนค่ากลับ |
+| `icon.roles` | `<ShieldCheck />` | `PhosphorIconsRegular.shieldCheck` | เมนู/แถวทางเข้า "บทบาทและสิทธิ์" (F-003) |
+
+- **ไอคอนพับ/กาง (`Disclosure`) ใช้ `icon.chevron-down` ตัวเดียว** — เปิด 0° · ปิด หมุน −90° · ไม่มี role `chevron-up`/`chevron-left` แยก (F-003)
 
 - **ต้องการ role ใหม่ = contribute-back** (§6/§9) — เพิ่มแถวในตารางนี้ก่อน แล้วค่อยใช้ · ⛔ ห้าม
   import ไอคอน Phosphor ตรง ๆ ในโค้ด feature โดยไม่มี role · ⛔ ห้ามใช้ไอคอนคนละความหมายกับ role
@@ -496,12 +502,16 @@ design system นี้เป็นของ **กลาง 1 ชุด ไม�
 | `Toast` | F-001 | web = มุมบนขวา · mobile = ล่างจอเหนือ safe-area |
 | `SessionListItem` | F-001 | แถวอุปกรณ์ + `color.badge.current.*` |
 | `EmptyState` | F-002 | ไอคอน `size.icon.xl` + หัวข้อ + คำอธิบาย + ปุ่ม 0–2 · **preset `ForbiddenPanel`** (`icon.lock`) ใช้กับทุก route ที่ RBAC ปฏิเสธ |
-| `Banner` | F-002 | 4 tone: `info` / `warning` / `success` / `danger` · ปุ่มในกล่องใช้โทนของกล่อง (§1.1c-2) |
+| `Banner` | F-002 (+F-003) | 4 tone: `info` / `warning` / `success` / `danger` · ปุ่มในกล่องใช้โทนของกล่อง (§1.1c-2) · **ไอคอนตั้งต้นตาม tone (`icon.info`/`icon.warn`/`icon.check-circle`/`icon.error`); override ได้เฉพาะ role จาก §1.6.2 — ที่ประกาศแล้ว: tone `info` + `icon.lock` = "ดูได้อย่างเดียวตามสิทธิ์"** |
 | `Badge` | F-002 | 4 variant: `success` / `warning` / `neutral` / `danger` · **ต้องมีข้อความไทยเสมอ** (ห้ามสื่อด้วยสีอย่างเดียว) |
 | `SectionCard` | F-002 | หัวข้อ + action มุมขวา + แถว label→value |
 | `CopyField` | F-002 | read-only + ปุ่ม `icon.copy` + ฟีดแบ็ก `Button state="confirmed"` · ต้องโฟกัส/เลือกข้อความได้ |
 | `RadioCardGroup` | F-002 | การ์ดตัวเลือก + คำอธิบาย + disabled พร้อมเหตุผล · แตะได้ทั้งการ์ด (≥44px) |
 | `ListRow` | F-002 | avatar/ไอคอน + บรรทัดหลัก/รอง + slot ขวา · สูง ≥ `size.list-row.min-h` |
+| `Checkbox` | F-003 | กล่อง `size.checkbox` / `radius.checkbox` / `checkbox.border.w` · 4 สถานะ: ว่าง (ขอบสูตรปุ่ม outline) · ติ๊ก (`btn.bg` + ขอบ `color.primary` + `icon.check` สี `btn.fg`) · disabled-ติ๊ก/ล็อก และ disabled-ว่าง (`surface.muted` + ขอบ `border.default`, เครื่องหมาย `text.muted`) · ⛔ ไม่ใช้ opacity · ⛔ ไม่ใช้เดี่ยว ๆ — อยู่ใน `CheckboxRow` เสมอ · ยังไม่มี indeterminate |
+| `CheckboxRow` | F-003 | กล่อง + ป้าย (`type.body.md`) + คำอธิบาย (`type.body.sm` `text.muted`) + `Badge` + บรรทัดเหตุผล (`icon.lock` sm) · **แตะได้ทั้งแถว ≥ `size.list-row.min-h`** · focus ring ที่แถว · disabled ยังโฟกัสได้ (`aria-disabled`) เพื่อให้อ่านเหตุผล · ป้ายไม่จางเมื่อ disabled |
+| `Disclosure` | F-003 | หัวข้อพับได้ · ทั้งแถวเป็นปุ่ม ≥ 56px · `type.button.md` + ตัวนับ `type.body.sm` ชิดขวา · `icon.chevron-down` (ปิด = −90°) · `aria-expanded` · เคารพ reduced-motion |
+| `StickyActionBar` | F-003 | แถบปุ่มติดล่าง · พื้น `surface` + เส้นบน `border.default` · padding `space.3`/`space.4` + safe-area · mobile = ปุ่มหลักเดียวเต็มกว้าง · web = sticky ในคอลัมน์ ปุ่มชิดขวา gap `space.3` · ไม่มีเงา · ไม่ตั้ง z เอง |
 
 ### 9.2 ของระดับ feature (**ไม่**อยู่ใน DS — ห้าม feature อื่นลากไปใช้ตรง ๆ)
 
@@ -510,6 +520,7 @@ design system นี้เป็นของ **กลาง 1 ชุด ไม�
 | `AppShell` · `OrgSwitcher` | F-002 | org-aware (ผูก `/o/[orgId]`) — ของกลางต้อง org-agnostic |
 | `CopyLinkPanel` | F-002 | ผูกกับกติกา "ลิงก์แสดงครั้งเดียว" (D-027) |
 | `MemberRow` · `InvitationRow` | F-002 | ผูก schema ของ F-002 (ประกอบจาก `ListRow` + `Badge` ซึ่งเป็นของกลาง) |
+| `CapabilityChecklist` · `CapabilityReadList` · `RoleListRow` · `RoleMetaLine` · `RoleReasonBanner` · `RoleChangedBanner` | F-003 | ผูก schema `CapabilityCatalog`/`RoleDetail` + กติกา reason ของ F-003 (ประกอบจาก `CheckboxRow` `Disclosure` `ListRow` `Badge` `Banner` ซึ่งเป็นของกลาง) |
 
 - **Claude Design sync (`/design-sync` + `DesignSync`):** push เฉพาะของใน **§9.1** เท่านั้น — ของใน §9.2 ไม่ push
 - component ระดับ feature ที่ feature ที่ 2 อยากใช้ = สัญญาณให้ **generalize แล้วย้ายขึ้น §9.1** (ผ่าน `@ux`)

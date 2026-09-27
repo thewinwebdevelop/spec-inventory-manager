@@ -415,3 +415,50 @@ Rationale: เปลี่ยน preset ย้อนหลัง = เปลี�
 Affects: Gate 1 ของ feature แรกที่มีช่องต้นทุน (คาด F-010) ต้องมี AC + test ว่า Staff preset ไม่เห็น · F-011 · รายงาน/dashboard (F-030) · forward-commitments
 Status: decided
 
+
+---
+
+### D-034 · 2026-09-27 · F-003 (แก้ช่องใน D-032 ข้อ 4/5)
+
+Q: security review ของ F-003 Gate 2 (SR-F003-01, High) พบว่ากฎ reset ⊊ (D-032 ข้อ 5) เลี่ยงได้ใน 3 request — Admin A ลด Admin B เป็น Staff (ผ่านเพราะ AC-5.4 ใช้ ⊆ กับเป้าหมาย) → reset รหัส B (ตอนนี้ ⊊ แล้ว) → ยก B กลับเป็น Admin ⇒ A สวมรอย B ได้ ทั้งที่เทสต์ "Admin→Admin reset = 404" ยังเขียว · จะปิดอย่างไร?
+Asked by: @security-reviewer (F-003 Gate 2) Owner: @user (Type 1 — ความปลอดภัย + เปลี่ยนพฤติกรรม route ที่ ship แล้ว)
+Decision: **แยกกฎเป็นสองแกน:** (1) **เป้าหมายที่แตะได้** (เปลี่ยน role สมาชิก · ถอดสมาชิก · รีเซ็ตรหัส) — role **ปัจจุบัน**ของเป้าหมายต้อง **⊊ สิทธิ์ของผู้กระทำ** (Owner ตาม D-030) · (2) **role ที่มอบให้** (เปลี่ยน role · เชิญ · reissue) — คงกฎ **⊆** ของ D-032 ข้อ 4 · ⇒ Admin จัดการ Admin ด้วยกันไม่ได้ ต้องให้ Owner ทำ · การกระทำต่อตัวเอง (เช่น ออกจากร้านเอง D-029) คงตามพฤติกรรมเดิม — backend-api ระบุในเอกสารว่าครอบเส้นทางไหน
+Rationale: ใช้กฎเดียวกับ reset ทุกเส้นทางที่แตะคน ⇒ ไม่มีลำดับ request ไหนลดเป้าหมายลงมาใต้ ⊊ ได้ก่อน reset · เทียบทางเลือก: cool-down (ช่องยังอยู่ แค่ต้องรอ + ทดสอบยาก) · รับความเสี่ยงแล้วจับจาก event (ช่องเปิด)
+Affects: AC-5.4 (แก้ถ้อยคำ) · `core-domain` `decideRoleGrant`/`canAssignRole` (แยก target-rule กับ grant-rule) · ⚠️ **เปลี่ยนพฤติกรรม route ที่ F-002 ship:** Admin เปลี่ยน role/ถอด Admin อีกคน = 403 (เดิมผ่าน) — regression test บังคับ · ux: เหตุผล disabled ของแถวสมาชิกที่สิทธิ์เท่ากัน · [F-003 security-review](features/F-003/security-review.md) SR-F003-01
+**Addendum 2026-09-27 (user ตัดสิน · พบตอน backend-api แก้ร่างรอบ 3):** ช่องรูปเดียวกันผ่าน **การแก้ role** — Admin A แก้ custom role R ที่สิทธิ์เท่ากับตัวเองซึ่ง B ถืออยู่ (ลดสิทธิ์) → B ⊊ A → reset รหัส B → แก้ R คืน · **ตัดสิน (ก):** การแก้/ลบ role ที่มี **ผู้ถือ active คนอื่น** (นอกจากตัวผู้แก้) ถือเป็นการ "แตะ" ผู้ถือทุกคน ⇒ role นั้นต้อง **⊊ สิทธิ์ผู้แก้** (Owner ตาม D-030) · role ที่ไม่มีผู้ถืออื่น คงกฎ ⊆ ของ D-032 ข้อ 4 · ผล: ร้านที่มี Admin > 1 คน Admin แก้ role Admin / role ที่สิทธิ์เท่ากันไม่ได้ ต้องให้ Owner ทำ · Affects เพิ่ม: AC-5.1 · `decideRoleWrite` (นับผู้ถือใน tx ใต้ org lock) · test matrix
+**Addendum 2 · 2026-09-27 (user ตัดสิน · SR-F003-17 จาก security delta review):** insider 2 คนร่วมมือ (M ถือ `manage_roles` ไม่มี `manage_members` ลด role ของ T → A reset T → M แก้คืน) ⇒ **(ข) การแก้/ลบ role ที่มีผู้ถือ active คนอื่น ต้องถือ `manage_members` ด้วย** (นอกจาก `manage_roles` + กฎ ⊊) · role ที่ไม่มีผู้ถืออื่น ใช้ `manage_roles` อย่างเดียวตามเดิม · **N-1:** คงการบล็อก rename-only ของ role ที่สิทธิ์เท่ากันซึ่งมีผู้ถืออื่น (ไม่ผ่อน — กันตั้งชื่อหลอกบน role ของ Admin อีกคน + ไม่ต้องแยก `canEdit` บน wire)
+Status: decided
+
+---
+
+### D-035 · 2026-09-27 · F-003 (ขยาย AC-5.3)
+
+Q: (SR-F003-02, Medium) Admin ที่รู้ตัวว่าจะถูกลดสิทธิ์/ถอด ออกคำเชิญ Admin ไปอีเมลสำรองของตัวเองไว้ก่อน — ตอน accept ไม่ตรวจสิทธิ์ปัจจุบันของผู้เชิญ ⇒ กลับเข้าร้านได้
+Asked by: @security-reviewer (F-003 Gate 2) Owner: @user (Type 1 — ขยาย AC ที่เซ็นแล้ว)
+Decision: **ตอน accept คำเชิญ server ตรวจซ้ำใน tx:** ผู้เชิญยังเป็นสมาชิก active ของร้าน **และ** สิทธิ์ปัจจุบันของผู้เชิญยัง ⊇ role ของคำเชิญ (Owner ผ่านเสมอ) — ไม่ผ่าน = คำเชิญใช้ไม่ได้ (รูปคำตอบ/สถานะ + copy ให้ backend-api + ux กำหนด; ห้ามเผยเหตุผลภายในเกินจำเป็นแก่ผู้รับเชิญ)
+Rationale: คำเชิญเป็นการมอบสิทธิ์ที่ถูกเลื่อนเวลา — ต้องใช้กฎเดียวกับการมอบ ณ เวลาที่มีผลจริง (สอดคล้อง AC-5.7 "สิทธิ์ ณ ตอนเขียน") · ต้นทุนต่ำ (อ่านใน tx ที่ accept มีอยู่แล้ว)
+Affects: AC-5.3 · `apps/api` invitations accept · event (ปฏิเสธ accept) · test-plan · [F-003 security-review](features/F-003/security-review.md) SR-F003-02
+**Addendum 2026-09-27 (user ตัดสิน · Q-P2/Q-P3 จาก backend-api):** (P2) ตอน accept ตรวจเพิ่มว่าผู้เชิญ **ยังถือ `manage_members`** · (P3) หลัง reissue "ผู้เชิญ" = **ผู้ที่ออกลิงก์ล่าสุด** (`Invitation.issuedByUserId`) — ไม่งั้นลิงก์ที่ Owner reissue แทนคนที่ถูกลดสิทธิ์จะใช้ไม่ได้เสมอ
+Status: decided
+
+---
+
+### D-036 · 2026-09-27 · cross-feature (F-003 เป็นตัวแรก)
+
+Q: ลบ entity ที่ประวัติอ้างถึง (เริ่มจาก `Role`) อย่างไร — FK `ON DELETE RESTRICT` ทำ hard delete ไม่ได้ และ nullable FK ทำประวัติอ่านชื่อไม่ได้ (AC-3.9b)
+Asked by: @backend-api (F-003 Gate 2 data-model) Owner: @user (pattern ระดับระบบ)
+Decision: **soft-delete** — `deletedAt` / `deletedByUserId` + partial unique `WHERE "deletedAt" IS NULL` + DB trigger กัน reference ที่ยัง live ชี้แถวที่ลบ (อ่าน FOR SHARE) + live read ผ่าน helper `live*Where` ที่ gate บังคับราย call site + เพดานแถวที่ลบต่อ tenant
+Rationale: ประวัติยังอ่านชื่อได้ · hard delete ทำไม่ได้อยู่แล้ว · helper + gate กัน "ลืมกรอง" · เพดานกัน DoS วนสร้าง/ลบ
+Affects: F-003 `Role` · คาดใช้ซ้ำที่ Product / SellableSku / Warehouse · `docs/01-data-model.md` (sync-back) · [F-003 data-model](features/F-003/data-model.md) §2
+Status: decided
+
+---
+
+### D-037 · 2026-09-27 · F-003 (registry)
+
+Q: ป้าย/คำอธิบาย capability + ป้ายกลุ่ม (ไทย) อยู่ที่ไหน — client i18n ต่อ key หรือ registry กลาง
+Asked by: @backend-api (F-003 Gate 2) Owner: @user · ux รับเงื่อนไขแล้ว
+Decision: อยู่ใน `packages/core-domain/src/rbac/registry.ts` และเสิร์ฟผ่าน `GET /capabilities` (org-scoped) · **ux เป็นเจ้าของข้อความในไฟล์นั้น** + copy-lint ครอบ + `descriptionTh` = 1 ประโยค · ข้อความที่ยังอยู่ client: "เร็ว ๆ นี้", "มาพร้อมสิทธิ์จัดการ", fallback ของ key ที่ไม่รู้จัก
+Rationale: ชุดเดียวทั้ง web + mobile (AC-7.1) · key "เร็ว ๆ นี้" เปลี่ยนเป็น live ได้โดยไม่ต้องออก app ใหม่ · locale เดียว (th) ไม่มีต้นทุน sync
+Affects: core-domain registry · `GET /capabilities` · web + mobile (ไม่ hardcode ป้าย) · ux copy-lint · [F-003 api-spec](features/F-003/api-spec.md)
+Status: decided

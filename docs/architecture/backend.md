@@ -399,8 +399,9 @@ export interface ChannelConnector {
 
 ```
 OrgContextMiddleware (ใหม่ — ตาม note ใน org-scope.guard.ts: guard wrap ALS ไม่ได้, middleware ทำได้)
-  อ่าน Bearer → userId · อ่าน X-Organization-Id → ตรวจ Membership active → โหลด capabilities +
-  entitlements (cache Redis TTL 60s) → OrgContextStore.run({ organizationId, userId, capabilities,
+  อ่าน Bearer → userId · อ่าน X-Organization-Id → ตรวจ Membership active → โหลด capabilities
+  **จาก DB ทุก request — ไม่มี cache (F-003 AC-6.5: revoke/แก้ role แล้ว request ถัดไปต้องเห็นทันที)** +
+  entitlements (F-007 ตัดสินเรื่อง cache เอง) → OrgContextStore.run({ organizationId, userId, capabilities,
   entitlements }, next)
 OrgScopeGuard (เติม body จริง)   → route ที่ mark org-scoped: ไม่มี context = 401/403
 @RequireCapability("manage_stock") → RBAC guard อ่าน context (B3) → 403 { code: "FORBIDDEN" }
@@ -630,8 +631,9 @@ account นั้น pause (ไม่เผา retry ใส่ 401)
   ชุด + StockLevel aggregate ทั้งชุด) แล้วเข้า pure fn — ไม่มี N+1 ทุกขนาด list · ตัวที่ต้อง "จำ" มีอยู่แล้ว
   โดยธรรมชาติ: `lastSyncedStock` (ต่อ listing) และ StockLevel (projection ของ ledger) · ถ้า metric ชี้ว่า
   จอ list ใหญ่ช้า ค่อยเพิ่ม cache สั้น (30s) ที่ระดับ service — ห้าม cache ในจุดที่เลขไป platform
-- **Caching allowlist (นอกนี้ = ห้าม):** resolved entitlements + capabilities ต่อ (org,user) TTL 60s +
-  invalidate ตอนแก้ role/plan · PlanDefinition/Channel master · connector config — **ห้าม cache**:
+- **Caching allowlist (นอกนี้ = ห้าม):** resolved entitlements ต่อ org (ถ้า F-007 เปิด — ต้อง invalidate ตอนแก้ plan) ·
+  PlanDefinition/Channel master · connector config — **ห้าม cache**: **capabilities/membership (F-003 AC-6.5 —
+  ใครจะเพิ่ม cache ต้อง invalidate ตอน revoke/แก้ role + มีเทสต์ว่า request ถัดไป 403 ทันที)**,
   StockLevel, availability ที่ใช้ตัดสินใจ push, ยอดเงินทุกชนิด
 - **N+1 discipline:** service method รับ id array เสมอ (แบบ `forSellables`) · ห้าม query ใน loop —
   reviewer จับ + integration test ใช้ Prisma query event นับจำนวน query บน hot path (assert ≤ N คงที่)

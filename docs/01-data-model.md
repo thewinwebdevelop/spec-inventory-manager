@@ -49,14 +49,22 @@ Membership     id, organizationId, userId, roleId, status (active|invited|revoke
                // status='invited' = dead state ใน Phase 0 (membership เกิดตอน accept เท่านั้น)
                // สมาชิกออกจาก org เองได้ (D-029) — บันทึกเป็น revoked แต่เป็นคนละ event
 Role           id, organizationId, name, key?, isSystem (Owner=ล็อก), capabilities[]  // editable ราย org
+               version, nameCustomized, lastEditedAt?, lastEditedByUserId?, deletedAt?, deletedByUserId?   // ← F-003
                // key = owner|admin|staff สำหรับ system role · custom role (F-003) = null
-               // @@unique([organizationId, key]) · ⚠ ห้ามใช้ key ตัดสินสิทธิ์ — สิทธิ์ = capabilities
-               // capability registry (open-ended): full_access, manage_members, manage_org_settings,
-               // manage_billing, manage_products, manage_stock, manage_channels, manage_orders,
-               // view_financials, access_accounting(Full tier) ...
+               // @@unique([organizationId, key]) · ชื่อ unique แบบไม่สนตัวพิมพ์ เฉพาะ role ที่ยังไม่ลบ · ชื่อห้ามมีอักขระควบคุม/มองไม่เห็น (Cc/Cf)
+               // ⚠ ห้ามใช้ key ตัดสินสิทธิ์ — สิทธิ์ = capabilities (หลังขยาย: full_access=ทุก key · manage_X⇒view_X)
+               // ลบ = soft-delete (deletedAt) — ประวัติ (สมาชิก revoked / คำเชิญ accepted) ยังอ้างถึงได้ (F-003 · D-036)
+               // full_access มีได้เฉพาะ role Owner (isSystem, ล็อก, 1 แถวต่อร้าน) — D-032
+               // แตะคน (เปลี่ยน role/ถอด/reset) ต้อง role เป้าหมาย ⊊ ผู้ทำ · มอบ role ต้อง ⊆ ผู้ทำ — D-034
+               //   แก้/ลบ role ที่มีผู้ถืออื่น = แตะผู้ถือทุกคน (⊊ + ต้องถือ manage_members) — D-034 Addendum/2
+               // capability registry = core-domain rbac/registry.ts (ไม่ใช่ตาราง · ป้ายไทยอยู่ที่นี่ D-037): key · group · tier(all|full)
+               //   · status(live|upcoming) · implies — full_access, manage_members, manage_roles, manage_org_settings,
+               //   manage_billing, manage_products, manage_stock, manage_channels, manage_orders,
+               //   view_financials, access_accounting(Full tier) ... · ต้นทุน/กำไรทุกจอ gate view_financials (D-033)
 Invitation     id, organizationId, email, roleId, status (pending|accepted|cancelled),
                tokenHash (HMAC keyed, unique), tokenIssuedAt, expiresAt,   // ← F-002/D-018: hash-at-rest
                invitedByUserId?, acceptedAt?, acceptedByUserId?, acceptedUserCreatedAt?, cancelledAt?
+               issuedByUserId?   // ← F-003: ผู้ออกลิงก์ปัจจุบัน (create/reissue) — accept ตรวจสิทธิ์ของคนนี้ซ้ำ (D-035)
                // expired = derived (pending && expiresAt < now) ไม่มี job เขียนสถานะ
                // acceptedUserCreatedAfterInvite เทียบกับ createdAt ไม่ใช่ tokenIssuedAt (rotate ต้องไม่ล้างร่องรอย)
 RefreshToken   id, userId, deviceId, familyId, tokenHash (HMAC, unique), rotatedFrom?, revokedAt?,
