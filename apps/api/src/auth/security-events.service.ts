@@ -143,6 +143,17 @@ export const ESCALATION_DEDUPE_WINDOW_SECONDS = 300;
  *  (the per-type suppressed metric already counted it). */
 export const ESCALATION_SUPPRESSED_COUNTER_TTL_SECONDS = 24 * 60 * 60;
 /** Redis key prefixes (greppable in redis-cli). */
+/**
+ * Hard deadline per dedupe round-trip (security review of B16, High). The auth
+ * Redis connection is the shared one (`maxRetriesPerRequest: null` + offline
+ * queue — BullMQ's requirement), so when Redis is down a command does not
+ * reject: it waits in the offline queue indefinitely. A `catch` alone would
+ * never fire and the event would be lost (breaks SR-12 fail-open) while any
+ * caller awaiting it hangs. Every store call is therefore raced against this
+ * deadline; losing the race counts as a Redis failure. 250 ms: well above a
+ * healthy same-region round-trip, short enough to sit on a 403 path.
+ */
+export const ESCALATION_DEDUPE_TIMEOUT_MS = 250;
 export const ESCALATION_DEDUPE_PREFIX = "secevt:dedupe:";
 export const ESCALATION_SUPPRESSED_PREFIX = "secevt:suppressed:";
 
@@ -399,6 +410,29 @@ function isPlainObject(value: unknown): value is Record<string, unknown> {
   return proto === Object.prototype || proto === null;
 }
 
+/** Raced against a dedupe store call so a hung connection reads as a failure. */
+class DedupeTimeoutError extends Error {
+  constructor(step: string) {
+    super(`dedupe ${step} exceeded ${ESCALATION_DEDUPE_TIMEOUT_MS}ms`);
+    this.name = "DedupeTimeoutError";
+  }
+}
+
+/**
+ * Settles with `work` or rejects at {@link ESCALATION_DEDUPE_TIMEOUT_MS},
+ * whichever is first. `Promise.race` keeps a handler on `work`, so a late
+ * rejection after the deadline is not an unhandledRejection. The timer is
+ * cleared on settle and unref'd so it never holds the process open.
+ */
+function withDedupeDeadline<T>(step: string, work: () => Promise<T>): Promise<T> {
+  let timer: ReturnType<typeof setTimeout> | undefined;
+  const deadline = new Promise<never>((_, reject) => {
+    timer = setTimeout(() => reject(new DedupeTimeoutError(step)), ESCALATION_DEDUPE_TIMEOUT_MS);
+    (timer as { unref?: () => void }).unref?.();
+  });
+  return Promise.race([work(), deadline]).finally(() => clearTimeout(timer));
+}
+
 /** Dedupe key tuple (arch §7): JSON-encoded so `null` ≠ `"null"` and no id can
  *  forge a delimiter, then hashed so the Redis key length is bounded. */
 function escalationDedupeHash(p: EscalationDeniedPayload): string {
@@ -435,6 +469,14 @@ export class SecurityEventsService {
    * {@link emitEscalationDenied}, which applies the SR-12 dedupe.
    */
   emit(type: DirectSecurityEventType, payload: Record<string, unknown>): void {
+    // Runtime twin of the type-level exclusion: an `as any` / untyped JS caller
+    // must not slip past the SR-12 dedupe. Fail loud — this is a programming
+    // error at the call site, and a test on that path turns it red.
+    if ((type as string) === ESCALATION_DENIED_EVENT) {
+      throw new Error(
+        `${ESCALATION_DENIED_EVENT} must be emitted via SecurityEventsService.emitEscalationDenied() (SR-12 dedupe)`,
+      );
+    }
     this.deliver(type, payload);
   }
 
@@ -445,8 +487,10 @@ export class SecurityEventsService {
    *  - first in the window → emitted, carrying `suppressedCount` = how many
    *    were swallowed for this key in the previous window(s) (then reset);
    *  - repeat inside the window → NOT emitted, counter `INCR`, metric +1;
-   *  - Redis error / no store → emitted every time (fail-open: this is volume
-   *    control on a log, losing volume beats losing the signal).
+   *  - Redis error, Redis not answering within {@link ESCALATION_DEDUPE_TIMEOUT_MS}
+   *    per step, or no store → emitted every time (fail-open: this is volume
+   *    control on a log, losing volume beats losing the signal). Worst-case
+   *    latency is 2 × the deadline (SET + GETDEL, or SET + INCR/EXPIRE).
    * Post-commit rule applies as for {@link emit}. Never throws on Redis
    * trouble — a refusal must stay a 403, not become a 500.
    */
@@ -466,12 +510,14 @@ export class SecurityEventsService {
     let first: boolean;
     try {
       first =
-        (await store.set(
-          `${ESCALATION_DEDUPE_PREFIX}${hash}`,
-          "1",
-          "EX",
-          ESCALATION_DEDUPE_WINDOW_SECONDS,
-          "NX",
+        (await withDedupeDeadline("set", () =>
+          store.set(
+            `${ESCALATION_DEDUPE_PREFIX}${hash}`,
+            "1",
+            "EX",
+            ESCALATION_DEDUPE_WINDOW_SECONDS,
+            "NX",
+          ),
         )) === "OK";
     } catch (err) {
       this.logger.warn(`security_event_dedupe_fail_open type=${type} step=set: ${String(err)}`);
@@ -486,8 +532,11 @@ export class SecurityEventsService {
       this.suppressed.set(type, (this.suppressed.get(type) ?? 0) + 1);
       this.logger.log(`metric security_event_suppressed_total type=${type} inc=1`);
       try {
-        await store.incr(counterKey);
-        await store.expire(counterKey, ESCALATION_SUPPRESSED_COUNTER_TTL_SECONDS);
+        // One deadline for the pair: the whole suppressed path stays bounded.
+        await withDedupeDeadline("incr", async () => {
+          await store.incr(counterKey);
+          await store.expire(counterKey, ESCALATION_SUPPRESSED_COUNTER_TTL_SECONDS);
+        });
       } catch (err) {
         this.logger.warn(`security_event_dedupe_fail_open type=${type} step=incr: ${String(err)}`);
       }
@@ -496,7 +545,7 @@ export class SecurityEventsService {
 
     let suppressedCount = 0;
     try {
-      const raw = await store.getdel(counterKey);
+      const raw = await withDedupeDeadline("getdel", () => store.getdel(counterKey));
       suppressedCount = raw === null ? 0 : Number(raw);
       if (!Number.isSafeInteger(suppressedCount) || suppressedCount < 0) suppressedCount = 0;
     } catch (err) {

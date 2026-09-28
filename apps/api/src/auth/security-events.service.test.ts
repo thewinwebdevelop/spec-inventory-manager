@@ -1,4 +1,5 @@
-import { describe, it, expect, beforeEach, afterEach } from "vitest";
+import { describe, it, expect, beforeEach, afterEach, vi } from "vitest";
+import { createRedisConnection } from "../health/redis.provider";
 import {
   SecurityEventsService,
   SECURITY_EVENT_TYPES,
@@ -11,6 +12,7 @@ import {
   ESCALATION_CHECKED_OPERATIONS,
   ESCALATION_DENIED_REASONS,
   ESCALATION_DEDUPE_WINDOW_SECONDS,
+  ESCALATION_DEDUPE_TIMEOUT_MS,
   type EscalationDedupeStore,
   type SecurityEventType,
 } from "./security-events.service";
@@ -657,6 +659,23 @@ describe("U-API3-10 ★ · F-003 events — pin, strict payload, no email (AC-9.
     const call = (): void => svc.emit("org.role.escalation_denied", {});
     expect(call).toBeTypeOf("function");
   });
+
+  it("emit() refuses escalation_denied at RUNTIME too — a cast cannot bypass the dedupe", () => {
+    const redis = new FakeRedis();
+    const svc = new SecurityEventsService(redis);
+    const sink = collectSecurityEvents(svc);
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any -- the point: a cast
+    const untyped = svc.emit.bind(svc) as any;
+    expect(() => untyped("org.role.escalation_denied", ESCALATION_PAYLOAD)).toThrow(
+      /emitEscalationDenied/,
+    );
+    expect(sink.events).toHaveLength(0); // nothing leaked around the dedupe
+    expect(redis.calls).toEqual([]);
+    // control: the same service still emits a direct type
+    svc.emit("org.role.deleted", { actorUserId: "a", organizationId: "o", roleId: "r", name: "n" });
+    expect(sink.types()).toEqual(["org.role.deleted"]);
+    sink.stop();
+  });
 });
 
 // ─── U-API3-11 — dedupe of escalation_denied (arch §7 SR-12) ────────────────
@@ -895,4 +914,117 @@ describe("U-API3-12 · ESCALATION_CHECKED_OPERATIONS (8) + reasons (4)", () => {
       "target_not_below_actor",
     ]);
   });
+});
+
+// ─── SR-12 fail-open must hold against a Redis that HANGS, not only one that
+// throws (security review of B16, High). The shared connection is built with
+// `maxRetriesPerRequest: null` + offline queue, so a dead Redis makes commands
+// wait forever instead of rejecting — the `catch` alone never fires.
+
+/** A store whose chosen commands never settle (a hung / queued connection). */
+function hangingStore(
+  hang: ReadonlyArray<keyof EscalationDedupeStore>,
+  base: Partial<EscalationDedupeStore> = {},
+): EscalationDedupeStore & { calls: string[] } {
+  const calls: string[] = [];
+  const never = <T>(): Promise<T> => new Promise<T>(() => {});
+  const cmd =
+    <T>(name: keyof EscalationDedupeStore, fallback: () => Promise<T>) =>
+    (): Promise<T> => {
+      calls.push(name);
+      return hang.includes(name) ? never<T>() : fallback();
+    };
+  return {
+    calls,
+    set: cmd("set", base.set ? () => base.set!("", "", "EX", 0, "NX") : async () => "OK" as const),
+    incr: cmd("incr", async () => 1),
+    expire: cmd("expire", async () => 1),
+    getdel: cmd("getdel", async () => null),
+  } as EscalationDedupeStore & { calls: string[] };
+}
+
+describe("U-API3-11b · escalation_denied fail-open on a HANGING Redis (SR-12)", () => {
+  beforeEach(() => vi.useFakeTimers());
+  afterEach(() => vi.useRealTimers());
+
+  /** Starts the emit and reports whether the returned promise has settled. */
+  function start(svc: SecurityEventsService): { settled: () => boolean; done: Promise<void> } {
+    let settled = false;
+    const done = svc.emitEscalationDenied(ESCALATION_PAYLOAD).then(() => {
+      settled = true;
+    });
+    return { settled: () => settled, done };
+  }
+
+  it("the deadline is 200–300 ms (review: bounded, short enough for a 403 path)", () => {
+    expect(ESCALATION_DEDUPE_TIMEOUT_MS).toBeGreaterThanOrEqual(200);
+    expect(ESCALATION_DEDUPE_TIMEOUT_MS).toBeLessThanOrEqual(300);
+  });
+
+  it("SET NX never answers → event emitted AT the deadline, promise settles (every time)", async () => {
+    const store = hangingStore(["set", "incr", "expire", "getdel"]);
+    const svc = new SecurityEventsService(store);
+    const sink = collectSecurityEvents(svc);
+    for (let i = 1; i <= 3; i++) {
+      const run = start(svc);
+      await vi.advanceTimersByTimeAsync(ESCALATION_DEDUPE_TIMEOUT_MS - 1);
+      expect(sink.events).toHaveLength(i - 1); // not before the deadline…
+      expect(run.settled()).toBe(false);
+      await vi.advanceTimersByTimeAsync(1);
+      expect(sink.events).toHaveLength(i); // …but exactly at it
+      expect(run.settled()).toBe(true);
+      await run.done;
+    }
+    for (const e of sink.events) expect(e.payload.suppressedCount).toBe(0);
+    expect(store.calls.filter((c) => c === "set")).toHaveLength(3); // it did try Redis
+    sink.stop();
+  });
+
+  it("SET answers OK but GETDEL hangs → still emitted by the next deadline", async () => {
+    const svc = new SecurityEventsService(hangingStore(["getdel"]));
+    const sink = collectSecurityEvents(svc);
+    const run = start(svc);
+    await vi.advanceTimersByTimeAsync(ESCALATION_DEDUPE_TIMEOUT_MS);
+    expect(sink.ofType("org.role.escalation_denied")).toHaveLength(1);
+    expect(sink.events[0].payload.suppressedCount).toBe(0);
+    expect(run.settled()).toBe(true);
+    await run.done;
+    sink.stop();
+  });
+
+  it("duplicate (SET → null) but INCR hangs → stays suppressed, promise still settles", async () => {
+    const store = hangingStore(["incr", "expire"], { set: async () => null });
+    const svc = new SecurityEventsService(store);
+    const sink = collectSecurityEvents(svc);
+    const run = start(svc);
+    await vi.advanceTimersByTimeAsync(ESCALATION_DEDUPE_TIMEOUT_MS);
+    expect(run.settled()).toBe(true); // a 403 awaiting this is not held hostage
+    expect(sink.events).toHaveLength(0);
+    expect(svc.suppressedTotal("org.role.escalation_denied")).toBe(1);
+    await run.done;
+    sink.stop();
+  });
+});
+
+describe("U-API3-11c · real ioredis, PRODUCTION connection options, Redis down", () => {
+  it("createRedisConnection() → dead port: the event still goes out within the deadline", async () => {
+    // Port 1 on loopback: connection refused. With the production options
+    // (maxRetriesPerRequest:null + offline queue) the SET is queued forever —
+    // the exact failure mode a thrown-error fake cannot reproduce.
+    const redis = createRedisConnection({ REDIS_URL: "redis://127.0.0.1:1" });
+    redis.on("error", () => {}); // reconnect noise is expected here
+    try {
+      const svc = new SecurityEventsService(redis);
+      const sink = collectSecurityEvents(svc);
+      const t0 = Date.now();
+      await svc.emitEscalationDenied(ESCALATION_PAYLOAD);
+      const elapsed = Date.now() - t0;
+      expect(sink.ofType("org.role.escalation_denied")).toHaveLength(1);
+      expect(elapsed).toBeGreaterThanOrEqual(ESCALATION_DEDUPE_TIMEOUT_MS - 5);
+      expect(elapsed).toBeLessThan(ESCALATION_DEDUPE_TIMEOUT_MS + 1000);
+      sink.stop();
+    } finally {
+      redis.disconnect();
+    }
+  }, 10_000);
 });
