@@ -1,0 +1,2 @@
+// G-09 red fixture: the import named in F-003 test-plan §5.2.
+import nodemailer from "nodemailer";
