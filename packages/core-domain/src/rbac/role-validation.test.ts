@@ -8,6 +8,7 @@ import {
   normalizeRoleName,
   reservedRoleNames,
   roleNameComparisonKey,
+  ROLE_NAME_FORBIDDEN_CHARACTER,
   ROLE_NAME_MAX_LENGTH,
   SYSTEM_ROLE_LABELS,
   validateRoleCapabilities,
@@ -168,13 +169,13 @@ const cp = (s: string) => [...s].length;
 
 describe("U-RB-07 normalizeRoleName — NFC → trim → collapse \\s+ to one U+0020", () => {
   it("trims and collapses tab / newline / NBSP / U+FEFF runs", () => {
-    expect(normalizeRoleName("  แพ็ค\t\n ของ  หน้าร้าน  ")).toBe("แพ็ค ของ หน้าร้าน");
-    expect(normalizeRoleName("Owner﻿")).toBe("Owner");
+    expect(normalizeRoleName("  แพ็ค\t\n ของ\u00A0\u00A0หน้าร้าน  ")).toBe("แพ็ค ของ หน้าร้าน");
+    expect(normalizeRoleName("Owner\uFEFF")).toBe("Owner");
   });
 
   it("composes to NFC", () => {
-    expect(normalizeRoleName("Café")).toBe("Café");
-    expect(cp(normalizeRoleName("Café"))).toBe(4);
+    expect(normalizeRoleName("Cafe\u0301")).toBe("Caf\u00E9");
+    expect(cp(normalizeRoleName("Cafe\u0301"))).toBe(4);
   });
 });
 
@@ -184,7 +185,7 @@ describe("U-RB-07 validateRoleName — Cc/Cf refused AFTER normalize, 1–50 cod
   });
 
   it("dm §2.1 fixtures: zero-width space / RLO / word joiner → VALIDATION_FAILED", () => {
-    for (const raw of ["เจ้า​ของร้าน", "‮นาหร", "พนัก⁠งาน"]) {
+    for (const raw of ["เจ้า\u200Bของร้าน", "\u202Eนาหร", "พนัก\u2060งาน"]) {
       expect(nameOf(raw), JSON.stringify(raw)).toEqual({
         ok: false,
         code: "VALIDATION_FAILED",
@@ -194,11 +195,11 @@ describe("U-RB-07 validateRoleName — Cc/Cf refused AFTER normalize, 1–50 cod
   });
 
   it('dm §2.1 fixture: "Owner\\uFEFF" is collapsed to "Owner", not refused', () => {
-    expect(nameOf("Owner﻿")).toEqual({ ok: true, name: "Owner" });
+    expect(nameOf("Owner\uFEFF")).toEqual({ ok: true, name: "Owner" });
   });
 
   it("Cc not matched by \\s (U+0000, U+0085 NEL) and Cf (soft hyphen, LRM) are refused", () => {
-    for (const raw of ["a\u0000b", "a\u0085b", "a­b", "a‎b", "a\u{E0001}b"]) {
+    for (const raw of ["a\u0000b", "a\u0085b", "a\u00ADb", "a\u200Eb", "a\u{E0001}b"]) {
       expect(nameOf(raw), JSON.stringify(raw)).toMatchObject({ reason: "forbidden_character" });
     }
   });
@@ -225,8 +226,70 @@ describe("U-RB-07 validateRoleName — Cc/Cf refused AFTER normalize, 1–50 cod
     expect(collapsed).toBeGreaterThan(0);
   });
 
+  // security review of B04 (Medium): invisible characters outside Cc/Cf let
+  // "เจ้าของร้าน" + filler dodge the reserved check. Built with fromCodePoint so
+  // no tool can turn the escape into a literal nobody can see in review.
+  it("review probes: Hangul fillers, braille blank, CGJ, variation selectors, private use, lone surrogate → refused", () => {
+    const probes = [
+      0x3164, 0x115f, 0x1160, 0xffa0, 0x2800, 0x034f, 0xfe0f, 0xe0100, 0xe000, 0xf0000, 0x10fffd,
+    ];
+    for (const c of probes) {
+      const raw = `เจ้าของร้าน${String.fromCodePoint(c)}`;
+      expect(nameOf(raw), c.toString(16)).toEqual({
+        ok: false,
+        code: "VALIDATION_FAILED",
+        reason: "forbidden_character",
+      });
+    }
+    // lone surrogates (Cs): String.fromCharCode, not fromCodePoint
+    for (const unit of [0xd800, 0xdbff, 0xdc00, 0xdfff]) {
+      expect(nameOf(`ab${String.fromCharCode(unit)}`), unit.toString(16)).toMatchObject({
+        reason: "forbidden_character",
+      });
+    }
+  });
+
+  it("ROLE_NAME_FORBIDDEN_CHARACTER = Cc ∪ Cf ∪ Default_Ignorable ∪ Co ∪ Cs ∪ {115F,1160,3164,FFA0,2800} — sweep, non-vacuous", () => {
+    const expected = /^[\p{Cc}\p{Cf}\p{Default_Ignorable_Code_Point}\p{Co}]$/u;
+    const extra = new Set([0x115f, 0x1160, 0x3164, 0xffa0, 0x2800]);
+    const space = /^\s$/u;
+    let members = 0;
+    let refused = 0;
+    let di = 0;
+    let co = 0;
+    const collapsed: number[] = [];
+    for (let c = 0; c <= 0x10ffff; c++) {
+      if (c >= 0xd800 && c <= 0xdfff) continue;
+      const ch = String.fromCodePoint(c);
+      const inSet = expected.test(ch) || extra.has(c);
+      // the exported constant is exactly the set: no more, no less
+      expect(ROLE_NAME_FORBIDDEN_CHARACTER.test(ch), c.toString(16)).toBe(inSet);
+      if (!inSet) continue;
+      members++;
+      if (/^\p{Default_Ignorable_Code_Point}$/u.test(ch)) di++;
+      if (/^\p{Co}$/u.test(ch)) co++;
+      if (space.test(ch)) {
+        collapsed.push(c); // collapsed by normalize before the check runs
+        continue;
+      }
+      expect(nameOf(`a${ch}b`), c.toString(16)).toMatchObject({
+        ok: false,
+        reason: "forbidden_character",
+      });
+      refused++;
+    }
+    for (let u = 0xd800; u <= 0xdfff; u++) {
+      expect(ROLE_NAME_FORBIDDEN_CHARACTER.test(String.fromCharCode(u)), u.toString(16)).toBe(true);
+    }
+    expect(di).toBeGreaterThan(4000);
+    expect(co).toBeGreaterThan(130_000);
+    // only ASCII tab..CR and U+FEFF escape by collapsing — every other member is refused
+    expect(collapsed).toEqual([0x09, 0x0a, 0x0b, 0x0c, 0x0d, 0xfeff]);
+    expect(refused).toBe(members - collapsed.length);
+  });
+
   it("empty after normalize → VALIDATION_FAILED empty", () => {
-    for (const raw of ["", "   ", "\t\n", "﻿"]) {
+    for (const raw of ["", "   ", "\t\n", "\uFEFF"]) {
       expect(nameOf(raw), JSON.stringify(raw)).toEqual({
         ok: false,
         code: "VALIDATION_FAILED",
@@ -307,6 +370,14 @@ describe("U-RB-08 reservedRoleNames — AC-3.5", () => {
     expect(set.has("เจ้าของร้าน")).toBe(true);
   });
 
+  it('selfKey "owner" does NOT exempt เจ้าของร้าน (fail-closed — Owner is ROLE_LOCKED anyway)', () => {
+    const set = reservedRoleNames({ liveSystemRoles: [OWNER, ADMIN, STAFF], selfKey: "owner" });
+    expect(set.has("เจ้าของร้าน")).toBe(true);
+    expect(validateRoleName("เจ้าของร้าน", { liveSystemRoles: [OWNER], selfKey: "owner" })).toEqual(
+      { ok: false, code: "ROLE_NAME_TAKEN", reason: "reserved" },
+    );
+  });
+
   it("rows whose key has no label (custom, key=null) reserve nothing", () => {
     expect([
       ...reservedRoleNames({
@@ -328,9 +399,9 @@ describe("U-RB-08 validateRoleName vs reserved — exact after normalize + lower
   });
 
   it("NFC-equivalent spelling collides; look-alikes do NOT (ux: no fuzzy matching)", () => {
-    const label = "Café";
+    const label = "Caf\u00E9";
     const custom = { ...ctx, labels: { owner: label, admin: "x", staff: "y" } };
-    expect(validateRoleName("Café", custom)).toEqual(taken);
+    expect(validateRoleName("Cafe\u0301", custom)).toEqual(taken);
     expect(validateRoleName("เจ้าของร้าน2", ctx)).toMatchObject({ ok: true });
     expect(validateRoleName("เจ้าของ ร้าน", ctx)).toMatchObject({ ok: true });
   });
@@ -343,7 +414,7 @@ describe("U-RB-08 validateRoleName vs reserved — exact after normalize + lower
   });
 
   it("Cc/Cf is refused before the reserved check (invisible 'เจ้าของร้าน' never reaches it)", () => {
-    expect(validateRoleName("เจ้า​ของร้าน", ctx)).toMatchObject({
+    expect(validateRoleName("เจ้า\u200Bของร้าน", ctx)).toMatchObject({
       code: "VALIDATION_FAILED",
       reason: "forbidden_character",
     });

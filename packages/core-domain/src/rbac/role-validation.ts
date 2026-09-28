@@ -71,11 +71,22 @@ export function validateRoleCapabilities(
 export const ROLE_NAME_MAX_LENGTH = 50;
 
 /**
- * Unicode general categories Cc (control) and Cf (format: zero-width, bidi
- * overrides, word joiner, soft hyphen …) — SR-04. The DB CHECK `Role_name_shape`
- * carries the same set; the Unicode-parity gate keeps the two equal.
+ * Every code point a role name may not contain after normalize — THE single
+ * set; the DB CHECK `Role_name_shape` (B10) must equal it (parity gate G3-07):
+ *
+ * - Cc (control) · Cf (format: zero-width, bidi overrides, word joiner …) — SR-04
+ * - Default_Ignorable_Code_Point — renders as nothing: CGJ U+034F, variation
+ *   selectors U+FE00–FE0F / U+E0100–E01EF, Hangul fillers U+115F/1160/3164/FFA0 …
+ * - U+2800 braille blank — not ignorable, but draws as empty space
+ * - Co (private use) — no agreed glyph; shows as blank or tofu
+ * - Cs (lone surrogate) — not valid UTF-8, so the stored name would differ
+ *
+ * Without this, `"เจ้าของร้าน" + U+3164` renders as the Owner label yet passes
+ * the exact reserved-name check (security review of B04, Medium). Visible
+ * homoglyphs (`"ผู้ดูเเล"`) stay out of scope: ux decided on no fuzzy matching.
  */
-export const ROLE_NAME_FORBIDDEN_CHARACTER = /[\p{Cc}\p{Cf}]/u;
+export const ROLE_NAME_FORBIDDEN_CHARACTER =
+  /[\p{Cc}\p{Cf}\p{Default_Ignorable_Code_Point}\p{Co}\p{Cs}\u{115F}\u{1160}\u{3164}\u{FFA0}\u{2800}]/u;
 
 /**
  * NFC → trim → collapse every `\s+` run to one U+0020 (data-model §2.1). JS
