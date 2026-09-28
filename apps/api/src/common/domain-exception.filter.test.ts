@@ -67,9 +67,7 @@ function mockHost(reqHeaders: Record<string, string> = {}): {
 
 /** Header lookup that survives casing differences in the response object. */
 function headerOf(res: CapturedResponse, name: string): string | undefined {
-  const hit = Object.entries(res.headers).find(
-    ([k]) => k.toLowerCase() === name.toLowerCase(),
-  );
+  const hit = Object.entries(res.headers).find(([k]) => k.toLowerCase() === name.toLowerCase());
   return hit?.[1];
 }
 
@@ -101,6 +99,25 @@ describe("DomainExceptionFilter", () => {
     });
   });
 
+  // F-003 · T-003-B02 · U-API3-17 — the filter needs no per-code branch: a
+  // registry entry carries its own status. This pins that the two new 403s
+  // arrive on the wire as themselves, with NO details (api-spec §4.3 / AC-6.4).
+  it.each(["ROLE_EXCEEDS_ACTOR", "TARGET_NOT_BELOW_ACTOR"] as const)(
+    "U-API3-17 maps %s to 403 + its own code, with no details",
+    (code) => {
+      const { host, res } = mockHost();
+      filter.catch(domainError(code), host);
+      expect(res.statusCode).toBe(HttpStatus.FORBIDDEN);
+      expect(res.body).toEqual({
+        error: {
+          code,
+          message: ERROR_CODES[code].message,
+          traceId: expect.stringMatching(UUID_V4),
+        },
+      });
+    },
+  );
+
   it("passes through details and fieldErrors when present", () => {
     const { host, res } = mockHost();
     filter.catch(
@@ -123,7 +140,10 @@ describe("DomainExceptionFilter", () => {
 
   it("applies response headers carried by the exception (Retry-After)", () => {
     const { host, res } = mockHost();
-    filter.catch(new DomainException(ERROR_CODES.RATE_LIMITED, { headers: { "Retry-After": "30" } }), host);
+    filter.catch(
+      new DomainException(ERROR_CODES.RATE_LIMITED, { headers: { "Retry-After": "30" } }),
+      host,
+    );
     expect(res.statusCode).toBe(HttpStatus.TOO_MANY_REQUESTS);
     expect(res.headers["Retry-After"]).toBe("30");
     expect(res.body?.error.code).toBe("RATE_LIMITED");

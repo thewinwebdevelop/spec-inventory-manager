@@ -359,10 +359,14 @@ paths:
       description: |
         US-5. Bearer-authed. The capability check is INLINE application logic (F-001-owned): the caller must have an ACTIVE Membership(orgId) whose role grants `manage_members`, AND the target must be an ACTIVE member of orgId (H-2). Any failure → the same-shape 404 (never 403 — no org-existence/status/capability oracle). On success: sets the target's password and revokes all the target's families. The capability check is not expressible as an OpenAPI security requirement.
 
-        ⚠️ THE WIRE SHAPE IS UNCHANGED SINCE F-001, BUT THE BEHAVIOUR NARROWED TWICE — cases that used to answer `200` now answer the SAME `404`, and no diff tool can see it (api-spec §2 note / architecture §15):
+        ⚠️ THE WIRE SHAPE IS UNCHANGED SINCE F-001, BUT THE BEHAVIOUR NARROWED THREE TIMES — cases that used to answer `200` now answer the SAME `404`, and no diff tool can see it (api-spec §2 note / architecture §15):
           • D-028/C-2 — the target also holds an active membership in ANOTHER shop;
           • D-030/NEW-1 — the target is an Owner (role holds `full_access`) and the
-            caller does not hold `full_access`.
+            caller does not hold `full_access`;
+          • F-003 (api-spec §6, AC-5.5/5.5b) — the target's role is not strictly
+            below the caller's capabilities (equal, above, or incomparable): an
+            Admin can no longer reset another Admin. Same status, same body, same
+            headers as "not a member" (only the trace id differs).
         Accepted consequence (D-030): a shop with a single Owner who forgets their password cannot self-recover until F-081.
       tags:
         - auth
@@ -883,6 +887,16 @@ paths:
         Answers with the §3.7 member row, so the client never has to refetch the list to render the new state — which is why this response carries an email address and therefore the §3.7 `no-store` policy (api-spec §1 lists §3.7 but not §3.8 by number; the classification follows the SHAPE, and `RESPONSE_HEADER_POLICY` in apps/api encodes that).
 
         The target's state is re-read INSIDE the transaction, after the shop's row lock is taken — so a `PATCH` racing a `DELETE` answers `404`, never a 500 or a resurrection.
+
+        ⚠️ F-003 NARROWS THIS ROUTE — THE WIRE SHAPE IS UNCHANGED, SO NO DIFF TOOL SEES IT (F-003 api-spec §4.3, D-034 · AC-5.1/5.4). Checks run in this fixed order, and every case F-002 already refused still answers exactly what it did:
+          1. touching an Owner without `full_access` → `403 FORBIDDEN` (as before);
+          2. the target's CURRENT role is not strictly below the caller's
+             capabilities (equal, above, or incomparable) →
+             `403 TARGET_NOT_BELOW_ACTOR` — except when the target is the caller
+             (stepping yourself down stays allowed, D-029);
+          3. the NEW role holds a capability the caller does not →
+             `403 ROLE_EXCEEDS_ACTOR` — this one applies to yourself too.
+        Neither new code carries `details` (AC-6.4). A "change" to the role the target already has is checked the same way and is not short-circuited: refused → the 403 above; allowed → `200` and the same `role_changed` event as F-002 (SR-19). The route also joins the `memberWrite` rate limit (120/hour per caller per shop) → `429 RATE_LIMITED` with `Retry-After`.
       tags:
         - members
       security:
@@ -913,7 +927,7 @@ paths:
                 $ref: '#/components/schemas/ErrorResponse'
         '403':
           description: |
-            `FORBIDDEN` — missing `manage_members`, or the Owner-only rule — or `ORG_ACCESS_DENIED` (not a member of this shop).
+            `FORBIDDEN` — missing `manage_members`, or the Owner-only rule — or `ORG_ACCESS_DENIED` (not a member of this shop) · F-003: `TARGET_NOT_BELOW_ACTOR` — the target's current role is not strictly below yours · `ROLE_EXCEEDS_ACTOR` — the new role holds a capability you do not. Neither carries `details`; refetch the member list and roles rather than retrying.
           content:
             application/json:
               schema:
@@ -960,6 +974,8 @@ paths:
         Removing YOURSELF through this route works, but only if you already hold `manage_members`. Everyone else uses `DELETE /orgs/{orgId}/membership` — this route grants nobody a softer path (D-029).
 
         Idempotency under a race: two concurrent revokes of the same person produce one `200` and one `404`, and `revokedAt` is written once.
+
+        ⚠️ F-003 NARROWS THIS ROUTE (wire shape unchanged — F-003 api-spec §4.3, D-034 · AC-5.4): after the Owner rule, a target whose role is not strictly below the caller's capabilities → `403 TARGET_NOT_BELOW_ACTOR` (no `details`). Removing yourself is exempt (D-029). The route also joins the `memberWrite` rate limit (120/hour per caller per shop) → `429 RATE_LIMITED` with `Retry-After`.
       tags:
         - members
       security:
@@ -984,7 +1000,7 @@ paths:
                 $ref: '#/components/schemas/ErrorResponse'
         '403':
           description: |
-            `FORBIDDEN` — missing `manage_members`, or removing an Owner without `full_access` — or `ORG_ACCESS_DENIED`.
+            `FORBIDDEN` — missing `manage_members`, or removing an Owner without `full_access` — or `ORG_ACCESS_DENIED` · F-003: `TARGET_NOT_BELOW_ACTOR` — the target's role is not strictly below yours (no `details`).
           content:
             application/json:
               schema:
@@ -1208,6 +1224,8 @@ paths:
         Inviting an address that already has a live invitation is `409 INVITATION_PENDING` WITH `details.invitationId` (+ `expiresAt`, `roleId`, `roleName`), so the UI can immediately offer "issue a new link" or "cancel" instead of leaving the user in a dead end (D-027).
 
         `Cache-Control: no-store` + `Referrer-Policy: no-referrer` — the body carries a live credential.
+
+        ⚠️ F-003 NARROWS THIS ROUTE (wire shape unchanged — F-003 api-spec §4.3, AC-5.3): after the Owner rule, a role holding any capability the caller does not → `403 ROLE_EXCEEDS_ACTOR` (no `details`); a role that has been deleted → `422 ROLE_INVALID`, the same answer as a role of another shop.
       tags:
         - invitations
       security:
@@ -1240,7 +1258,7 @@ paths:
                 $ref: '#/components/schemas/ErrorResponse'
         '403':
           description: |
-            `FORBIDDEN` — missing `manage_members`, or inviting an Owner-capable role without `full_access` — or `ORG_ACCESS_DENIED`.
+            `FORBIDDEN` — missing `manage_members`, or inviting an Owner-capable role without `full_access` — or `ORG_ACCESS_DENIED` · F-003: `ROLE_EXCEEDS_ACTOR` — the role holds a capability you do not (no `details`).
           content:
             application/json:
               schema:
@@ -1284,6 +1302,8 @@ paths:
       summary: Cancel a pending invitation
       description: |
         F-002 api-spec §3.13. Requires `manage_members`. Any link already sent stops working immediately.
+
+        ⚠️ F-003 NARROWS THIS ROUTE, WHICH HAD NO ROLE RULE AT ALL (wire shape unchanged — F-003 api-spec §4.3): cancelling an invitation to a role holding `full_access` now needs `full_access` → `403 FORBIDDEN` (an Admin can no longer cancel an Owner invitation); an invitation whose role holds a capability the caller does not → `403 ROLE_EXCEEDS_ACTOR` (no `details`). The route also joins the `memberWrite` rate limit (120/hour per caller per shop) → `429 RATE_LIMITED` with `Retry-After`.
       tags:
         - invitations
       security:
@@ -1307,7 +1327,8 @@ paths:
               schema:
                 $ref: '#/components/schemas/ErrorResponse'
         '403':
-          description: '`FORBIDDEN` (no `manage_members`) or `ORG_ACCESS_DENIED`'
+          description: |
+            `FORBIDDEN` (no `manage_members`; F-003: or the invitation's role holds `full_access` and you do not) or `ORG_ACCESS_DENIED` · F-003: `ROLE_EXCEEDS_ACTOR` — the invitation's role holds a capability you do not (no `details`).
           content:
             application/json:
               schema:
@@ -1351,6 +1372,8 @@ paths:
         An EXPIRED invitation can still be reissued (its stored status is still `pending`) — deliberately, to avoid a dead end on screen; with the Owner-only rule in place, forbidding it would buy no security.
 
         `Cache-Control: no-store` + `Referrer-Policy: no-referrer`.
+
+        ⚠️ F-003 NARROWS THIS ROUTE (wire shape unchanged — F-003 api-spec §4.3, D-035 Addendum): after the Owner rule, an invitation whose role holds a capability the caller does not → `403 ROLE_EXCEEDS_ACTOR` (no `details`). Holding `manage_roles` now counts as elevated for the 24-hour TTL. The reissuer becomes the invitation's issuer of record (not on the wire): from then on, `POST /invitations/accept` re-checks THE REISSUER's standing instead of the original inviter's.
       tags:
         - invitations
       security:
@@ -1377,7 +1400,7 @@ paths:
                 $ref: '#/components/schemas/ErrorResponse'
         '403':
           description: |
-            `FORBIDDEN` — missing `manage_members`, or reissuing an Owner invitation without `full_access` (nothing is written when this fires) — or `ORG_ACCESS_DENIED`.
+            `FORBIDDEN` — missing `manage_members`, or reissuing an Owner invitation without `full_access` (nothing is written when this fires) — or `ORG_ACCESS_DENIED` · F-003: `ROLE_EXCEEDS_ACTOR` — the invitation's role holds a capability you do not (no `details`; nothing is written).
           content:
             application/json:
               schema:
@@ -1422,6 +1445,8 @@ paths:
         Returns no `organizationId`, no full email address and no member list.
 
         `Cache-Control: no-store` + `Referrer-Policy: no-referrer`.
+
+        ⚠️ F-003 (api-spec §4.3): preview does NOT run accept's issuer re-check (D-035), so it can show a `pending` invitation that `accept` then answers with `409 INVITATION_CANCELLED`. Handle that answer on the accept step.
 
         @frontend: read the token out of the URL, `history.replaceState` it away immediately, and keep it in memory (never localStorage) for the whole sign-up → sign-in → accept flow.
       tags:
@@ -1498,6 +1523,8 @@ paths:
         Decision order, pinned by unit test: unknown token → expired → cancelled/accepted → email mismatch → role unavailable → already a member → superseded → success. Every one of these is re-checked INSIDE the transaction that holds the shop's row lock, so `accept` cannot slip between a `revoke`/`cancel`/`reissue` and win.
 
         `Cache-Control: no-store` + `Referrer-Policy: no-referrer`.
+
+        ⚠️ F-003 ADDS A LAST CHECK (wire shape unchanged — F-003 api-spec §4.3, D-035 + Addendum). After every refusal above, the server re-checks whoever issued the CURRENT link (the latest reissuer, else the original inviter): if they are no longer an active member of the shop, OR no longer hold `manage_members`, OR their current capabilities no longer cover the invitation's role, the invitation is cancelled in the same transaction and the answer is `409 INVITATION_CANCELLED` — byte-for-byte the body of an invitation the shop cancelled itself (no new `details`). Every earlier case still gets the answer it got before. `expiresAt` may also be shortened (AC-10.4).
       tags:
         - invitations
       security:
@@ -1543,7 +1570,7 @@ paths:
                 $ref: '#/components/schemas/ErrorResponse'
         '409':
           description: |
-            `INVITATION_EXPIRED` · `INVITATION_CANCELLED` · `INVITATION_ALREADY_ACCEPTED` · `ALREADY_MEMBER` · `INVITATION_SUPERSEDED` (the link predates your removal) · `INVITATION_ROLE_UNAVAILABLE` (the invited role was deleted — checked at ACCEPT, not only at creation) · `CONFLICT` + `details.reason = "busy"` (lock contention, retry).
+            `INVITATION_EXPIRED` · `INVITATION_CANCELLED` (F-003: also when the issuer of the current link lost their standing — see above) · `INVITATION_ALREADY_ACCEPTED` · `ALREADY_MEMBER` · `INVITATION_SUPERSEDED` (the link predates your removal) · `INVITATION_ROLE_UNAVAILABLE` (the invited role was deleted — checked at ACCEPT, not only at creation) · `CONFLICT` + `details.reason = "busy"` (lock contention, retry).
           content:
             application/json:
               schema:

@@ -22,6 +22,11 @@ post:
     `Cache-Control: no-store` + `Referrer-Policy: no-referrer`.
 
 
+    ⚠️ F-003 (api-spec §4.3): preview does NOT run accept's issuer re-check
+    (D-035), so it can show a `pending` invitation that `accept` then answers
+    with `409 INVITATION_CANCELLED`. Handle that answer on the accept step.
+
+
     @frontend: read the token out of the URL, `history.replaceState` it away
     immediately, and keep it in memory (never localStorage) for the whole
     sign-up → sign-in → accept flow.

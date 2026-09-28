@@ -104,6 +104,12 @@ post:
 
     `Cache-Control: no-store` + `Referrer-Policy: no-referrer` — the body
     carries a live credential.
+
+
+    ⚠️ F-003 NARROWS THIS ROUTE (wire shape unchanged — F-003 api-spec §4.3,
+    AC-5.3): after the Owner rule, a role holding any capability the caller
+    does not → `403 ROLE_EXCEEDS_ACTOR` (no `details`); a role that has been
+    deleted → `422 ROLE_INVALID`, the same answer as a role of another shop.
   tags:
     - invitations
   security:
@@ -137,7 +143,9 @@ post:
     "403":
       description: >
         `FORBIDDEN` — missing `manage_members`, or inviting an Owner-capable
-        role without `full_access` — or `ORG_ACCESS_DENIED`.
+        role without `full_access` — or `ORG_ACCESS_DENIED` · F-003:
+        `ROLE_EXCEEDS_ACTOR` — the role holds a capability you do not (no
+        `details`).
       content:
         application/json:
           schema:
