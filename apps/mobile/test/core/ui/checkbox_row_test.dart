@@ -6,12 +6,19 @@ import 'package:mobile/core/theme/app_theme.dart';
 import 'package:mobile/core/ui/checkbox_row.dart';
 
 void main() {
-  Widget wrap(Widget child) {
+  Widget wrap(Widget child, {Brightness brightness = Brightness.light}) {
     return MaterialApp(
-      theme: buildAppTheme(),
+      theme: buildAppTheme(brightness: brightness),
       home: Scaffold(body: child),
     );
   }
+
+  BoxDecoration boxDecoration(WidgetTester tester) {
+    final container = tester.widget<Container>(find.byKey(const Key('checkbox_row.box')));
+    return container.decoration as BoxDecoration;
+  }
+
+  Color borderColor(WidgetTester tester) => (boxDecoration(tester).border as Border).top.color;
 
   testWidgets('tapping an unchecked, enabled row calls onChanged(true)', (tester) async {
     bool? result;
@@ -118,5 +125,74 @@ void main() {
     )));
 
     expect(find.text('เร็ว ๆ นี้'), findsOneWidget);
+  });
+
+  // ui.md §2.1 border table — this is the exact class of bug the web build
+  // shipped (`btn.bg` used where `color.primary` was specced, invisible in
+  // dark theme where the two diverge): assert the box border/fill colour
+  // per state, in BOTH themes, so a future edit that collapses
+  // "checked border" back into "checked fill" goes red immediately.
+  group('box border/fill colour per state (ui.md §2.1) — light + dark', () {
+    for (final brightness in [Brightness.light, Brightness.dark]) {
+      final colors = brightness == Brightness.dark ? AppColorsX.dark : AppColorsX.light;
+      final label = brightness.name;
+
+      testWidgets('checked+enabled ($label): border=primary, fill=btnBg', (tester) async {
+        await tester.pumpWidget(wrap(
+          CheckboxRow(label: 'ดูสินค้า', value: true, onChanged: (_) {}),
+          brightness: brightness,
+        ));
+
+        final deco = boxDecoration(tester);
+        expect(borderColor(tester), colors.primary);
+        expect(deco.color, colors.btnBg);
+      });
+
+      testWidgets('empty+enabled ($label): border=btnBorder, fill=surface', (tester) async {
+        await tester.pumpWidget(wrap(
+          CheckboxRow(label: 'ดูสินค้า', value: false, onChanged: (_) {}),
+          brightness: brightness,
+        ));
+
+        final deco = boxDecoration(tester);
+        expect(borderColor(tester), colors.btnBorder);
+        expect(deco.color, colors.surface);
+      });
+
+      testWidgets('disabled+checked/locked ($label): border=borderDefault, fill=surfaceMuted',
+          (tester) async {
+        await tester.pumpWidget(wrap(
+          CheckboxRow(
+            label: 'แก้ไขสินค้า',
+            value: true,
+            disabled: true,
+            reason: 'ล็อกตามบทบาท',
+            onChanged: null,
+          ),
+          brightness: brightness,
+        ));
+
+        final deco = boxDecoration(tester);
+        expect(borderColor(tester), colors.borderDefault);
+        expect(deco.color, colors.surfaceMuted);
+      });
+
+      testWidgets('disabled+empty ($label): border=borderDefault, fill=surfaceMuted', (tester) async {
+        await tester.pumpWidget(wrap(
+          CheckboxRow(
+            label: 'แก้ไขสินค้า',
+            value: false,
+            disabled: true,
+            reason: 'ล็อกตามบทบาท',
+            onChanged: null,
+          ),
+          brightness: brightness,
+        ));
+
+        final deco = boxDecoration(tester);
+        expect(borderColor(tester), colors.borderDefault);
+        expect(deco.color, colors.surfaceMuted);
+      });
+    }
   });
 }

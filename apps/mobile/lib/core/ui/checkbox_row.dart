@@ -229,6 +229,7 @@ class _CheckboxBox extends StatelessWidget {
     }
 
     return Container(
+      key: const Key('checkbox_row.box'),
       width: AppSizes.checkbox,
       height: AppSizes.checkbox,
       decoration: BoxDecoration(
