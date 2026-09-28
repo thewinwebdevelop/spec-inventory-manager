@@ -3,15 +3,19 @@ import {
   ORG_RATE_LIMITS,
   ORG_TX_TIMEOUTS,
   envObjectSchema,
+  ROLE_CAPACITY,
   envSchema,
   loadEnv,
   parseRoleWritesEnabled,
   resolveInvitationTokenSecret,
   resolveOrgRateLimits,
   resolveOrgTxTimeouts,
+  resolveRoleCapacity,
 } from "./env";
 import {
+  MAX_DELETED_ROLES_PER_ORG_DEFAULT,
   MAX_ORGS_PER_USER_DEFAULT,
+  MAX_ROLES_PER_ORG_DEFAULT,
   ORG_RATE_LIMIT_DEFAULTS,
   ORG_RATE_LIMIT_ENV_VARS,
   ORG_TX_TIMEOUT_DEFAULTS,
@@ -311,6 +315,9 @@ describe("U-CFG-05/06 · ORG_RATE_LIMIT_* (policy pinned here, behaviour reads i
       reissueInvitationLink: { limit: 60, windowSec: 3600, key: "organizationId" },
       publicInvitationEntry: { limit: 30, windowSec: 3600, key: "ip" },
       revealTaxProfile: { limit: 20, windowSec: 3600, key: "userId+organizationId" },
+      // F-003 architecture.md §10 rows — pinned in the U-CFG3-03 describe below.
+      roleWrite: { limit: 60, windowSec: 3600, key: "organizationId" },
+      memberWrite: { limit: 120, windowSec: 3600, key: "userId+organizationId" },
     });
   });
 
@@ -426,6 +433,113 @@ describe("U-CFG-07 · ORG_TX_TIMEOUTS (§5.2 · NEW-4)", () => {
     expect(ORG_RATE_LIMITS.createOrganization.limit).toBe(10);
     process.env[ORG_RATE_LIMIT_ENV_VARS.createOrganization] = "2";
     expect(ORG_RATE_LIMITS.createOrganization.limit).toBe(2);
+  });
+});
+
+// =============================================================================
+// F-003 · T-003-DV02 — role capacity + roleWrite/memberWrite rate limits
+// (architecture.md §10). test-plan.md U-CFG3-02/03.
+// =============================================================================
+
+describe("U-CFG3-02 · MAX_ROLES_PER_ORG / MAX_DELETED_ROLES_PER_ORG (arch §10)", () => {
+  it("PIN: defaults are 30 / 500", () => {
+    expect(MAX_ROLES_PER_ORG_DEFAULT).toBe(30);
+    expect(MAX_DELETED_ROLES_PER_ORG_DEFAULT).toBe(500);
+    const result = envSchema.safeParse(validEnv);
+    expect(result.success).toBe(true);
+    if (result.success) {
+      expect(result.data.MAX_ROLES_PER_ORG).toBe("30");
+      expect(result.data.MAX_DELETED_ROLES_PER_ORG).toBe("500");
+    }
+  });
+
+  it("is env-tunable", () => {
+    const result = envSchema.safeParse({
+      ...validEnv,
+      MAX_ROLES_PER_ORG: "5",
+      MAX_DELETED_ROLES_PER_ORG: "50",
+    });
+    expect(result.success).toBe(true);
+    if (result.success) {
+      expect(result.data.MAX_ROLES_PER_ORG).toBe("5");
+      expect(result.data.MAX_DELETED_ROLES_PER_ORG).toBe("50");
+    }
+    const resolved = resolveRoleCapacity({
+      ...validEnv,
+      MAX_ROLES_PER_ORG: "5",
+      MAX_DELETED_ROLES_PER_ORG: "50",
+    } as NodeJS.ProcessEnv);
+    expect(resolved).toEqual({ maxRolesPerOrg: 5, maxDeletedRolesPerOrg: 50 });
+  });
+
+  it("NEGATIVE: non-numeric value → boot fails and names the var", () => {
+    for (const envVar of ["MAX_ROLES_PER_ORG", "MAX_DELETED_ROLES_PER_ORG"]) {
+      for (const bad of ["abc", "-1", "1.5", "0", ""]) {
+        expect(failedVars({ ...validEnv, [envVar]: bad })).toContain(envVar);
+      }
+    }
+  });
+
+  it("ROLE_CAPACITY is a live view over process.env", () => {
+    const ORIGINAL = process.env.MAX_ROLES_PER_ORG;
+    expect(ROLE_CAPACITY.maxRolesPerOrg).toBe(30);
+    process.env.MAX_ROLES_PER_ORG = "7";
+    expect(ROLE_CAPACITY.maxRolesPerOrg).toBe(7);
+    if (ORIGINAL === undefined) delete process.env.MAX_ROLES_PER_ORG;
+    else process.env.MAX_ROLES_PER_ORG = ORIGINAL;
+  });
+});
+
+describe("U-CFG3-03 · ORG_RATE_LIMIT_ROLE_WRITE_PER_HOUR / …MEMBER_WRITE_PER_HOUR (arch §10)", () => {
+  it("PIN: roleWrite=60/organizationId · memberWrite=120/userId+organizationId · window 1h", () => {
+    expect(ORG_RATE_LIMIT_DEFAULTS.roleWrite).toEqual({
+      limit: 60,
+      windowSec: 3600,
+      key: "organizationId",
+    });
+    expect(ORG_RATE_LIMIT_DEFAULTS.memberWrite).toEqual({
+      limit: 120,
+      windowSec: 3600,
+      key: "userId+organizationId",
+    });
+  });
+
+  it("zod defaults resolve to exactly ORG_RATE_LIMIT_DEFAULTS.roleWrite/memberWrite", () => {
+    const resolved = resolveOrgRateLimits(validEnv as NodeJS.ProcessEnv);
+    expect(resolved.roleWrite).toEqual(ORG_RATE_LIMIT_DEFAULTS.roleWrite);
+    expect(resolved.memberWrite).toEqual(ORG_RATE_LIMIT_DEFAULTS.memberWrite);
+  });
+
+  it("both limits are env-tunable through their documented vars, window stays fixed", () => {
+    const lowered = {
+      ...validEnv,
+      [ORG_RATE_LIMIT_ENV_VARS.roleWrite]: "6",
+      [ORG_RATE_LIMIT_ENV_VARS.memberWrite]: "12",
+    } as NodeJS.ProcessEnv;
+    expect(envSchema.safeParse(lowered).success).toBe(true);
+    const resolved = resolveOrgRateLimits(lowered);
+    expect(resolved.roleWrite.limit).toBe(6);
+    expect(resolved.memberWrite.limit).toBe(12);
+    // window + key dimension are policy, not env-tunable
+    expect(resolved.roleWrite.windowSec).toBe(3600);
+    expect(resolved.roleWrite.key).toBe("organizationId");
+    expect(resolved.memberWrite.windowSec).toBe(3600);
+    expect(resolved.memberWrite.key).toBe("userId+organizationId");
+  });
+
+  it("NEGATIVE: a non-numeric / zero quota → fails and names that var", () => {
+    for (const envVar of [ORG_RATE_LIMIT_ENV_VARS.roleWrite, ORG_RATE_LIMIT_ENV_VARS.memberWrite]) {
+      for (const bad of ["abc", "0", "-5", "2.5"]) {
+        expect(failedVars({ ...validEnv, [envVar]: bad })).toContain(envVar);
+      }
+    }
+  });
+
+  it("ORG_RATE_LIMITS.roleWrite/memberWrite are a live view over process.env", () => {
+    expect(ORG_RATE_LIMITS.roleWrite.limit).toBe(60);
+    process.env[ORG_RATE_LIMIT_ENV_VARS.roleWrite] = "3";
+    expect(ORG_RATE_LIMITS.roleWrite.limit).toBe(3);
+    expect(ORG_RATE_LIMITS.memberWrite.limit).toBe(120);
   });
 });
 

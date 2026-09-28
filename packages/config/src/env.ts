@@ -12,7 +12,9 @@
 // missing var can never surface as an unhandled framework stack trace.
 import { z } from "zod";
 import {
+  MAX_DELETED_ROLES_PER_ORG_DEFAULT,
   MAX_ORGS_PER_USER_DEFAULT,
+  MAX_ROLES_PER_ORG_DEFAULT,
   ORG_RATE_LIMIT_DEFAULTS,
   ORG_TX_TIMEOUT_DEFAULTS,
   type OrgRateLimits,
@@ -96,6 +98,28 @@ const orgRateLimitShape = {
   ORG_RATE_LIMIT_TAX_REVEAL_PER_HOUR: positiveIntEnv(
     "ORG_RATE_LIMIT_TAX_REVEAL_PER_HOUR",
     ORG_RATE_LIMIT_DEFAULTS.revealTaxProfile.limit,
+  ),
+  // --- F-003 §10 (role/member write abuse control) --------------------------
+  ORG_RATE_LIMIT_ROLE_WRITE_PER_HOUR: positiveIntEnv(
+    "ORG_RATE_LIMIT_ROLE_WRITE_PER_HOUR",
+    ORG_RATE_LIMIT_DEFAULTS.roleWrite.limit,
+  ),
+  ORG_RATE_LIMIT_MEMBER_WRITE_PER_HOUR: positiveIntEnv(
+    "ORG_RATE_LIMIT_MEMBER_WRITE_PER_HOUR",
+    ORG_RATE_LIMIT_DEFAULTS.memberWrite.limit,
+  ),
+};
+
+// --- F-003 §10 · role capacity policy (default MAX_ROLES_PER_ORG=30 · ------
+// MAX_DELETED_ROLES_PER_ORG=500). Same `positiveIntEnv` seam as
+// MAX_ORGS_PER_USER: a non-numeric value fails BOOT (never falls back to the
+// default silently), because a typo'd cap is a security-relevant gap, not a
+// cosmetic default.
+const roleCapacityShape = {
+  MAX_ROLES_PER_ORG: positiveIntEnv("MAX_ROLES_PER_ORG", MAX_ROLES_PER_ORG_DEFAULT),
+  MAX_DELETED_ROLES_PER_ORG: positiveIntEnv(
+    "MAX_DELETED_ROLES_PER_ORG",
+    MAX_DELETED_ROLES_PER_ORG_DEFAULT,
   ),
 };
 
@@ -225,6 +249,7 @@ export const envObjectSchema = z.object({
   // take it from the `Env` that `loadEnv` returns (a plain boolean, not a
   // live getter like ORG_TX_TIMEOUTS) — opening it is a rolling restart.
   ROLE_WRITES_ENABLED: z.string().optional().transform(parseRoleWritesEnabled),
+  ...roleCapacityShape,
 });
 
 export const envSchema = envObjectSchema.superRefine((env, ctx) => {
@@ -342,8 +367,26 @@ export const orgRateLimitsSchema = z.object(orgRateLimitShape).transform((v): Or
       ...ORG_RATE_LIMIT_DEFAULTS.revealTaxProfile,
       limit: Number(v.ORG_RATE_LIMIT_TAX_REVEAL_PER_HOUR),
     }),
+    roleWrite: Object.freeze({
+      ...ORG_RATE_LIMIT_DEFAULTS.roleWrite,
+      limit: Number(v.ORG_RATE_LIMIT_ROLE_WRITE_PER_HOUR),
+    }),
+    memberWrite: Object.freeze({
+      ...ORG_RATE_LIMIT_DEFAULTS.memberWrite,
+      limit: Number(v.ORG_RATE_LIMIT_MEMBER_WRITE_PER_HOUR),
+    }),
   }),
 );
+
+/** Standalone schema for the F-003 §10 role capacity knobs. */
+export const roleCapacitySchema = z.object(roleCapacityShape).transform((v) =>
+  Object.freeze({
+    maxRolesPerOrg: Number(v.MAX_ROLES_PER_ORG),
+    maxDeletedRolesPerOrg: Number(v.MAX_DELETED_ROLES_PER_ORG),
+  }),
+);
+
+export type RoleCapacity = z.infer<typeof roleCapacitySchema>;
 
 /**
  * Resolves the effective tx/lock timeouts from `source` (default `process.env`).
@@ -358,6 +401,11 @@ export function resolveOrgTxTimeouts(source: NodeJS.ProcessEnv = process.env): O
 /** Resolves the effective §8 quotas from `source` (default `process.env`). */
 export function resolveOrgRateLimits(source: NodeJS.ProcessEnv = process.env): OrgRateLimits {
   return orgRateLimitsSchema.parse(source);
+}
+
+/** Resolves the effective F-003 §10 role capacity caps from `source`. */
+export function resolveRoleCapacity(source: NodeJS.ProcessEnv = process.env): RoleCapacity {
+  return roleCapacitySchema.parse(source);
 }
 
 /**
@@ -436,5 +484,21 @@ export const ORG_RATE_LIMITS: OrgRateLimits = Object.freeze({
   },
   get revealTaxProfile() {
     return resolveOrgRateLimits().revealTaxProfile;
+  },
+  get roleWrite() {
+    return resolveOrgRateLimits().roleWrite;
+  },
+  get memberWrite() {
+    return resolveOrgRateLimits().memberWrite;
+  },
+});
+
+/** Live view of the effective F-003 §10 role capacity caps (process.env). */
+export const ROLE_CAPACITY: RoleCapacity = Object.freeze({
+  get maxRolesPerOrg() {
+    return resolveRoleCapacity().maxRolesPerOrg;
+  },
+  get maxDeletedRolesPerOrg() {
+    return resolveRoleCapacity().maxDeletedRolesPerOrg;
   },
 });

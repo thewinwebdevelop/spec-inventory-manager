@@ -39,11 +39,7 @@ export const ORG_TX_TIMEOUT_DEFAULTS: OrgTxTimeouts = Object.freeze({
 });
 
 /** Which dimension a rate-limit bucket is keyed by (architecture.md §8). */
-export type OrgRateLimitKeyDimension =
-  | "userId"
-  | "organizationId"
-  | "ip"
-  | "userId+organizationId";
+export type OrgRateLimitKeyDimension = "userId" | "organizationId" | "ip" | "userId+organizationId";
 
 export interface OrgRateLimitRule {
   /** Allowed requests per window. */
@@ -54,13 +50,20 @@ export interface OrgRateLimitRule {
   readonly key: OrgRateLimitKeyDimension;
 }
 
-/** The rate-limited actions F-002 introduces (architecture.md §8 table rows). */
+/**
+ * The rate-limited actions F-002 introduces (architecture.md §8 table rows)
+ * plus the two F-003 adds (architecture.md §10): `roleWrite` (POST/PATCH/
+ * DELETE role, combined, keyed by `organizationId`) and `memberWrite` (PATCH/
+ * DELETE member + DELETE invitation, keyed by `userId+organizationId`).
+ */
 export type OrgRateLimitAction =
   | "createOrganization"
   | "createInvitation"
   | "reissueInvitationLink"
   | "publicInvitationEntry"
-  | "revealTaxProfile";
+  | "revealTaxProfile"
+  | "roleWrite"
+  | "memberWrite";
 
 export type OrgRateLimits = Readonly<Record<OrgRateLimitAction, OrgRateLimitRule>>;
 
@@ -82,7 +85,11 @@ const HOUR_SEC = 3_600;
  */
 export const ORG_RATE_LIMIT_DEFAULTS: OrgRateLimits = Object.freeze({
   createOrganization: Object.freeze({ limit: 10, windowSec: HOUR_SEC, key: "userId" as const }),
-  createInvitation: Object.freeze({ limit: 30, windowSec: HOUR_SEC, key: "organizationId" as const }),
+  createInvitation: Object.freeze({
+    limit: 30,
+    windowSec: HOUR_SEC,
+    key: "organizationId" as const,
+  }),
   reissueInvitationLink: Object.freeze({
     limit: 60,
     windowSec: HOUR_SEC,
@@ -91,6 +98,17 @@ export const ORG_RATE_LIMIT_DEFAULTS: OrgRateLimits = Object.freeze({
   publicInvitationEntry: Object.freeze({ limit: 30, windowSec: HOUR_SEC, key: "ip" as const }),
   revealTaxProfile: Object.freeze({
     limit: 20,
+    windowSec: HOUR_SEC,
+    key: "userId+organizationId" as const,
+  }),
+  // --- F-003 §10 (role/member write abuse control) --------------------------
+  roleWrite: Object.freeze({
+    limit: 60,
+    windowSec: HOUR_SEC,
+    key: "organizationId" as const,
+  }),
+  memberWrite: Object.freeze({
+    limit: 120,
     windowSec: HOUR_SEC,
     key: "userId+organizationId" as const,
   }),
@@ -103,7 +121,15 @@ export const ORG_RATE_LIMIT_ENV_VARS: Readonly<Record<OrgRateLimitAction, string
   reissueInvitationLink: "ORG_RATE_LIMIT_INVITE_LINK_PER_HOUR",
   publicInvitationEntry: "ORG_RATE_LIMIT_INVITE_PUBLIC_PER_HOUR",
   revealTaxProfile: "ORG_RATE_LIMIT_TAX_REVEAL_PER_HOUR",
+  roleWrite: "ORG_RATE_LIMIT_ROLE_WRITE_PER_HOUR",
+  memberWrite: "ORG_RATE_LIMIT_MEMBER_WRITE_PER_HOUR",
 });
 
 /** Default cap on how many active orgs one user may belong to (§6.3, D-029). */
 export const MAX_ORGS_PER_USER_DEFAULT = 50;
+
+/** Default cap on LIVE roles per org, including system roles (F-003 §10). */
+export const MAX_ROLES_PER_ORG_DEFAULT = 30;
+
+/** Default cap on SOFT-DELETED roles per org — history retention (F-003 §10). */
+export const MAX_DELETED_ROLES_PER_ORG_DEFAULT = 500;
