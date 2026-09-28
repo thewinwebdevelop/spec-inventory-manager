@@ -109,7 +109,7 @@ B01 (components+codegen) ─────→ frontend W*/M* (types) · B21 → W0
 
 | ID | งาน | ref → target | deps | เทสต์ | status | updated_by |
 |----|-----|--------------|------|-------|--------|------------|
-| T-003-M01 | ★ const `manage_roles` + guard helper entry point/screen (`can()` ต่อยอด — skill `client-security`) | `docs/mobile-architecture.md` §3.3 · FC → `apps/mobile/lib/core/session/capabilities.dart` | G2✓ | unit | todo | — |
+| T-003-M01 | ★ const `manage_roles` + guard helper entry point/screen (`can()` ต่อยอด — skill `client-security`) | `docs/architecture/mobile.md` §3.3 · FC → `apps/mobile/lib/core/session/capabilities.dart` | G2✓ | unit | todo | — |
 | T-003-M02 | widget กลาง `CheckboxRow` · `Disclosure` · `StickyActionBar` (bottom sheet ใช้ native) | ui §2, §5 · design-system §9.1 → `apps/mobile/lib/core/ui/` | G2✓ | widget tests | todo | — |
 | T-003-M03 | reason→copy (ux §0.3) + `app_th.arb` R1–R9 (ไม่รวม R10 error table) | ux §0.2, §0.3, §E → `apps/mobile/lib/features/org/` · `apps/mobile/lib/l10n/app_th.arb` | G2✓ | CM3 copy | todo | — |
 | T-003-M04 | ย้ายคำ "สิทธิ์→บทบาท" arb keys ตาราง ux §0.1 + **ลบ** `inviteRoleAdminDesc`/`inviteRoleStaffDesc` | ux §0.1 → `app_th.arb` | **merge/deploy คู่ W04** | copy-lint arb เทียบ web | todo | — |
