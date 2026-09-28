@@ -194,6 +194,15 @@ model Role {
   //    re-opens finding C-1 the moment F-003 ships custom roles.
   key String?
 
+  // F-003 (migration `f003_role_expand`, data-model §2) — all defaulted or
+  // nullable so F-002 inserts still succeed.
+  version            Int       @default(1) // optimistic concurrency (AC-3.12) — PATCH `where {id, version}`
+  nameCustomized     Boolean   @default(false) // AC-1.5 — set when a PATCH renames; never back to false
+  lastEditedAt       DateTime? // AC-9.6 — null = system default (backfill/seed/delete never write it)
+  lastEditedByUserId String? // no FK (same pattern as revokedByUserId)
+  deletedAt          DateTime? // soft delete (AC-3.8/3.9b) — live reads filter via LIVE_ROLE_WHERE
+  deletedByUserId    String? // no FK
+
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
@@ -201,7 +210,13 @@ model Role {
   memberships  Membership[]
   invitations  Invitation[]
 
-  @@unique([organizationId, name])
+  // F-003 — REMOVED `@@unique([organizationId, name])`. Raw SQL in
+  // `f003_role_expand` (Prisma's DSL cannot express these):
+  //   UNIQUE ("organizationId", lower(name)) WHERE "deletedAt" IS NULL  "Role_org_name_ci_live_key" (P2002 → 409 ROLE_NAME_TAKEN)
+  //   UNIQUE ("organizationId") WHERE "isSystem"                         "Role_one_system_per_org" (SR-07)
+  //   CHECK  Role_capabilities_nonempty · Role_full_access_system_only · Role_system_not_deleted · Role_name_shape
+  //   TRIGGER role_system_row_lock · role_system_flag_guard · role_soft_delete_guard ·
+  //           role_live_reference_guard (on Membership + Invitation)
   // NEW — one `key` per org. Postgres treats each NULL as distinct, so any
   // number of custom (key = null) roles coexist under this unique index.
   @@unique([organizationId, key])
@@ -274,6 +289,11 @@ model Invitation {
   acceptedUserCreatedAt DateTime?
 
   cancelledAt DateTime? // NEW
+
+  // F-003 (D-035 + Addendum) — who issued the CURRENT link: create AND reissue
+  // write it with the token. Accept re-checks COALESCE(issuedByUserId,
+  // invitedByUserId). No FK, not on the wire, not backfilled (null = fallback).
+  issuedByUserId String?
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt // NEW
