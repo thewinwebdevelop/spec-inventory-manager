@@ -229,6 +229,28 @@ export function migrateDiff(schemaPath: string, url: string): CommandResult {
   return { status: res.status, stdout: res.stdout, stderr: res.stderr };
 }
 
+/** Real `prisma migrate resolve --rolled-back <name>` (the runbook step after a failed deploy). */
+export function migrateResolveRolledBack(
+  schemaPath: string,
+  url: string,
+  name: string,
+): CommandResult {
+  const res = spawnSync(
+    PRISMA_BIN,
+    ["migrate", "resolve", "--rolled-back", name, "--schema", schemaPath],
+    {
+      cwd: join(schemaPath, ".."),
+      env: { ...process.env, DATABASE_URL: url, PRISMA_HIDE_UPDATE_MESSAGE: "1" },
+      encoding: "utf8",
+      timeout: 90_000,
+    },
+  );
+  if (res.error) throw new Error(`prisma migrate resolve could not run: ${res.error.message}`);
+  if (res.status === null)
+    throw new Error(`prisma migrate resolve was killed (${res.signal})\n${res.stderr}`);
+  return { status: res.status, stdout: res.stdout, stderr: res.stderr };
+}
+
 // ── scratch databases ─────────────────────────────────────────────────────────
 
 export interface ScratchDatabase {

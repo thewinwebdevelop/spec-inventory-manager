@@ -178,6 +178,12 @@ d("I3-16 — Role guards at the DB layer, written through SYSTEM_PRISMA", () => 
       " Lead",
       "Two  spaces",
       "x".repeat(51),
+      // B10 review (Medium): Unicode whitespace Postgres btrim()/\s would miss
+      "Owner" + String.fromCodePoint(0xa0),
+      "Owner" + String.fromCodePoint(0x3000),
+      String.fromCodePoint(0x3000) + "Lead",
+      "Own" + String.fromCodePoint(0xa0) + "er",
+      "Two " + String.fromCodePoint(0x2003) + "spaces",
     ]) {
       await expect(
         db.role.create({ data: { organizationId: org.id, name, capabilities: ["manage_stock"] } }),
@@ -191,6 +197,24 @@ d("I3-16 — Role guards at the DB layer, written through SYSTEM_PRISMA", () => 
     await db.role.create({
       data: { organizationId: org.id, name: "y".repeat(50), capabilities: ["manage_stock"] },
     });
+  });
+
+  it("raw SQL: 'Owner' + U+00A0 / U+3000 is refused by the CHECK — never a second, look-alike 'Owner'", async () => {
+    const org = await shop();
+    const count = () => db.role.count({ where: { organizationId: org.id } });
+    const n = await count();
+    for (const ws of [0xa0, 0x3000]) {
+      await expect(
+        db.$executeRawUnsafe(
+          `INSERT INTO "Role" (id, "organizationId", name, capabilities, "updatedAt")
+           VALUES ($1, $2, 'Owner' || chr($3::int), '{manage_stock}', now())`,
+          `b10-ws-${ws}-${org.id}`,
+          org.id,
+          ws,
+        ),
+      ).rejects.toThrow(/Role_name_shape/);
+    }
+    expect(await count()).toBe(n);
   });
 
   it("case-insensitive unique among LIVE roles; a soft-deleted name is reusable", async () => {

@@ -75,24 +75,52 @@ export function parseEscapedBracketClass(body: string): Set<number> {
 }
 
 /**
- * Every forbidden-character class in `sql`: a quoted bracket expression `'[...]'` that holds
- * at least one `\u`/`\U` escape. A bracket literal holding a raw non-ASCII
- * character THROWS (see the convention above).
+ * Every escaped bracket expression inside a string literal of `sql` — the body
+ * of each `[...]` that holds at least one `\u`/`\U` escape, wherever it sits in
+ * the literal (`'[...]'`, `'^[...]'`, `'[...][...]'`, `'[...]$'`). `--` line
+ * comments are dropped first (their apostrophes would pair up as quotes). A
+ * bracket holding a raw non-ASCII character THROWS (see the convention above).
+ *
+ * Which set a class must equal is decided by the caller (unicode-parity.test.ts
+ * classifies each against the known sets — a class that equals none is red).
  */
-export function extractForbiddenClasses(sql: string): string[] {
+export function extractEscapedClasses(sql: string): string[] {
+  const code = sql
+    .split("\n")
+    .map((line) => {
+      const i = line.indexOf("--");
+      return i < 0 ? line : line.slice(0, i);
+    })
+    .join("\n");
   const out: string[] = [];
-  const bracketLiteral = /'\[([^\]']*)\]'/g;
-  for (const m of sql.matchAll(bracketLiteral)) {
-    const body = m[1];
-    // eslint-disable-next-line no-control-regex
-    if (/[^\x00-\x7F]/.test(body)) {
-      throw new Error(
-        `unicode class: raw non-ASCII character in '[${body}]' — write it as \\uXXXX/\\UXXXXXXXX`,
-      );
+  for (const lit of code.matchAll(/'([^']*)'/g)) {
+    for (const m of lit[1].matchAll(/\[([^\]]*)\]/g)) {
+      const body = m[1];
+      // eslint-disable-next-line no-control-regex
+      if (/[^\x00-\x7F]/.test(body)) {
+        throw new Error(
+          `unicode class: raw non-ASCII character in '[${body}]' — write it as \\uXXXX/\\UXXXXXXXX`,
+        );
+      }
+      if (/\\[uU]/.test(body)) out.push(body);
     }
-    if (/\\[uU]/.test(body)) out.push(body);
   }
   return out;
+}
+
+/**
+ * JS `\s` (what core-domain's normalizeRoleName trims and collapses) — NOT
+ * Postgres `\s`/btrim, which depend on LC_CTYPE / trim U+0020 only.
+ */
+export function jsWhitespaceSet(): Set<number> {
+  return codePointSet(/^\s$/u);
+}
+
+/** JS `\s` minus U+0020: after normalize, no such code point can remain in a name. */
+export function jsWhitespaceNonSpaceSet(): Set<number> {
+  const s = jsWhitespaceSet();
+  s.delete(0x20);
+  return s;
 }
 
 /** Hex list of code points in `a` but not in `b` (for readable failure messages). */

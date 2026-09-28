@@ -28,7 +28,9 @@ const MIGRATIONS = join(DB_PKG, "prisma", "migrations");
 interface UnicodeClassHelpers {
   codePointSet(re: RegExp): Set<number>;
   forbiddenRoleNameSet(): Set<number>;
-  extractForbiddenClasses(sql: string): string[];
+  extractEscapedClasses(sql: string): string[];
+  jsWhitespaceSet(): Set<number>;
+  jsWhitespaceNonSpaceSet(): Set<number>;
   parseEscapedBracketClass(body: string): Set<number>;
   difference(a: Set<number>, b: Set<number>): string[];
 }
@@ -55,7 +57,15 @@ describe("G3-07 (core-domain half) — role-name forbidden characters: core-doma
       : "B04 not on this base yet — SQL class is set-equal to the db-side definition (core-domain compared once B04 lands)",
     async () => {
       const h = await helpers();
-      const classes = h.extractForbiddenClasses(roleExpandSql());
+      // the whitespace classes (leading/trailing/doubled/non-space JS \s) are pinned by
+      // packages/db unicode-parity.test.ts; every OTHER escaped class is a forbidden class
+      const isWs = (body: string) => {
+        const set = h.parseEscapedBracketClass(body);
+        return [h.jsWhitespaceSet(), h.jsWhitespaceNonSpaceSet()].some(
+          (ws) => h.difference(ws, set).length === 0 && h.difference(set, ws).length === 0,
+        );
+      };
+      const classes = h.extractEscapedClasses(roleExpandSql()).filter((b) => !isWs(b));
       expect(classes.length, "no forbidden-character class in f003_role_expand").toBeGreaterThan(0);
 
       let expected: Set<number>;

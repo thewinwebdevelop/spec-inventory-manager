@@ -10,12 +10,14 @@
 //          completed by the real deploy to the same catalogue as a clean apply ·
 //          `prisma migrate diff` from the migrated DB to schema.prisma is empty.
 import { afterAll, describe, expect, it } from "vitest";
+import { PrismaClient } from "../generated/client";
 import {
   F002_BASELINE,
   createScratchDatabase,
   listRealMigrations,
   migrateDeploy,
   migrateDiff,
+  migrateResolveRolledBack,
   realMigrationBySlug,
   realMigrationsAfter,
   removeStagedMigrations,
@@ -117,6 +119,12 @@ const PREFLIGHT_CASES: ReadonlyArray<{
     why: "a name holding U+200B ZERO WIDTH SPACE (Cf)",
     breakIt: (org) =>
       `UPDATE "Role" SET name = 'Sta' || chr(8203) || 'ff' WHERE "organizationId" = '${org}' AND key = 'staff';`,
+  },
+  {
+    check: "name_shape",
+    why: "'Staff' + U+3000 IDEOGRAPHIC SPACE (Postgres btrim() would keep it)",
+    breakIt: (org) =>
+      `UPDATE "Role" SET name = 'Staff' || chr(12288) WHERE "organizationId" = '${org}' AND key = 'staff';`,
   },
   {
     check: "system_role_count",
@@ -245,6 +253,56 @@ d("M3-03 f003_role_expand re-applies cleanly and leaves no drift", () => {
 
       const diff = migrateDiff(staged.schemaPath, db.url);
       expect(diff.status, `schema drift:\n${diff.stdout}\n${diff.stderr}`).toBe(0);
+    },
+    SLOW,
+  );
+
+  it(
+    "lock timeout: a session holding a lock on Role → deploy fails fast (5s), rolled back; resolve --rolled-back + deploy again → applied",
+    async () => {
+      const { db, staged } = await baselineDb();
+      await seedF002Org(db.url, { tag: "locked", ownerStatus: "active" });
+      staged.add(roleExpand());
+
+      // A long read transaction on Role (ACCESS SHARE) blocks ALTER TABLE (ACCESS EXCLUSIVE).
+      const holder = new PrismaClient({ datasources: { db: { url: db.url } } });
+      let blocked: ReturnType<typeof migrateDeploy> | undefined;
+      let tookMs = 0;
+      try {
+        await holder.$transaction(
+          async (tx) => {
+            await tx.$executeRawUnsafe(`LOCK TABLE "Role" IN ACCESS SHARE MODE`);
+            const t0 = Date.now();
+            blocked = migrateDeploy(staged.schemaPath, db.url);
+            tookMs = Date.now() - t0;
+          },
+          { timeout: 90_000, maxWait: 10_000 },
+        );
+      } finally {
+        await holder.$disconnect();
+      }
+      expect(blocked?.status).not.toBe(0);
+      expect(`${blocked?.stderr}${blocked?.stdout}`).toMatch(/lock timeout/);
+      expect(tookMs).toBeLessThan(60_000); // failed fast, did not queue behind the holder
+      // rolled back as a whole: no F-003 column left behind
+      expect(
+        query(
+          db.url,
+          `SELECT column_name FROM information_schema.columns WHERE table_name = 'Role' AND column_name = 'version';`,
+        ),
+      ).toEqual([]);
+
+      // runbook: resolve --rolled-back, then deploy again once the blocker is gone
+      const again = migrateDeploy(staged.schemaPath, db.url);
+      expect(
+        again.status,
+        "prisma must refuse to continue past a failed migration (P3009)",
+      ).not.toBe(0);
+      const resolved = migrateResolveRolledBack(staged.schemaPath, db.url, roleExpand().name);
+      expect(resolved.status, resolved.stderr).toBe(0);
+      const retry = migrateDeploy(staged.schemaPath, db.url);
+      expect(retry.status, retry.stderr).toBe(0);
+      expect(migrateDiff(staged.schemaPath, db.url).status).toBe(0);
     },
     SLOW,
   );
