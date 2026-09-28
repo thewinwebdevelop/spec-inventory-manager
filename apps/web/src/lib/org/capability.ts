@@ -46,3 +46,28 @@ export function can(capabilities: ReadonlySet<string>, capability: string): bool
  * The guard in `capability-lint.test.ts` now fails on a sixth copy.
  */
 export { CAPABILITY_FULL_ACCESS, CAPABILITY_MANAGE_MEMBERS, CAPABILITY_MANAGE_ORG_SETTINGS };
+
+/**
+ * ★ T-003-W01 — F-003's gate for the roles screens (api-spec: every new role
+ * route requires it).
+ *
+ * ⚠️ The ONE name declared here rather than re-exported, and only because the
+ * source does not exist yet: core-domain's `rbac/registry` lands with T-003-B03,
+ * and W01 is ordered before it. When B03 merges, replace this line with a
+ * re-export from `@omnistock/core-domain` — same value, pinned by
+ * `capability-lint.test.ts`, so the swap is mechanical. Until then this is the
+ * sanctioned file for the literal (the lint's allow-list), so the web tree
+ * still has exactly one copy.
+ *
+ * TODO(T-003-B03): when B03 merges, delete this declaration and re-export
+ * `CAPABILITY_MANAGE_ROLES` from `@omnistock/core-domain` alongside the three
+ * above (tracked in docs/features/F-003/tasks.md).
+ */
+export const CAPABILITY_MANAGE_ROLES = "manage_roles" as const;
+
+/** The capabilities a route may be gated on. A typo is a compile error, not a
+ *  silently hidden screen. Grows as features add names. */
+export type GateCapability =
+  | typeof CAPABILITY_MANAGE_MEMBERS
+  | typeof CAPABILITY_MANAGE_ORG_SETTINGS
+  | typeof CAPABILITY_MANAGE_ROLES;

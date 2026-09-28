@@ -27,7 +27,7 @@
 import { describe, it, expect } from "vitest";
 import { readdirSync, readFileSync, statSync, existsSync } from "node:fs";
 import { join, relative, sep } from "node:path";
-import { can } from "./capability";
+import { can, CAPABILITY_MANAGE_ROLES } from "./capability";
 
 /** cwd is `apps/web` under vitest. */
 const REPO_ROOT = join(process.cwd(), "..", "..");
@@ -88,7 +88,7 @@ const ALLOWED = Object.freeze([
  * So: a capability NAME may appear as a literal only where the rule lives.
  * Everywhere else, import it.
  */
-const CAPABILITY_LITERAL = /['"](full_access|manage_members|manage_org_settings)['"]/g;
+const CAPABILITY_LITERAL = /['"](full_access|manage_members|manage_org_settings|manage_roles)['"]/g;
 
 export interface Offence {
   readonly file: string;
@@ -154,10 +154,14 @@ describe("★ capability questions go through the shared rule, never Set members
   it("the scan reached both trees, and the sanctioned files exist", () => {
     // A guard that scanned nothing would be green forever — the failure mode
     // that makes the next person delete it rather than trust it.
-    expect(files.some((f) => f.path.startsWith("apps/web/src")), "web tree not scanned").toBe(true);
-    expect(files.some((f) => f.path.startsWith("apps/mobile/lib")), "mobile tree not scanned").toBe(
-      true,
-    );
+    expect(
+      files.some((f) => f.path.startsWith("apps/web/src")),
+      "web tree not scanned",
+    ).toBe(true);
+    expect(
+      files.some((f) => f.path.startsWith("apps/mobile/lib")),
+      "mobile tree not scanned",
+    ).toBe(true);
     expect(files.length).toBeGreaterThan(50);
     for (const allowed of ALLOWED) {
       expect(
@@ -211,11 +215,19 @@ describe("★ capability questions go through the shared rule, never Set members
     // The line that shipped, and the two shapes that must not trip: the file
     // that defines the names, and prose that quotes one.
     expect(
-      findLiterals([
-        { path: "x.dart", source: "capabilities: const {'full_access'}," },
-      ]),
+      findLiterals([{ path: "x.dart", source: "capabilities: const {'full_access'}," }]),
       "the scan would not have caught the client that invented a capability set",
     ).toHaveLength(1);
+
+    // ★ T-003-W01 — F-003's capability is covered from the day it exists:
+    // W05–W11 each gate on it, which is five chances to hand-type it.
+    expect(
+      findLiterals([
+        { path: "x.tsx", source: '<RouteGuard requiredCapability="manage_roles">' },
+        { path: "y.dart", source: "org.can('manage_roles')" },
+      ]),
+      "a hand-typed manage_roles would slip past the literal scan",
+    ).toHaveLength(2);
 
     expect(
       findLiterals([
@@ -237,5 +249,16 @@ describe("★ capability questions go through the shared rule, never Set members
     const staff = new Set(["view_products"]);
     expect(can(staff, "manage_members")).toBe(false);
     expect(can(staff, "view_products")).toBe(true);
+  });
+
+  it("★ T-003-W01: CAPABILITY_MANAGE_ROLES is the server's string, and obeys the same rule", () => {
+    // The value is what the server's CapabilityGuard compares against
+    // (F-003 architecture §1 / data-model §4.2 backfill). A typo here would
+    // hide the roles menu from every Admin while the server still allowed them.
+    expect(CAPABILITY_MANAGE_ROLES).toBe("manage_roles");
+    expect(can(new Set([CAPABILITY_MANAGE_ROLES]), CAPABILITY_MANAGE_ROLES)).toBe(true);
+    expect(can(new Set(["full_access"]), CAPABILITY_MANAGE_ROLES)).toBe(true);
+    // Holding manage_members does NOT imply manage_roles (two separate caps).
+    expect(can(new Set(["manage_members"]), CAPABILITY_MANAGE_ROLES)).toBe(false);
   });
 });
