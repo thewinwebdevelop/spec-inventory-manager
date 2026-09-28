@@ -1,0 +1,5 @@
+// G-06 red fixture: a Membership born through a relation (no membership.create
+// call anywhere), with no status, so the column DEFAULT ('invited') writes it.
+await tx.organization.create({
+  data: { name, memberships: { create: { userId, roleId } } },
+});

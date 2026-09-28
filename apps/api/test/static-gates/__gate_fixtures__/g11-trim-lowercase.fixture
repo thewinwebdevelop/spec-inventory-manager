@@ -1,0 +1,2 @@
+// G-11 red fixture: the shape named in F-003 test-plan §5.2.
+const key = email.trim().toLowerCase();
