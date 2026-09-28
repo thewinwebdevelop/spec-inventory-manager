@@ -11,12 +11,18 @@
 // DELETE members · create invitation · reissue invitation link (NEW-2) ·
 // admin-reset password (NEW-1/D-030). All of them feed this ONE function; none
 // of them re-implements the rule.
+//
+// F-003 · T-003-B05 (architecture §1 table · D-034): the rule itself moved to
+// `rbac/member-authority.ts` (`decideMemberAuthority`, two axes). What is left
+// here is a COMPAT WRAPPER for the F-002 call sites that still pass Owner-ness
+// booleans; it has no logic of its own (U-RB-15) and is deleted in the PR that
+// moves the last call site (B17/B18). Because it hands `decideMemberAuthority`
+// only Owner-marker sets (`[full_access]` or `[]`), its answers are exactly
+// F-002's — the D-034 target/grant axes take effect where a call site passes
+// the real capability sets to `decideMemberAuthority` directly.
 
-import {
-  CAPABILITY_FULL_ACCESS,
-  CAPABILITY_MANAGE_MEMBERS,
-  hasCapability,
-} from "../auth/capabilities";
+import { CAPABILITY_FULL_ACCESS } from "../auth/capabilities";
+import { decideMemberAuthority } from "../rbac/member-authority";
 
 export interface CanAssignRoleInput {
   /** Capabilities of the role the CALLER currently holds in this org. */
@@ -38,21 +44,16 @@ export function isOwnerRole(capabilities: readonly string[]): boolean {
 }
 
 /**
- * May the actor perform this membership change?
+ * May the actor perform this membership change? (F-002 semantics — compat.)
  *
  * - Anything that TOUCHES ownership — granting `full_access` to someone, or
  *   modifying/revoking/resetting someone who currently holds it — requires the
- *   actor to hold `full_access` themselves.
- * - Everything else still requires `manage_members` (which `full_access`
- *   implies via `hasCapability`). architecture §3.2 states the rule as
- *   `(!targetIsOwner && !newRoleIsOwner) || full_access`; we additionally keep
- *   the `manage_members` floor so the mandatory matrix case ⑧ ("empty
- *   actorCapabilities → false in EVERY case", data-model §6) is literally true.
- *   This is strictly stricter than the architecture formula and never more
- *   permissive: every real call site already sits behind
- *   `@RequireCapability(manage_members)` (architecture §3.1), so no legitimate
- *   caller loses anything — but a future call site that forgets the guard fails
- *   closed here instead of silently allowing the change.
+ *   actor to hold `full_access` themselves (`owner_only`).
+ * - Everything else still requires `manage_members` — the floor of
+ *   `decideMemberAuthority` (`full_access` grants it through expansion), so
+ *   the mandatory matrix case ⑧ ("empty actorCapabilities → false in EVERY
+ *   case", data-model §6) is literally true and a call site that forgets the
+ *   guard fails closed.
  *
  * Returning a boolean (not throwing) is deliberate: the call sites map it to
  * different wire results — `403 FORBIDDEN` for member/invitation routes, but
@@ -64,8 +65,11 @@ export function canAssignRole({
   targetIsOwner,
   newRoleIsOwner,
 }: CanAssignRoleInput): boolean {
-  if (targetIsOwner || newRoleIsOwner) {
-    return hasCapability(actorCapabilities, CAPABILITY_FULL_ACCESS);
-  }
-  return hasCapability(actorCapabilities, CAPABILITY_MANAGE_MEMBERS);
+  return decideMemberAuthority({
+    op: "change_role",
+    actorCapabilities,
+    actorIsTarget: false,
+    targetCurrentCapabilities: targetIsOwner ? [CAPABILITY_FULL_ACCESS] : [],
+    grantCapabilities: newRoleIsOwner ? [CAPABILITY_FULL_ACCESS] : [],
+  }).ok;
 }

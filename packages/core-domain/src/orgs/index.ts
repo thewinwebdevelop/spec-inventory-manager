@@ -135,7 +135,11 @@ export {
 // NEW-1/D-030). Same `canAssignRole` rule as the membership routes, no copy.
 export {
   decideAdminReset,
+  decideAdminResetVisible,
   isAdminResetCallerAuthorized,
+  type AdminResetVisibleViewer,
+  type AdminResetVisibleRow,
+  type AdminResetVisibleVerdict,
   type AdminResetDecision,
   type AdminResetInput,
   type AdminResetMembershipFacts,
