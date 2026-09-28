@@ -99,7 +99,13 @@ function Box({ checked, disabled }: { checked: boolean; disabled: boolean }) {
       className={cn(
         "pointer-events-none flex h-full w-full items-center justify-center",
         "rounded-checkbox border-[length:var(--checkbox-border-w)] transition-colors",
-        checked && !disabled && "border-btn-bg bg-btn-bg text-btn-fg",
+        // ⚠️ `border-primary`, NOT `border-btn-bg` — design-system.md §1.3/§9.1
+        // and the ⛔ note at §1.1c-3 are explicit that `color.primary` and
+        // `btn.bg` are the SAME value in light but MUST diverge in dark
+        // (`#2FBBA6` vs `#0A5A45`); the box needs a border that is visible
+        // against its own fill in both themes, which is exactly what that
+        // divergence is for.
+        checked && !disabled && "border-primary bg-btn-bg text-btn-fg",
         checked && disabled && "border-border-default bg-surface-muted text-text-muted",
         !checked && disabled && "border-border-default bg-surface-muted",
         !checked &&

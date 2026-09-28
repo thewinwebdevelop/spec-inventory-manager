@@ -15,6 +15,13 @@ describe("Checkbox (ui.md §2.1, F-003)", () => {
     expect(screen.getByRole("checkbox")).toBeChecked();
   });
 
+  it("checked+enabled box border uses color.primary, not btn.bg (design-system.md §1.3/§9.1 — the two tokens diverge in dark theme, so border-btn-bg would blend into the fill)", () => {
+    render(<Checkbox checked onChange={() => {}} />);
+    const box = screen.getByRole("checkbox").nextElementSibling;
+    expect(box?.getAttribute("class")).toMatch(/\bborder-primary\b/);
+    expect(box?.getAttribute("class")).not.toMatch(/\bborder-btn-bg\b/);
+  });
+
   it("calls onChange with the new value when toggled", async () => {
     const user = userEvent.setup();
     const onChange = vi.fn();
