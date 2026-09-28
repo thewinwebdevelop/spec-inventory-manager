@@ -1,0 +1,2 @@
+// G-11 red fixture: the same normalisation, hidden behind a wrapper.
+const key = String(dto.email ?? "").toLowerCase();
