@@ -13,6 +13,13 @@
 //   swapped            — Staff.key="owner", Owner.key="staff"   (I-45 literal)
 //   owner-null         — Staff.key="owner", Owner.key=null      (I-45 "+ key=null")
 //   admin-wears-owner  — Admin.key="owner", Owner.key=null      (extension, see below)
+//   staff-wears-admin  — Staff.key="admin", Admin.key=null      (review Medium: a
+//                        "key admin ⇒ manage_members" mapping, or a blueprint
+//                        lookup BY KEY, passes every state that only ever puts
+//                        "owner"/"staff" on Staff)
+//
+// ORDER-INDEPENDENT: every `it` builds its own shop, so no case depends on what
+// an earlier case wrote (or failed to write).
 //
 // WHY AN ADMIN ACTOR AND NOT ONLY STAFF: Staff lacks `manage_members`, so
 // `CapabilityGuard` refuses Staff before any Owner-only rule is evaluated. A
@@ -51,14 +58,18 @@ if (!INT_LANE_ENABLED) {
   );
 }
 
-type KeyState = "untouched" | "swapped" | "owner-null" | "admin-wears-owner";
+type KeyState = "untouched" | "swapped" | "owner-null" | "admin-wears-owner" | "staff-wears-admin";
 
 const EXPECTED_KEYS: Record<KeyState, Record<"Owner" | "Admin" | "Staff", string | null>> = {
   untouched: { Owner: "owner", Admin: "admin", Staff: "staff" },
   swapped: { Owner: "staff", Admin: "admin", Staff: "owner" },
   "owner-null": { Owner: null, Admin: "admin", Staff: "owner" },
   "admin-wears-owner": { Owner: null, Admin: "owner", Staff: "staff" },
+  "staff-wears-admin": { Owner: "owner", Admin: null, Staff: "admin" },
 };
+
+/** Users an Owner-only / guard request could act UPON (sessions + passwords snapshotted). */
+const TARGETS = ["ownerA", "ownerB", "ownerC", "promotee", "staffX", "staffY", "staffZ"] as const;
 
 const NEW_PASSWORD = "role-key-authority-7Qx!pass";
 
@@ -66,6 +77,8 @@ d("I3-56 part 1 / I-45 — Role.key never decides a permission (DB)", () => {
   let app: TestApp;
   let prisma: PrismaClient;
   let kit: SeedKit;
+  /** Users whose seeded refresh tokens must go before `kit.cleanup()` (FK). */
+  const sessionUserIds: string[] = [];
 
   beforeAll(async () => {
     prisma = new PrismaClient({ datasources: { db: { url: process.env.TEST_DATABASE_URL } } });
@@ -75,6 +88,9 @@ d("I3-56 part 1 / I-45 — Role.key never decides a permission (DB)", () => {
   });
 
   afterAll(async () => {
+    if (prisma && sessionUserIds.length > 0) {
+      await prisma.refreshToken.deleteMany({ where: { userId: { in: sessionUserIds } } });
+    }
     if (kit) await kit.cleanup();
     if (app) await app.close();
     if (prisma) await prisma.$disconnect();
@@ -123,6 +139,21 @@ d("I3-56 part 1 / I-45 — Role.key never decides a permission (DB)", () => {
       });
       p[who] = { ...user, accessToken: token(user.id) };
     }
+    // A live session for every target, so "nothing was written" also covers
+    // "nobody's sessions were revoked" (reset-password / removal revoke them).
+    for (const who of TARGETS) {
+      const now = Date.now();
+      await prisma.refreshToken.create({
+        data: {
+          userId: p[who].id,
+          familyId: randomUUID(),
+          tokenHash: randomUUID().replace(/-/g, "") + randomUUID().replace(/-/g, ""),
+          expiresAt: new Date(now + 60 * 86_400_000),
+          familyExpiresAt: new Date(now + 90 * 86_400_000),
+        },
+      });
+      sessionUserIds.push(p[who].id);
+    }
     const ownerInvitation = await kit.createInvitation({
       organizationId: org.id,
       email: `qa01-owner-inv-${randomUUID()}@example.com`,
@@ -156,6 +187,10 @@ d("I3-56 part 1 / I-45 — Role.key never decides a permission (DB)", () => {
         await kit.setRoleKey(Owner.id, null);
         await kit.setRoleKey(Admin.id, "owner");
         break;
+      case "staff-wears-admin":
+        await kit.setRoleKey(Admin.id, null);
+        await kit.setRoleKey(Staff.id, "admin");
+        break;
     }
 
     // Fixture sanity, read from the DATABASE: the keys moved, capabilities did not.
@@ -178,7 +213,7 @@ d("I3-56 part 1 / I-45 — Role.key never decides a permission (DB)", () => {
   // ── requests ────────────────────────────────────────────────────────────
 
   const send = (
-    method: "patch" | "delete" | "post",
+    method: "patch" | "delete" | "post" | "put",
     path: string,
     accessToken: string,
     body?: object,
@@ -250,9 +285,10 @@ d("I3-56 part 1 / I-45 — Role.key never decides a permission (DB)", () => {
     { route: "R6 POST reset Owner password", status: 404, code: "NOT_FOUND" },
   ];
 
-  /** Everything an Owner-only request could have written. */
+  /** Everything an Owner-only or guard-tier request could have written. */
   async function snapshot(s: Shop) {
-    const [memberships, invitations, ownerC] = await Promise.all([
+    const targetIds = TARGETS.map((who) => s.p[who].id);
+    const [memberships, invitations, roles, organization, passwords, sessions] = await Promise.all([
       prisma.membership.findMany({
         where: { organizationId: s.org.id },
         select: { userId: true, roleId: true, status: true, revokedAt: true },
@@ -270,115 +306,193 @@ d("I3-56 part 1 / I-45 — Role.key never decides a permission (DB)", () => {
         },
         orderBy: { id: "asc" },
       }),
-      prisma.user.findUniqueOrThrow({
-        where: { id: s.p.ownerC.id },
-        select: { passwordHash: true },
+      prisma.role.findMany({
+        where: { organizationId: s.org.id },
+        select: {
+          id: true,
+          name: true,
+          key: true,
+          isSystem: true,
+          capabilities: true,
+          updatedAt: true,
+        },
+        orderBy: { id: "asc" },
+      }),
+      prisma.organization.findUniqueOrThrow({
+        where: { id: s.org.id },
+        select: {
+          name: true,
+          logo: true,
+          timezone: true,
+          taxEntityType: true,
+          taxId: true,
+          vatRegistered: true,
+          taxBranchCode: true,
+          updatedAt: true,
+        },
+      }),
+      prisma.user.findMany({
+        where: { id: { in: targetIds } },
+        select: { id: true, passwordHash: true },
+        orderBy: { id: "asc" },
+      }),
+      prisma.refreshToken.findMany({
+        where: { userId: { in: targetIds } },
+        select: { id: true, userId: true, familyId: true, revokedAt: true, expiresAt: true },
+        orderBy: { id: "asc" },
       }),
     ]);
-    return { memberships, invitations, ownerCPasswordHash: ownerC.passwordHash };
+    // Non-vacuity: one live session per target was seeded — an empty list here
+    // would make "sessions unchanged" true of any request.
+    expect(sessions).toHaveLength(TARGETS.length);
+    return { memberships, invitations, roles, organization, passwords, sessions };
   }
+
+  const passwordOf = (snap: Awaited<ReturnType<typeof snapshot>>, userId: string) =>
+    snap.passwords.find((u) => u.id === userId)!.passwordHash;
 
   const inviteEmail = (): string => `qa01-new-${randomUUID()}@example.com`;
 
   // ── the matrix ──────────────────────────────────────────────────────────
+  // Every `it` seeds its OWN shop (review Low-4): no case can pass or fail
+  // because of what a sibling wrote, and `-t` / reordering / `.only` are safe.
 
-  describe.each<[KeyState]>([["untouched"], ["swapped"], ["owner-null"], ["admin-wears-owner"]])(
-    "key state: %s",
-    (state) => {
-      let s: Shop;
+  describe.each<[KeyState]>([
+    ["untouched"],
+    ["swapped"],
+    ["owner-null"],
+    ["admin-wears-owner"],
+    ["staff-wears-admin"],
+  ])("key state: %s", (state) => {
+    it("★ Staff is refused on every Owner-only route, and nothing is written", async () => {
+      const s = await shop(state);
+      const before = await snapshot(s);
+      expect(await ownerOnly(s, s.p.stf, inviteEmail())).toEqual(REFUSED);
+      expect(await snapshot(s)).toEqual(before);
+    });
 
-      beforeAll(async () => {
-        s = await shop(state);
+    it("★ Staff is refused at the GUARD too — manage_members + manage_org_settings verbs, key or no key", async () => {
+      // Why this exists: the Owner-only routes re-read the actor's
+      // capabilities inside the transaction, so a GUARD that trusted `key`
+      // (Staff.key="owner" ⇒ full_access) would still be stopped there, and
+      // the case above would stay green. Measured, not assumed: that exact
+      // mutation in org-context.middleware left all six Owner-only refusals
+      // intact. Several verbs here have no second check — the guard is the
+      // only thing between Staff and them.
+      const s = await shop(state);
+      const o = `/orgs/${s.org.id}`;
+      const R = s.org.roles;
+      const t = s.p.stf.accessToken;
+      const before = await snapshot(s);
+      const results = {
+        // manage_members
+        "PATCH members/{staff}": (
+          await send("patch", `${o}/members/${s.p.staffX.id}`, t, { roleId: R.Admin.id })
+        ).status,
+        "DELETE members/{staff}": (await send("delete", `${o}/members/${s.p.staffY.id}`, t)).status,
+        "POST invitations (Staff role)": (
+          await send("post", `${o}/invitations`, t, { email: inviteEmail(), roleId: R.Staff.id })
+        ).status,
+        "POST invitations/{staff}/link": (
+          await send("post", `${o}/invitations/${s.staffInvitationId}/link`, t)
+        ).status,
+        "GET members": (
+          await request(app.server()).get(`${o}/members`).set("Authorization", `Bearer ${t}`)
+        ).status,
+        // manage_org_settings
+        "PATCH org": (await send("patch", o, t, { name: `renamed-by-staff-${randomUUID()}` }))
+          .status,
+        "PUT tax-profile": (
+          await send("put", `${o}/tax-profile`, t, {
+            entityType: "company",
+            taxId: "0105556000009",
+            vatRegistered: false,
+            branchCode: "00000",
+          })
+        ).status,
+        // JSON body, as the real client sends it: a body-less POST answers 415
+        // once past the guard, which would hide what the guard decided.
+        "POST tax-profile/reveal": (await send("post", `${o}/tax-profile/reveal`, t, {})).status,
+        // F-001's @UserScoped path — its own check, its own 404-never-403 shape.
+        "POST members/{staff}/reset-password": (
+          await send("post", `${o}/members/${s.p.staffZ.id}/reset-password`, t, {
+            newPassword: NEW_PASSWORD,
+          })
+        ).status,
+      };
+      expect(results).toEqual({
+        "PATCH members/{staff}": 403,
+        "DELETE members/{staff}": 403,
+        "POST invitations (Staff role)": 403,
+        "POST invitations/{staff}/link": 403,
+        "GET members": 403,
+        "PATCH org": 403,
+        "PUT tax-profile": 403,
+        "POST tax-profile/reveal": 403,
+        "POST members/{staff}/reset-password": 404,
       });
+      expect(await snapshot(s)).toEqual(before);
+    });
 
-      it("★ Staff is refused on every Owner-only route, and nothing is written", async () => {
-        const before = await snapshot(s);
-        expect(await ownerOnly(s, s.p.stf, inviteEmail())).toEqual(REFUSED);
-        expect(await snapshot(s)).toEqual(before);
+    it("★ Admin (manage_members, no full_access) is refused on every Owner-only route, and nothing is written", async () => {
+      const s = await shop(state);
+      const before = await snapshot(s);
+      expect(await ownerOnly(s, s.p.adm, inviteEmail())).toEqual(REFUSED);
+      expect(await snapshot(s)).toEqual(before);
+    });
+
+    it("control: Admin's refusals are the Owner-only rule — the same verbs on non-Owner targets succeed", async () => {
+      // Without this, "Admin got 403" could mean a malformed body, a wrong
+      // path, or a rate limit. Same shop layout, same actor, same six verbs.
+      const s = await shop(state);
+      const o = `/orgs/${s.org.id}`;
+      const R = s.org.roles;
+      const a = s.p.adm.accessToken;
+      const results = [
+        (await send("patch", `${o}/members/${s.p.staffX.id}`, a, { roleId: R.Admin.id })).status,
+        (await send("patch", `${o}/members/${s.p.staffX.id}`, a, { roleId: R.Staff.id })).status,
+        (await send("delete", `${o}/members/${s.p.staffY.id}`, a)).status,
+        (await send("post", `${o}/invitations`, a, { email: inviteEmail(), roleId: R.Staff.id }))
+          .status,
+        (await send("post", `${o}/invitations/${s.staffInvitationId}/link`, a)).status,
+        (
+          await send("post", `${o}/members/${s.p.staffZ.id}/reset-password`, a, {
+            newPassword: NEW_PASSWORD,
+          })
+        ).status,
+      ];
+      expect(results).toEqual([200, 200, 200, 201, 200, 200]);
+    });
+
+    it("★ Owner — whatever its key says — performs every Owner-only route, and the writes land", async () => {
+      const s = await shop(state);
+      const before = await snapshot(s);
+      const email = inviteEmail();
+      const outcomes = await ownerOnly(s, s.p.own, email);
+      expect(outcomes.map((x) => [x.route, x.status])).toEqual([
+        ["R1 PATCH promote→Owner", 200],
+        ["R2 PATCH demote Owner", 200],
+        ["R3 DELETE Owner", 200],
+        ["R4 POST invite as Owner", 201],
+        ["R5 POST reissue Owner invitation", 200],
+        ["R6 POST reset Owner password", 200],
+      ]);
+
+      // Status codes alone would be satisfied by an endpoint that answers 200
+      // and writes nothing. Ask the database.
+      const R = s.org.roles;
+      const after = await snapshot(s);
+      const m = (userId: string) => after.memberships.find((x) => x.userId === userId)!;
+      expect(m(s.p.promotee.id)).toMatchObject({ roleId: R.Owner.id, status: "active" });
+      expect(m(s.p.ownerB.id)).toMatchObject({ roleId: R.Staff.id, status: "active" });
+      expect(m(s.p.ownerA.id).status).toBe("revoked");
+      expect(after.invitations.find((i) => i.email === email)).toMatchObject({
+        roleId: R.Owner.id,
+        status: "pending",
       });
-
-      it("★ Staff is refused at the GUARD too — the non-Owner manage_members verbs, key or no key", async () => {
-        // Why this exists: the Owner-only routes re-read the actor's
-        // capabilities inside the transaction, so a GUARD that trusted `key`
-        // (Staff.key="owner" ⇒ full_access) would still be stopped there, and
-        // the case above would stay green. Measured, not assumed: that exact
-        // mutation in org-context.middleware left all six Owner-only refusals
-        // intact. These verbs have no second check — the guard is the only
-        // thing between Staff and them.
-        const o = `/orgs/${s.org.id}`;
-        const R = s.org.roles;
-        const t = s.p.stf.accessToken;
-        const before = await snapshot(s);
-        const results = [
-          (await send("patch", `${o}/members/${s.p.staffX.id}`, t, { roleId: R.Admin.id })).status,
-          (await send("delete", `${o}/members/${s.p.staffY.id}`, t)).status,
-          (await send("post", `${o}/invitations`, t, { email: inviteEmail(), roleId: R.Staff.id }))
-            .status,
-          (await send("post", `${o}/invitations/${s.staffInvitationId}/link`, t)).status,
-          (await request(app.server()).get(`${o}/members`).set("Authorization", `Bearer ${t}`))
-            .status,
-        ];
-        expect(results).toEqual([403, 403, 403, 403, 403]);
-        expect(await snapshot(s)).toEqual(before);
-      });
-
-      it("★ Admin (manage_members, no full_access) is refused on every Owner-only route, and nothing is written", async () => {
-        const before = await snapshot(s);
-        expect(await ownerOnly(s, s.p.adm, inviteEmail())).toEqual(REFUSED);
-        expect(await snapshot(s)).toEqual(before);
-      });
-
-      it("control: Admin's refusals are the Owner-only rule — the same verbs on non-Owner targets succeed", async () => {
-        // Without this, "Admin got 403" could mean a malformed body, a wrong
-        // path, or a rate limit. Same shop, same actor, same six verbs.
-        const o = `/orgs/${s.org.id}`;
-        const R = s.org.roles;
-        const a = s.p.adm.accessToken;
-        const results = [
-          (await send("patch", `${o}/members/${s.p.staffX.id}`, a, { roleId: R.Admin.id })).status,
-          (await send("patch", `${o}/members/${s.p.staffX.id}`, a, { roleId: R.Staff.id })).status,
-          (await send("delete", `${o}/members/${s.p.staffY.id}`, a)).status,
-          (await send("post", `${o}/invitations`, a, { email: inviteEmail(), roleId: R.Staff.id }))
-            .status,
-          (await send("post", `${o}/invitations/${s.staffInvitationId}/link`, a)).status,
-          (
-            await send("post", `${o}/members/${s.p.staffZ.id}/reset-password`, a, {
-              newPassword: NEW_PASSWORD,
-            })
-          ).status,
-        ];
-        expect(results).toEqual([200, 200, 200, 201, 200, 200]);
-      });
-
-      it("★ Owner — whatever its key says — performs every Owner-only route, and the writes land", async () => {
-        const before = await snapshot(s);
-        const email = inviteEmail();
-        const outcomes = await ownerOnly(s, s.p.own, email);
-        expect(outcomes.map((x) => [x.route, x.status])).toEqual([
-          ["R1 PATCH promote→Owner", 200],
-          ["R2 PATCH demote Owner", 200],
-          ["R3 DELETE Owner", 200],
-          ["R4 POST invite as Owner", 201],
-          ["R5 POST reissue Owner invitation", 200],
-          ["R6 POST reset Owner password", 200],
-        ]);
-
-        // Status codes alone would be satisfied by an endpoint that answers 200
-        // and writes nothing. Ask the database.
-        const R = s.org.roles;
-        const after = await snapshot(s);
-        const m = (userId: string) => after.memberships.find((x) => x.userId === userId)!;
-        expect(m(s.p.promotee.id)).toMatchObject({ roleId: R.Owner.id, status: "active" });
-        expect(m(s.p.ownerB.id)).toMatchObject({ roleId: R.Staff.id, status: "active" });
-        expect(m(s.p.ownerA.id).status).toBe("revoked");
-        expect(after.invitations.find((i) => i.email === email)).toMatchObject({
-          roleId: R.Owner.id,
-          status: "pending",
-        });
-        const inv = (x: typeof before) => x.invitations.find((i) => i.id === s.ownerInvitationId)!;
-        expect(inv(after).tokenHash).not.toBe(inv(before).tokenHash);
-        expect(after.ownerCPasswordHash).not.toBe(before.ownerCPasswordHash);
-      });
-    },
-  );
+      const inv = (x: typeof before) => x.invitations.find((i) => i.id === s.ownerInvitationId)!;
+      expect(inv(after).tokenHash).not.toBe(inv(before).tokenHash);
+      expect(passwordOf(after, s.p.ownerC.id)).not.toBe(passwordOf(before, s.p.ownerC.id));
+    });
+  });
 });
