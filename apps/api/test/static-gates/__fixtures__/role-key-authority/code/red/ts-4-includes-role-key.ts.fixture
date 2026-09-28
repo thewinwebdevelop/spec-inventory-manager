@@ -1,0 +1,5 @@
+// G-12 red fixture TS-4 — set membership over role keys.
+const ELEVATED = ["owner", "admin"];
+export const isElevated = (role: { key: string }) => ELEVATED.includes(role.key); // ← hit
+export const isElevatedKey = (roleKey: string) => ["owner", "admin"].includes(roleKey); // ← hit
+export const inSet = (m: { role: { key: string } }) => ELEVATED_SET.has(m.role.key); // ← hit

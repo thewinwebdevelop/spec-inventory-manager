@@ -1,0 +1,14 @@
+// G-12 green controls (Dart). Zero hits expected.
+/// Ownership is a CAPABILITY — never `roleKey == 'owner'`.
+class Tile extends StatelessWidget {
+  const Tile({super.key, required this.m});
+  // if (role.key == 'owner') — prose, not code
+  bool get isOwner => m.capabilities.contains('full_access');
+  Membership copy() => Membership(roleKey: m.roleKey, key: r.key);
+  bool esc(KeyEvent e) => e.logicalKey == LogicalKeyboardKey.escape;
+  // DART-3/4 neighbours
+  bool get active => status == 'active';
+  Widget title(AppLocalizations t, Role role) => Text(role.name);
+  final String cls = 'admin-panel';
+  final Map<String, int> sizes = {'small': 1, 'large': 2};
+}

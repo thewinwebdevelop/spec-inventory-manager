@@ -1,0 +1,14 @@
+// G-12 red fixture DART-3 — a system-role literal: compared, `case`, `=>` arm, map key.
+int gate(Role role, String k) {
+  if (k == 'owner') return 1; // ← hit
+  if ("admin" != normalize(k)) return 2; // ← hit
+  switch (k) {
+    case 'staff': // ← hit
+      return 3;
+  }
+  final limit = {'owner': 9, 'admin': 5}[k]; // ← hit
+  return switch (k) {
+    "owner" => 1, // ← hit
+    _ => 0,
+  };
+}
