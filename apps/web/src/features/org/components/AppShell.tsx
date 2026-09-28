@@ -11,7 +11,8 @@
  * enforcement (§1.4, architecture §3.1): the server refuses the call whatever
  * the menu looks like, and every hidden entry still has an error path — which
  * is why `/o/[orgId]/settings/members` typed directly into the address bar
- * lands on a `ForbiddenPanel` rather than on nothing.
+ * lands on a `ForbiddenPanel` rather than on nothing (the page's `RouteGuard`,
+ * T-003-W01 — pinned by `components/org/RouteGuard.routes.test.tsx`).
  */
 import type { ReactNode } from "react";
 import { useEffect, useState } from "react";

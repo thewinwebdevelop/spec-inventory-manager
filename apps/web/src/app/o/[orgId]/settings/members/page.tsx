@@ -1,14 +1,19 @@
 /**
  * S6 — สมาชิก (`/o/{orgId}/settings/members`). Routing only.
  *
- * No `RouteGuard` yet: `manage_members` gating on this route is F-003's
- * `RouteGuard`/`ForbiddenPanel` work (web.md §3.3, debt W-16). Until then the
- * shell hides the nav entry without the capability and the server answers 403
- * to anyone who types the URL — which is the correct order of authority, just
- * without the friendly panel.
+ * Behind `RouteGuard(manage_members)` (T-003-W01, closes debt W-16): someone
+ * who types the URL without the capability gets the S12ข `ForbiddenPanel`
+ * instead of a screen that fires requests only to be refused. The guard is UX
+ * — the server still answers 403 to every members call regardless.
  */
 import { MembersScreen } from "../../../../../features/org/components/MembersScreen";
+import { RouteGuard } from "../../../../../components/org/RouteGuard";
+import { CAPABILITY_MANAGE_MEMBERS } from "../../../../../lib/org/capability";
 
 export default function MembersPage() {
-  return <MembersScreen />;
+  return (
+    <RouteGuard requiredCapability={CAPABILITY_MANAGE_MEMBERS}>
+      <MembersScreen />
+    </RouteGuard>
+  );
 }
