@@ -33,6 +33,18 @@ post:
 
 
     `Cache-Control: no-store` + `Referrer-Policy: no-referrer`.
+
+
+    ⚠️ F-003 ADDS A LAST CHECK (wire shape unchanged — F-003 api-spec §4.3,
+    D-035 + Addendum). After every refusal above, the server re-checks whoever
+    issued the CURRENT link (the latest reissuer, else the original inviter):
+    if they are no longer an active member of the shop, OR no longer hold
+    `manage_members`, OR their current capabilities no longer cover the
+    invitation's role, the invitation is cancelled in the same transaction and
+    the answer is `409 INVITATION_CANCELLED` — byte-for-byte the body of an
+    invitation the shop cancelled itself (no new `details`). Every earlier case
+    still gets the answer it got before. `expiresAt` may also be shortened
+    (AC-10.4).
   tags:
     - invitations
   security:
@@ -79,7 +91,8 @@ post:
             $ref: "../components/common.yaml#/ErrorResponse"
     "409":
       description: >
-        `INVITATION_EXPIRED` · `INVITATION_CANCELLED` ·
+        `INVITATION_EXPIRED` · `INVITATION_CANCELLED` (F-003: also when the
+        issuer of the current link lost their standing — see above) ·
         `INVITATION_ALREADY_ACCEPTED` · `ALREADY_MEMBER` ·
         `INVITATION_SUPERSEDED` (the link predates your removal) ·
         `INVITATION_ROLE_UNAVAILABLE` (the invited role was deleted — checked at

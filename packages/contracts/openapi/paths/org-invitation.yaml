@@ -9,6 +9,15 @@ delete:
   description: >
     F-002 api-spec §3.13. Requires `manage_members`. Any link already sent stops
     working immediately.
+
+
+    ⚠️ F-003 NARROWS THIS ROUTE, WHICH HAD NO ROLE RULE AT ALL (wire shape
+    unchanged — F-003 api-spec §4.3): cancelling an invitation to a role
+    holding `full_access` now needs `full_access` → `403 FORBIDDEN` (an Admin
+    can no longer cancel an Owner invitation); an invitation whose role holds a
+    capability the caller does not → `403 ROLE_EXCEEDS_ACTOR` (no `details`).
+    The route also joins the `memberWrite` rate limit (120/hour per caller per
+    shop) → `429 RATE_LIMITED` with `Retry-After`.
   tags:
     - invitations
   security:
@@ -32,7 +41,11 @@ delete:
           schema:
             $ref: "../components/common.yaml#/ErrorResponse"
     "403":
-      description: "`FORBIDDEN` (no `manage_members`) or `ORG_ACCESS_DENIED`"
+      description: >
+        `FORBIDDEN` (no `manage_members`; F-003: or the invitation's role holds
+        `full_access` and you do not) or `ORG_ACCESS_DENIED` · F-003:
+        `ROLE_EXCEEDS_ACTOR` — the invitation's role holds a capability you do
+        not (no `details`).
       content:
         application/json:
           schema:
