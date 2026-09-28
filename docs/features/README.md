@@ -80,7 +80,8 @@ Tier: ⚙️ core/infra · 🔵 Sync (ได้ทุก tier) · 🟣 Full (ต
 | [F-001](F-001-authentication.md) | Authentication (email+password, JWT + refresh rotation/reuse-detection, identifier นามธรรม) | both | full | ⚙️ | 🟣 | F-000 |
 | [F-002](F-002-organization-license-membership.md) | Organization · License · Membership (1 license=1 org=1 TIN, 1 user หลาย org, org switcher, deactivate-not-delete) | both | full | ⚙️ | 🟣 | F-001 |
 | [F-007](F-007-tier-entitlements-core.md) | **Tier & entitlements core** (`can()`/`canAdd()`, plan/entitlement, itemized grants, FeatureGate, retention policy) | — | full | ⚙️ | 🔵 | F-002 |
-| [F-003](F-003/F-003.md) | Roles & permissions (editable roles ราย org + capability registry + Owner ล็อก + กฎ ⊆ NEW-10) — *G1 re-baseline 2026-09-27* | both | full | ⚙️ | 🔵 | F-002, F-007 (tier tag seam) |
+| [F-003](F-003/F-003.md) | Roles & permissions (editable roles ราย org + capability registry + Owner ล็อก + กฎ ⊆ NEW-10) — *G1 re-baseline 2026-09-27 · G2✓ 2026-09-28* | both | full | ⚙️ | 🟣 | F-002, F-007 (tier tag seam) |
+| F-002b | จัดการสมาชิกรายคนบน mobile (ถอดสมาชิก / ยกเลิกคำเชิญ) + ปุ่ม reset รหัส (web+mobile) — *แยกจาก F-003 ตาม user 2026-09-27 · จอบน route ที่ F-002 ship แล้ว ต้องเคารพแกน target ⊊ ของ F-003; ต่อคิวหลัง F-003 เพราะกฎสิทธิ์ต้องนิ่งก่อน แต่ก่อน Phase 1 เพื่อให้ Owner จัดการทีมจบในมือถือ* | both | light | ⚙️ | ⬜ | F-002, F-003, F-006 |
 | [F-004](F-004-settings-org-config.md) | Settings & org config (ops: profile, default warehouse, allocation/inventory defaults) — *tax settings → F-004b/Phase 2* | both | light | ⚙️ | 🔵 | F-002, F-003 |
 | [F-005](F-005-audit-log.md) | Audit log (append-only, action registry, cross-org seam — แยกจาก domain ledger) | both | full | ⚙️ | 🔵 | F-003 |
 | [F-006](F-006-mobile-app-shell.md) | Mobile app shell (auth/secure token, org switcher, Dart client, FeatureGate, push, theme/i18n, skeleton, force-update) | mobile | full | ⚙️ | 🔵 | F-000, F-001, F-002, F-007 |
