@@ -17,3 +17,8 @@ export * from "./auth";
 // (canAssignRole), Thai TIN/branch-code validation, derived invitation status,
 // invitation email mask. Pure, framework-free, clock-free (golden rules #4/#6).
 export * from "./orgs";
+
+// F-003 rbac (T-003-B03) — capability registry, expand, canonical form,
+// lostCapabilities. The shipped constants + `hasCapability` stay exported via
+// `./auth` (same bindings, now backed by the registry).
+export * from "./rbac";
