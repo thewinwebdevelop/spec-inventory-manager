@@ -72,7 +72,6 @@ const NOT_YET_BUILT: ReadonlyMap<string, string> = new Map([
   ["apps/api/test/f003-role-writes.int.test.ts", "F-003 Gate 2 design — T-003-B26a (docs/features/F-003/tasks.md)"],
   ["apps/api/test/f003-seed.kit.ts", "F-003 Gate 2 design — T-003-QA06 (docs/features/F-003/tasks.md)"],
   ["apps/api/test/f003-sweeps.int.test.ts", "F-003 Gate 2 design — T-003-QA08 (docs/features/F-003/tasks.md)"],
-  ["apps/api/test/role-key-authority.int.test.ts", "F-003 Gate 2 design — T-003-QA01 (docs/features/F-003/tasks.md)"],
   ["apps/api/test/static-gates/role-key-authority.gate.test.ts", "F-003 Gate 2 design — T-003-QA03 (docs/features/F-003/tasks.md)"],
   ["packages/core-domain/src/rbac/authority-lemma.test.ts", "F-003 Gate 2 design — T-003-QA07 (docs/features/F-003/tasks.md)"],
   ["packages/db/src/backfill-f003.ts", "F-003 Gate 2 design — T-003-B11 (docs/features/F-003/tasks.md)"],
