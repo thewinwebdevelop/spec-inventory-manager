@@ -19,6 +19,7 @@ import { orgKey } from "../../lib/org/org-keys";
 import { CAPABILITY_MANAGE_MEMBERS, CAPABILITY_MANAGE_ROLES } from "../../lib/org/capability";
 import { FORBIDDEN_PANEL_COPY } from "../ui/ForbiddenPanel";
 import { setAccessToken, clearAccessToken } from "../../lib/token-store";
+import { errorsTh } from "../../i18n/errors";
 
 const ORG = "org_1";
 const GUARDED = "เนื้อหาที่ต้องมีสิทธิ์";
@@ -196,4 +197,48 @@ describe("★ RouteGuard under the real OrgGuard", () => {
     expect(fetchImpl).toHaveBeenCalledTimes(2);
     expect(screen.queryByText(GUARDED)).not.toBeInTheDocument();
   });
+
+  /**
+   * Security review (Low): the denial's refetch itself fails. Recorded
+   * behaviour: `OrgGuard` sees `profile.isError` and replaces the WHOLE org
+   * subtree with its ErrorBanner (+ retry button) — so the guarded content is
+   * never shown (fail-closed), the ForbiddenPanel is gone too, and nothing
+   * refetches again unless the person presses retry (no loop).
+   */
+  it.each([
+    [
+      "5xx",
+      () =>
+        new Response(JSON.stringify({ code: "INTERNAL" }), {
+          status: 500,
+          headers: { "Content-Type": "application/json" },
+        }),
+    ],
+    [
+      "network",
+      () => {
+        throw new TypeError("Failed to fetch");
+      },
+    ],
+  ])(
+    "a failed refetch after a denial (%s) fails closed and does not loop",
+    async (_label, failure) => {
+      let calls = 0;
+      const fetchImpl = vi.fn(async () => {
+        calls += 1;
+        if (calls === 1) return json(profile(["view_products"]));
+        return failure();
+      });
+      vi.stubGlobal("fetch", fetchImpl);
+      renderUnderOrgGuard();
+      await waitFor(() =>
+        expect(screen.getByRole("button", { name: errorsTh.retry })).toBeInTheDocument(),
+      );
+      expect(screen.queryByText(GUARDED)).not.toBeInTheDocument();
+      expect(screen.queryByText(FORBIDDEN_PANEL_COPY.title)).not.toBeInTheDocument();
+      await new Promise((r) => setTimeout(r, 100));
+      expect(fetchImpl).toHaveBeenCalledTimes(2);
+      expect(screen.queryByText(GUARDED)).not.toBeInTheDocument();
+    },
+  );
 });

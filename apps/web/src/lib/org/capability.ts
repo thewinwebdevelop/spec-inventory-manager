@@ -58,6 +58,10 @@ export { CAPABILITY_FULL_ACCESS, CAPABILITY_MANAGE_MEMBERS, CAPABILITY_MANAGE_OR
  * `capability-lint.test.ts`, so the swap is mechanical. Until then this is the
  * sanctioned file for the literal (the lint's allow-list), so the web tree
  * still has exactly one copy.
+ *
+ * TODO(T-003-B03): when B03 merges, delete this declaration and re-export
+ * `CAPABILITY_MANAGE_ROLES` from `@omnistock/core-domain` alongside the three
+ * above (tracked in docs/features/F-003/tasks.md).
  */
 export const CAPABILITY_MANAGE_ROLES = "manage_roles" as const;
 
