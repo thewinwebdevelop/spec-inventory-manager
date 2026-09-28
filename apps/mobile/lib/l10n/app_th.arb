@@ -344,5 +344,386 @@
   },
   "@taxHiddenOnResumeHint": {
     "description": "Mobile-only: the number is dropped when the app backgrounds (M-07). Said BEFORE it happens, so the disappearance is not read as a bug."
+  },
+
+  "roleUsageCount": "สมาชิก {n} คน",
+  "@roleUsageCount": {
+    "description": "ux §0.2 'ใช้อยู่'. Followed by roleUsageIncludesYou when the viewer holds this role, or shown alone otherwise.",
+    "placeholders": { "n": { "type": "int" } }
+  },
+  "roleUsageIncludesYou": " (รวมคุณ)",
+  "@roleUsageIncludesYou": {
+    "description": "ux §0.2 — appended to roleUsageCount when myMembership.roleId === role.id. Never shown when n=0."
+  },
+  "roleUsageEmpty": "ยังไม่มีสมาชิกใช้",
+  "@roleUsageEmpty": {
+    "description": "ux §0.2 — usage.activeMembers = 0."
+  },
+  "rolePendingInvitationsSuffix": " · คำเชิญที่ยังไม่ปิด {m} ใบ",
+  "@rolePendingInvitationsSuffix": {
+    "description": "ux §0.2 — appended when usage.pendingInvitations > 0 (counts pending + expired, AC-3.9). Not shown at 0.",
+    "placeholders": { "m": { "type": "int" } }
+  },
+  "roleLastEditedDefault": "ค่าเริ่มต้นของระบบ",
+  "@roleLastEditedDefault": {
+    "description": "ux §0.2 AC-9.6 — RoleDetail.lastEdited = null."
+  },
+  "roleLastEditedByMe": "แก้ไขล่าสุดโดยคุณ · {dateTime}",
+  "@roleLastEditedByMe": {
+    "description": "ux §0.2 AC-9.6 — lastEdited.kind = 'me'.",
+    "placeholders": { "dateTime": { "type": "String" } }
+  },
+  "roleLastEditedByMember": "แก้ไขล่าสุดโดยคนในบทบาท \"{roleName}\" · {dateTime}",
+  "@roleLastEditedByMember": {
+    "description": "ux §0.2 AC-9.6 — lastEdited.kind = 'member' with a roleName. Quoted to avoid reading as a person's name (the role name is free text).",
+    "placeholders": { "roleName": { "type": "String" }, "dateTime": { "type": "String" } }
+  },
+  "roleLastEditedByFormerMember": "แก้ไขล่าสุดโดยอดีตสมาชิก · {dateTime}",
+  "@roleLastEditedByFormerMember": {
+    "description": "ux §0.2 AC-9.6 — lastEdited.kind = 'former_member'.",
+    "placeholders": { "dateTime": { "type": "String" } }
+  },
+  "roleLastEditedUnknown": "แก้ไขล่าสุด · {dateTime}",
+  "@roleLastEditedUnknown": {
+    "description": "ux §0.2 AC-9.6 — unrecognized kind, or kind='member' with no roleName. Drops the 'โดย…' clause instead of showing a raw key.",
+    "placeholders": { "dateTime": { "type": "String" } }
+  },
+
+  "roleReasonWritesDisabledTitle": "ยังสร้างหรือแก้บทบาทไม่ได้ในตอนนี้",
+  "roleReasonWritesDisabledBody": "ระบบกำลังทยอยเปิดให้ทุกร้าน ระหว่างนี้ดูรายละเอียดได้ตามปกติ และยังมอบบทบาทที่มีอยู่ให้สมาชิกได้เหมือนเดิม",
+  "@roleReasonWritesDisabledBody": {
+    "description": "ux §0.3 (ก) reason=writes_disabled — top-of-screen banner on R1/R3/R4, no button attached."
+  },
+  "roleReasonRoleLockedTitle": "บทบาทเจ้าของร้านถูกล็อกไว้",
+  "roleReasonRoleLockedBody": "แก้ชื่อ แก้สิทธิ์ หรือลบไม่ได้ เพื่อให้ร้านมีคนที่ทำได้ทุกอย่างอยู่เสมอ — ถ้าต้องการบทบาทที่ทำได้เกือบทุกอย่าง ให้สร้างบทบาทใหม่แล้วติ๊กสิทธิ์ที่ต้องการ",
+  "@roleReasonRoleLockedBody": {
+    "description": "ux §0.3 (ก) reason=role_locked — R4, the Owner role."
+  },
+  "roleReasonExceedsPermissionsTitle": "ดูได้อย่างเดียว — บทบาทนี้มีสิทธิ์ที่คุณไม่มี",
+  "roleReasonExceedsPermissionsBody": "คุณแก้ ลบ หรือทำสำเนาบทบาทที่มีสิทธิ์เกินของตัวเองไม่ได้ ถ้าต้องการเปลี่ยน ให้เจ้าของร้านแก้ให้",
+  "@roleReasonExceedsPermissionsBody": {
+    "description": "ux §0.3 (ก) reason=exceeds_your_permissions — R4."
+  },
+  "roleReasonInUseRequiresManageMembersTitle": "ดูได้อย่างเดียว — มีสมาชิกคนอื่นใช้บทบาทนี้อยู่",
+  "roleReasonInUseRequiresManageMembersBody": "การแก้หรือลบบทบาทที่คนอื่นใช้อยู่ ต้องมีสิทธิ์ \"จัดการสมาชิกและคำเชิญ\" ด้วย ให้เจ้าของร้านแก้ หรือทำสำเนาไปปรับเป็นบทบาทใหม่",
+  "@roleReasonInUseRequiresManageMembersBody": {
+    "description": "ux §0.3 (ก) reason=in_use_requires_manage_members — R4; canClone stays available in this reason, shown as a button inside the banner."
+  },
+  "roleReasonEqualPermissionsInUseTitle": "ดูได้อย่างเดียว — มีคนที่สิทธิ์เท่าคุณใช้บทบาทนี้อยู่",
+  "roleReasonEqualPermissionsInUseBody": "บทบาทนี้มีสิทธิ์เท่ากับของคุณ และมีสมาชิกคนอื่นใช้อยู่ จึงต้องให้เจ้าของร้านเป็นคนแก้หรือลบ — หรือทำสำเนาไปปรับเป็นบทบาทใหม่",
+  "@roleReasonEqualPermissionsInUseBody": {
+    "description": "ux §0.3 (ก) reason=equal_permissions_in_use — R4; also the 403 TARGET_NOT_BELOW_ACTOR error-banner copy (api-spec §5/ux §E)."
+  },
+  "roleReasonUnknownTitle": "ดูได้อย่างเดียว",
+  "roleReasonUnknownBody": "ตอนนี้คุณทำรายการนี้กับบทบาทนี้ไม่ได้ ถ้าคิดว่าไม่ถูกต้อง ติดต่อเจ้าของร้าน",
+  "@roleReasonUnknownBody": {
+    "description": "ux §0.3 (ก) — fallback for any reason value this build does not recognize, at every field (canEdit/canDelete/canCreate/canClone)."
+  },
+
+  "roleDeleteInUseTitle": "ลบไม่ได้ตอนนี้ — ยังมีคนใช้บทบาทนี้อยู่",
+  "roleDeleteInUseBody": "ย้ายสมาชิกไปบทบาทอื่นและยกเลิกคำเชิญเหล่านี้ก่อน แล้วค่อยลบ",
+  "@roleDeleteInUseBody": {
+    "description": "ux §0.3 (ก) reason=in_use (canDelete only), shown under the delete button on R3/R4 together with the §0.2 usage-count line, and reused as R5(ข)'s body."
+  },
+  "roleDeleteHistoryLimitReachedTitle": "ลบเพิ่มไม่ได้",
+  "roleDeleteHistoryLimitReachedBody": "ร้านนี้ลบบทบาทไปครบจำนวนที่ระบบเก็บประวัติได้แล้ว กรุณาติดต่อทีมงาน OmniStock",
+  "@roleDeleteHistoryLimitReachedBody": {
+    "description": "ux §0.3 (ก) reason=history_limit_reached (canDelete), shown under the delete button — no count in this copy (compare roleFormErrorHistoryLimitReached, the 409 banner variant, which does carry details.limit)."
+  },
+  "roleLimitReachedWithLimitBody": "ร้านนี้มีบทบาทครบ {limit} บทบาทแล้ว ลบบทบาทที่ไม่ใช้ก่อน จึงจะสร้างใหม่ได้",
+  "@roleLimitReachedWithLimitBody": {
+    "description": "ux §0.3 (ก) reason=role_limit_reached (canCreate/canClone) when a limit is in hand, and the 409 ROLE_LIMIT_REACHED error-banner copy (same text, ux §E) — details.limit must never be hard-coded (per-plan).",
+    "placeholders": { "limit": { "type": "int" } }
+  },
+  "roleLimitReachedUnknownLimitBody": "ร้านนี้มีบทบาทครบจำนวนสูงสุดแล้ว ลบบทบาทที่ไม่ใช้ก่อน จึงจะสร้างใหม่ได้",
+  "@roleLimitReachedUnknownLimitBody": {
+    "description": "ux §0.3 (ก) reason=role_limit_reached fallback when no limit is available client-side (e.g. R4 opened directly)."
+  },
+
+  "roleAssignBlockedOwnerOnly": "เฉพาะเจ้าของร้านเท่านั้นที่ตั้งเจ้าของร้านคนใหม่ได้",
+  "roleAssignBlockedExceedsPermissions": "บทบาทนี้มีสิทธิ์ที่คุณไม่มี จึงมอบให้คนอื่นไม่ได้",
+  "roleAssignBlockedUnknown": "คุณมอบบทบาทนี้ไม่ได้",
+  "@roleAssignBlockedUnknown": {
+    "description": "ux §0.3 (ข) — RoleRow.assignBlockedReason, all three cases (owner_only / exceeds_your_permissions / unknown fallback)."
+  },
+  "memberManageBlockedOwnerOnly": "เฉพาะเจ้าของร้านเท่านั้นที่เปลี่ยนบทบาทหรือถอดเจ้าของร้านคนอื่นได้",
+  "memberManageBlockedEqualPermissions": "คนนี้มีสิทธิ์เท่ากับคุณ — ให้เจ้าของร้านเปลี่ยนบทบาทหรือถอดออก",
+  "memberManageBlockedExceedsPermissions": "คนนี้มีสิทธิ์บางอย่างที่คุณไม่มี — ให้เจ้าของร้านเปลี่ยนบทบาทหรือถอดออก",
+  "memberManageBlockedUnknown": "คุณจัดการสมาชิกคนนี้ไม่ได้ — ให้เจ้าของร้านช่วย",
+  "@memberManageBlockedUnknown": {
+    "description": "ux §0.3 (ข) — MemberRow.manageBlockedReason, all four cases (owner_only / equal_permissions / exceeds_your_permissions / unknown fallback); also R10's row-level reason line (R10 sheet copy itself is out of T-003-M03 scope, but this shared reason text is not)."
+  },
+  "invitationManageBlockedOwnerOnly": "เฉพาะเจ้าของร้านเท่านั้นที่ยกเลิกหรือออกลิงก์ใหม่ให้คำเชิญเจ้าของร้านได้",
+  "invitationManageBlockedExceedsPermissions": "คำเชิญนี้ให้บทบาทที่มีสิทธิ์ที่คุณไม่มี — ให้เจ้าของร้านยกเลิกหรือออกลิงก์ใหม่",
+  "invitationManageBlockedUnknown": "คุณจัดการคำเชิญนี้ไม่ได้ — ให้เจ้าของร้านช่วย",
+  "@invitationManageBlockedUnknown": {
+    "description": "ux §0.3 (ข) — Invitation.manageBlockedReason, all three cases (owner_only / exceeds_your_permissions / unknown fallback)."
+  },
+
+  "rolesListTitle": "บทบาทและสิทธิ์",
+  "rolesListDesc1": "บทบาทคือชุดสิทธิ์ที่มอบให้สมาชิก เช่น พนักงานแพ็คของทำอะไรได้บ้าง",
+  "rolesListDesc2": "มอบบทบาทให้แต่ละคนได้ที่หน้าสมาชิก",
+  "rolesListGoToMembers": "ไปหน้าสมาชิก",
+  "rolesListUsageCount": "ใช้ไป {used} จาก {limit} บทบาท",
+  "@rolesListUsageCount": {
+    "description": "ux R1 — items.length / viewer.limit.",
+    "placeholders": { "used": { "type": "int" }, "limit": { "type": "int" } }
+  },
+  "rolesListCreateCta": "สร้างบทบาท",
+  "rolesListBadgeLocked": "ล็อก",
+  "rolesListBadgeReadOnly": "ดูได้อย่างเดียว",
+  "rolesListLoadError": "โหลดรายการบทบาทไม่สำเร็จ",
+  "rolesListLoadErrorHint": "ตรวจการเชื่อมต่อแล้วลองใหม่",
+  "rolesEntryRowSub": "กำหนดว่าแต่ละบทบาททำอะไรได้",
+  "@rolesEntryRowSub": {
+    "description": "ux R1 — the 'ข้อมูลร้าน' screen's entry ListRow subtitle, under rolesListTitle as its label."
+  },
+  "rolesManageTertiaryCta": "จัดการบทบาท",
+  "@rolesManageTertiaryCta": {
+    "description": "ux R1 — tertiary button on the members screen, shown when can('manage_roles')."
+  },
+
+  "roleTemplateDialogTitle": "สร้างบทบาทใหม่",
+  "roleTemplateDialogIntro": "เริ่มจากบทบาทที่ใกล้เคียงที่สุด แล้วค่อยปรับสิทธิ์",
+  "roleTemplateBlankTitle": "เริ่มจากว่าง",
+  "roleTemplateBlankDesc": "ไม่ติ๊กสิทธิ์ใดไว้ก่อน เลือกเองทีละข้อ",
+  "roleTemplateOwnerNote": "บทบาทเจ้าของร้านใช้เป็นต้นแบบไม่ได้ เพราะสิทธิ์ทำได้ทุกอย่างมีได้เฉพาะเจ้าของร้าน",
+  "roleTemplateNext": "ถัดไป",
+  "roleTemplateCancel": "ยกเลิก",
+
+  "roleFormCreateTitle": "สร้างบทบาทใหม่",
+  "roleFormCloneIntro": "เริ่มจากสำเนาของ \"{templateName}\"",
+  "@roleFormCloneIntro": {
+    "placeholders": { "templateName": { "type": "String" } }
+  },
+  "roleFormNameLabel": "ชื่อบทบาท",
+  "roleFormNameHelperEdit": "เปลี่ยนชื่อได้ ชื่อใหม่จะแสดงแทนชื่อเดิมทุกหน้าจอ",
+  "roleFormNameHelperCreate": "ตั้งตามหน้าที่ในร้าน เช่น พนักงานแพ็คของ แอดมินตอบแชท",
+  "roleFormNamePlaceholder": "เช่น พนักงานแพ็คของ",
+  "roleFormNameCounter": "{count}/50",
+  "@roleFormNameCounter": {
+    "placeholders": { "count": { "type": "int" } }
+  },
+  "roleFormNameEmptyError": "กรอกชื่อบทบาท",
+  "roleFormNameTooLongError": "ชื่อบทบาทยาวได้ไม่เกิน 50 ตัวอักษร",
+  "roleFormCapabilitiesHeader": "สิทธิ์ของบทบาทนี้",
+  "roleFormCapabilitiesCounter": "เลือกแล้ว {selected} จาก {total}",
+  "@roleFormCapabilitiesCounter": {
+    "placeholders": { "selected": { "type": "int" }, "total": { "type": "int" } }
+  },
+  "roleFormUpcomingNote": "สิทธิ์ที่มีป้าย \"เร็ว ๆ นี้\" คือฟีเจอร์ที่ยังไม่เปิด ติ๊กไว้ก่อนได้ จะมีผลทันทีเมื่อฟีเจอร์เปิด",
+  "@roleFormUpcomingNote": {
+    "description": "ux §0.4 D-037 client-side copy. Shown once under the checklist header when catalog has at least one status=upcoming item."
+  },
+  "roleFormUpcomingBadge": "เร็ว ๆ นี้",
+  "roleFormImpliedLockLabel": "มาพร้อมสิทธิ์จัดการ",
+  "@roleFormImpliedLockLabel": {
+    "description": "ux §0.4 D-037 — implied-checked-and-locked row label."
+  },
+  "roleFormCannotGrantLabel": "คุณไม่มีสิทธิ์นี้ จึงให้บทบาทอื่นไม่ได้",
+  "@roleFormCannotGrantLabel": {
+    "description": "ux R3 checklist — viewer cannot grant a capability they don't hold themselves (client-side guard only; server decides with 403 ROLE_EXCEEDS_ACTOR)."
+  },
+  "roleFormUnknownCapabilitiesNote": "และสิทธิ์อื่นอีก {count} รายการที่แสดงในหน้านี้ไม่ได้",
+  "@roleFormUnknownCapabilitiesNote": {
+    "description": "ux §0.4 fallback — RoleDetail.capabilities keys not present in the catalog. These keys must still round-trip on PATCH (server decides), never dropped silently.",
+    "placeholders": { "count": { "type": "int" } }
+  },
+  "roleFormEmptySelectionError": "เลือกสิทธิ์อย่างน้อย 1 อย่าง",
+  "@roleFormEmptySelectionError": {
+    "description": "ux R3 client-side guard AND the 422 ROLE_EMPTY server error (ux §E) — same copy for both."
+  },
+  "roleFormCloneCta": "ทำสำเนาเป็นบทบาทใหม่",
+  "roleFormDeleteCta": "ลบบทบาทนี้",
+  "roleFormCloneUnsavedNote": "สำเนาจะใช้ฉบับที่บันทึกไว้ ไม่รวมที่ยังไม่ได้บันทึก",
+  "roleFormSubmitCreate": "สร้างบทบาท",
+  "roleFormSubmitSave": "บันทึก",
+  "roleFormSubmitCreating": "กำลังสร้าง...",
+  "roleFormSubmitSaving": "กำลังบันทึก...",
+  "roleFormCancelCta": "ยกเลิก",
+  "roleFormDiscardTitle": "ทิ้งการแก้ไขนี้?",
+  "roleFormDiscardBody": "สิ่งที่แก้ไว้ยังไม่ได้บันทึก ออกจากหน้านี้แล้วจะหายไป",
+  "roleFormDiscardConfirm": "ทิ้งการแก้ไข",
+  "roleFormDiscardCancel": "แก้ต่อ",
+  "roleFormLoadErrorTitle": "เปิดบทบาทนี้ไม่สำเร็จ",
+  "roleFormLoadErrorHint": "ตรวจการเชื่อมต่อแล้วลองใหม่",
+  "roleFormCatalogLoadError": "โหลดรายการสิทธิ์ไม่สำเร็จ",
+  "roleFormNotFoundTitle": "ไม่พบบทบาทนี้",
+  "roleFormNotFoundBody": "บทบาทนี้อาจถูกลบไปแล้ว",
+  "@roleFormNotFoundBody": {
+    "description": "ux R3 404 state AND the shared 404 NOT_FOUND row in ux §E."
+  },
+  "roleFormBackToList": "กลับไปหน้ารายการบทบาท",
+  "roleFormCreateSuccessToast": "สร้างบทบาท \"{name}\" แล้ว",
+  "@roleFormCreateSuccessToast": {
+    "placeholders": { "name": { "type": "String" } }
+  },
+  "roleFormSaveSuccessToast": "บันทึกบทบาท \"{name}\" แล้ว",
+  "@roleFormSaveSuccessToast": {
+    "placeholders": { "name": { "type": "String" } }
+  },
+  "roleFormLostOwnManageRolesToast": "บันทึกแล้ว — ตอนนี้คุณไม่มีสิทธิ์จัดการบทบาทแล้ว",
+  "roleFormTemplateGoneNotice": "ใช้บทบาทนี้เป็นต้นแบบไม่ได้แล้ว เริ่มจากว่างแทน",
+
+  "roleFormErrorNameInvalidChars": "ชื่อนี้มีอักขระที่ใช้ไม่ได้ (เช่น อักขระที่มองไม่เห็นซึ่งติดมาจากการคัดลอก) ลองพิมพ์ชื่อใหม่เอง",
+  "@roleFormErrorNameInvalidChars": {
+    "description": "ux §E — 422 VALIDATION_FAILED, fieldErrors.name."
+  },
+  "roleFormErrorNameTaken": "ชื่อนี้ใช้ไม่ได้ เพราะซ้ำกับบทบาทที่มีอยู่แล้ว (รวมชื่อ เจ้าของร้าน ผู้ดูแล พนักงาน) ลองตั้งชื่ออื่น",
+  "@roleFormErrorNameTaken": {
+    "description": "ux §E — 409 ROLE_NAME_TAKEN."
+  },
+  "roleFormErrorUnknownCapability": "สิทธิ์บางรายการใช้ไม่ได้แล้ว ระบบโหลดรายการสิทธิ์ล่าสุดให้แล้ว ตรวจดูแล้วบันทึกอีกครั้ง",
+  "@roleFormErrorUnknownCapability": {
+    "description": "ux §E — 422 UNKNOWN_CAPABILITY. Client refetches GET /capabilities and un-checks details.capabilities keys."
+  },
+  "roleFormErrorFullAccessReserved": "สิทธิ์ \"ทำได้ทุกอย่าง\" มีได้เฉพาะบทบาทเจ้าของร้าน",
+  "@roleFormErrorFullAccessReserved": {
+    "description": "ux §E — 422 FULL_ACCESS_RESERVED (defensive copy — normal UI cannot send this)."
+  },
+  "roleFormErrorHistoryLimitReached": "ลบเพิ่มไม่ได้ — ร้านนี้ลบบทบาทไปครบ {limit} ครั้งที่ระบบเก็บประวัติได้แล้ว กรุณาติดต่อทีมงาน OmniStock",
+  "@roleFormErrorHistoryLimitReached": {
+    "description": "ux §E — 409 ROLE_HISTORY_LIMIT_REACHED (R5), carries details.limit. Compare roleDeleteHistoryLimitReachedBody, the reason-banner variant with no number.",
+    "placeholders": { "limit": { "type": "int" } }
+  },
+  "roleFormErrorExceedsActor": "คุณให้สิทธิ์ที่ตัวเองไม่มีไม่ได้ สิทธิ์ของคุณอาจเพิ่งถูกเปลี่ยน ระบบโหลดข้อมูลล่าสุดให้แล้ว",
+  "@roleFormErrorExceedsActor": {
+    "description": "ux §E — 403 ROLE_EXCEEDS_ACTOR on the role form (R3 ErrorBanner). Client refetches myMembership + the role."
+  },
+  "roleFormErrorThrottled": "แก้บทบาทถี่เกินไป กรุณารอ {mm}:{ss} แล้วลองใหม่",
+  "@roleFormErrorThrottled": {
+    "description": "ux §E — 429 RATE_LIMITED on the role form ThrottleBanner. Countdown from Retry-After.",
+    "placeholders": { "mm": { "type": "String" }, "ss": { "type": "String" } }
+  },
+  "roleFormErrorBusy": "ร้านนี้กำลังมีการแก้ไขอื่นอยู่ ลองใหม่อีกครั้งในไม่กี่วินาที",
+  "@roleFormErrorBusy": {
+    "description": "ux §E — 409 CONFLICT (details.reason=busy) on the role form. Screen-specific copy, distinct from the app-wide errorBusy string."
+  },
+  "roleFormErrorGeneric": "บันทึกบทบาทไม่สำเร็จ กรุณาลองใหม่อีกครั้ง",
+  "@roleFormErrorGeneric": {
+    "description": "ux §E — fallback for any other code / LAST_OWNER / 5xx while saving a role."
+  },
+  "roleFormErrorGenericDelete": "ลบบทบาทไม่สำเร็จ กรุณาลองใหม่อีกครั้ง",
+  "@roleFormErrorGenericDelete": {
+    "description": "ux §E — same fallback row as roleFormErrorGeneric, delete variant."
+  },
+
+  "roleConfirmTitle": "บันทึกการเปลี่ยนสิทธิ์ของ \"{name}\"?",
+  "@roleConfirmTitle": {
+    "placeholders": { "name": { "type": "String" } }
+  },
+  "roleConfirmAddedHeader": "เพิ่ม",
+  "roleConfirmRemovedHeader": "เอาออก",
+  "roleConfirmImpactMembers": "มีผลกับสมาชิก {count} คนทันที ไม่ต้องออกจากระบบ",
+  "@roleConfirmImpactMembers": {
+    "placeholders": { "count": { "type": "int" } }
+  },
+  "roleConfirmImpactNoMembers": "ยังไม่มีสมาชิกใช้บทบาทนี้",
+  "roleConfirmImpactPendingInvitations": "คำเชิญที่ยังไม่ปิด {count} ใบ จะได้สิทธิ์ชุดใหม่เมื่อกดรับ",
+  "@roleConfirmImpactPendingInvitations": {
+    "placeholders": { "count": { "type": "int" } }
+  },
+  "roleConfirmLostCapabilitiesTitle": "คุณจะเสียสิทธิ์เหล่านี้ทันที",
+  "roleConfirmLostManageRolesNote": "บันทึกแล้วคุณจะกลับมาแก้เองไม่ได้ ต้องให้เจ้าของร้านแก้คืน",
+  "roleConfirmLostOtherNote": "ถ้าต้องการคืน ให้เจ้าของร้านแก้ให้",
+  "roleConfirmSubmit": "บันทึก",
+  "roleConfirmSubmitDestructive": "บันทึก และยอมเสียสิทธิ์",
+  "roleConfirmContinueEditing": "แก้ต่อ",
+  "roleConfirmSubmitting": "กำลังบันทึก...",
+
+  "roleConflictTitle": "มีคนแก้บทบาทนี้ไปก่อนคุณ",
+  "roleConflictBody": "หน้านี้แสดงฉบับล่าสุดแล้ว สิ่งที่คุณแก้ไว้ยังไม่ถูกบันทึก:",
+  "@roleConflictBody": {
+    "description": "ux R3b — 409 ROLE_CHANGED. Client must NOT resubmit; re-fetches GET /roles/{id}."
+  },
+  "roleConflictNameDiff": "ชื่อ: \"{from}\" → \"{to}\"",
+  "@roleConflictNameDiff": {
+    "placeholders": { "from": { "type": "String" }, "to": { "type": "String" } }
+  },
+  "roleConflictAddedDiff": "เพิ่ม: {label}",
+  "@roleConflictAddedDiff": {
+    "placeholders": { "label": { "type": "String" } }
+  },
+  "roleConflictRemovedDiff": "เอาออก: {label}",
+  "@roleConflictRemovedDiff": {
+    "placeholders": { "label": { "type": "String" } }
+  },
+  "roleConflictReapply": "ใส่การแก้ของฉันกลับเข้าไป",
+  "roleConflictClose": "ปิด",
+  "roleConflictSomeSkipped": "บางรายการใส่กลับไม่ได้ เพราะตอนนี้คุณไม่มีสิทธิ์นั้น",
+
+  "roleReadonlyGivenLabel": "ให้",
+  "roleReadonlyNotGivenLabel": "ไม่ได้ให้",
+  "@roleReadonlyNotGivenLabel": {
+    "description": "ux R4 — read-only capability list rows are plain list items ('ให้'/'ไม่ได้ให้' as text), never a disabled checkbox (A §0)."
+  },
+  "roleFullAccessCardTitle": "ทำได้ทุกอย่าง (เฉพาะเจ้าของร้าน)",
+  "@roleFullAccessCardTitle": {
+    "description": "ux R4 — the Owner role's single-card view (§0.4 full_access.labelTh, repeated here since R4 renders it as a dedicated card, not a checklist row)."
+  },
+
+  "roleDeleteConfirmTitle": "ลบบทบาท \"{name}\"?",
+  "@roleDeleteConfirmTitle": {
+    "placeholders": { "name": { "type": "String" } }
+  },
+  "roleDeleteConfirmBody": "ลบแล้วเอาคืนไม่ได้ ถ้าต้องใช้อีกต้องสร้างใหม่ ประวัติเดิม (สมาชิกที่ถูกถอด คำเชิญเก่า) ยังแสดงชื่อบทบาทนี้ได้ตามเดิม",
+  "roleDeleteConfirmCta": "ลบบทบาท",
+  "roleDeleteConfirmDeleting": "กำลังลบ...",
+  "roleDeleteConfirmCancel": "ไม่ลบ",
+  "roleDeleteSuccessToast": "ลบบทบาท \"{name}\" แล้ว",
+  "@roleDeleteSuccessToast": {
+    "placeholders": { "name": { "type": "String" } }
+  },
+  "roleDeleteInUseSelfNote": "คนที่ใช้บทบาทนี้คือคุณเอง — ให้เจ้าของร้านย้ายคุณไปบทบาทอื่นก่อน",
+  "roleDeleteViewMembersCta": "ดูสมาชิกที่ใช้บทบาทนี้ ({count})",
+  "@roleDeleteViewMembersCta": {
+    "placeholders": { "count": { "type": "int" } }
+  },
+  "roleDeleteViewInvitationsCta": "ดูคำเชิญที่ใช้บทบาทนี้ ({count})",
+  "@roleDeleteViewInvitationsCta": {
+    "placeholders": { "count": { "type": "int" } }
+  },
+  "roleDeleteNoManageMembersNote": "คนที่จัดการสมาชิกได้ (เช่น เจ้าของร้าน) ต้องเป็นคนย้ายสมาชิกหรือยกเลิกคำเชิญ",
+  "roleDeleteClose": "ปิด",
+  "roleDeleteGoneToast": "บทบาทนี้ถูกลบไปแล้ว",
+
+  "roleFilteredMembersBanner": "กำลังแสดงเฉพาะคนที่ใช้บทบาท \"{name}\"",
+  "@roleFilteredMembersBanner": {
+    "placeholders": { "name": { "type": "String" } }
+  },
+  "roleFilteredMembersBannerUnknown": "กำลังแสดงเฉพาะคนที่ใช้บทบาทที่เลือก",
+  "roleFilteredShowAll": "แสดงทั้งหมด",
+  "roleFilteredBackToRole": "กลับไปที่บทบาท \"{name}\"",
+  "@roleFilteredBackToRole": {
+    "placeholders": { "name": { "type": "String" } }
+  },
+  "roleFilteredInvitationsHeader": "คำเชิญที่ใช้บทบาทนี้ ({count})",
+  "@roleFilteredInvitationsHeader": {
+    "placeholders": { "count": { "type": "int" } }
+  },
+  "roleFilteredMembersHeader": "สมาชิกที่ใช้บทบาทนี้ ({count})",
+  "@roleFilteredMembersHeader": {
+    "placeholders": { "count": { "type": "int" } }
+  },
+  "roleFilteredInvitationsEmpty": "ไม่มีคำเชิญที่ใช้บทบาทนี้แล้ว",
+  "roleFilteredMembersEmpty": "ไม่มีสมาชิกที่ใช้บทบาทนี้แล้ว",
+  "roleFilteredAllEmptyBanner": "ไม่มีใครใช้บทบาทนี้แล้ว — กลับไปลบบทบาทได้เลย",
+  "roleFilteredMobileTitle": "คนที่ใช้บทบาท \"{name}\"",
+  "@roleFilteredMobileTitle": {
+    "placeholders": { "name": { "type": "String" } }
+  },
+  "roleFilteredMobileFooterNote": "ถอดสมาชิกออกจากร้าน หรือยกเลิกคำเชิญ ทำได้ที่เว็บ",
+
+  "roleSeeAllCapabilitiesLink": "ดูว่าแต่ละบทบาททำอะไรได้บ้าง",
+  "@roleSeeAllCapabilitiesLink": {
+    "description": "ux R8 — tertiary link, shown only when can('manage_roles')."
+  },
+  "roleOptionCurrentSuffix": " (บทบาทปัจจุบัน)",
+  "@roleOptionCurrentSuffix": {
+    "description": "ux R8 — appended to the target's current role option; that option stays selectable even while otherwise disabled."
+  },
+  "roleGrantExceedsActorError": "บทบาทนี้มีสิทธิ์ที่คุณไม่มี จึงมอบให้คนอื่นไม่ได้ เลือกบทบาทอื่น หรือให้เจ้าของร้านทำ",
+  "@roleGrantExceedsActorError": {
+    "description": "ux §E — 403 ROLE_EXCEEDS_ACTOR when granting/inviting a role (R8 change-role / invite; table row 'เปลี่ยนบทบาท / เชิญ'). Client refetches GET /roles."
   }
 }
