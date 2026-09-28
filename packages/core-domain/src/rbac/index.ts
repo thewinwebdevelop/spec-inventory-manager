@@ -19,3 +19,20 @@ export {
 export { expandCapabilities } from "./expand";
 
 export { canonicalizeCapabilities, lostCapabilities } from "./canonical";
+
+export {
+  validateRoleCapabilities,
+  validateRoleName,
+  normalizeRoleName,
+  roleNameComparisonKey,
+  reservedRoleNames,
+  SYSTEM_ROLE_LABELS,
+  ROLE_NAME_MAX_LENGTH,
+  ROLE_NAME_FORBIDDEN_CHARACTER,
+  type ValidatedCapabilities,
+  type ValidatableRegistry,
+  type RoleCapabilitiesValidation,
+  type RoleNameValidation,
+  type ReservedRoleNamesContext,
+  type SystemRoleLabels,
+} from "./role-validation";
