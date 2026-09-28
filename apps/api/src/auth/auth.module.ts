@@ -16,7 +16,7 @@ import { AccessTokenService } from "./access-token.service";
 import { JwtAuthGuard } from "./jwt-auth.guard";
 import { RefreshTokenService } from "./refresh-token.service";
 import { ThrottleService } from "./throttle.service";
-import { SecurityEventsService } from "./security-events.service";
+import { SecurityEventsService, SECURITY_EVENTS_DEDUPE_STORE } from "./security-events.service";
 import { AuthService } from "./auth.service";
 import { AuthController } from "./auth.controller";
 import { MembersController } from "./members.controller";
@@ -46,6 +46,9 @@ export const AUTH_REDIS = Symbol("AUTH_REDIS");
     AccessTokenService,
     JwtAuthGuard,
     SecurityEventsService,
+    // F-003 SR-12 — `escalation_denied` dedupe counts in the same Redis the
+    // throttle uses (ioredis satisfies `EscalationDedupeStore` structurally).
+    { provide: SECURITY_EVENTS_DEDUPE_STORE, useExisting: AUTH_REDIS },
     {
       provide: AUTH_REDIS,
       useFactory: () => {

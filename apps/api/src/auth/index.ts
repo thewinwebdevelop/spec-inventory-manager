@@ -26,6 +26,12 @@ export {
   SecurityEventsService,
   collectSecurityEvents,
   SECURITY_EVENT_TYPES,
+  // F-003 — the escalation vocabulary the role/member/invite routes emit with.
+  ESCALATION_CHECKED_OPERATIONS,
+  ESCALATION_DENIED_REASONS,
+  type EscalationDeniedPayload,
+  type EscalationCheckedOperation,
+  type EscalationDeniedReason,
   type SecurityEvent,
   type SecurityEventType,
   type SecurityEventCollector,

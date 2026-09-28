@@ -1,12 +1,17 @@
-import { describe, it, expect } from "vitest";
+import { describe, it, expect, beforeEach, afterEach } from "vitest";
 import {
   SecurityEventsService,
   SECURITY_EVENT_TYPES,
   F001_SECURITY_EVENT_TYPES,
   F002_SECURITY_EVENT_TYPES,
+  F003_SECURITY_EVENT_TYPES,
   SECURITY_EVENT_PAYLOAD_KEYS,
   STRICT_PAYLOAD_EVENT_TYPES,
   collectSecurityEvents,
+  ESCALATION_CHECKED_OPERATIONS,
+  ESCALATION_DENIED_REASONS,
+  ESCALATION_DEDUPE_WINDOW_SECONDS,
+  type EscalationDedupeStore,
   type SecurityEventType,
 } from "./security-events.service";
 
@@ -38,6 +43,17 @@ const ARCH_S9_EVENTS = [
   "auth.password.admin_reset_blocked_owner_target",
 ];
 
+/** A well-formed `org.role.escalation_denied` payload (arch §7). */
+const ESCALATION_PAYLOAD = {
+  actorUserId: "actor-1",
+  organizationId: "org-1",
+  roleId: "role-1",
+  targetUserId: null,
+  operation: "update_role",
+  reason: "exceeds_actor",
+  excessCapabilities: ["manage_roles"],
+} as const;
+
 describe("SecurityEventType union — F-002 architecture §9 / §15 row 4", () => {
   it("contains exactly the 15 F-002 events, by name and in §9 order", () => {
     expect([...F002_SECURITY_EVENT_TYPES]).toEqual(ARCH_S9_EVENTS);
@@ -53,12 +69,16 @@ describe("SecurityEventType union — F-002 architecture §9 / §15 row 4", () =
     ]);
   });
 
-  it("is the union of both sets, 19 values, with no duplicates", () => {
-    expect(SECURITY_EVENT_TYPES).toHaveLength(19);
-    expect(new Set(SECURITY_EVENT_TYPES).size).toBe(19);
+  // R3-01 (F-003 AC-9.4) — was 19 (F-001 4 + F-002 15). Raised to 25 ON
+  // PURPOSE in the same change that adds the 6 F-003 events; the F-002 list
+  // above is untouched and still pinned at 15.
+  it("is the union of all three sets, 25 values (4 + 15 + 6), with no duplicates", () => {
+    expect(SECURITY_EVENT_TYPES).toHaveLength(25);
+    expect(new Set(SECURITY_EVENT_TYPES).size).toBe(25);
     expect([...SECURITY_EVENT_TYPES]).toEqual([
       ...F001_SECURITY_EVENT_TYPES,
       ...F002_SECURITY_EVENT_TYPES,
+      ...F003_SECURITY_EVENT_TYPES,
     ]);
   });
 
@@ -105,14 +125,29 @@ const _UNION_IS_EXHAUSTIVE: Record<SecurityEventType, true> = {
   "org.access.capability_denied": true,
   "auth.password.admin_reset_blocked_multi_org": true,
   "auth.password.admin_reset_blocked_owner_target": true,
+  // F-003 (arch §7 / §13.4)
+  "org.role.created": true,
+  "org.role.updated": true,
+  "org.role.deleted": true,
+  "org.role.escalation_denied": true,
+  "auth.password.admin_reset_blocked_privilege": true,
+  "org.invitation.accept_blocked_inviter": true,
 };
 void _UNION_IS_EXHAUSTIVE;
 
 describe("SecurityEventsService transport (unchanged — qa test sink)", () => {
-  it("delivers every event type to the '*' subscriber", () => {
+  it("delivers every event type to the '*' subscriber", async () => {
     const svc = new SecurityEventsService();
     const sink = collectSecurityEvents(svc);
-    for (const type of SECURITY_EVENT_TYPES) svc.emit(type, {});
+    for (const type of SECURITY_EVENT_TYPES) {
+      // `escalation_denied` only leaves through its deduped door (arch §7
+      // SR-12) — `emit()` does not accept it at the type level.
+      if (type === "org.role.escalation_denied") {
+        await svc.emitEscalationDenied(ESCALATION_PAYLOAD);
+      } else {
+        svc.emit(type, {});
+      }
+    }
     expect(sink.types()).toEqual([...SECURITY_EVENT_TYPES]);
     sink.stop();
   });
@@ -276,11 +311,7 @@ describe("payload safety — admin_reset_blocked_* never carries a password or h
         hash: "$argon2id$v=19$m=65536,t=3,p=4$abc",
       });
       const [event] = sink.ofType(type);
-      expect(Object.keys(event.payload).sort()).toEqual([
-        "actorUserId",
-        "orgId",
-        "targetUserId",
-      ]);
+      expect(Object.keys(event.payload).sort()).toEqual(["actorUserId", "orgId", "targetUserId"]);
       const serialized = JSON.stringify(event);
       expect(serialized).not.toContain("hunter2");
       expect(serialized).not.toContain("argon2id");
@@ -382,16 +413,486 @@ describe("payload safety — invitation events carry emailMasked, never the addr
     // An exact list, not a `toContain`: adding a family here changes what is
     // dropped from real audit payloads, so it must be a deliberate edit rather
     // than something that drifts in.
-    expect([...STRICT_PAYLOAD_EVENT_TYPES].sort()).toEqual([
-      "auth.password.admin_reset_blocked_multi_org",
-      "auth.password.admin_reset_blocked_owner_target",
-      "org.invitation.accepted",
-      "org.invitation.cancelled",
-      "org.invitation.created",
-      "org.invitation.link_reissued",
-      "org.member.reactivated",
-      "org.tax_profile.revealed",
-      "org.tax_profile.set",
+    expect([...STRICT_PAYLOAD_EVENT_TYPES].sort()).toEqual(
+      [
+        "auth.password.admin_reset_blocked_multi_org",
+        "auth.password.admin_reset_blocked_owner_target",
+        "org.invitation.accepted",
+        "org.invitation.cancelled",
+        "org.invitation.created",
+        "org.invitation.link_reissued",
+        "org.member.reactivated",
+        "org.tax_profile.revealed",
+        "org.tax_profile.set",
+        // F-003 (T-003-B16) — all 6 role/permission events, deliberately.
+        "org.role.created",
+        "org.role.updated",
+        "org.role.deleted",
+        "org.role.escalation_denied",
+        "auth.password.admin_reset_blocked_privilege",
+        "org.invitation.accept_blocked_inviter",
+      ].sort(),
+    );
+  });
+});
+
+// ═══════════════════════════════════════════════════════════════════════════
+// F-003 · T-003-B16 ★ — the 6 role/permission events (arch §7 · §13.4)
+// ═══════════════════════════════════════════════════════════════════════════
+
+/**
+ * The 6 F-003 events, transcribed from F-003 architecture §7 (table order).
+ * Not imported from the code, for the same reason as ARCH_S9_EVENTS.
+ */
+const F003_ARCH_S7_EVENTS = [
+  "org.role.created",
+  "org.role.updated",
+  "org.role.deleted",
+  "org.role.escalation_denied",
+  "auth.password.admin_reset_blocked_privilege",
+  "org.invitation.accept_blocked_inviter",
+];
+
+/** arch §7 payload column, transcribed. `before`/`after` are nested objects. */
+const F003_ARCH_S7_PAYLOAD_KEYS: Record<string, string[]> = {
+  "org.role.created": ["actorUserId", "organizationId", "roleId", "name", "capabilities"],
+  "org.role.updated": [
+    "actorUserId",
+    "organizationId",
+    "roleId",
+    "before",
+    "after",
+    "affectedActiveMembers",
+    "invitationsShortened",
+  ],
+  "org.role.deleted": ["actorUserId", "organizationId", "roleId", "name", "capabilities"],
+  "org.role.escalation_denied": [
+    "actorUserId",
+    "organizationId",
+    "roleId",
+    "targetUserId",
+    "operation",
+    "reason",
+    "excessCapabilities",
+    "suppressedCount",
+  ],
+  "auth.password.admin_reset_blocked_privilege": ["actorUserId", "orgId", "targetUserId"],
+  "org.invitation.accept_blocked_inviter": [
+    "actorUserId",
+    "organizationId",
+    "invitationId",
+    "issuerUserId",
+    "reason",
+    "excessCapabilities",
+  ],
+};
+
+/** Keys that would identify a PERSON rather than an id (AC-9.5). `name` is
+ *  allowed only as the ROLE's name, on the role CRUD events. */
+const PERSON_KEYS = ["email", "emailmasked", "displayname", "fullname", "username", "phone"];
+
+describe("U-API3-10 ★ · F-003 events — pin, strict payload, no email (AC-9.1/9.4/9.5)", () => {
+  it("F003_SECURITY_EVENT_TYPES equals the 6 arch §7 events, in order", () => {
+    expect([...F003_SECURITY_EVENT_TYPES]).toEqual(F003_ARCH_S7_EVENTS);
+    expect(F003_SECURITY_EVENT_TYPES).toHaveLength(6);
+  });
+
+  it("does not touch the F-002 list (15) and shares no name with F-001/F-002", () => {
+    expect(F002_SECURITY_EVENT_TYPES).toHaveLength(15);
+    const earlier = new Set<string>([...F001_SECURITY_EVENT_TYPES, ...F002_SECURITY_EVENT_TYPES]);
+    for (const type of F003_SECURITY_EVENT_TYPES) expect(earlier.has(type), type).toBe(false);
+  });
+
+  it("documents exactly the arch §7 payload keys for each of the 6", () => {
+    for (const type of F003_SECURITY_EVENT_TYPES) {
+      expect([...SECURITY_EVENT_PAYLOAD_KEYS[type]].sort(), type).toEqual(
+        [...F003_ARCH_S7_PAYLOAD_KEYS[type]].sort(),
+      );
+    }
+  });
+
+  it("all 6 are on the strict list (undocumented keys are dropped)", () => {
+    for (const type of F003_SECURITY_EVENT_TYPES) {
+      expect(STRICT_PAYLOAD_EVENT_TYPES, type).toContain(type);
+    }
+  });
+
+  it("no documented F-003 key names a person (AC-9.5) — `name` only on role CRUD", () => {
+    let checked = 0;
+    for (const type of F003_SECURITY_EVENT_TYPES) {
+      for (const key of SECURITY_EVENT_PAYLOAD_KEYS[type]) {
+        checked++;
+        expect(PERSON_KEYS, `${type}.${key}`).not.toContain(key.toLowerCase());
+        if (key === "name") {
+          expect(["org.role.created", "org.role.deleted"], type).toContain(type);
+        }
+      }
+    }
+    expect(checked).toBeGreaterThan(0); // non-vacuity
+  });
+
+  const EMAIL = "victim@example.com";
+
+  for (const type of [
+    "org.role.created",
+    "org.role.deleted",
+    "auth.password.admin_reset_blocked_privilege",
+    "org.invitation.accept_blocked_inviter",
+  ] as const) {
+    it(`${type} drops an email smuggled under any undocumented key (key + value)`, () => {
+      const svc = new SecurityEventsService();
+      const sink = collectSecurityEvents(svc);
+      const documented = Object.fromEntries(
+        SECURITY_EVENT_PAYLOAD_KEYS[type].map((k) => [k, `v-${k}`]),
+      );
+      svc.emit(type, {
+        ...documented,
+        email: EMAIL,
+        emailMasked: "v***@example.com",
+        actorEmail: EMAIL,
+        displayName: "Somchai",
+      });
+      const [event] = sink.ofType(type);
+      expect(Object.keys(event.payload).sort()).toEqual(
+        [...SECURITY_EVENT_PAYLOAD_KEYS[type]].sort(),
+      );
+      const serialized = JSON.stringify(event.payload);
+      expect(serialized).not.toContain("@");
+      expect(serialized).not.toContain("Somchai");
+      sink.stop();
+    });
+  }
+
+  it("org.role.updated: before/after keep ONLY {name, capabilities} (nested strict)", () => {
+    const svc = new SecurityEventsService();
+    const sink = collectSecurityEvents(svc);
+    svc.emit("org.role.updated", {
+      actorUserId: "a",
+      organizationId: "o1",
+      roleId: "r1",
+      before: { name: "Staff", capabilities: ["view_stock"], editedByEmail: EMAIL },
+      after: { name: "Staff+", capabilities: ["view_stock", "edit_stock"], lastEditedBy: EMAIL },
+      affectedActiveMembers: 3,
+      invitationsShortened: 1,
+      actorEmail: EMAIL,
+    });
+    const [event] = sink.ofType("org.role.updated");
+    expect(event.payload).toEqual({
+      actorUserId: "a",
+      organizationId: "o1",
+      roleId: "r1",
+      before: { name: "Staff", capabilities: ["view_stock"] },
+      after: { name: "Staff+", capabilities: ["view_stock", "edit_stock"] },
+      affectedActiveMembers: 3,
+      invitationsShortened: 1,
+    });
+    expect(JSON.stringify(event.payload)).not.toContain("@");
+    sink.stop();
+  });
+
+  it("org.role.updated: a non-object before/after (e.g. an address string) is dropped", () => {
+    const svc = new SecurityEventsService();
+    const sink = collectSecurityEvents(svc);
+    svc.emit("org.role.updated", {
+      actorUserId: "a",
+      organizationId: "o1",
+      roleId: "r1",
+      before: EMAIL,
+      after: ["x", EMAIL],
+    });
+    const [event] = sink.ofType("org.role.updated");
+    expect(event.payload).not.toHaveProperty("before");
+    expect(event.payload).not.toHaveProperty("after");
+    expect(event.payload.roleId).toBe("r1"); // control: the rest survived
+    sink.stop();
+  });
+
+  it("escalation_denied drops undocumented keys too (strict through the deduped door)", async () => {
+    const svc = new SecurityEventsService();
+    const sink = collectSecurityEvents(svc);
+    await svc.emitEscalationDenied({
+      ...ESCALATION_PAYLOAD,
+      // A careless call site spreading a wider object — compiles, so the
+      // runtime must hold the line.
+      ...({ actorEmail: EMAIL } as object),
+    });
+    const [event] = sink.ofType("org.role.escalation_denied");
+    expect(Object.keys(event.payload).sort()).toEqual(
+      [...F003_ARCH_S7_PAYLOAD_KEYS["org.role.escalation_denied"]].sort(),
+    );
+    expect(event.payload.suppressedCount).toBe(0);
+    expect(JSON.stringify(event.payload)).not.toContain("@");
+    sink.stop();
+  });
+
+  it("post-commit: an F-003 event after a rolled-back tx leaves no trace", async () => {
+    const svc = new SecurityEventsService();
+    const sink = collectSecurityEvents(svc);
+    const commitThenEmit = async (tx: () => Promise<void>): Promise<void> => {
+      await tx();
+      svc.emit("org.role.deleted", {
+        actorUserId: "a",
+        organizationId: "o1",
+        roleId: "r1",
+        name: "Staff",
+        capabilities: ["view_stock"],
+      });
+    };
+    await expect(
+      commitThenEmit(async () => {
+        throw new Error("rollback");
+      }),
+    ).rejects.toThrow("rollback");
+    expect(sink.events).toHaveLength(0);
+    await commitThenEmit(async () => {});
+    expect(sink.types()).toEqual(["org.role.deleted"]); // control: the path CAN emit
+    sink.stop();
+  });
+
+  it("emit() refuses escalation_denied at the type level (only the deduped door)", () => {
+    const svc = new SecurityEventsService();
+    // Never invoked — this case exists for `typecheck`: if `emit()` ever
+    // accepts the type again, the directive below becomes unused and fails.
+    // @ts-expect-error — `org.role.escalation_denied` is not an `emit()` type.
+    const call = (): void => svc.emit("org.role.escalation_denied", {});
+    expect(call).toBeTypeOf("function");
+  });
+});
+
+// ─── U-API3-11 — dedupe of escalation_denied (arch §7 SR-12) ────────────────
+
+/** Minimal in-memory Redis for the 4 commands the dedupe uses, with a clock. */
+class FakeRedis implements EscalationDedupeStore {
+  now = 0;
+  failing = false;
+  calls: string[] = [];
+  private readonly data = new Map<string, { value: string; expiresAt: number | null }>();
+
+  private live(key: string): { value: string; expiresAt: number | null } | undefined {
+    const entry = this.data.get(key);
+    if (entry && entry.expiresAt !== null && entry.expiresAt <= this.now) {
+      this.data.delete(key);
+      return undefined;
+    }
+    return entry;
+  }
+  private guard(cmd: string): void {
+    this.calls.push(cmd);
+    if (this.failing) throw new Error("ECONNREFUSED");
+  }
+  async set(
+    key: string,
+    value: string,
+    _ex: "EX",
+    seconds: number,
+    _nx: "NX",
+  ): Promise<"OK" | null> {
+    this.guard("set");
+    if (this.live(key)) return null;
+    this.data.set(key, { value, expiresAt: this.now + seconds * 1000 });
+    return "OK";
+  }
+  async incr(key: string): Promise<number> {
+    this.guard("incr");
+    const entry = this.live(key);
+    const next = (entry ? Number(entry.value) : 0) + 1;
+    this.data.set(key, { value: String(next), expiresAt: entry?.expiresAt ?? null });
+    return next;
+  }
+  async expire(key: string, seconds: number): Promise<number> {
+    this.guard("expire");
+    const entry = this.live(key);
+    if (!entry) return 0;
+    entry.expiresAt = this.now + seconds * 1000;
+    return 1;
+  }
+  async getdel(key: string): Promise<string | null> {
+    this.guard("getdel");
+    const entry = this.live(key);
+    this.data.delete(key);
+    return entry ? entry.value : null;
+  }
+}
+
+describe("U-API3-11 · escalation_denied dedupe — Redis SET NX EX 300, fail-open", () => {
+  let redis: FakeRedis;
+  let svc: SecurityEventsService;
+  let sink: ReturnType<typeof collectSecurityEvents>;
+  const WINDOW_MS = ESCALATION_DEDUPE_WINDOW_SECONDS * 1000;
+
+  beforeEach(() => {
+    redis = new FakeRedis();
+    svc = new SecurityEventsService(redis);
+    sink = collectSecurityEvents(svc);
+  });
+  afterEach(() => sink.stop());
+
+  it("window is 5 minutes", () => {
+    expect(ESCALATION_DEDUPE_WINDOW_SECONDS).toBe(300);
+  });
+
+  it("same key 3× inside 5 minutes = 1 event; next after the window carries suppressedCount=2", async () => {
+    await svc.emitEscalationDenied(ESCALATION_PAYLOAD);
+    redis.now += 60_000;
+    await svc.emitEscalationDenied(ESCALATION_PAYLOAD);
+    redis.now += 60_000;
+    await svc.emitEscalationDenied(ESCALATION_PAYLOAD);
+    expect(sink.ofType("org.role.escalation_denied")).toHaveLength(1);
+    expect(sink.events[0].payload.suppressedCount).toBe(0);
+    expect(svc.suppressedTotal("org.role.escalation_denied")).toBe(2);
+
+    redis.now = WINDOW_MS; // first SET was at t=0 → the window is over exactly now
+    await svc.emitEscalationDenied(ESCALATION_PAYLOAD);
+    const events = sink.ofType("org.role.escalation_denied");
+    expect(events).toHaveLength(2);
+    expect(events[1].payload.suppressedCount).toBe(2);
+
+    // …and the counter was consumed: the window after that starts from 0.
+    redis.now += WINDOW_MS;
+    await svc.emitEscalationDenied(ESCALATION_PAYLOAD);
+    expect(sink.ofType("org.role.escalation_denied")[2].payload.suppressedCount).toBe(0);
+  });
+
+  it("a different targetUserId is a different key → emitted separately", async () => {
+    const onMember = { ...ESCALATION_PAYLOAD, operation: "change_member_role" as const };
+    await svc.emitEscalationDenied({ ...onMember, targetUserId: "u-1" });
+    await svc.emitEscalationDenied({ ...onMember, targetUserId: "u-2" });
+    await svc.emitEscalationDenied({ ...onMember, targetUserId: "u-1" }); // dup of #1
+    expect(sink.ofType("org.role.escalation_denied").map((e) => e.payload.targetUserId)).toEqual([
+      "u-1",
+      "u-2",
+    ]);
+  });
+
+  it("every key component separates: actor, org, operation, reason, roleId, targetUserId", async () => {
+    const variants = [
+      { actorUserId: "actor-2" },
+      { organizationId: "org-2" },
+      { operation: "delete_role" as const },
+      { reason: "role_locked" as const },
+      { roleId: "role-2" },
+      { roleId: null },
+      { targetUserId: "u-9" },
+    ];
+    await svc.emitEscalationDenied(ESCALATION_PAYLOAD);
+    for (const v of variants) await svc.emitEscalationDenied({ ...ESCALATION_PAYLOAD, ...v });
+    expect(sink.ofType("org.role.escalation_denied")).toHaveLength(1 + variants.length);
+  });
+
+  it("excessCapabilities is NOT part of the key (arch §7 key tuple)", async () => {
+    await svc.emitEscalationDenied(ESCALATION_PAYLOAD);
+    await svc.emitEscalationDenied({ ...ESCALATION_PAYLOAD, excessCapabilities: ["other"] });
+    expect(sink.ofType("org.role.escalation_denied")).toHaveLength(1);
+  });
+
+  it('null and the string "null" are not the same key (no delimiter collision)', async () => {
+    await svc.emitEscalationDenied({ ...ESCALATION_PAYLOAD, roleId: null });
+    await svc.emitEscalationDenied({ ...ESCALATION_PAYLOAD, roleId: "null" });
+    expect(sink.ofType("org.role.escalation_denied")).toHaveLength(2);
+  });
+
+  it("Redis throwing = emit EVERY time (fail-open — lose volume, never the signal)", async () => {
+    redis.failing = true;
+    for (let i = 0; i < 3; i++) await svc.emitEscalationDenied(ESCALATION_PAYLOAD);
+    const events = sink.ofType("org.role.escalation_denied");
+    expect(events).toHaveLength(3);
+    for (const e of events) expect(e.payload.suppressedCount).toBe(0);
+    expect(redis.calls.length).toBeGreaterThan(0); // it did try Redis
+  });
+
+  it("Redis failing AFTER the NX set (reading the counter) still emits", async () => {
+    const store: EscalationDedupeStore = {
+      set: async () => "OK",
+      incr: async () => 1,
+      expire: async () => 1,
+      getdel: async () => {
+        throw new Error("ECONNRESET");
+      },
+    };
+    const s2 = new SecurityEventsService(store);
+    const sink2 = collectSecurityEvents(s2);
+    await s2.emitEscalationDenied(ESCALATION_PAYLOAD);
+    expect(sink2.ofType("org.role.escalation_denied")).toHaveLength(1);
+    expect(sink2.events[0].payload.suppressedCount).toBe(0);
+    sink2.stop();
+  });
+
+  it("Redis failing on the suppression counter keeps it suppressed (NX already said duplicate)", async () => {
+    const store: EscalationDedupeStore = {
+      set: async () => null,
+      incr: async () => {
+        throw new Error("ECONNRESET");
+      },
+      expire: async () => 1,
+      getdel: async () => null,
+    };
+    const s2 = new SecurityEventsService(store);
+    const sink2 = collectSecurityEvents(s2);
+    await s2.emitEscalationDenied(ESCALATION_PAYLOAD);
+    expect(sink2.events).toHaveLength(0);
+    expect(s2.suppressedTotal("org.role.escalation_denied")).toBe(1);
+    sink2.stop();
+  });
+
+  it("applies to escalation_denied ONLY — other F-003 events are never deduped", () => {
+    for (let i = 0; i < 3; i++) {
+      svc.emit("org.invitation.accept_blocked_inviter", {
+        actorUserId: "u1",
+        organizationId: "o1",
+        invitationId: "i1",
+        issuerUserId: "u0",
+        reason: "inviter_not_active",
+        excessCapabilities: [],
+      });
+      svc.emit("auth.password.admin_reset_blocked_privilege", {
+        actorUserId: "a",
+        orgId: "o1",
+        targetUserId: "t",
+      });
+    }
+    expect(sink.events).toHaveLength(6);
+    expect(redis.calls).toEqual([]); // emit() never touches Redis
+  });
+
+  it("no store wired = every event emitted (fail-open, same as Redis down)", async () => {
+    const bare = new SecurityEventsService();
+    const sink2 = collectSecurityEvents(bare);
+    for (let i = 0; i < 3; i++) await bare.emitEscalationDenied(ESCALATION_PAYLOAD);
+    expect(sink2.events).toHaveLength(3);
+    sink2.stop();
+  });
+});
+
+// ─── U-API3-12 — the 8 checked operations + 4 reasons (test-plan §5.3) ─────
+
+describe("U-API3-12 · ESCALATION_CHECKED_OPERATIONS (8) + reasons (4)", () => {
+  it("exports exactly the 8 operations of test-plan §5.3, in table order", () => {
+    expect([...ESCALATION_CHECKED_OPERATIONS]).toEqual([
+      "create_role",
+      "update_role",
+      "delete_role",
+      "change_member_role",
+      "remove_member",
+      "invite_create",
+      "invite_reissue",
+      "invite_cancel",
+    ]);
+    expect(new Set(ESCALATION_CHECKED_OPERATIONS).size).toBe(8);
+  });
+
+  it("does not count accept re-check / admin reset (they have their own events)", () => {
+    const ops: readonly string[] = ESCALATION_CHECKED_OPERATIONS;
+    for (const excluded of ["invite_accept_recheck", "reset_password", "invite_accept"]) {
+      expect(ops).not.toContain(excluded);
+    }
+  });
+
+  it("the possible reasons are exactly the 4 of arch §7", () => {
+    expect([...ESCALATION_DENIED_REASONS].sort()).toEqual([
+      "exceeds_actor",
+      "full_access_reserved",
+      "role_locked",
+      "target_not_below_actor",
     ]);
   });
 });
