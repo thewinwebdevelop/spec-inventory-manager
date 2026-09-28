@@ -23,7 +23,7 @@ import {
 import { domainError } from "../common/domain-exception";
 import { rethrowOrgLockError } from "@omnistock/db";
 import { PrismaService } from "../prisma/prisma.service";
-import type { SecurityEventType } from "./security-events.service";
+import type { DirectSecurityEventType } from "./security-events.service";
 import { HashingService } from "./hashing.service";
 import { RefreshTokenService, type IssuedRefresh } from "./refresh-token.service";
 import { AccessTokenService } from "./access-token.service";
@@ -63,11 +63,12 @@ class AdminResetRefusedRollback extends Error {
  * OWNER's password" is an account-takeover signal, not a side effect of the
  * multi-org policy, and an investigator must be able to tell them apart.
  */
-const ADMIN_RESET_REFUSAL_EVENTS: Readonly<Partial<Record<AdminResetRefusal, SecurityEventType>>> =
-  Object.freeze({
-    target_active_in_other_org: "auth.password.admin_reset_blocked_multi_org",
-    target_is_owner: "auth.password.admin_reset_blocked_owner_target",
-  });
+const ADMIN_RESET_REFUSAL_EVENTS: Readonly<
+  Partial<Record<AdminResetRefusal, DirectSecurityEventType>>
+> = Object.freeze({
+  target_active_in_other_org: "auth.password.admin_reset_blocked_multi_org",
+  target_is_owner: "auth.password.admin_reset_blocked_owner_target",
+});
 
 /**
  * `SET LOCAL lock_timeout` value for the admin-reset transaction. Read from
@@ -79,9 +80,7 @@ const ADMIN_RESET_REFUSAL_EVENTS: Readonly<Partial<Record<AdminResetRefusal, Sec
 function adminResetLockTimeoutMs(): number {
   const ms = ORG_TX_TIMEOUTS.lockTimeoutMs;
   if (!Number.isInteger(ms) || ms <= 0) {
-    throw new Error(
-      `ORG_TX_TIMEOUTS.lockTimeoutMs must be a positive integer (got ${String(ms)})`,
-    );
+    throw new Error(`ORG_TX_TIMEOUTS.lockTimeoutMs must be a positive integer (got ${String(ms)})`);
   }
   return ms;
 }
@@ -103,7 +102,10 @@ export class AuthService {
 
   // ─── US-1 signup ───────────────────────────────────────────────────────────
 
-  async signup(rawEmail: string, password: string): Promise<{ userId: string; email: string; verified: boolean }> {
+  async signup(
+    rawEmail: string,
+    password: string,
+  ): Promise<{ userId: string; email: string; verified: boolean }> {
     const email = normalizeEmail(rawEmail);
     if (!isValidEmailShape(email)) {
       throw domainError("EMAIL_INVALID");
