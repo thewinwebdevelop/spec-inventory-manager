@@ -41,7 +41,9 @@ describe("U-RB-05 · canonicalizeCapabilities", () => {
   });
 
   it("drops a key implied by another key in the set (fixture registry)", () => {
-    expect(canonicalizeCapabilities(["view_widgets", "manage_widgets"], FIXTURE)).toEqual(["manage_widgets"]);
+    expect(canonicalizeCapabilities(["view_widgets", "manage_widgets"], FIXTURE)).toEqual([
+      "manage_widgets",
+    ]);
     // control: the implied key alone stays.
     expect(canonicalizeCapabilities(["view_widgets"], FIXTURE)).toEqual(["view_widgets"]);
   });
@@ -91,7 +93,11 @@ describe("U-RB-09 · lostCapabilities + golden vectors (shared with CW3-01 / CM3
 
   it("has ≥ 8 vectors covering implies, full_access and no-loss", () => {
     expect(file.vectors.length).toBeGreaterThanOrEqual(8);
-    expect(file.vectors.some((v) => v.registry === "implies_fixture" && v.lost.some((k) => k.startsWith("view_")))).toBe(true);
+    expect(
+      file.vectors.some(
+        (v) => v.registry === "implies_fixture" && v.lost.some((k) => k.startsWith("view_")),
+      ),
+    ).toBe(true);
     expect(file.vectors.some((v) => v.before.includes("full_access"))).toBe(true);
     expect(file.vectors.some((v) => v.lost.length === 0)).toBe(true);
     for (const v of file.vectors) expect(file.registries[v.registry], v.name).toBeDefined();
@@ -102,11 +108,19 @@ describe("U-RB-09 · lostCapabilities + golden vectors (shared with CW3-01 / CM3
   });
 
   it("defaults to the shipped registry", () => {
-    expect(lostCapabilities(["manage_members", "manage_roles"], ["manage_members"])).toEqual(["manage_roles"]);
+    expect(lostCapabilities(["manage_members", "manage_roles"], ["manage_members"])).toEqual([
+      "manage_roles",
+    ]);
   });
 
   it("equals expand(before) \\ expand(after) across the fixture matrix", () => {
-    const sets = powerSet(["full_access", "manage_members", "manage_widgets", "view_widgets", "zzz"]);
+    const sets = powerSet([
+      "full_access",
+      "manage_members",
+      "manage_widgets",
+      "view_widgets",
+      "zzz",
+    ]);
     for (const before of sets) {
       for (const after of sets) {
         const ea = new Set(expandCapabilities(after, FIXTURE));

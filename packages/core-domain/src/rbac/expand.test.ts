@@ -15,7 +15,11 @@ const FIXTURE: RegistryLike = [
 ];
 
 /** ⊆ after expanding both sides — the comparison every rule in F-003 uses. */
-const isSubset = (a: readonly string[], b: readonly string[], r: RegistryLike = CAPABILITY_REGISTRY) => {
+const isSubset = (
+  a: readonly string[],
+  b: readonly string[],
+  r: RegistryLike = CAPABILITY_REGISTRY,
+) => {
   const eb = new Set(expandCapabilities(b, r));
   return expandCapabilities(a, r).every((k) => eb.has(k));
 };
@@ -29,12 +33,18 @@ describe("U-RB-03 · expandCapabilities", () => {
   });
 
   it("manage_X → + view_X (fixture registry)", () => {
-    expect(expandCapabilities(["manage_widgets"], FIXTURE)).toEqual(["manage_widgets", "view_widgets"]);
+    expect(expandCapabilities(["manage_widgets"], FIXTURE)).toEqual([
+      "manage_widgets",
+      "view_widgets",
+    ]);
     expect(expandCapabilities(["view_widgets"], FIXTURE)).toEqual(["view_widgets"]);
   });
 
   it("unknown keys are KEPT (fail-closed: they make ⊆ fail instead of vanishing — SR-11)", () => {
-    expect(expandCapabilities(["manage_members", "mystery_key"])).toEqual(["manage_members", "mystery_key"]);
+    expect(expandCapabilities(["manage_members", "mystery_key"])).toEqual([
+      "manage_members",
+      "mystery_key",
+    ]);
     // control: if the unknown key were dropped, a non-Owner holding it would
     // pass ⊆ against an actor who does not hold it.
     expect(isSubset(["manage_members", "mystery_key"], ["manage_members"])).toBe(false);
@@ -65,7 +75,10 @@ describe("U-RB-03 · expandCapabilities", () => {
   });
 
   it("AC-7.2: a new registry key is default-deny for Admin/Staff and automatic for Owner", () => {
-    const withNewKey: RegistryLike = [...CAPABILITY_REGISTRY, { key: "manage_brand_new", implies: [] }];
+    const withNewKey: RegistryLike = [
+      ...CAPABILITY_REGISTRY,
+      { key: "manage_brand_new", implies: [] },
+    ];
     const admin = ["manage_members", "manage_org_settings", "manage_products"];
     const staff = ["manage_products", "manage_stock", "manage_orders"];
     expect(hasCapability(admin, "manage_brand_new", withNewKey)).toBe(false);
@@ -76,7 +89,9 @@ describe("U-RB-03 · expandCapabilities", () => {
   });
 
   it("never expands into full_access (only Owner's role grants ownership)", () => {
-    const everyOther = CAPABILITY_REGISTRY.map((c) => c.key as string).filter((k) => k !== "full_access");
+    const everyOther = CAPABILITY_REGISTRY.map((c) => c.key as string).filter(
+      (k) => k !== "full_access",
+    );
     expect(expandCapabilities(everyOther)).not.toContain("full_access");
   });
 });
@@ -100,10 +115,20 @@ describe("U-RB-04 · hasCapability runs through expandCapabilities", () => {
   it("F-001/F-002 call sites keep their answers (canAssignRole matrix)", () => {
     const owner = ["full_access"];
     const admin = ["manage_members", "manage_org_settings"];
-    expect(canAssignRole({ actorCapabilities: owner, targetIsOwner: true, newRoleIsOwner: false })).toBe(true);
-    expect(canAssignRole({ actorCapabilities: admin, targetIsOwner: true, newRoleIsOwner: false })).toBe(false);
-    expect(canAssignRole({ actorCapabilities: admin, targetIsOwner: false, newRoleIsOwner: true })).toBe(false);
-    expect(canAssignRole({ actorCapabilities: admin, targetIsOwner: false, newRoleIsOwner: false })).toBe(true);
-    expect(canAssignRole({ actorCapabilities: [], targetIsOwner: false, newRoleIsOwner: false })).toBe(false);
+    expect(
+      canAssignRole({ actorCapabilities: owner, targetIsOwner: true, newRoleIsOwner: false }),
+    ).toBe(true);
+    expect(
+      canAssignRole({ actorCapabilities: admin, targetIsOwner: true, newRoleIsOwner: false }),
+    ).toBe(false);
+    expect(
+      canAssignRole({ actorCapabilities: admin, targetIsOwner: false, newRoleIsOwner: true }),
+    ).toBe(false);
+    expect(
+      canAssignRole({ actorCapabilities: admin, targetIsOwner: false, newRoleIsOwner: false }),
+    ).toBe(true);
+    expect(
+      canAssignRole({ actorCapabilities: [], targetIsOwner: false, newRoleIsOwner: false }),
+    ).toBe(false);
   });
 });

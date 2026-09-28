@@ -56,20 +56,57 @@ describe("U-RB-01 · CAPABILITY_REGISTRY invariants", () => {
   // Each fixture breaks exactly ONE rule; the check must name it.
   const RED: [string, CapabilityDef[], RegExp][] = [
     ["duplicate key", [...validFixture(), def("view_widgets")], /duplicate key "view_widgets"/],
-    ["implies points at a missing key", [FULL, def("manage_widgets", { implies: ["view_widgets"] })], /unknown key "view_widgets"/],
-    ["implies not of shape manage_X → view_X", [FULL, def("manage_widgets", { implies: ["view_gadgets"] }), def("view_gadgets")], /must be manage_X → view_X/],
-    ["implies chain (more than one level)", [FULL, def("manage_a", { implies: ["view_a"] }), def("view_a", { implies: ["view_b"] }), def("view_b")], /one level/],
-    ["implies cycle", [FULL, def("manage_a", { implies: ["view_a"] }), def("view_a", { implies: ["manage_a"] })], /one level/],
-    ["second selectable=false entry", [...validFixture(), def("manage_x", { selectable: false })], /selectable=false/],
-    ["full_access selectable", [def("full_access", { group: null }), def("manage_x")], /selectable=false/],
+    [
+      "implies points at a missing key",
+      [FULL, def("manage_widgets", { implies: ["view_widgets"] })],
+      /unknown key "view_widgets"/,
+    ],
+    [
+      "implies not of shape manage_X → view_X",
+      [FULL, def("manage_widgets", { implies: ["view_gadgets"] }), def("view_gadgets")],
+      /must be manage_X → view_X/,
+    ],
+    [
+      "implies chain (more than one level)",
+      [
+        FULL,
+        def("manage_a", { implies: ["view_a"] }),
+        def("view_a", { implies: ["view_b"] }),
+        def("view_b"),
+      ],
+      /one level/,
+    ],
+    [
+      "implies cycle",
+      [FULL, def("manage_a", { implies: ["view_a"] }), def("view_a", { implies: ["manage_a"] })],
+      /one level/,
+    ],
+    [
+      "second selectable=false entry",
+      [...validFixture(), def("manage_x", { selectable: false })],
+      /selectable=false/,
+    ],
+    [
+      "full_access selectable",
+      [def("full_access", { group: null }), def("manage_x")],
+      /selectable=false/,
+    ],
     ["full_access missing", [def("manage_x")], /full_access/],
-    ["scope other than org", [...validFixture(), def("manage_x", { scope: "platform" as "org" })], /scope/],
+    [
+      "scope other than org",
+      [...validFixture(), def("manage_x", { scope: "platform" as "org" })],
+      /scope/,
+    ],
     ["platform_ prefix", [...validFixture(), def("platform_manage_x")], /platform_/],
     ["cross_ prefix", [...validFixture(), def("cross_manage_x")], /cross_/],
     ["key not snake_case", [...validFixture(), def("manageX")], /snake_case/],
     ["unknown group", [...validFixture(), def("manage_x", { group: "nope" as "team" })], /group/],
     ["empty labelTh", [...validFixture(), def("manage_x", { labelTh: " " })], /labelTh/],
-    ["descriptionTh with two sentences", [...validFixture(), def("manage_x", { descriptionTh: "ทำ ก ได้. ทำ ข ได้." })], /descriptionTh/],
+    [
+      "descriptionTh with two sentences",
+      [...validFixture(), def("manage_x", { descriptionTh: "ทำ ก ได้. ทำ ข ได้." })],
+      /descriptionTh/,
+    ],
   ];
   it.each(RED)("red fixture: %s", (_name, registry, message) => {
     const violations = registryInvariantViolations(registry);
@@ -115,14 +152,42 @@ describe("U-RB-01 · CAPABILITY_REGISTRY invariants", () => {
       ["finance", "การเงิน"],
     ]);
     expect(CAPABILITY_REGISTRY.map((c) => [c.key, c.labelTh, c.descriptionTh])).toEqual([
-      ["full_access", "ทำได้ทุกอย่าง (เฉพาะเจ้าของร้าน)", "ทำได้ทุกอย่างในร้านนี้ รวมถึงสิทธิ์ที่จะเพิ่มในอนาคต และตั้งหรือถอดเจ้าของร้าน"],
-      ["manage_members", "จัดการสมาชิกและคำเชิญ", "เชิญคนเข้าร้าน เปลี่ยนบทบาท และถอดสมาชิกออก ได้เฉพาะบทบาทที่ไม่เกินสิทธิ์ของตัวเอง"],
-      ["manage_roles", "จัดการบทบาทและสิทธิ์", "สร้าง แก้ และลบบทบาท รวมถึงเลือกว่าแต่ละบทบาททำอะไรได้บ้าง"],
-      ["manage_org_settings", "ตั้งค่าร้านและข้อมูลภาษี", "แก้ชื่อร้าน และดูหรือแก้ข้อมูลผู้เสียภาษีของร้าน"],
-      ["manage_billing", "จัดการแพ็กเกจและการชำระเงิน", "เปลี่ยนแพ็กเกจ ดูใบเสร็จ และจัดการวิธีชำระเงินของร้าน"],
-      ["manage_products", "จัดการสินค้า", "เพิ่ม แก้ และลบสินค้ากับราคาขาย แต่ไม่เห็นต้นทุนถ้าไม่มีสิทธิ์ดูต้นทุนและกำไร"],
+      [
+        "full_access",
+        "ทำได้ทุกอย่าง (เฉพาะเจ้าของร้าน)",
+        "ทำได้ทุกอย่างในร้านนี้ รวมถึงสิทธิ์ที่จะเพิ่มในอนาคต และตั้งหรือถอดเจ้าของร้าน",
+      ],
+      [
+        "manage_members",
+        "จัดการสมาชิกและคำเชิญ",
+        "เชิญคนเข้าร้าน เปลี่ยนบทบาท และถอดสมาชิกออก ได้เฉพาะบทบาทที่ไม่เกินสิทธิ์ของตัวเอง",
+      ],
+      [
+        "manage_roles",
+        "จัดการบทบาทและสิทธิ์",
+        "สร้าง แก้ และลบบทบาท รวมถึงเลือกว่าแต่ละบทบาททำอะไรได้บ้าง",
+      ],
+      [
+        "manage_org_settings",
+        "ตั้งค่าร้านและข้อมูลภาษี",
+        "แก้ชื่อร้าน และดูหรือแก้ข้อมูลผู้เสียภาษีของร้าน",
+      ],
+      [
+        "manage_billing",
+        "จัดการแพ็กเกจและการชำระเงิน",
+        "เปลี่ยนแพ็กเกจ ดูใบเสร็จ และจัดการวิธีชำระเงินของร้าน",
+      ],
+      [
+        "manage_products",
+        "จัดการสินค้า",
+        "เพิ่ม แก้ และลบสินค้ากับราคาขาย แต่ไม่เห็นต้นทุนถ้าไม่มีสิทธิ์ดูต้นทุนและกำไร",
+      ],
       ["manage_stock", "จัดการสต๊อก", "รับของเข้า ปรับยอด และย้ายสต๊อกระหว่างคลังสินค้า"],
-      ["manage_channels", "เชื่อมต่อช่องทางขาย", "เชื่อมร้านบน Shopee Lazada และ TikTok แล้วตั้งค่าการส่งสต๊อกไปแต่ละร้าน"],
+      [
+        "manage_channels",
+        "เชื่อมต่อช่องทางขาย",
+        "เชื่อมร้านบน Shopee Lazada และ TikTok แล้วตั้งค่าการส่งสต๊อกไปแต่ละร้าน",
+      ],
       ["manage_orders", "จัดการออเดอร์และการแพ็ค", "ดูออเดอร์ แพ็คของ และอัปเดตสถานะการจัดส่ง"],
       ["view_financials", "ดูต้นทุนและกำไร", "เห็นต้นทุน กำไร และตัวเลขการเงินของร้านในทุกหน้าจอ"],
       ["access_accounting", "เข้าถึงระบบบัญชี", "ออกเอกสารบัญชีและดูรายงานภาษีของร้าน"],
@@ -147,7 +212,12 @@ describe("U-RB-01 · CAPABILITY_REGISTRY invariants", () => {
     expect(legacy.CAPABILITY_MANAGE_MEMBERS).toBe(CAPABILITY_MANAGE_MEMBERS);
     expect(legacy.CAPABILITY_MANAGE_ORG_SETTINGS).toBe(CAPABILITY_MANAGE_ORG_SETTINGS);
     const keys = CAPABILITY_REGISTRY.map((c) => c.key as string);
-    for (const k of [CAPABILITY_FULL_ACCESS, CAPABILITY_MANAGE_MEMBERS, CAPABILITY_MANAGE_ORG_SETTINGS, CAPABILITY_MANAGE_ROLES]) {
+    for (const k of [
+      CAPABILITY_FULL_ACCESS,
+      CAPABILITY_MANAGE_MEMBERS,
+      CAPABILITY_MANAGE_ORG_SETTINGS,
+      CAPABILITY_MANAGE_ROLES,
+    ]) {
       expect(keys).toContain(k);
     }
   });
@@ -161,7 +231,18 @@ describe("U-RB-01 · CAPABILITY_REGISTRY invariants", () => {
       ["owner", ["full_access"]],
       // T-003-B11 adds manage_roles here together with the backfill migration
       // (data-model §4.2) — this pin flips to 8 entries in that commit.
-      ["admin", ["manage_members", "manage_org_settings", "manage_products", "manage_stock", "manage_channels", "manage_orders", "view_financials"]],
+      [
+        "admin",
+        [
+          "manage_members",
+          "manage_org_settings",
+          "manage_products",
+          "manage_stock",
+          "manage_channels",
+          "manage_orders",
+          "view_financials",
+        ],
+      ],
       ["staff", ["manage_products", "manage_stock", "manage_orders"]],
     ]);
   });
@@ -174,7 +255,9 @@ describe("U-RB-02 · shipped implies edges are append-only (SR-11)", () => {
 
   it("every live edge is recorded in the snapshot (otherwise a later removal would go unnoticed)", () => {
     const shipped = new Set(shippedEdges().map(([a, b]) => `${a}→${b}`));
-    const unrecorded = impliesEdges(CAPABILITY_REGISTRY).filter(([a, b]) => !shipped.has(`${a}→${b}`));
+    const unrecorded = impliesEdges(CAPABILITY_REGISTRY).filter(
+      ([a, b]) => !shipped.has(`${a}→${b}`),
+    );
     expect(unrecorded, "append the edge to rbac/fixtures/shipped-implies-edges.json").toEqual([]);
   });
 

@@ -84,7 +84,8 @@ const DEFS = [
     key: CAPABILITY_MANAGE_MEMBERS,
     scope: "org",
     labelTh: "จัดการสมาชิกและคำเชิญ",
-    descriptionTh: "เชิญคนเข้าร้าน เปลี่ยนบทบาท และถอดสมาชิกออก ได้เฉพาะบทบาทที่ไม่เกินสิทธิ์ของตัวเอง",
+    descriptionTh:
+      "เชิญคนเข้าร้าน เปลี่ยนบทบาท และถอดสมาชิกออก ได้เฉพาะบทบาทที่ไม่เกินสิทธิ์ของตัวเอง",
     group: "team",
     tier: "all",
     status: "live",
@@ -193,7 +194,8 @@ const DEFS = [
 ] as const satisfies readonly CapabilityDef[];
 
 /** data-model §1, in order. */
-export const CAPABILITY_REGISTRY: readonly (CapabilityDef & (typeof DEFS)[number])[] = deepFreeze(DEFS);
+export const CAPABILITY_REGISTRY: readonly (CapabilityDef & (typeof DEFS)[number])[] =
+  deepFreeze(DEFS);
 
 /** Union of every registered key. */
 export type CapabilityKey = (typeof DEFS)[number]["key"];
@@ -215,10 +217,12 @@ export function registryInvariantViolations(registry: readonly CapabilityDef[]):
     const at = `"${c.key}"`;
     if (!SNAKE_CASE.test(c.key)) out.push(`${at}: key must be snake_case`);
     if (c.scope !== "org") out.push(`${at}: scope must be "org" (US-8)`);
-    if (/^(platform_|cross_)/.test(c.key)) out.push(`${at}: platform_/cross_ keys are cross-org (US-8)`);
+    if (/^(platform_|cross_)/.test(c.key))
+      out.push(`${at}: platform_/cross_ keys are cross-org (US-8)`);
     if (c.group !== null && !GROUP_KEYS.has(c.group)) out.push(`${at}: unknown group "${c.group}"`);
     if (c.tier !== "all" && c.tier !== "full") out.push(`${at}: unknown tier "${c.tier}"`);
-    if (c.status !== "live" && c.status !== "upcoming") out.push(`${at}: unknown status "${c.status}"`);
+    if (c.status !== "live" && c.status !== "upcoming")
+      out.push(`${at}: unknown status "${c.status}"`);
     if (c.labelTh.trim() === "") out.push(`${at}: labelTh is empty`);
     if (c.descriptionTh.trim() === "" || /[.!?\n]\s*\S/.test(c.descriptionTh)) {
       out.push(`${at}: descriptionTh must be exactly one sentence`);
@@ -232,7 +236,8 @@ export function registryInvariantViolations(registry: readonly CapabilityDef[]):
         continue;
       }
       const m = /^manage_(.+)$/.exec(c.key);
-      if (!m || target !== `view_${m[1]}`) out.push(`${at} → "${target}": implies must be manage_X → view_X`);
+      if (!m || target !== `view_${m[1]}`)
+        out.push(`${at} → "${target}": implies must be manage_X → view_X`);
       // One level only: an implied key implies nothing. This also rules out cycles.
       if (implied.implies.length > 0) out.push(`${at} → "${target}": implies is one level only`);
     }
