@@ -10,6 +10,9 @@
 // These two are the ONLY ways an org-scoped route may declare itself. There is
 // deliberately no third, looser option.
 import { SetMetadata, type CustomDecorator } from "@nestjs/common";
+import { CAPABILITY_REGISTRY } from "@omnistock/core-domain";
+
+const REGISTERED_KEYS: ReadonlySet<string> = new Set(CAPABILITY_REGISTRY.map((c) => c.key));
 
 /** Reflector key carrying the required capability (a string). */
 export const CAPABILITY_KEY = "omnistock:required-capability";
@@ -20,8 +23,12 @@ export const ANY_ACTIVE_MEMBER_KEY = "omnistock:any-active-member";
 /**
  * This route requires `capability` of the caller's role IN THE CURRENT ORG.
  * Metadata only — `CapabilityGuard` does the work with `hasCapability()` from
- * `@omnistock/core-domain` (so `full_access` keeps meaning "everything", in one
- * place, for F-001, F-002 and F-003 alike).
+ * `@omnistock/core-domain`, which expands the role's list first: `full_access`
+ * grants every key in `CAPABILITY_REGISTRY` (not "any string"), and
+ * `manage_X` grants `view_X`. One place, for F-001, F-002 and F-003 alike.
+ *
+ * The key must therefore be registered: an unregistered key is a route that
+ * even `full_access` cannot reach, so it is refused at import time below.
  *
  * May be applied to a handler or to a controller class; a handler-level
  * declaration overrides the class-level one.
@@ -34,6 +41,12 @@ export const RequireCapability = (capability: string): CustomDecorator<string> =
     throw new Error(
       "@RequireCapability() needs a non-empty capability string " +
         "(use the constants from @omnistock/core-domain)",
+    );
+  }
+  if (!REGISTERED_KEYS.has(capability)) {
+    throw new Error(
+      `@RequireCapability(${JSON.stringify(capability)}): key is not in CAPABILITY_REGISTRY ` +
+        "(add it to packages/core-domain/src/rbac/registry.ts, or fix the typo)",
     );
   }
   return SetMetadata(CAPABILITY_KEY, capability);
