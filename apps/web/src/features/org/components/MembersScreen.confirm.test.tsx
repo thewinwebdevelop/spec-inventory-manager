@@ -116,7 +116,7 @@ describe("MembersScreen — reissue asks first (§9.2)", () => {
     expect(body.textContent).toContain("malee@shop.com");
     // …and that the invitation itself is unchanged, which is the question a
     // reader asks next.
-    expect(body.textContent).toContain("อีเมลและสิทธิ์ของคำเชิญไม่เปลี่ยน");
+    expect(body.textContent).toContain("อีเมลและบทบาทของคำเชิญไม่เปลี่ยน");
   });
 
   it("confirming rotates, and says afterwards that the old link is gone", async () => {

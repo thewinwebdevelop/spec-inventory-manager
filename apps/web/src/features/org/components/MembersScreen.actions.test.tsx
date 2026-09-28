@@ -1,7 +1,8 @@
 // W-17 — the member row's actions, which were `<span>`s until now.
 //
 // The debt this closes is a specific kind: W5 wrote all five mutation hooks and
-// W6 rendered the action names as TEXT, so S9 (เปลี่ยนสิทธิ์) and S10 (ถอดออก
+// W6 rendered the action names as TEXT, so S9 (เปลี่ยนบทบาท — F-003 §0.1
+// renamed this from F-002's "เปลี่ยนสิทธิ์") and S10 (ถอดออก
 // จากร้าน) existed on screen as words nobody could press. Every AC behind
 // US-5/US-6 was signed off against code that could not be reached, and no test
 // noticed because the words were all there.
@@ -189,7 +190,7 @@ describe("W-17 · the row's actions are controls, not words", () => {
   });
 });
 
-describe("S9 · เปลี่ยนสิทธิ์ (§10.1)", () => {
+describe("S9 · เปลี่ยนบทบาท (§10.1)", () => {
   async function openChangeRole() {
     renderScreen();
     await userEvent.click(

@@ -31,24 +31,29 @@ import { DialogShell } from "../../../components/ui/DialogShell";
 import { ErrorBanner } from "../../../components/ui/ErrorBanner";
 import { RadioCardGroup } from "../../../components/ui/RadioCardGroup";
 
-/** Verbatim from ux-wireframe §10.1 — `ux` owns every string here. */
+/**
+ * ux-wireframe §10.1, moved through F-003 §0.1: `ux` owns every string here,
+ * and F-002's "สิทธิ์" (ROLE) is renamed to "บทบาท" throughout — the word
+ * "สิทธิ์" now belongs to F-003's capability checklist and the two meanings
+ * cannot share a screen (see ux-wireframe F-003 §0.1 migration table).
+ */
 export const CHANGE_ROLE_COPY = {
-  title: (email: string) => `เปลี่ยนสิทธิ์ของ ${email}`,
-  currentTag: "(สิทธิ์ปัจจุบัน)",
-  ownerOnlyHelper: "เฉพาะเจ้าของร้านเท่านั้นที่ตั้งหรือแก้สิทธิ์ของเจ้าของร้าน",
+  title: (email: string) => `เปลี่ยนบทบาทของ ${email}`,
+  currentTag: "(บทบาทปัจจุบัน)",
+  ownerOnlyHelper: "เฉพาะเจ้าของร้านเท่านั้นที่ตั้งหรือเปลี่ยนบทบาทของเจ้าของร้าน",
   lastOwnerWarning: "ร้านนี้ต้องมีเจ้าของอย่างน้อย 1 คนเสมอ",
-  submit: "บันทึกสิทธิ์",
+  submit: "บันทึกบทบาท",
   submitLoading: "กำลังบันทึก...",
   cancel: "ยกเลิก",
-  successToast: (email: string, role: string) => `เปลี่ยนสิทธิ์ของ ${email} เป็น ${role} แล้ว`,
+  successToast: (email: string, role: string) => `เปลี่ยนบทบาทของ ${email} เป็น ${role} แล้ว`,
   error: {
     lastOwner:
-      "ร้านนี้ต้องมีเจ้าของอย่างน้อย 1 คน — ตั้งคนอื่นเป็นเจ้าของร้านก่อน แล้วค่อยเปลี่ยนสิทธิ์นี้",
+      "ร้านนี้ต้องมีเจ้าของอย่างน้อย 1 คน — ตั้งคนอื่นเป็นเจ้าของร้านก่อน แล้วค่อยเปลี่ยนบทบาทนี้",
     forbidden:
-      "คุณไม่มีสิทธิ์เปลี่ยนสิทธิ์นี้ — เฉพาะเจ้าของร้านเท่านั้นที่ตั้งหรือแก้สิทธิ์ของเจ้าของร้าน",
-    roleInvalid: "สิทธิ์ที่เลือกใช้ไม่ได้แล้ว กรุณาเลือกใหม่อีกครั้ง",
+      "คุณไม่มีสิทธิ์เปลี่ยนบทบาทนี้ — เฉพาะเจ้าของร้านเท่านั้นที่ตั้งหรือเปลี่ยนบทบาทของเจ้าของร้าน",
+    roleInvalid: "บทบาทที่เลือกใช้ไม่ได้แล้ว กรุณาเลือกใหม่อีกครั้ง",
     gone: "คนนี้ไม่ได้เป็นสมาชิกของร้านนี้แล้ว",
-    generic: "เปลี่ยนสิทธิ์ไม่สำเร็จ กรุณาลองใหม่อีกครั้ง",
+    generic: "เปลี่ยนบทบาทไม่สำเร็จ กรุณาลองใหม่อีกครั้ง",
   },
 } as const;
 
@@ -128,46 +133,44 @@ export function ChangeRoleDialog({
 
   return (
     <DialogShell label={CHANGE_ROLE_COPY.title(member.email)} onClose={onClose}>
-        <h3 className="text-heading-sm">{CHANGE_ROLE_COPY.title(member.email)}</h3>
-        {banner && <ErrorBanner message={banner} />}
+      <h3 className="text-heading-sm">{CHANGE_ROLE_COPY.title(member.email)}</h3>
+      {banner && <ErrorBanner message={banner} />}
 
-        <RadioCardGroup
-          name="changeRoleId"
-          legend={CHANGE_ROLE_COPY.title(member.email)}
-          value={roleId}
-          onChange={setRoleId}
-          options={offered.map((role) => {
-            const isOwnerOption = ownerRoleIds.has(role.id);
-            const closed = isOwnerOption && !iAmOwner;
-            return {
-              value: role.id,
-              label: roleLabel(role.key, role.name),
-              description:
-                role.id === member.roleId ? CHANGE_ROLE_COPY.currentTag : undefined,
-              disabled: change.isPending || closed,
-              disabledReason: closed ? CHANGE_ROLE_COPY.ownerOnlyHelper : undefined,
-            };
-          })}
-        />
+      <RadioCardGroup
+        name="changeRoleId"
+        legend={CHANGE_ROLE_COPY.title(member.email)}
+        value={roleId}
+        onChange={setRoleId}
+        options={offered.map((role) => {
+          const isOwnerOption = ownerRoleIds.has(role.id);
+          const closed = isOwnerOption && !iAmOwner;
+          return {
+            value: role.id,
+            label: roleLabel(role.key, role.name),
+            description: role.id === member.roleId ? CHANGE_ROLE_COPY.currentTag : undefined,
+            disabled: change.isPending || closed,
+            disabledReason: closed ? CHANGE_ROLE_COPY.ownerOnlyHelper : undefined,
+          };
+        })}
+      />
 
-        {/* Before the press, never as an error afterwards (§10.1). */}
-        {demotingAnOwner && <p className="text-body-sm">{CHANGE_ROLE_COPY.lastOwnerWarning}</p>}
+      {/* Before the press, never as an error afterwards (§10.1). */}
+      {demotingAnOwner && <p className="text-body-sm">{CHANGE_ROLE_COPY.lastOwnerWarning}</p>}
 
-        {/* `.dialog .acts` — one right-aligned row, `space.3` between. */}
-        <div className="flex flex-wrap justify-end gap-3 pt-2">
-          <Button
-            onClick={submit}
-            disabled={change.isPending || unchanged}
-            loading={change.isPending}
-            loadingLabel={CHANGE_ROLE_COPY.submitLoading}
-          >
-            {CHANGE_ROLE_COPY.submit}
-          </Button>
-          <Button variant="secondary" onClick={onClose} disabled={change.isPending}>
-            {CHANGE_ROLE_COPY.cancel}
-          </Button>
-        </div>
-    
+      {/* `.dialog .acts` — one right-aligned row, `space.3` between. */}
+      <div className="flex flex-wrap justify-end gap-3 pt-2">
+        <Button
+          onClick={submit}
+          disabled={change.isPending || unchanged}
+          loading={change.isPending}
+          loadingLabel={CHANGE_ROLE_COPY.submitLoading}
+        >
+          {CHANGE_ROLE_COPY.submit}
+        </Button>
+        <Button variant="secondary" onClick={onClose} disabled={change.isPending}>
+          {CHANGE_ROLE_COPY.cancel}
+        </Button>
+      </div>
     </DialogShell>
   );
 }
