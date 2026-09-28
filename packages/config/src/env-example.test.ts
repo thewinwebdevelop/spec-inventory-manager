@@ -85,9 +85,7 @@ describe("★ .env.example is the deployment contract, and it matches the schema
 
   it("★ every documented var is either validated here or explained", () => {
     const shape = envObjectSchema.shape as Record<string, unknown>;
-    const unexplained = documented.filter(
-      (key) => !(key in shape) && !(key in NOT_VALIDATED_HERE),
-    );
+    const unexplained = documented.filter((key) => !(key in shape) && !(key in NOT_VALIDATED_HERE));
     expect(
       unexplained,
       "a var in `.env.example` that no schema validates and no note explains is one an operator " +
@@ -120,9 +118,7 @@ describe("★ .env.example is the deployment contract, and it matches the schema
     expect(contents, "the rotation consequence is not stated").toMatch(/ROTATION|rotat/i);
     expect(contents, "key separation is not stated").toMatch(/differ from BOTH|key separation/i);
     expect(contents, "the https rule is not stated").toMatch(/https/i);
-    expect(contents, "the fail-closed 503 is not stated").toContain(
-      "ORG_PROVISIONING_UNAVAILABLE",
-    );
+    expect(contents, "the fail-closed 503 is not stated").toContain("ORG_PROVISIONING_UNAVAILABLE");
   });
 
   it("SELF-CHECK: the parser reads assignments, not comments or prose", () => {
@@ -132,9 +128,29 @@ describe("★ .env.example is the deployment contract, and it matches the schema
     expect(parseEnvExample("#FOO=bar")).toEqual([]);
     // A commented-out OPTIONAL override must not read as documented-and-set:
     // `.env.example` uses that form on purpose for the tunables.
-    expect(parseEnvExample("# MAX_ORGS_PER_USER=\"50\"")).toEqual([]);
+    expect(parseEnvExample('# MAX_ORGS_PER_USER="50"')).toEqual([]);
     expect(parseEnvExample("  # spaced comment")).toEqual([]);
     expect(parseEnvExample("not a var line")).toEqual([]);
     expect(parseEnvExample('A=1\n# B=2\nC="3"')).toEqual(["A", "C"]);
+  });
+});
+
+describe("★ U-CFG3-01 · .env.example ships ROLE_WRITES_ENABLED closed, with its open conditions", () => {
+  const contents = readFileSync(ENV_EXAMPLE, "utf8");
+
+  it('the flag is assigned exactly once, to "false" — a copied file never opens it', () => {
+    const lines = contents.split("\n").filter((l) => /^\s*ROLE_WRITES_ENABLED\s*=/.test(l));
+    expect(lines, "ROLE_WRITES_ENABLED is not assigned exactly once in .env.example").toHaveLength(
+      1,
+    );
+    expect(lines[0]?.trim()).toBe('ROLE_WRITES_ENABLED="false"');
+  });
+
+  it("the comment states what opening it requires (arch §12/§14), not just the name", () => {
+    expect(contents, "the exact-match rule is not stated").toMatch(/exactly "true"/i);
+    expect(contents, "the no-F-002-instance precondition is not stated").toMatch(/F-002 instance/i);
+    expect(contents, "the rollback consequence is not stated").toMatch(/rollback/i);
+    expect(contents, "the pointer to the open conditions is missing").toMatch(/§12/);
+    expect(contents, "the pointer to the open conditions is missing").toMatch(/§14/);
   });
 });

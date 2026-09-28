@@ -2,8 +2,10 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import {
   ORG_RATE_LIMITS,
   ORG_TX_TIMEOUTS,
+  envObjectSchema,
   envSchema,
   loadEnv,
+  parseRoleWritesEnabled,
   resolveInvitationTokenSecret,
   resolveOrgRateLimits,
   resolveOrgTxTimeouts,
@@ -222,7 +224,11 @@ describe("U-CFG-02 · WEB_APP_BASE_URL (carries the invitation token)", () => {
 
   it("NEGATIVE: http:// on localhost in production → still fails", () => {
     expect(
-      failedVars({ ...validEnv, NODE_ENV: "production", WEB_APP_BASE_URL: "http://localhost:3001" }),
+      failedVars({
+        ...validEnv,
+        NODE_ENV: "production",
+        WEB_APP_BASE_URL: "http://localhost:3001",
+      }),
     ).toContain("WEB_APP_BASE_URL");
   });
 
@@ -266,9 +272,7 @@ describe("U-CFG-03 · DEFAULT_ORG_PLAN_KEY (required, no silent fallback — §6
   });
 
   it("NEGATIVE: blank → fails (must not degrade to a free plan)", () => {
-    expect(failedVars({ ...validEnv, DEFAULT_ORG_PLAN_KEY: "" })).toContain(
-      "DEFAULT_ORG_PLAN_KEY",
-    );
+    expect(failedVars({ ...validEnv, DEFAULT_ORG_PLAN_KEY: "" })).toContain("DEFAULT_ORG_PLAN_KEY");
   });
 
   it("POSITIVE: the value is passed through verbatim (server-resolved plan key)", () => {
@@ -459,58 +463,127 @@ describe("loadEnv() fail-closed at boot", () => {
 
 // ── ★ A-8 · key separation, in the resolver and not only at boot ──────────
 
-  describe("resolveInvitationTokenSecret", () => {
-    const LONG = "a".repeat(32);
+describe("resolveInvitationTokenSecret", () => {
+  const LONG = "a".repeat(32);
 
-    it("returns a present, long-enough secret", () => {
-      expect(resolveInvitationTokenSecret({ INVITATION_TOKEN_SECRET: LONG } as NodeJS.ProcessEnv)).toBe(LONG);
-    });
-
-    it("★ refuses a secret that is ALSO a JWT secret (§7.3 key separation)", () => {
-      // Security review A-8. The separation rule lived only in `loadEnv`'s
-      // whole-env `superRefine`, so any process that does not boot through it
-      // — a seed script, a future worker, a test harness setting env by hand —
-      // would hash invitation tokens with the JWT key and behave perfectly.
-      // The day a JWT secret leaks, it would also mint invitation tokens,
-      // which is precisely what §7.3 separates them to prevent.
-      //
-      // `packages/db` calls this resolver on every hash, so this is the check
-      // that runs where the key is actually used.
-      expect(() =>
-        resolveInvitationTokenSecret({
-          INVITATION_TOKEN_SECRET: LONG,
-          JWT_ACCESS_SECRET: LONG,
-        } as NodeJS.ProcessEnv),
-      ).toThrow(/separate|JWT/i);
-
-      expect(() =>
-        resolveInvitationTokenSecret({
-          INVITATION_TOKEN_SECRET: LONG,
-          JWT_REFRESH_SECRET: LONG,
-        } as NodeJS.ProcessEnv),
-      ).toThrow(/separate|JWT/i);
-    });
-
-    it("says nothing about the values themselves when it refuses", () => {
-      // The message reaches logs. Naming either secret would put both in them.
-      try {
-        resolveInvitationTokenSecret({
-          INVITATION_TOKEN_SECRET: LONG,
-          JWT_ACCESS_SECRET: LONG,
-        } as NodeJS.ProcessEnv);
-        throw new Error("expected a throw");
-      } catch (err) {
-        expect(String((err as Error).message)).not.toContain(LONG);
-      }
-    });
-
-    it("is fine when the JWT secrets are absent or different", () => {
-      expect(
-        resolveInvitationTokenSecret({
-          INVITATION_TOKEN_SECRET: LONG,
-          JWT_ACCESS_SECRET: "b".repeat(32),
-          JWT_REFRESH_SECRET: "c".repeat(32),
-        } as NodeJS.ProcessEnv),
-      ).toBe(LONG);
-    });
+  it("returns a present, long-enough secret", () => {
+    expect(
+      resolveInvitationTokenSecret({ INVITATION_TOKEN_SECRET: LONG } as NodeJS.ProcessEnv),
+    ).toBe(LONG);
   });
+
+  it("★ refuses a secret that is ALSO a JWT secret (§7.3 key separation)", () => {
+    // Security review A-8. The separation rule lived only in `loadEnv`'s
+    // whole-env `superRefine`, so any process that does not boot through it
+    // — a seed script, a future worker, a test harness setting env by hand —
+    // would hash invitation tokens with the JWT key and behave perfectly.
+    // The day a JWT secret leaks, it would also mint invitation tokens,
+    // which is precisely what §7.3 separates them to prevent.
+    //
+    // `packages/db` calls this resolver on every hash, so this is the check
+    // that runs where the key is actually used.
+    expect(() =>
+      resolveInvitationTokenSecret({
+        INVITATION_TOKEN_SECRET: LONG,
+        JWT_ACCESS_SECRET: LONG,
+      } as NodeJS.ProcessEnv),
+    ).toThrow(/separate|JWT/i);
+
+    expect(() =>
+      resolveInvitationTokenSecret({
+        INVITATION_TOKEN_SECRET: LONG,
+        JWT_REFRESH_SECRET: LONG,
+      } as NodeJS.ProcessEnv),
+    ).toThrow(/separate|JWT/i);
+  });
+
+  it("says nothing about the values themselves when it refuses", () => {
+    // The message reaches logs. Naming either secret would put both in them.
+    try {
+      resolveInvitationTokenSecret({
+        INVITATION_TOKEN_SECRET: LONG,
+        JWT_ACCESS_SECRET: LONG,
+      } as NodeJS.ProcessEnv);
+      throw new Error("expected a throw");
+    } catch (err) {
+      expect(String((err as Error).message)).not.toContain(LONG);
+    }
+  });
+
+  it("is fine when the JWT secrets are absent or different", () => {
+    expect(
+      resolveInvitationTokenSecret({
+        INVITATION_TOKEN_SECRET: LONG,
+        JWT_ACCESS_SECRET: "b".repeat(32),
+        JWT_REFRESH_SECRET: "c".repeat(32),
+      } as NodeJS.ProcessEnv),
+    ).toBe(LONG);
+  });
+});
+
+// ── ★ U-CFG3-01 · ROLE_WRITES_ENABLED (F-003 architecture.md §12) ──────────
+//
+// The flag that keeps custom-role writes closed until every instance runs
+// F-003. Opening it early re-opens SR-03 (an F-002 instance applies none of the
+// new ⊆/⊊ rules to a custom role) — so the ONLY value that opens it is the
+// exact string "true". Anything else, including values that look truthy to a
+// human, must read as closed rather than fail the boot or open it.
+describe('★ U-CFG3-01 · ROLE_WRITES_ENABLED (default false · exact "true" only · read once at boot)', () => {
+  it("unset → false (default is closed)", () => {
+    const env = envSchema.parse(validEnv);
+    expect(env.ROLE_WRITES_ENABLED).toBe(false);
+  });
+
+  it('exactly "true" → true', () => {
+    const env = envSchema.parse({ ...validEnv, ROLE_WRITES_ENABLED: "true" });
+    expect(env.ROLE_WRITES_ENABLED).toBe(true);
+  });
+
+  it.each(["", "TRUE", "True", "1", "yes", "on", " true", "true ", "true\n", "false", "0"])(
+    "%j → false (boot still succeeds; the flag just stays closed)",
+    (raw) => {
+      const result = envSchema.safeParse({ ...validEnv, ROLE_WRITES_ENABLED: raw });
+      expect(result.success).toBe(true);
+      if (result.success) {
+        // toBe(false), not falsy: a string that slipped through untransformed
+        // ("TRUE") would be truthy in the guard — this pins the boolean.
+        expect(result.data.ROLE_WRITES_ENABLED).toBe(false);
+      }
+    },
+  );
+
+  it("parseRoleWritesEnabled is the same rule, usable without the whole env", () => {
+    expect(parseRoleWritesEnabled(undefined)).toBe(false);
+    expect(parseRoleWritesEnabled("true")).toBe(true);
+    for (const raw of ["", "TRUE", "1", "yes", " true"]) {
+      expect(parseRoleWritesEnabled(raw), JSON.stringify(raw)).toBe(false);
+    }
+  });
+
+  it("is OPTIONAL in the schema — an environment without it boots with the flag closed", () => {
+    const shape = envObjectSchema.shape as Record<string, { isOptional(): boolean } | undefined>;
+    expect(shape.ROLE_WRITES_ENABLED, "ROLE_WRITES_ENABLED is not in the schema").toBeDefined();
+    expect(shape.ROLE_WRITES_ENABLED?.isOptional()).toBe(true);
+  });
+
+  it("read once at boot: the loaded value is a snapshot, not a live view of process.env", () => {
+    const exit = vi.spyOn(process, "exit").mockImplementation((() => {
+      throw new Error("process.exit called");
+    }) as never);
+    const source: NodeJS.ProcessEnv = { ...validEnv };
+    const env = loadEnv(source);
+    expect(env.ROLE_WRITES_ENABLED).toBe(false);
+
+    // Flipping the variable after boot must not open the flag in this process —
+    // opening it is a rolling restart (architecture.md §12), not a hot toggle.
+    source.ROLE_WRITES_ENABLED = "true";
+    expect(env.ROLE_WRITES_ENABLED).toBe(false);
+
+    // …and it is a plain data property, unlike the live ORG_* getters above.
+    const descriptor = Object.getOwnPropertyDescriptor(env, "ROLE_WRITES_ENABLED");
+    expect(descriptor?.get).toBeUndefined();
+    expect(descriptor?.value).toBe(false);
+    expect(exit).not.toHaveBeenCalled();
+    exit.mockRestore();
+  });
+});
