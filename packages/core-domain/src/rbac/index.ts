@@ -36,3 +36,12 @@ export {
   type ReservedRoleNamesContext,
   type SystemRoleLabels,
 } from "./role-validation";
+// T-003-B05 — the one rule for touching a person / handing out a role (D-034).
+export {
+  decideMemberAuthority,
+  MEMBER_AUTHORITY_OPS,
+  type MemberAuthorityInput,
+  type MemberAuthorityOp,
+  type MemberAuthorityResult,
+  type TargetRelation,
+} from "./member-authority";

@@ -62,7 +62,12 @@ interface Scenario {
 }
 
 function buildHarness(scenario: Scenario = {}) {
-  const caller = scenario.caller ?? { status: "active", capabilities: [CAPABILITY_MANAGE_MEMBERS] };
+  // F-003 · T-003-B05 (D-034): reset needs target ⊊ caller, so the default
+  // caller also holds the default target's capability (as the Admin preset does).
+  const caller = scenario.caller ?? {
+    status: "active",
+    capabilities: [CAPABILITY_MANAGE_MEMBERS, "manage_products"],
+  };
   const target = scenario.target ?? { status: "active", capabilities: ["manage_products"] };
   const counts = [...(scenario.otherOrgActiveCounts ?? [0, 0])];
   const targetUserRow = scenario.targetUserRow ?? true;
@@ -73,13 +78,22 @@ function buildHarness(scenario: Scenario = {}) {
   function delegates(label: "root" | "tx") {
     return {
       membership: {
-        findUnique: vi.fn(async (args: { where: { organizationId_userId: { organizationId: string; userId: string } } }) => {
-          const { organizationId, userId } = args.where.organizationId_userId;
-          calls.push(`${label}:membership.findUnique(${organizationId},${userId})`);
-          const fixture = userId === CALLER ? caller : userId === TARGET ? target : { status: null, capabilities: [] };
-          if (fixture.status === null) return null;
-          return { status: fixture.status, role: { capabilities: fixture.capabilities } };
-        }),
+        findUnique: vi.fn(
+          async (args: {
+            where: { organizationId_userId: { organizationId: string; userId: string } };
+          }) => {
+            const { organizationId, userId } = args.where.organizationId_userId;
+            calls.push(`${label}:membership.findUnique(${organizationId},${userId})`);
+            const fixture =
+              userId === CALLER
+                ? caller
+                : userId === TARGET
+                  ? target
+                  : { status: null, capabilities: [] };
+            if (fixture.status === null) return null;
+            return { status: fixture.status, role: { capabilities: fixture.capabilities } };
+          },
+        ),
         count: vi.fn(async (args: { where: Record<string, unknown> }) => {
           calls.push(`${label}:membership.count(${JSON.stringify(args.where)})`);
           return counts.length > 1 ? (counts.shift() as number) : (counts[0] ?? 0);
@@ -288,7 +302,9 @@ describe("U-API-07 · adminResetPassword — fail-closed × 2 conditions, one tr
     // reads nothing about the target, so it cannot make a stale decision.
     expect(h.calls[0]).toBe(`root:membership.findUnique(${ORG},${CALLER})`);
     expect(h.calls[1]).toMatch(/^tx:\$executeRawUnsafe\(SET LOCAL lock_timeout = '\d+ms'\)$/);
-    expect(h.calls[2]).toBe(`tx:$queryRawUnsafe(SELECT id, email FROM "User" WHERE id = $1 FOR UPDATE|${TARGET})`);
+    expect(h.calls[2]).toBe(
+      `tx:$queryRawUnsafe(SELECT id, email FROM "User" WHERE id = $1 FOR UPDATE|${TARGET})`,
+    );
     // Nothing about the TARGET was read or written before the lock was taken.
     expect(h.calls.slice(3).every((c) => c.startsWith("tx:"))).toBe(true);
     expectDecisionRanOnTheTransaction(h);
@@ -325,19 +341,22 @@ describe("U-API-07 · adminResetPassword — fail-closed × 2 conditions, one tr
     h = buildHarness();
     // Flip the target's role between the two decisions.
     let seen = 0;
-    h.tx.membership.findUnique.mockImplementation(async (args: {
-      where: { organizationId_userId: { userId: string } };
-    }) => {
-      const { userId } = args.where.organizationId_userId;
-      if (userId === CALLER) {
-        return { status: "active", role: { capabilities: [CAPABILITY_MANAGE_MEMBERS] } };
-      }
-      seen += 1;
-      return {
-        status: "active",
-        role: { capabilities: seen > 1 ? [CAPABILITY_FULL_ACCESS] : ["manage_products"] },
-      };
-    });
+    h.tx.membership.findUnique.mockImplementation(
+      async (args: { where: { organizationId_userId: { userId: string } } }) => {
+        const { userId } = args.where.organizationId_userId;
+        if (userId === CALLER) {
+          return {
+            status: "active",
+            role: { capabilities: [CAPABILITY_MANAGE_MEMBERS, "manage_products"] },
+          };
+        }
+        seen += 1;
+        return {
+          status: "active",
+          role: { capabilities: seen > 1 ? [CAPABILITY_FULL_ACCESS] : ["manage_products"] },
+        };
+      },
+    );
     expect404(await run(h));
     expect(h.state.rolledBack).toBe(true);
     expect(h.sink.types()).toEqual(["auth.password.admin_reset_blocked_owner_target"]);
@@ -350,24 +369,36 @@ describe("U-API-07 · adminResetPassword — fail-closed × 2 conditions, one tr
     ]) {
       h = buildHarness(scenario);
       await run(h);
-      const blocked = h.sink.events.filter((e) => e.type.startsWith("auth.password.admin_reset_blocked"));
+      const blocked = h.sink.events.filter((e) =>
+        e.type.startsWith("auth.password.admin_reset_blocked"),
+      );
       expect(blocked.length).toBe(1);
       const serialized = JSON.stringify(blocked[0].payload);
       expect(serialized).not.toContain(NEW_PW);
       expect(serialized).not.toContain(NEW_HASH);
-      expect(Object.keys(blocked[0].payload).sort()).toEqual(["actorUserId", "orgId", "targetUserId"]);
+      expect(Object.keys(blocked[0].payload).sort()).toEqual([
+        "actorUserId",
+        "orgId",
+        "targetUserId",
+      ]);
     }
   });
 
   it("(4) every refusal returns a BYTE-IDENTICAL 404 — no oracle for 'is this person the Owner?'", async () => {
     const scenarios: Array<[string, Scenario]> = [
       ["caller not a member", { caller: { status: null, capabilities: [] } }],
-      ["caller without manage_members", { caller: { status: "active", capabilities: ["manage_products"] } }],
+      [
+        "caller without manage_members",
+        { caller: { status: "active", capabilities: ["manage_products"] } },
+      ],
       ["target not a member", { target: { status: null, capabilities: [] } }],
       ["target revoked here", { target: { status: "revoked", capabilities: [] } }],
       ["target user row missing", { targetUserRow: false }],
       ["C-2 target active elsewhere", { otherOrgActiveCounts: [1, 1] }],
-      ["NEW-1 target is an Owner", { target: { status: "active", capabilities: [CAPABILITY_FULL_ACCESS] } }],
+      [
+        "NEW-1 target is an Owner",
+        { target: { status: "active", capabilities: [CAPABILITY_FULL_ACCESS] } },
+      ],
       ["NEW-5ก concurrent membership", { otherOrgActiveCounts: [0, 1] }],
     ];
     const bodies: string[] = [];
@@ -396,13 +427,19 @@ describe("U-API-07 · adminResetPassword — fail-closed × 2 conditions, one tr
     // policy is already public through signup.
     const scenarios: Array<[string, Harness]> = [
       ["plain member (would have been allowed)", buildHarness()],
-      ["Owner target — NEW-1 would refuse", buildHarness({
-        target: { status: "active", capabilities: [CAPABILITY_FULL_ACCESS] },
-      })],
+      [
+        "Owner target — NEW-1 would refuse",
+        buildHarness({
+          target: { status: "active", capabilities: [CAPABILITY_FULL_ACCESS] },
+        }),
+      ],
       ["multi-org target — C-2 would refuse", buildHarness({ otherOrgActiveCounts: [1, 1] })],
-      ["caller lacks manage_members", buildHarness({
-        caller: { status: "active", capabilities: ["manage_products"] },
-      })],
+      [
+        "caller lacks manage_members",
+        buildHarness({
+          caller: { status: "active", capabilities: ["manage_products"] },
+        }),
+      ],
     ];
 
     for (const [label, harness] of scenarios) {
