@@ -141,6 +141,38 @@ jobs:
           node-version-file: ".nvmrc"
       - uses: pnpm/action-setup@v4
       - run: pnpm install --frozen-lockfile
+      # T-003-DV03 (QA05 hand-off, test-plan §4.14) — the migration-fail harness'
+      # NOTICE/WARNING/ERROR capture (runSqlCapturingNotices, used by the F-003
+      # Owner-invariant + M3-04 cases below) shells out to `psql` because Prisma
+      # discards server NOTICE output entirely (QA05 report, packages/db/test/
+      # migration-harness.ts comment). PM decision (QA05 report "เพิ่ม dependency"):
+      # install the system binary here, do NOT add an npm `pg` dependency to
+      # packages/db just to read notices. ubuntu-latest images typically ship a
+      # postgresql-client already, but that is an assumption this job must not
+      # silently rely on — install explicitly so a future runner-image change
+      # can't turn these cases into a silent ENOENT skip-that-looks-like-pass
+      # (they in fact throw, not skip, per the harness — but don't rely on that
+      # either: prove the binary is there before the suite needs it).
+      - name: install postgresql-client (psql — NOTICE capture for the migration-fail harness)
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y postgresql-client
+          psql --version
+      # T-003-DV03 — the migration-fail harness (createScratchDatabase) issues a
+      # real `CREATE DATABASE` / `DROP DATABASE … WITH (FORCE)` per test case
+      # (QA05 report "ตัดสินเอง" #1: a failed migration leaves the target DB
+      # un-deployable, so each case needs its own throwaway DB, not the shared
+      # omnistock_ci one). The official `postgres:16` image makes POSTGRES_USER
+      # a superuser via initdb, which implies rolcreatedb — assert that here so
+      # a future switch to a locked-down non-superuser CI role turns into a
+      # loud, specific failure instead of every scratch-DB case going red with
+      # a confusing "permission denied to create database".
+      - name: T-003-DV03 — verify the CI Postgres role can CREATE DATABASE (harness needs it)
+        run: |
+          PGPASSWORD=omnistock psql -h localhost -U omnistock -d omnistock_ci -tAc \
+            "select rolcreatedb from pg_roles where rolname = 'omnistock'" | grep -qx t \
+            || { echo "::error::role 'omnistock' lacks CREATEDB — the migration-fail harness (createScratchDatabase) cannot create its per-case scratch databases"; exit 1; }
+          echo "omnistock has CREATEDB"
       - name: generate Prisma client (gitignored — verify:ac imports it)
         run: pnpm --filter @omnistock/db exec prisma generate
       # ★ B-10 — build the packages this job then RUNS.
@@ -184,15 +216,26 @@ jobs:
         run: pnpm --filter @omnistock/db run test --reporter=default --reporter=json --outputFile.json=/tmp/db-tests.json
       - name: I-37 lane-enabled guard — a skipped tenancy proof is RED, not green
         # Asserts the run really happened: 0 skipped cases, tenancy.db.test.ts
-        # contributed >= 15 PASSED cases, and the package suite as a whole >= 100.
-        # Raising these numbers is welcome; lowering one is a reviewable diff.
+        # contributed >= 15 PASSED cases, org-lock >= 5, and (T-003-DV03,
+        # QA05 hand-off) the F-003 migration-fail harness' own proof file
+        # (test/f003-owner-invariant.int.test.ts — harness self-proof + M3-01
+        # Owner-invariant cases + the psql NOTICE/WARNING/ERROR helper) >= 10.
+        # That third --require is the actual point of this task: today the file
+        # only reaches this job because vitest's `include` glob happens to catch
+        # it, same as every other file in test/ — nothing here proved it keeps
+        # running if it's renamed, moved, or its `include` glob narrows. Package
+        # total floor raised 165 -> 195 (QA05 report "green" proof, real run
+        # against an ephemeral Postgres: 195 passed / 0 skipped / 0 failed across
+        # 11 files, including these 10). Raising these numbers is welcome;
+        # lowering one is a reviewable diff.
         run: |
           node tool/ci/assert-tests-ran.mjs \
             --report /tmp/db-tests.json \
             --lane "db-migrate · packages/db" \
             --require "src/tenancy.db.test.ts=15" \
             --require "src/org-lock.db.test.ts=5" \
-            --min-passed 165
+            --require "test/f003-owner-invariant.int.test.ts=10" \
+            --min-passed 195
 
   # AC9 + R1 — architectural boundary gates (dependency-cruiser, §2.5, backend.md
   # §5.2). `pnpm depcruise` (turbo) runs EVERY package's gate: core-domain purity
