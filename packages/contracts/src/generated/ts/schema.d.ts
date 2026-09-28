@@ -703,6 +703,41 @@ export interface paths {
 export type webhooks = Record<string, never>;
 export interface components {
     schemas: {
+        RoleDetailListPage: {
+            /** @description Every live role of the shop, `createdAt asc, id asc`. */
+            items: components["schemas"]["RoleDetail"][];
+            /** @description Always `null` while the role ceiling fits in one page. Present so a client written today survives the day it is not. */
+            nextCursor: string | null;
+            viewer: components["schemas"]["RoleDetailListViewer"];
+        };
+        /** @description Creates a custom role; "clone" is this same request pre-filled from another role. There is no `key`, `isSystem` or `version`: unknown fields are stripped, so a created role always has `key: null` (AC-1.4). */
+        CreateRoleRequest: {
+            /** @description 1–50 code points AFTER the server normalises it (NFC, trim, collapse inner whitespace); invisible/control characters (Unicode Cc/Cf) are refused. The response carries the normalised name. */
+            name: string;
+            /** @description Keys from the capability catalog with `selectable: true`. Stored in canonical form (api-spec §2) — the response may differ from what was sent (duplicates and implied keys removed, sorted). */
+            capabilities: string[];
+        };
+        /** @description Rename and/or replace the capability set. At least one of `name` and `capabilities` must be sent. Sending the values already stored is a no-op: `200` with the current role, `version` unchanged. */
+        UpdateRoleRequest: {
+            /** @description The `RoleDetail.version` the user was looking at. */
+            version: number;
+            /** @description Same rules as `CreateRoleRequest.name`. */
+            name?: string;
+            /** @description The WHOLE new set (replace, not a diff). Same rules as `CreateRoleRequest.capabilities`. */
+            capabilities?: string[];
+        };
+        /** @description The success body of deleting a role. Deletion is soft: history keeps showing the role's name (AC-3.9b), but it is gone from every live list. */
+        DeletedRole: {
+            id: string;
+            /** Format: date-time */
+            deletedAt: string;
+        };
+        /** @description The capabilities this shop can see (data-model §1). Cache it PER SHOP: an entitlement-gated tier is hidden entirely, not flagged (AC-7.4). */
+        CapabilityCatalog: {
+            /** @description Checklist sections, in display order. */
+            groups: components["schemas"]["CapabilityGroup"][];
+            items: components["schemas"]["CapabilityEntry"][];
+        };
         HealthResponse: {
             /**
              * @description Literal "ok" when the service is healthy, "error" when one or more dependency checks fail (returned with HTTP 503).
@@ -1209,6 +1244,98 @@ export interface components {
                 name: string;
             };
             membership: components["schemas"]["AcceptedMembership"];
+        };
+        /** @description How many hold this role — counts only, never who (AC-6.4). */
+        RoleUsage: {
+            activeMembers: number;
+            /** @description Invitations still `pending` for this role, INCLUDING ones whose link has expired (AC-3.9) — both block deletion. */
+            pendingInvitations: number;
+        };
+        /** @description Who last edited the role, as the VIEWER may know it (AC-9.6). Decided at read time against this shop only. There is deliberately no e-mail, user id or display name on the wire (api-spec §3 — `displayName` waits for a profile feature; adding an optional field later is non-breaking). */
+        RoleLastEditedBy: {
+            /** @description OPEN SET. `me` → "คุณ" · `member` → the editor's CURRENT role in this shop (the three `role*` fields below) · `former_member` → "อดีตสมาชิก" (no longer an active member of this shop, including a deleted account). Any other value → generic copy. */
+            kind: string;
+            /** @description Present only when `kind` is `member`. Display per AC-1.5. */
+            roleName?: string;
+            /** @description Present only when `kind` is `member`. Translation only — OPEN SET, fall back to `roleName`. */
+            roleKey?: string | null;
+            /** @description Present only when `kind` is `member`. */
+            roleNameCustomized?: boolean;
+        };
+        RoleLastEdited: {
+            /** Format: date-time */
+            at: string;
+            by: components["schemas"]["RoleLastEditedBy"];
+        };
+        /** @description The server's verdict for THIS caller at read time — whether to enable a button and why not. It is a UX input: every write re-reads the caller's permissions inside its transaction and may still refuse (AC-5.7). */
+        RoleWriteVerdict: {
+            allowed: boolean;
+            /** @description `null` when `allowed` is `true`. OPEN SET (api-spec §3), first match wins in this fixed order: `writes_disabled` → `role_locked` → `exceeds_your_permissions` → `in_use_requires_manage_members` → `equal_permissions_in_use` → `in_use` → `history_limit_reached`; `canClone` uses `owner_role` · `exceeds_your_permissions` · `role_limit_reached` · `writes_disabled`; `canCreate` uses `role_limit_reached` · `writes_disabled`. `writes_disabled` outranks every other reason while role writes are switched off. Any other value → generic copy. */
+            reason: string | null;
+        };
+        /** @description Per-role verdicts. `canEdit` covers renaming too. `canClone` is not affected by who holds the role — cloning never touches anyone's permissions. */
+        RoleDetailViewer: {
+            canEdit: components["schemas"]["RoleWriteVerdict"];
+            canDelete: components["schemas"]["RoleWriteVerdict"];
+            canClone: components["schemas"]["RoleWriteVerdict"];
+        };
+        /**
+         * @description One role in full — the body of the role detail read, each item of the role list page, and the success body of creating or updating a role (api-spec §3). Readable only by a holder of `manage_roles`.
+         *
+         *     Unlike `RoleRow` (readable by every active member), this DOES publish `capabilities`: the reader can already edit roles, so the list is the thing they are here to see.
+         */
+        RoleDetail: {
+            id: string;
+            /** @description The stored name, already normalised (NFC, trimmed, inner whitespace collapsed). Display rule (AC-1.5): `nameCustomized ? name : (translate key ?? name)`. */
+            name: string;
+            /**
+             * @description Stable slug for TRANSLATION ONLY: `owner`, `admin` or `staff` for the system presets, `null` for every role a user created. OPEN SET — on `null` or an unrecognised value fall back to `name`.
+             *
+             *     ⛔ NEVER a permission input. Whether a role grants ownership is `grantsOwnership`; what it allows is `capabilities`.
+             */
+            key: string | null;
+            /** @description The shop renamed this role (always `true` for a role with `key: null`). When `true`, show `name` as-is instead of translating `key`. */
+            nameCustomized: boolean;
+            /** @description The locked Owner role. It can be neither edited, renamed nor deleted. `viewer` already says so per action — use this for labelling only. */
+            isSystem: boolean;
+            /** @description Derived server-side from `capabilities` (`full_access`), never from `key`. */
+            grantsOwnership: boolean;
+            /** @description The CANONICAL stored set, sorted by key (api-spec §2): a key implied by another key in the set is not repeated. The Owner role is exactly `["full_access"]`. May contain keys whose catalog `status` is `upcoming`, and — from an older catalog — keys a client does not know: render those generically, never drop them silently. */
+            capabilities: string[];
+            /** @description Optimistic-concurrency token. Send it back unchanged in `UpdateRoleRequest.version`. On a version conflict the client MUST re-fetch this role and show the difference — it must never resubmit automatically with the newer version (AC-3.12). */
+            version: number;
+            usage: components["schemas"]["RoleUsage"];
+            /** @description `null` = never edited since the system provisioned it ("ค่าเริ่มต้นของระบบ", AC-9.6). */
+            lastEdited: components["schemas"]["RoleLastEdited"] | null;
+            viewer: components["schemas"]["RoleDetailViewer"];
+            /** Format: date-time */
+            createdAt: string;
+        };
+        RoleDetailListViewer: {
+            canCreate: components["schemas"]["RoleWriteVerdict"];
+            /** @description How many live roles this shop may have (the create ceiling). */
+            limit: number;
+        };
+        CapabilityGroup: {
+            /** @description OPEN SET (e.g. `team`, `shop`, `catalog_stock`, `channels`, `orders`, `finance`). */
+            key: string;
+            labelTh: string;
+        };
+        /** @description One capability. The registry's `tier` and `scope` are internal and are not published. */
+        CapabilityEntry: {
+            /** @description Stable snake_case identifier — the value stored in `RoleDetail.capabilities`. OPEN SET: new keys ship with new features. */
+            key: string;
+            labelTh: string;
+            /** @description One sentence — what holding it actually lets someone do. */
+            descriptionTh: string;
+            /** @description A `CapabilityGroup.key`, or `null` for an entry that is not a checklist item (`full_access`). OPEN SET — an unknown group goes in a generic section. */
+            group: string | null;
+            /** @description OPEN SET. `live` · `upcoming` (shown as "เร็ว ๆ นี้"; may be ticked in advance, AC-7.5). Any other value → generic copy. */
+            status: string;
+            /** @description Keys granted automatically with this one (one level only, e.g. `manage_X` → `view_X`). Shown ticked and disabled. */
+            implies: string[];
+            /** @description `false` = may never appear in a create/update request (`full_access`). */
+            selectable: boolean;
         };
     };
     responses: never;
