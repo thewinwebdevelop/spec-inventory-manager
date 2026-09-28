@@ -8,6 +8,9 @@ signoff: approved     # user 2026-09-27 (+ รับ D-036/D-037)
 > เป็น **`Cc ∪ Cf ∪ Default_Ignorable_Code_Point ∪ Co ∪ Cs ∪ {U+115F, U+1160, U+3164, U+FFA0, U+2800}`** (ค่าคงที่เดียว `ROLE_NAME_FORBIDDEN_CHARACTER` ใน core-domain ·
 > DB CHECK สร้างจากชุดเดียวกันด้วยเครื่อง · parity gate G3-07) — review probe พบว่าอักขระมองไม่เห็นที่ไม่ใช่ Cf (Hangul filler, braille blank, CGJ, variation selector, private use)
 > เลี่ยงคำสงวน "เจ้าของร้าน" ได้ ⇒ "ความเสี่ยงคงเหลือที่รับ" เรื่อง U+3164/U+2800 ใน §2.1 **ไม่มีแล้ว** · ที่ยังรับ: Thai homoglyph/วรรณยุกต์ซ้อน (ux ไม่ fuzzy — forward-commitments) · ผลข้างเคียง: emoji ที่ใช้ U+FE0F/ZWJ ตั้งเป็นชื่อ role ไม่ได้ · ทุกที่ในเอกสารนี้ที่เขียน "Cc/Cf" ให้อ่านเป็นชุดนี้
+> **amendment 2026-09-29 (build · review ของ T-003-B10):** CHECK ชื่อ (§3.1) และ pre-flight (§4.1) **ไม่ใช้ `btrim()`/`\s` ของ Postgres** (ตัดแค่ U+0020 / ขึ้นกับ ctype) —
+> ใช้ชุด whitespace ของ JS `\s` ที่สร้างด้วยเครื่อง: ห้ามหัว/ท้าย · ห้ามซ้อน · **ห้าม whitespace อื่นนอก U+0020 ทุกตำแหน่ง** (ค่าที่ service เขียนผ่านเสมอเพราะ normalize ยุบเป็น U+0020 แล้ว — CHECK กันเฉพาะ raw SQL/เส้นทางที่ข้าม normalize) ·
+> migration ตั้ง `SET lock_timeout = '5s'` · ข้อจำกัดคงเหลือ: `lower()` ใต้ `LC_CTYPE=C` fold เฉพาะ ASCII (ไทยไม่มีตัวพิมพ์ — service ยังจับได้) → forward-commitments (devops)
 > อ้างอิง/ต่อยอดจาก [docs/01-data-model.md](../../01-data-model.md) + schema ที่ ship จริง (`packages/db/prisma/schema.prisma`)
 > ต่อจาก [architecture.md](architecture.md) · data-model ขับ [api-spec.md](api-spec.md) · D-028 · D-030 · D-032 · D-033 · D-034 · D-035
 > รอบ 3 (2026-09-27): แก้ตาม security-review SR-03/04/06/07/09/10/12 — ตารางรวมที่ architecture §15
