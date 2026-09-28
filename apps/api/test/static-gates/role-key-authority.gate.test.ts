@@ -58,13 +58,27 @@ const CODE_ROOTS = [
  * choices, never a permission input. Pinned per FILE + exact LINE text: a new
  * key read in the same file is red until reviewed and pinned here.
  */
+function labelCalls(file: string, lines: string[]): PresentationAllowance {
+  return {
+    file,
+    reason: "Display only: a role key passed to `roleLabel` to render the role's label.",
+    lines,
+  };
+}
+
 const PRESENTATION_ALLOWLIST: readonly PresentationAllowance[] = Object.freeze([
   {
     file: "apps/web/src/features/org/i18n.ts",
     reason:
       "`roleLabel()` maps a system roleKey to its Thai label and falls back to roleName " +
       "for an unknown/custom key (api-spec: roleKey is an open set). Display only.",
-    lines: ["switch (roleKey) {", 'case "owner":', 'case "admin":', 'case "staff":'],
+    lines: [
+      "export function roleLabel(roleKey: string | null | undefined, roleName: string | undefined): string {",
+      "switch (roleKey) {",
+      'case "owner":',
+      'case "admin":',
+      'case "staff":',
+    ],
   },
   {
     file: "apps/mobile/lib/features/org/presentation/widgets/role_label.dart",
@@ -93,8 +107,45 @@ const PRESENTATION_ALLOWLIST: readonly PresentationAllowance[] = Object.freeze([
       "'owner' => t.inviteRoleOwnerDesc,",
       "'admin' => t.inviteRoleAdminDesc,",
       "'staff' => t.inviteRoleStaffDesc,",
+      "title: Text(roleLabel(t, role.key, role.name)),",
     ],
   },
+  // ── display call sites: a role key handed to `roleLabel` to render a label.
+  // Exempt ONLY here, line by line; the helper's result used as a condition
+  // (TS-10 / DART-6) is red even on a pinned line.
+  labelCalls("apps/web/src/features/invite/components/InviteScreen.tsx", [
+    "<p>{inviteScreenTh.invitedAs(roleLabel(previewed.roleKey, previewed.roleName))}</p>",
+    "roleName: roleLabel(result.membership.roleKey, result.membership.roleName),",
+  ]),
+  labelCalls("apps/web/src/features/org/components/ChangeRoleDialog.tsx", [
+    "label: roleLabel(role.key, role.name),",
+  ]),
+  labelCalls("apps/web/src/features/org/components/InviteDialog.tsx", [
+    "label: roleLabel(role.key, role.name),",
+  ]),
+  labelCalls("apps/web/src/features/org/components/MembersScreen.tsx", [
+    "{roleLabel(invitation.roleKey, invitation.roleName)}",
+    "roleName: roleLabel(invitation.roleKey, invitation.roleName),",
+    '<Badge tone="neutral">{roleLabel(member.roleKey, member.roleName)}</Badge>',
+  ]),
+  labelCalls("apps/web/src/features/org/components/OrgSwitcher.tsx", [
+    "{roleLabel(active.roleKey, active.roleName)}",
+    "{roleLabel(item.membership.roleKey, item.membership.roleName)}",
+  ]),
+  labelCalls("apps/web/src/features/org/components/SelectOrgScreen.tsx", [
+    "{roleLabel(item.membership.roleKey, item.membership.roleName)}",
+  ]),
+  labelCalls("apps/mobile/lib/features/org/presentation/screens/members_screen.dart", [
+    "Text('${roleLabel(t, invitation.roleKey, invitation.roleName)} · $status'),",
+    "'${roleLabel(t, member.roleKey, member.roleName)} · '",
+  ]),
+  labelCalls("apps/mobile/lib/features/org/presentation/screens/org_picker_screen.dart", [
+    "subtitle: Text(roleLabel(t, org.roleKey, org.roleName)),",
+  ]),
+  labelCalls("apps/mobile/lib/features/org/presentation/widgets/org_switcher.dart", [
+    "? '${roleLabel(t, org.roleKey, org.roleName)} · ${t.orgSwitcherCurrent}'",
+    ": roleLabel(t, org.roleKey, org.roleName),",
+  ]),
 ]);
 
 /**
@@ -132,10 +183,14 @@ const RED_CODE_FIXTURES: ReadonlyArray<readonly [string, CodeRuleId]> = [
   ["code/red/ts-6-system-literal.ts.fixture", "TS-6"],
   ["code/red/ts-7-indirection.ts.fixture", "TS-7"],
   ["code/red/ts-8-named-constant.ts.fixture", "TS-8"],
+  ["code/red/ts-9-label-declared.ts.fixture", "TS-9"],
+  ["code/red/ts-10-label-as-condition.ts.fixture", "TS-10"],
   ["code/red/dart-1-key-equality.dart.fixture", "DART-1"],
   ["code/red/dart-2-switch-contains.dart.fixture", "DART-2"],
   ["code/red/dart-3-system-literal.dart.fixture", "DART-3"],
   ["code/red/dart-4-indirection.dart.fixture", "DART-4"],
+  ["code/red/dart-5-label-declared.dart.fixture", "DART-5"],
+  ["code/red/dart-6-label-as-condition.dart.fixture", "DART-6"],
 ];
 
 const BRIDGE: SqlAllowance = {
@@ -267,11 +322,41 @@ describe("G-12 · self-check: every code shape turns the gate red (fixtures)", (
     expect(scanCode("x.md", "role.key === 'owner'")).toEqual([]);
   });
 
-  it("the label-callee exemption is by name: any other callee is red", () => {
-    expect(scanCode("x.ts", "f(roleLabel(role.key, role.name));")).toEqual([]);
-    expect(scanCode("x.ts", "f(roleLabels(role.key, role.name));").map((h) => h.rule)).toEqual([
-      "TS-7",
-    ]);
+  it("★ roleLabel is not a free pass: a call outside a pinned display line is red, in any file", () => {
+    for (const [file, line] of [
+      ["apps/api/src/orgs/x.ts", "const l = roleLabel(role.key, role.name);"],
+      [
+        "apps/web/src/features/org/components/MembersScreen.tsx",
+        "const extra = roleLabel(m.roleKey, m.roleName);",
+      ],
+      ["apps/mobile/lib/x.dart", "final l = roleLabel(t, m.roleKey, m.roleName);"],
+    ] as const) {
+      const hits = scanCode(file, line);
+      expect(hits.length, line).toBeGreaterThan(0);
+      expect(codeOffenders(hits, PRESENTATION_ALLOWLIST).length, line).toBe(hits.length);
+    }
+  });
+
+  it("★ a label helper declared outside the two known label maps is red (the api-side decoy)", () => {
+    const decoy = "export function roleLabel(k: string): boolean {\n  return ELEVATED.has(k);\n}";
+    const hits = scanCode("apps/api/src/orgs/decide.ts", decoy);
+    expect(hits.map((h) => h.rule)).toEqual(["TS-9"]);
+    expect(codeOffenders(hits, PRESENTATION_ALLOWLIST)).toHaveLength(1);
+  });
+
+  it("★ UNPINNABLE: the label's result used as a condition is red even on a pinned line of an allowlisted file", () => {
+    const file = "apps/web/src/features/org/components/MembersScreen.tsx";
+    const line = "if (roleLabel(member.roleKey, member.roleName) === orgTh.role.owner) allow();";
+    const hits = scanCode(file, line);
+    expect(hits.map((h) => h.rule)).toContain("TS-10");
+    const pinned = [{ file, reason: "fixture", lines: [line.trim()] }];
+    expect(codeOffenders(hits, pinned).map((h) => h.rule)).toEqual(["TS-10"]);
+    const dart = scanCode("x.dart", "if (roleLabel(t, k, n) == t.roleOwner) allow();");
+    expect(
+      codeOffenders(dart, [{ file: "x.dart", reason: "f", lines: [dart[0]!.text] }]).map(
+        (h) => h.rule,
+      ),
+    ).toEqual(["DART-6"]);
   });
 
   it("the presentation allowlist is per FILE and per LINE: a sibling file or a new line is red", () => {
@@ -371,6 +456,8 @@ describe("G-12 · self-check: the SQL layer and its removeBy clock (fixtures)", 
     // one at a time, so no case hides behind another
     for (const sql of [
       "SELECT 'DROP FUNCTION role_f003_admin_bridge();';",
+      "SELECT $x$DROP FUNCTION role_f003_admin_bridge();$x$;",
+      "DO $$ BEGIN EXECUTE $q$DROP FUNCTION role_f003_admin_bridge();$q$; END $$;",
       "DROP FUNCTION IF EXISTS audit.role_f003_admin_bridge();",
       "DROP FUNCTION IF EXISTS role_f003_admin_bridge(text);",
       "CREATE FUNCTION later_fn() RETURNS void LANGUAGE plpgsql AS $$ BEGIN DROP FUNCTION role_f003_admin_bridge(); END $$;",
@@ -385,6 +472,23 @@ describe("G-12 · self-check: the SQL layer and its removeBy clock (fixtures)", 
         AFTER,
       ),
     ).toEqual([]);
+  });
+
+  it("a drop's signature must match the create's full argument types", () => {
+    const create = {
+      name: "20261001000000_sig",
+      sql: `CREATE FUNCTION sig_fn(p_at timestamp with time zone, p_role "text") RETURNS boolean LANGUAGE sql AS $$ SELECT key = 'owner' FROM "Role" $$;`,
+    };
+    const entry = { ...BRIDGE, migration: create.name, fn: "sig_fn" };
+    expect(parseMigration(create.name, create.sql).creates[0]!.args).toEqual([
+      "timestamp with time zone",
+      "text",
+    ]);
+    const withDrop = (drop: string) => sqlOffenders([create, later(drop)], [entry], AFTER);
+    expect(withDrop("DROP FUNCTION sig_fn(time with time zone, text);")).toHaveLength(1);
+    expect(withDrop("DROP FUNCTION sig_fn(timestamp with time zone);")).toHaveLength(1);
+    expect(withDrop("DROP FUNCTION sig_fn(timestamp with time zone, text);")).toEqual([]);
+    expect(withDrop("DROP FUNCTION sig_fn(at_ts timestamp with time zone, r text);")).toEqual([]);
   });
 
   it("order matters: a drop BEFORE the create does not retire it; a later keyed re-create revives it", () => {

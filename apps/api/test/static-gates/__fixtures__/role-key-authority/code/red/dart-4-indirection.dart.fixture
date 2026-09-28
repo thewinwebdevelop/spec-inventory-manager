@@ -5,6 +5,8 @@ int gate(Role role, Membership m, String key) {
   final norm = role.key.toLowerCase(); // ← hit
   final allowed = can(m.roleKey, 'manage_roles'); // ← hit
   final String? alias = m.role?.key; // ← hit
+  final k = m.roleKey ?? ''; // ← hit
+  final shown = Text(roleLabel(t, m.roleKey, m.roleName)); // ← hit
   if (role.key == kOwner) return 1; // ← hit DART-1
   if (m.role.key != RoleKeys.admin) return 2; // ← hit DART-1
   if (key == ownerKey) return 3; // ← hit

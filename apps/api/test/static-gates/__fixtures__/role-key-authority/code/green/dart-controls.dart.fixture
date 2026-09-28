@@ -8,7 +8,7 @@ class Tile extends StatelessWidget {
   bool esc(KeyEvent e) => e.logicalKey == LogicalKeyboardKey.escape;
   // DART-3/4 neighbours
   bool get active => status == 'active';
-  Widget title(AppLocalizations t, Role role) => Text(roleLabel(t, role.key, role.name));
+  Widget title(AppLocalizations t, Role role) => Text(role.name);
   final String cls = 'admin-panel';
   final Map<String, int> sizes = {'small': 1, 'large': 2};
 }

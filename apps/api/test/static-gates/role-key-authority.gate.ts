@@ -8,17 +8,25 @@
 // layer is I3-56 / I-45 (swap `key` on a real DB; permissions must not move —
 // architecture §14). This file is the fast layer only. Known blind spots:
 //   · a key carried away through a variable that is NOT assigned on one line
-//     from the key (`let k; … k = x`, `const k = role.key ?? "staff"`, spread,
-//     `Object.values(role)`, a Map built at runtime and read with that variable)
-//   · a key passed to a callee in LABEL_CALLEES (display only, exempt by name)
+//     from the key (`let k; … k = x`, spread, `Object.values(role)`, a Map
+//     built at runtime and read with that variable, Dart record/object patterns
+//     like `final Membership(:roleKey) = m`)
+//   · a role key reaching a label helper (`roleLabel`) is a hit like any other
+//     argument; it passes only as a pinned line of a display-allowlisted file.
+//     A `roleLabel` DECLARED anywhere is a hit (pinned only in the two known
+//     label maps), and its RESULT used as a condition is red even when pinned.
+//     Not seen: the label result stored in a variable and compared later.
 //   · `({ key }: Role) => …` parameter destructuring — caught only when that
 //     `key` is then compared to a literal / a named constant / switched on
 //   · Dart enum `.name` mirroring the key, extension getters
 //   · TS regex literal after a keyword (`return /a\/*b/`) is read as division;
 //     only a `/*` inside such a literal could desync the comment stripper
 //   · SQL: a function whose body is `BEGIN ATOMIC` (no `$$`) makes the parser
-//     THROW (loud, not silent) · a `DROP FUNCTION` issued as dynamic SQL inside
-//     a `$q$…$q$` string in a DO block is counted as a real drop
+//     THROW (loud, not silent) · a `DROP FUNCTION` issued as dynamic SQL
+//     (`EXECUTE $q$DROP …$q$` / `EXECUTE 'DROP …'`) is NOT counted — write the
+//     drop as a plain statement (fail-safe: stays red) · type aliases are not
+//     unified (`timestamptz` ≠ `timestamp with time zone`, `int` ≠ `integer`):
+//     spell the drop signature exactly like the create (fail-safe: stays red)
 import { existsSync, readdirSync, readFileSync, statSync } from "node:fs";
 import { join } from "node:path";
 
@@ -33,10 +41,14 @@ export const CODE_RULE_IDS = [
   "TS-6",
   "TS-7",
   "TS-8",
+  "TS-9",
+  "TS-10",
   "DART-1",
   "DART-2",
   "DART-3",
   "DART-4",
+  "DART-5",
+  "DART-6",
 ] as const;
 export type CodeRuleId = (typeof CODE_RULE_IDS)[number];
 
@@ -59,12 +71,19 @@ export interface PresentationAllowance {
   readonly lines: readonly string[];
 }
 
-/** Display helpers that may take a role key as an argument (exempt from TS-7/DART-4 "argument"). */
+/** Display helpers that turn a role key into a label (TS-9/10 · DART-5/6). */
 export const LABEL_CALLEES: readonly string[] = ["roleLabel"];
 
+/**
+ * Rules no allowlist pin can silence: a label helper's RESULT used as a
+ * condition is a decision, whatever file it sits in.
+ */
+export const UNPINNABLE_RULES: ReadonlySet<CodeRuleId> = new Set<CodeRuleId>(["TS-10", "DART-6"]);
+
 const SYS = "(?:owner|admin|staff)";
-// `(` right after the callee, or `,` inside its argument list.
-const NOT_ARG_OF_LABEL = `(?<!\\b(?:${LABEL_CALLEES.join("|")})\\s*(?:\\([^()]*)?)`;
+const LABEL = `(?:${LABEL_CALLEES.join("|")})`;
+/** A call of a label helper, one level of nested parens. */
+const LABEL_CALL = `\\b${LABEL}\\s*\\([^()]*(?:\\([^()]*\\)[^()]*)*\\)`;
 
 // Operands. `[\w$?.!]*[rR]ole` catches role / targetRole / membership.role;
 // `?.`, `!.` and a trailing `!` are TS/Dart spellings of the same read.
@@ -89,9 +108,19 @@ const indirection = (op: string, aliasDecl: string): string[] => [
   `\\[\\s*${op}\\s*\\]`, // POLICY[role.key] · {'owner': 9}[roleKey]
   `[rR]ole[?!]?\\.key\\s*[?!]?\\.\\s*[\\w$]+\\s*\\(`, // role.key.toLowerCase()
   `[rR]oleKey\\s*[?!]?\\.\\s*[\\w$]+\\s*\\(`, // roleKey.trim()
-  `${NOT_ARG_OF_LABEL}[(,]\\s*${op}\\s*[,)]`, // String(role.key) · can(role.key, …) · indexOf(roleKey)
-  `\\b${aliasDecl}\\s+[\\w$]+(?:\\s*:\\s*[^=]+)?\\s*(?<![=!<>])=(?!=)\\s*${op}\\s*(?:;|$)`, // const k = role.key;
+  `[(,]\\s*${op}\\s*[,)]`, // String(role.key) · can(role.key, …) · indexOf(roleKey) · roleLabel(roleKey)
+  // const k = role.key; · const k = m.roleKey ?? ""; · final k = m.roleKey ?? '';
+  `\\b${aliasDecl}\\s+[\\w$]+(?:\\s*:\\s*[^=]+)?\\s*(?<![=!<>])=(?!=)\\s*${op}\\s*(?:(?:\\?\\?|\\|\\|)[^;]*)?(?:;|$)`,
   `\\{[^}]*\\bkey\\b[^}]*\\}\\s*=\\s*[\\w$?!.]*[rR]ole\\b`, // const { key } = membership.role
+  `\\{[^}]*\\broleKey\\b[^}]*\\}\\s*=(?!=)`, // const { roleKey } = m · const { roleKey: k } = m
+];
+
+/** The label helper's result used as a decision: compared, negated, branched on, tested. */
+const labelAsCondition = (eq: string): string[] => [
+  `${LABEL_CALL}\\s*(?:${eq}|&&|\\|\\||\\?(?![.?])|[?!]?\\.)`,
+  `(?:${eq}|!)\\s*${LABEL_CALL}`,
+  `\\b(?:if|while)\\s*\\(\\s*${LABEL_CALL}`,
+  `\\.(?:includes|has|contains|indexOf|startsWith|endsWith)\\(\\s*${LABEL_CALL}`,
 ];
 
 /** `key` against a named constant (r.key === OWNER) · bare `switch (key)`. */
@@ -130,6 +159,17 @@ const TS_RULES: ReadonlyArray<readonly [CodeRuleId, RegExp]> = [
   ["TS-7", re(indirection(TS_OP, "(?:const|let|var)"))],
   // 8. key vs a named constant · bare switch (key)
   ["TS-8", re(namedConstant(TS_EQ), "i")],
+  // 9. a label helper DECLARED (pinned only in the known label maps)
+  [
+    "TS-9",
+    re([
+      `\\bfunction\\s*\\*?\\s*${LABEL}\\s*[<(]`,
+      `\\b(?:const|let|var)\\s+${LABEL}\\b`,
+      `(?:^\\s*|[{,;]\\s*)(?:(?:public|private|protected|static|async|readonly)\\s+)*${LABEL}\\s*(?::\\s*(?:\\(|function\\b|async\\b|[\\w$]+\\s*=>)|=(?![=>])|\\([^)]*\\)\\s*(?::[^{=]*)?\\{)`,
+    ]),
+  ],
+  // 10. its RESULT used as a condition (UNPINNABLE)
+  ["TS-10", re(labelAsCondition(TS_EQ))],
 ];
 
 const DART_RULES: ReadonlyArray<readonly [CodeRuleId, RegExp]> = [
@@ -167,6 +207,16 @@ const DART_RULES: ReadonlyArray<readonly [CodeRuleId, RegExp]> = [
     "DART-4",
     re([...indirection(DART_OP, "(?:final|var|const|String\\??)"), ...namedConstant(DART_EQ)], "i"),
   ],
+  // 5. a label helper DECLARED: `String roleLabel(` · `final roleLabel =`
+  [
+    "DART-5",
+    re([
+      `(?<![\\w.])(?:bool|int|double|num|void|dynamic|[A-Z][\\w]*(?:<[^>]*>)?)\\??\\s+${LABEL}\\s*[<(]`,
+      `\\b(?:final|var|const)\\s+(?:[\\w<>?]+\\s+)?${LABEL}\\s*=`,
+    ]),
+  ],
+  // 6. its RESULT used as a condition (UNPINNABLE)
+  ["DART-6", re(labelAsCondition(DART_EQ))],
 ];
 
 type Lang = "ts" | "dart";
@@ -276,7 +326,11 @@ export function codeOffenders(
   hits: readonly CodeHit[],
   allowlist: readonly PresentationAllowance[],
 ): CodeHit[] {
-  return hits.filter((h) => !allowlist.some((a) => a.file === h.file && a.lines.includes(h.text)));
+  return hits.filter(
+    (h) =>
+      UNPINNABLE_RULES.has(h.rule) ||
+      !allowlist.some((a) => a.file === h.file && a.lines.includes(h.text)),
+  );
 }
 
 /** Pinned lines that no longer produce a hit — re-pin or drop the entry. */
@@ -436,10 +490,48 @@ function normalizeArgs(list: string): string[] {
     const tokens = noDefault
       .replace(/"/g, "")
       .trim()
+      .toLowerCase()
       .split(/\s+/)
-      .filter((t) => !/^(IN|OUT|INOUT|VARIADIC)$/i.test(t));
-    return (tokens[tokens.length - 1] ?? "").toLowerCase();
+      .filter((t) => t && !/^(in|out|inout|variadic)$/.test(t));
+    // `p_id text` → drop the parameter name; a multi-word type keeps every word
+    // (`timestamp with time zone` ≠ `time with time zone`).
+    if (tokens.length >= 2 && !MULTIWORD_TYPE_START.has(tokens[0]!)) tokens.shift();
+    return tokens.join(" ");
   });
+}
+
+const MULTIWORD_TYPE_START = new Set([
+  "double",
+  "character",
+  "char",
+  "bit",
+  "timestamp",
+  "time",
+  "interval",
+  "national",
+]);
+
+/**
+ * Blank every `$tag$…$tag$` string except the body of a `DO` block — whose
+ * statements really run — and recurse into that body so `EXECUTE $q$DROP…$q$`
+ * or `RAISE NOTICE $m$DROP…$m$` inside it is blanked too.
+ */
+function blankDollarStrings(sql: string): string {
+  let out = "";
+  let i = 0;
+  const tag = /\$([A-Za-z_]\w*)?\$/g;
+  for (;;) {
+    tag.lastIndex = i;
+    const m = tag.exec(sql);
+    if (!m) return out + sql.slice(i);
+    const bodyStart = m.index + m[0].length;
+    const close = sql.indexOf(m[0], bodyStart);
+    if (close === -1) return out + sql.slice(i);
+    const body = sql.slice(bodyStart, close);
+    const isDo = /\bDO(?:\s+LANGUAGE\s+\w+)?\s*$/i.test(sql.slice(i, m.index));
+    out += sql.slice(i, bodyStart) + (isDo ? blankDollarStrings(body) : blank(body)) + m[0];
+    i = close + m[0].length;
+  }
 }
 
 /** Index just after the `)` matching the `(` at `open`. */
@@ -512,7 +604,7 @@ export function parseMigration(
     });
   }
   const drops: SqlFunctionDrop[] = [];
-  for (const m of blankSqlStrings(dropText).matchAll(DROP_FN)) {
+  for (const m of blankSqlStrings(blankDollarStrings(dropText)).matchAll(DROP_FN)) {
     const list = m[1]!.replace(/\b(CASCADE|RESTRICT)\s*$/i, "");
     const items: string[] = [];
     let depth = 0;

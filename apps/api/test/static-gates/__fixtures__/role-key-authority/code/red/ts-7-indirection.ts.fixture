@@ -11,5 +11,10 @@ export function gate(role: { key: string }, member: { roleKey: string | null; ro
   const s = String(member.role.key); // ← hit
   let alias = role.key; // ← hit
   const { key } = member.role; // ← hit
-  return [limit, rank, norm, up, idx, allowed, also, s, alias, key];
+  const k1 = member.roleKey ?? ""; // ← hit
+  const k2 = role.key || "staff"; // ← hit
+  const { roleKey: k3 } = member; // ← hit
+  const { roleKey } = member; // ← hit
+  const shown = roleLabel(member.roleKey, "x"); // ← hit
+  return [limit, rank, norm, up, idx, allowed, also, s, alias, key, k1, k2, k3, roleKey, shown]; // ← hit
 }

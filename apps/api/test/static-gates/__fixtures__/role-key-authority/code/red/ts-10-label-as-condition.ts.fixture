@@ -1,0 +1,9 @@
+// G-12 red fixture TS-10 — the label helper's RESULT used as a decision. These
+// are UNPINNABLE: red even in a display-allowlisted file.
+export function gate(role: { key: string }, k: string, n: string) {
+  if (roleLabel(role.key)) allow(); // ← hit
+  if (roleLabel(role.key, n) === t.owner) allow(); // ← hit
+  const denied = !roleLabel(k, n); // ← hit
+  const ok = ELEVATED.has(roleLabel(k, n)); // ← hit
+  return orgTh.role.admin !== roleLabel(k, n) ? 1 : 0; // ← hit
+}
