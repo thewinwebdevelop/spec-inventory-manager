@@ -82,18 +82,33 @@ class CapabilityScreenGuard extends ConsumerStatefulWidget {
 class _CapabilityScreenGuardState extends ConsumerState<CapabilityScreenGuard> {
   bool _deniedReported = false;
 
+  /// The shop this screen was opened in. A screen's data belongs to ONE shop:
+  /// switching to shop B — even one where the caller holds the same
+  /// capability — must not leave shop A's roles on screen.
+  late final String? _openedInOrg = ref.read(activeOrgIdProvider);
+
+  bool _allowed({required bool watch}) {
+    final can = watch
+        ? ref.watch(canProvider(widget.capability))
+        : ref.read(canProvider(widget.capability));
+    final orgId = watch ? ref.watch(activeOrgIdProvider) : ref.read(activeOrgIdProvider);
+    return can && orgId != null && orgId == _openedInOrg;
+  }
+
   @override
   Widget build(BuildContext context) {
-    final allowed = ref.watch(canProvider(widget.capability));
-    if (allowed) {
+    if (_allowed(watch: true)) {
       _deniedReported = false;
       return widget.child;
     }
     if (!_deniedReported) {
       _deniedReported = true;
-      // Never navigate during build.
+      // Never navigate during build. Re-check at call time: a denial that was
+      // undone before the frame ended (e.g. the empty set a shop entry holds
+      // until `capabilitiesLearned` lands) must not throw the person out. The
+      // rebuild that follows the restore resets the latch.
       WidgetsBinding.instance.addPostFrameCallback((_) {
-        if (mounted) widget.onDenied();
+        if (mounted && !_allowed(watch: false)) widget.onDenied();
       });
     }
     return const SizedBox.shrink();

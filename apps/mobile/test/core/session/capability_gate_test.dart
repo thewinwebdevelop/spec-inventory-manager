@@ -144,19 +144,21 @@ void main() {
   group('CapabilityScreenGuard (screens)', () {
     late int denied;
 
+    Widget tree(ProviderContainer c, {String label = 'R1 screen'}) => UncontrolledProviderScope(
+          container: c,
+          child: MaterialApp(
+            home: CapabilityScreenGuard(
+              capability: manageRolesCapability,
+              onDenied: () => denied++,
+              child: Text(label),
+            ),
+          ),
+        );
+
     Future<ProviderContainer> pump(WidgetTester tester, ActiveOrg org) async {
       denied = 0;
       final c = _container(active: org);
-      await tester.pumpWidget(UncontrolledProviderScope(
-        container: c,
-        child: MaterialApp(
-          home: CapabilityScreenGuard(
-            capability: manageRolesCapability,
-            onDenied: () => denied++,
-            child: const Text('R1 screen'),
-          ),
-        ),
-      ));
+      await tester.pumpWidget(tree(c));
       await tester.pump();
       return c;
     }
@@ -188,12 +190,17 @@ void main() {
       expect(find.text('R1 screen'), findsNothing);
       expect(denied, 1);
 
-      // Further rebuilds while still denied must not fire again (a double
-      // `pop` would close the screen underneath too).
-      c.read(sessionControllerProvider.notifier)
-          .capabilitiesLearned(orgId: 'org_1', capabilities: const {});
+      // Further REAL rebuilds while still denied must not fire again (a
+      // double `pop` would close the screen underneath too). A capability
+      // change that leaves `canProvider` false does not rebuild the guard, so
+      // the rebuild is forced from the parent: a new widget config at the same
+      // spot runs `build` again on the same State.
+      await tester.pumpWidget(tree(c, label: 'R1 screen (rebuilt)'));
       await tester.pump();
+      await tester.pumpWidget(tree(c, label: 'R1 screen (rebuilt again)'));
       await tester.pump();
+
+      expect(find.textContaining('R1 screen'), findsNothing);
       expect(denied, 1);
     });
 
@@ -204,6 +211,36 @@ void main() {
       await tester.pump();
       expect(find.text('R1 screen'), findsNothing);
       expect(denied, 1);
+    });
+
+    testWidgets(
+        '★ switching to another shop that ALSO grants it still denies — '
+        "the screen holds shop A's data", (tester) async {
+      final c = await pump(tester, _org({manageRolesCapability}));
+      c.read(sessionControllerProvider.notifier)
+          .switchOrg(_org({fullAccessCapability}, id: 'org_2'));
+      await tester.pump();
+      await tester.pump();
+
+      expect(find.text('R1 screen'), findsNothing);
+      expect(denied, 1);
+    });
+
+    testWidgets('a denial undone before the post-frame check does not leave', (tester) async {
+      // The shape of a shop entry: the set is briefly empty until
+      // `capabilitiesLearned` lands. This callback is registered before the
+      // guard's (which is added during build), so it runs first and restores
+      // the capability between the guard's build and its post-frame call.
+      final c = await pump(tester, _org({manageRolesCapability}));
+      final session = c.read(sessionControllerProvider.notifier)
+        ..capabilitiesLearned(orgId: 'org_1', capabilities: const {});
+      tester.binding.addPostFrameCallback((_) => session
+          .capabilitiesLearned(orgId: 'org_1', capabilities: {manageRolesCapability}));
+      await tester.pump();
+      await tester.pump();
+
+      expect(denied, 0);
+      expect(find.text('R1 screen'), findsOneWidget);
     });
   });
 }
