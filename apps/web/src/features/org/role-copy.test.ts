@@ -19,6 +19,7 @@ import {
   memberManageBlockedReasonCopy,
   roleBadgeLabel,
   roleFormErrorMessage,
+  roleNameFieldErrorMessage,
   usageLine,
 } from "./role-copy";
 
@@ -232,6 +233,14 @@ describe("§0.3 (ข) — invitationManageBlockedReasonCopy (Invitation.manageBl
     ["anything_else", "คุณจัดการคำเชิญนี้ไม่ได้ — ให้เจ้าของร้านช่วย"],
   ])("%s", (reason, expected) => {
     expect(invitationManageBlockedReasonCopy(reason)).toBe(expected);
+  });
+});
+
+describe("§E — roleNameFieldErrorMessage (422 VALIDATION_FAILED + fieldErrors.name)", () => {
+  it("returns the ux §E copy for an invalid role name", () => {
+    expect(roleNameFieldErrorMessage()).toBe(
+      "ชื่อนี้มีอักขระที่ใช้ไม่ได้ (เช่น อักขระที่มองไม่เห็นซึ่งติดมาจากการคัดลอก) ลองพิมพ์ชื่อใหม่เอง",
+    );
   });
 });
 

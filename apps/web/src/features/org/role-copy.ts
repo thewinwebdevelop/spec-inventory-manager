@@ -271,14 +271,21 @@ export function invitationManageBlockedReasonCopy(reason: string | null | undefi
 // §E — Error code → copy (ใหม่ + ที่พฤติกรรมเปลี่ยน)
 // ---------------------------------------------------------------------------
 
+/**
+ * `422 VALIDATION_FAILED` + `fieldErrors.name` → ข้อความใต้ช่องชื่อ (ux §E).
+ * Server ส่ง `VALIDATION_FAILED` + field — ไม่มี code "VALIDATION_FAILED_NAME";
+ * ผู้เรียกดู `fieldErrors.name` แล้วใช้ฟังก์ชันนี้ (ห้ามประกอบ code ขึ้นเองฝั่ง client).
+ */
+export function roleNameFieldErrorMessage(): string {
+  return "ชื่อนี้มีอักขระที่ใช้ไม่ได้ (เช่น อักขระที่มองไม่เห็นซึ่งติดมาจากการคัดลอก) ลองพิมพ์ชื่อใหม่เอง";
+}
+
 /** R3/R4/R5 — ฟอร์มบทบาท (ErrorBanner เว้นแต่ระบุ) */
 export function roleFormErrorMessage(
   code: string,
   opts: { readonly limit?: number | null; readonly action?: "save" | "delete" } = {},
 ): string {
   switch (code) {
-    case "VALIDATION_FAILED_NAME":
-      return "ชื่อนี้มีอักขระที่ใช้ไม่ได้ (เช่น อักขระที่มองไม่เห็นซึ่งติดมาจากการคัดลอก) ลองพิมพ์ชื่อใหม่เอง";
     case "ROLE_NAME_TAKEN":
       return "ชื่อนี้ใช้ไม่ได้ เพราะซ้ำกับบทบาทที่มีอยู่แล้ว (รวมชื่อ เจ้าของร้าน ผู้ดูแล พนักงาน) ลองตั้งชื่ออื่น";
     case "ROLE_EMPTY":
