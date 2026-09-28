@@ -1,0 +1,13 @@
+// G-12 red fixture TS-5 — branching on the key.
+export function limitFor(roleKey: string, member: { role: { key: string } }) {
+  switch (roleKey) { // ← hit
+    case "owner":
+      return Infinity;
+    default:
+      return 0;
+  }
+  switch (member.role.key) { // ← hit
+    default:
+      return 0;
+  }
+}

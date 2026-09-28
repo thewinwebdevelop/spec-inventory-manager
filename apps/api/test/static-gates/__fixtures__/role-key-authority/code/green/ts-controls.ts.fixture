@@ -1,0 +1,19 @@
+// G-12 green controls (TS) — legitimate code that shares vocabulary with the
+// forbidden shapes. Zero hits expected; a hit here is a false positive.
+// if (role.key === "owner") return true;   <- prose about the rule
+/* switch (roleKey) { case "owner": } */
+/**
+ * Not `key === "owner"` — ownership is `full_access`.
+ */
+export function ok(caps: string[], m: { roleKey: string | null; roleName: string }, e: { key: string }) {
+  if (caps.includes("full_access")) return true;
+  const row = { roleKey: "owner", key: m.roleKey };
+  const label = roleLabel(m.roleKey, m.roleName);
+  if (e.key === "Escape") return false;
+  switch (rule.key) {
+    default:
+      break;
+  }
+  const found = personas.find((p) => p.key === key);
+  return Boolean(row && label && found);
+}

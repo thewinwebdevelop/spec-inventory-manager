@@ -1,0 +1,10 @@
+// G-12 red fixture TS-1 — a role's `key` compared directly. Every line tagged
+// `← hit` MUST be flagged; untagged lines must not be.
+export function canManage(role: { key: string | null }, targetRole: { key: string }) {
+  if (role.key === "owner") return true; // ← hit
+  if (role?.key !== 'staff') return true; // ← hit
+  if (targetRole.key == "admin") return false; // ← hit
+  if (membership.role.key != someKey) return false; // ← hit
+  if ("owner" === actorRole.key) return true; // ← hit
+  return false;
+}
