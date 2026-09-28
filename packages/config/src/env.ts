@@ -99,6 +99,21 @@ const orgRateLimitShape = {
   ),
 };
 
+// --- F-003 §12 · ROLE_WRITES_ENABLED -----------------------------------------
+/**
+ * The one rule for `ROLE_WRITES_ENABLED`: open only on the exact string
+ * `"true"`. Unset, `""`, `"TRUE"`, `"1"`, `"yes"`, `" true"` → `false`.
+ *
+ * Deliberately NOT a boot failure on unexpected values: the flag guards
+ * custom-role writes, and opening it before every instance runs F-003 re-opens
+ * SR-03 (architecture.md §12). A typo therefore degrades to "closed" (503
+ * ROLE_WRITES_DISABLED on role writes) — the safe side — rather than either
+ * opening it or taking the whole API down with it.
+ */
+export function parseRoleWritesEnabled(raw: string | undefined): boolean {
+  return raw === "true";
+}
+
 /** `http://` is only tolerated on loopback outside production (local dev/test). */
 function isAcceptableWebAppBaseUrl(raw: string, nodeEnv: string): boolean {
   let url: URL;
@@ -124,127 +139,129 @@ function isAcceptableWebAppBaseUrl(raw: string, nodeEnv: string): boolean {
  * file and compares it against these keys, which is why the object is named
  * rather than inlined into the `superRefine` chain.
  */
-export const envObjectSchema = z
-  .object({
-    DATABASE_URL: z
-      .string({ required_error: "DATABASE_URL is required" })
-      .min(1, "DATABASE_URL is required")
-      .url("DATABASE_URL must be a valid connection string URL"),
-    REDIS_URL: z
-      .string({ required_error: "REDIS_URL is required" })
-      .min(1, "REDIS_URL is required")
-      .url("REDIS_URL must be a valid connection string URL"),
-    JWT_ACCESS_SECRET: z
-      .string({ required_error: "JWT_ACCESS_SECRET is required" })
-      .min(32, "JWT_ACCESS_SECRET must be at least 32 chars (256-bit random) — F-001 I-4"),
-    JWT_REFRESH_SECRET: z
-      .string({ required_error: "JWT_REFRESH_SECRET is required" })
-      .min(32, "JWT_REFRESH_SECRET must be at least 32 chars (256-bit random) — F-001 I-4"),
-    PORT: z
-      .string({ required_error: "PORT is required" })
-      .min(1, "PORT is required")
-      .regex(/^\d+$/, "PORT must be numeric"),
-    NODE_ENV: z.enum(["development", "test", "production"], {
-      required_error: "NODE_ENV is required",
-      invalid_type_error: "NODE_ENV must be one of development|test|production",
-    }),
-    // --- Trusted-proxy hop count (F-001 security review · T-001-06/12) --------
-    // How many X-Forwarded-For hops to trust, counting from the right (Express
-    // `trust proxy` numeric semantics). Defaults to "0" — trust NO hop, so
-    // req.ip is the socket peer and a client can NEVER spoof X-Forwarded-For to
-    // forge req.ip and bypass the IP throttle (arch §8.1/§8.3). Prod behind one
-    // reverse proxy sets "1"; raise only for a real longer known chain. Garbage
-    // (non-integer/negative) fails fast at boot.
-    TRUST_PROXY_HOPS: z
-      .string()
-      .regex(/^\d+$/, "TRUST_PROXY_HOPS must be a non-negative integer")
-      .default("0"),
-    // --- CORS allow-list (F-001 T-001-11) ------------------------------------
-    // Comma-separated browser origins the API may set Access-Control-Allow-
-    // Origin + Allow-Credentials:true for. Parsed to a string[] (blank entries
-    // dropped). main.ts passes THIS EXPLICIT LIST to enableCors — never `*`/
-    // `true` with credentials, which would break the login-CSRF "preflight the
-    // API won't allow" property (api-spec §0). Default "" = no cross-origin
-    // allowed (same-origin dev proxy path, apps/web rewrites).
-    CORS_ALLOWED_ORIGINS: z
-      .string()
-      .default("")
-      .transform((raw) =>
-        raw
-          .split(",")
-          .map((o) => o.trim())
-          .filter((o) => o.length > 0),
-      ),
-    // --- F-002 (org/license/membership) · architecture.md §6.4 ---------------
-    // HMAC key for `Invitation.tokenHash` (§7.3). Separate key from auth on
-    // purpose: sharing the JWT secret would make a leak on either side spread
-    // to the other instantly. Rotating this INVALIDATES every pending
-    // invitation silently (hashes are one-way) — see §6.4 for the drill.
-    INVITATION_TOKEN_SECRET: z
-      .string({ required_error: "INVITATION_TOKEN_SECRET is required" })
-      .min(
-        32,
-        "INVITATION_TOKEN_SECRET must be at least 32 chars (256-bit random) — F-002 §7.3",
-      ),
-    // Base origin the API prefixes onto `inviteUrl` (`${base}/invite?token=…`).
-    // Must be https so the invitation token never travels in clear text; local
-    // dev/test may use http on loopback only.
-    WEB_APP_BASE_URL: z
-      .string({ required_error: "WEB_APP_BASE_URL is required" })
-      .min(1, "WEB_APP_BASE_URL is required")
-      .url("WEB_APP_BASE_URL must be a valid absolute URL (e.g. https://app.example.com)"),
-    // Plan key `PlanProvisioningService.resolveForNewOrg()` looks up in
-    // PlanDefinition. REQUIRED, no default, no silent fallback: an unset value
-    // must make `POST /organizations` fail closed (503
-    // ORG_PROVISIONING_UNAVAILABLE), never hand out a free plan (§6.2, AC US-1).
-    DEFAULT_ORG_PLAN_KEY: z
-      .string({ required_error: "DEFAULT_ORG_PLAN_KEY is required" })
-      .min(
-        1,
-        "DEFAULT_ORG_PLAN_KEY is required — F-002 §6.2 forbids falling back to a free plan; an unset value must stop the boot, not provision the wrong tier",
-      ),
-    // Cap on active orgs per user, enforced fail-closed in the service (§6.3).
-    MAX_ORGS_PER_USER: positiveIntEnv("MAX_ORGS_PER_USER", MAX_ORGS_PER_USER_DEFAULT),
-    ...orgTxTimeoutShape,
-    ...orgRateLimitShape,
-  });
+export const envObjectSchema = z.object({
+  DATABASE_URL: z
+    .string({ required_error: "DATABASE_URL is required" })
+    .min(1, "DATABASE_URL is required")
+    .url("DATABASE_URL must be a valid connection string URL"),
+  REDIS_URL: z
+    .string({ required_error: "REDIS_URL is required" })
+    .min(1, "REDIS_URL is required")
+    .url("REDIS_URL must be a valid connection string URL"),
+  JWT_ACCESS_SECRET: z
+    .string({ required_error: "JWT_ACCESS_SECRET is required" })
+    .min(32, "JWT_ACCESS_SECRET must be at least 32 chars (256-bit random) — F-001 I-4"),
+  JWT_REFRESH_SECRET: z
+    .string({ required_error: "JWT_REFRESH_SECRET is required" })
+    .min(32, "JWT_REFRESH_SECRET must be at least 32 chars (256-bit random) — F-001 I-4"),
+  PORT: z
+    .string({ required_error: "PORT is required" })
+    .min(1, "PORT is required")
+    .regex(/^\d+$/, "PORT must be numeric"),
+  NODE_ENV: z.enum(["development", "test", "production"], {
+    required_error: "NODE_ENV is required",
+    invalid_type_error: "NODE_ENV must be one of development|test|production",
+  }),
+  // --- Trusted-proxy hop count (F-001 security review · T-001-06/12) --------
+  // How many X-Forwarded-For hops to trust, counting from the right (Express
+  // `trust proxy` numeric semantics). Defaults to "0" — trust NO hop, so
+  // req.ip is the socket peer and a client can NEVER spoof X-Forwarded-For to
+  // forge req.ip and bypass the IP throttle (arch §8.1/§8.3). Prod behind one
+  // reverse proxy sets "1"; raise only for a real longer known chain. Garbage
+  // (non-integer/negative) fails fast at boot.
+  TRUST_PROXY_HOPS: z
+    .string()
+    .regex(/^\d+$/, "TRUST_PROXY_HOPS must be a non-negative integer")
+    .default("0"),
+  // --- CORS allow-list (F-001 T-001-11) ------------------------------------
+  // Comma-separated browser origins the API may set Access-Control-Allow-
+  // Origin + Allow-Credentials:true for. Parsed to a string[] (blank entries
+  // dropped). main.ts passes THIS EXPLICIT LIST to enableCors — never `*`/
+  // `true` with credentials, which would break the login-CSRF "preflight the
+  // API won't allow" property (api-spec §0). Default "" = no cross-origin
+  // allowed (same-origin dev proxy path, apps/web rewrites).
+  CORS_ALLOWED_ORIGINS: z
+    .string()
+    .default("")
+    .transform((raw) =>
+      raw
+        .split(",")
+        .map((o) => o.trim())
+        .filter((o) => o.length > 0),
+    ),
+  // --- F-002 (org/license/membership) · architecture.md §6.4 ---------------
+  // HMAC key for `Invitation.tokenHash` (§7.3). Separate key from auth on
+  // purpose: sharing the JWT secret would make a leak on either side spread
+  // to the other instantly. Rotating this INVALIDATES every pending
+  // invitation silently (hashes are one-way) — see §6.4 for the drill.
+  INVITATION_TOKEN_SECRET: z
+    .string({ required_error: "INVITATION_TOKEN_SECRET is required" })
+    .min(32, "INVITATION_TOKEN_SECRET must be at least 32 chars (256-bit random) — F-002 §7.3"),
+  // Base origin the API prefixes onto `inviteUrl` (`${base}/invite?token=…`).
+  // Must be https so the invitation token never travels in clear text; local
+  // dev/test may use http on loopback only.
+  WEB_APP_BASE_URL: z
+    .string({ required_error: "WEB_APP_BASE_URL is required" })
+    .min(1, "WEB_APP_BASE_URL is required")
+    .url("WEB_APP_BASE_URL must be a valid absolute URL (e.g. https://app.example.com)"),
+  // Plan key `PlanProvisioningService.resolveForNewOrg()` looks up in
+  // PlanDefinition. REQUIRED, no default, no silent fallback: an unset value
+  // must make `POST /organizations` fail closed (503
+  // ORG_PROVISIONING_UNAVAILABLE), never hand out a free plan (§6.2, AC US-1).
+  DEFAULT_ORG_PLAN_KEY: z
+    .string({ required_error: "DEFAULT_ORG_PLAN_KEY is required" })
+    .min(
+      1,
+      "DEFAULT_ORG_PLAN_KEY is required — F-002 §6.2 forbids falling back to a free plan; an unset value must stop the boot, not provision the wrong tier",
+    ),
+  // Cap on active orgs per user, enforced fail-closed in the service (§6.3).
+  MAX_ORGS_PER_USER: positiveIntEnv("MAX_ORGS_PER_USER", MAX_ORGS_PER_USER_DEFAULT),
+  ...orgTxTimeoutShape,
+  ...orgRateLimitShape,
+  // --- F-003 (custom roles) · architecture.md §12/§14 ----------------------
+  // Closes custom-role writes (POST/PATCH/DELETE role → 503) until devops has
+  // evidence no F-002 instance is left serving. Optional, default false,
+  // exact "true" only (parseRoleWritesEnabled). READ ONCE AT BOOT: consumers
+  // take it from the `Env` that `loadEnv` returns (a plain boolean, not a
+  // live getter like ORG_TX_TIMEOUTS) — opening it is a rolling restart.
+  ROLE_WRITES_ENABLED: z.string().optional().transform(parseRoleWritesEnabled),
+});
 
-export const envSchema = envObjectSchema
-  .superRefine((env, ctx) => {
-    if (env.JWT_ACCESS_SECRET === env.JWT_REFRESH_SECRET) {
-      ctx.addIssue({
-        code: z.ZodIssueCode.custom,
-        path: ["JWT_REFRESH_SECRET"],
-        message:
-          "JWT_ACCESS_SECRET and JWT_REFRESH_SECRET must differ (F-001 I-4) — using the same value for both defeats the separate-scope guarantee (architecture.md §9)",
-      });
-    }
+export const envSchema = envObjectSchema.superRefine((env, ctx) => {
+  if (env.JWT_ACCESS_SECRET === env.JWT_REFRESH_SECRET) {
+    ctx.addIssue({
+      code: z.ZodIssueCode.custom,
+      path: ["JWT_REFRESH_SECRET"],
+      message:
+        "JWT_ACCESS_SECRET and JWT_REFRESH_SECRET must differ (F-001 I-4) — using the same value for both defeats the separate-scope guarantee (architecture.md §9)",
+    });
+  }
 
-    // Key separation (F-002 §7.3): the invitation HMAC key must not be reused
-    // from either auth secret.
-    if (
-      env.INVITATION_TOKEN_SECRET === env.JWT_ACCESS_SECRET ||
-      env.INVITATION_TOKEN_SECRET === env.JWT_REFRESH_SECRET
-    ) {
-      ctx.addIssue({
-        code: z.ZodIssueCode.custom,
-        path: ["INVITATION_TOKEN_SECRET"],
-        message:
-          "INVITATION_TOKEN_SECRET must differ from both JWT_ACCESS_SECRET and JWT_REFRESH_SECRET (F-002 §6.4/§7.3) — reusing an auth secret means a leak on either side compromises the other",
-      });
-    }
+  // Key separation (F-002 §7.3): the invitation HMAC key must not be reused
+  // from either auth secret.
+  if (
+    env.INVITATION_TOKEN_SECRET === env.JWT_ACCESS_SECRET ||
+    env.INVITATION_TOKEN_SECRET === env.JWT_REFRESH_SECRET
+  ) {
+    ctx.addIssue({
+      code: z.ZodIssueCode.custom,
+      path: ["INVITATION_TOKEN_SECRET"],
+      message:
+        "INVITATION_TOKEN_SECRET must differ from both JWT_ACCESS_SECRET and JWT_REFRESH_SECRET (F-002 §6.4/§7.3) — reusing an auth secret means a leak on either side compromises the other",
+    });
+  }
 
-    if (!isAcceptableWebAppBaseUrl(env.WEB_APP_BASE_URL, env.NODE_ENV)) {
-      ctx.addIssue({
-        code: z.ZodIssueCode.custom,
-        path: ["WEB_APP_BASE_URL"],
-        message:
-          "WEB_APP_BASE_URL must use https:// (F-002 §6.4) — plain http is accepted only on localhost/127.0.0.1 outside production, because this origin carries the invitation token",
-      });
-    }
+  if (!isAcceptableWebAppBaseUrl(env.WEB_APP_BASE_URL, env.NODE_ENV)) {
+    ctx.addIssue({
+      code: z.ZodIssueCode.custom,
+      path: ["WEB_APP_BASE_URL"],
+      message:
+        "WEB_APP_BASE_URL must use https:// (F-002 §6.4) — plain http is accepted only on localhost/127.0.0.1 outside production, because this origin carries the invitation token",
+    });
+  }
 
-    refineOrgTxTimeouts(env, ctx);
-  });
+  refineOrgTxTimeouts(env, ctx);
+});
 
 export type Env = z.infer<typeof envSchema>;
 
@@ -294,40 +311,38 @@ export function loadEnv(source: NodeJS.ProcessEnv = process.env): Env {
 export const orgTxTimeoutsSchema = z
   .object(orgTxTimeoutShape)
   .superRefine(refineOrgTxTimeouts)
-  .transform(
-    (v): OrgTxTimeouts =>
-      Object.freeze({
-        lockTimeoutMs: Number(v.ORG_LOCK_TIMEOUT_MS),
-        txTimeoutMs: Number(v.ORG_TX_TIMEOUT_MS),
-        maxWaitMs: Number(v.ORG_TX_MAX_WAIT_MS),
-      }),
+  .transform((v): OrgTxTimeouts =>
+    Object.freeze({
+      lockTimeoutMs: Number(v.ORG_LOCK_TIMEOUT_MS),
+      txTimeoutMs: Number(v.ORG_TX_TIMEOUT_MS),
+      maxWaitMs: Number(v.ORG_TX_MAX_WAIT_MS),
+    }),
   );
 
 /** Standalone schema for the §8 quotas. Window length is not env-tunable. */
-export const orgRateLimitsSchema = z.object(orgRateLimitShape).transform(
-  (v): OrgRateLimits =>
-    Object.freeze({
-      createOrganization: Object.freeze({
-        ...ORG_RATE_LIMIT_DEFAULTS.createOrganization,
-        limit: Number(v.ORG_RATE_LIMIT_CREATE_ORG_PER_HOUR),
-      }),
-      createInvitation: Object.freeze({
-        ...ORG_RATE_LIMIT_DEFAULTS.createInvitation,
-        limit: Number(v.ORG_RATE_LIMIT_INVITE_CREATE_PER_HOUR),
-      }),
-      reissueInvitationLink: Object.freeze({
-        ...ORG_RATE_LIMIT_DEFAULTS.reissueInvitationLink,
-        limit: Number(v.ORG_RATE_LIMIT_INVITE_LINK_PER_HOUR),
-      }),
-      publicInvitationEntry: Object.freeze({
-        ...ORG_RATE_LIMIT_DEFAULTS.publicInvitationEntry,
-        limit: Number(v.ORG_RATE_LIMIT_INVITE_PUBLIC_PER_HOUR),
-      }),
-      revealTaxProfile: Object.freeze({
-        ...ORG_RATE_LIMIT_DEFAULTS.revealTaxProfile,
-        limit: Number(v.ORG_RATE_LIMIT_TAX_REVEAL_PER_HOUR),
-      }),
+export const orgRateLimitsSchema = z.object(orgRateLimitShape).transform((v): OrgRateLimits =>
+  Object.freeze({
+    createOrganization: Object.freeze({
+      ...ORG_RATE_LIMIT_DEFAULTS.createOrganization,
+      limit: Number(v.ORG_RATE_LIMIT_CREATE_ORG_PER_HOUR),
     }),
+    createInvitation: Object.freeze({
+      ...ORG_RATE_LIMIT_DEFAULTS.createInvitation,
+      limit: Number(v.ORG_RATE_LIMIT_INVITE_CREATE_PER_HOUR),
+    }),
+    reissueInvitationLink: Object.freeze({
+      ...ORG_RATE_LIMIT_DEFAULTS.reissueInvitationLink,
+      limit: Number(v.ORG_RATE_LIMIT_INVITE_LINK_PER_HOUR),
+    }),
+    publicInvitationEntry: Object.freeze({
+      ...ORG_RATE_LIMIT_DEFAULTS.publicInvitationEntry,
+      limit: Number(v.ORG_RATE_LIMIT_INVITE_PUBLIC_PER_HOUR),
+    }),
+    revealTaxProfile: Object.freeze({
+      ...ORG_RATE_LIMIT_DEFAULTS.revealTaxProfile,
+      limit: Number(v.ORG_RATE_LIMIT_TAX_REVEAL_PER_HOUR),
+    }),
+  }),
 );
 
 /**
