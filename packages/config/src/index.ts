@@ -13,14 +13,20 @@ export type { Env } from "./env";
 export {
   ORG_RATE_LIMITS,
   ORG_TX_TIMEOUTS,
+  ROLE_CAPACITY,
   orgRateLimitsSchema,
   orgTxTimeoutsSchema,
+  roleCapacitySchema,
   resolveOrgRateLimits,
   resolveInvitationTokenSecret,
   resolveOrgTxTimeouts,
+  resolveRoleCapacity,
 } from "./env";
+export type { RoleCapacity } from "./env";
 export {
+  MAX_DELETED_ROLES_PER_ORG_DEFAULT,
   MAX_ORGS_PER_USER_DEFAULT,
+  MAX_ROLES_PER_ORG_DEFAULT,
   ORG_RATE_LIMIT_DEFAULTS,
   ORG_RATE_LIMIT_ENV_VARS,
   ORG_TX_TIMEOUT_DEFAULTS,
