@@ -112,6 +112,22 @@ components:
         Default auth scheme for OmniStock API endpoints. Individual public
         endpoints (e.g. /health, /auth/signup, /auth/login,
         /invitations/preview) opt out per operation via `security: []`.
+  # F-003 (T-003-B01) — role/capability shapes published AHEAD of their routes
+  # so the generated clients carry the types (Q-T1: each path lands with the
+  # task that serves it — B21/B23/B24/B25). Only the ROOTS of the graph are
+  # listed; `redocly bundle` hoists everything they reference. Once a path
+  # references a schema, its line here is redundant but harmless.
+  schemas:
+    RoleDetailListPage:
+      $ref: "./components/roles.yaml#/RoleDetailListPage"
+    CreateRoleRequest:
+      $ref: "./components/roles.yaml#/CreateRoleRequest"
+    UpdateRoleRequest:
+      $ref: "./components/roles.yaml#/UpdateRoleRequest"
+    DeletedRole:
+      $ref: "./components/roles.yaml#/DeletedRole"
+    CapabilityCatalog:
+      $ref: "./components/roles.yaml#/CapabilityCatalog"
 
 security:
   - bearerAuth: []
