@@ -203,7 +203,6 @@
 | `radius.button` | 8px | มุมโค้งปุ่ม, input field |
 | `radius.card` | 12px | มุมโค้ง auth card, dialog, banner |
 | `radius.badge` | 9999px (pill) | badge "อุปกรณ์นี้" |
-| `radius.checkbox` | 4px | มุมกล่อง `Checkbox` — เล็กกว่า `radius.button` เพราะกล่อง 20px มุม 8px จะอ่านเป็นวงกลม (ชนกับ radio) (F-003) |
 | `size.auth-card.max-w` | 400px | max-width auth card (web); mobile ไม่ใช้ (เต็มจอ) |
 | `size.tap-target.min` | 44px | **ความสูงขั้นต่ำของทุกอย่างที่กดได้** (ดูกติกาใต้ตาราง) |
 | `size.dialog.max-w` | 480px | ความกว้างสูงสุดของ dialog / การ์ดกึ่งกลางทั่วไป (web) — **คนละตัวกับ** `size.auth-card.max-w` (400px) |
@@ -212,8 +211,6 @@
 | `size.drawer.w` | 280px | **drawer ที่ลอยทับหน้า** (web <lg, §8.2) — **คนละตัวกับ** `size.sidebar.w` โดยเจตนา: ของที่ทับหน้าอยู่ต้องกว้างกว่าเพื่อให้อ่านเป็นชั้นแยก และไม่ควรขยับตามเวลา sidebar ถาวรเปลี่ยนความกว้าง |
 | `size.drawer.max-w` | 85% | เพดานของ drawer บนจอแคบ — **ต้องเหลือ scrim ให้เห็น** ไม่งั้นผู้ใช้ไม่รู้ว่ากดตรงไหนให้มันหายไป |
 | `size.list-row.min-h` | 56px | ความสูงขั้นต่ำของแถวรายการ / แถวเมนู (ทั้ง web + mobile) |
-| `size.checkbox` | 20px | กล่อง `Checkbox` — **ไม่ใช่พื้นที่แตะ** (แถว `CheckboxRow` ≥ `size.list-row.min-h` คือพื้นที่แตะ) (F-003) |
-| `checkbox.border.w` | 2px | ขอบกล่อง `Checkbox` ทุกสถานะ (F-003) |
 | `size.data-row.label-w` | 150px | คอลัมน์ label ของแถว "ป้าย → ค่า" (`DataRow`) — ค่าคงที่เพื่อให้ label ทุกแถวเรียงเป็นคอลัมน์เดียวกัน |
 | `size.data-row.value-min-w` | 180px | ความกว้างขั้นต่ำของคอลัมน์ค่า ก่อนที่ค่าจะตัดลงบรรทัดใหม่ใต้ label |
 | `size.content.max-w` | 1280px | ความกว้างสูงสุดของเนื้อหาที่จัดกึ่งกลาง (§8.1) |
