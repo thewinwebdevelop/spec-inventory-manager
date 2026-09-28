@@ -102,6 +102,17 @@ describe("U-RB-04 · hasCapability runs through expandCapabilities", () => {
     expect(hasCapability(["view_widgets"], "manage_widgets", FIXTURE)).toBe(false);
   });
 
+  it("full_access grants registry keys only — never an unregistered key (SR-11 fail-closed)", () => {
+    // The pre-F-003 form `includes(full) || includes(req)` said yes to ANY string.
+    expect(hasCapability(["full_access"], "legacy_key")).toBe(false);
+    expect(hasCapability(["full_access"], "manage_memebers")).toBe(false);
+    // …while an explicit holder of the unknown key still matches it (kept, not dropped).
+    expect(hasCapability(["legacy_key"], "legacy_key")).toBe(true);
+    // Non-vacuity: full_access still passes every registered key.
+    for (const { key } of CAPABILITY_REGISTRY)
+      expect(hasCapability(["full_access"], key)).toBe(true);
+  });
+
   it("the signature the guard calls is unchanged: (capabilities, required) → boolean", () => {
     expect(legacyHasCapability).toBe(hasCapability);
     expect(hasCapability(["manage_members"], "manage_members")).toBe(true);

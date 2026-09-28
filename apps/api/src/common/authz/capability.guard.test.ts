@@ -27,7 +27,7 @@ import {
 } from "@nestjs/common";
 import { Test } from "@nestjs/testing";
 import request from "supertest";
-import { CAPABILITY_MANAGE_MEMBERS } from "@omnistock/core-domain";
+import { CAPABILITY_MANAGE_MEMBERS, CAPABILITY_REGISTRY } from "@omnistock/core-domain";
 import { PrismaService } from "../../prisma/prisma.service";
 import { TenancyModule } from "../../tenancy/tenancy.module";
 import { Public, SystemScoped, UserScoped } from "../../tenancy/route-scope.decorator";
@@ -65,7 +65,9 @@ let capabilities: string[] = [];
 let membershipStatus: "active" | "revoked" = "active";
 
 const findUnique = vi.fn(
-  async (args: { where: { organizationId_userId: { organizationId: string; userId: string } } }) => {
+  async (args: {
+    where: { organizationId_userId: { organizationId: string; userId: string } };
+  }) => {
     const { organizationId, userId } = args.where.organizationId_userId;
     if (organizationId !== ORG || userId !== USER) return null;
     return {
@@ -389,6 +391,18 @@ describe("CapabilityGuard — fail-closed by omission (§3.1 · I-2 · NEW-3)", 
     expect(() => RequireCapability("")).toThrow(/non-empty capability/);
     expect(() => RequireCapability("   ")).toThrow(/non-empty capability/);
     expect(() => RequireCapability(undefined as unknown as string)).toThrow();
+  });
+
+  it("@RequireCapability refuses a key that is NOT in CAPABILITY_REGISTRY at IMPORT time (T-003-B03 review)", () => {
+    // `full_access` expands to registry keys only, so an unregistered key is a
+    // route even the Owner cannot reach — a typo must break at module load.
+    expect(() => RequireCapability("manage_memebers")).toThrow(/not in CAPABILITY_REGISTRY/);
+    expect(() => RequireCapability("legacy_key")).toThrow(/not in CAPABILITY_REGISTRY/);
+    // Non-vacuity: every registered key is still accepted.
+    expect(CAPABILITY_REGISTRY.length).toBeGreaterThan(0);
+    for (const { key } of CAPABILITY_REGISTRY) {
+      expect(() => RequireCapability(key)).not.toThrow();
+    }
   });
 
   // ── §3.1 · a declared capability ─────────────────────────────────────────

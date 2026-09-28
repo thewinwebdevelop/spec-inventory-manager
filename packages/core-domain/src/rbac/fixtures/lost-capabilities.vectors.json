@@ -123,6 +123,34 @@
       "before": ["view_widgets"],
       "after": ["manage_widgets"],
       "lost": []
+    },
+    {
+      "name": "implies: full_access to manage_X keeps view_X (only full_access and the other keys are lost)",
+      "registry": "implies_fixture",
+      "before": ["full_access"],
+      "after": ["manage_widgets"],
+      "lost": ["full_access", "manage_members"]
+    },
+    {
+      "name": "after holds only an unknown key: every known key is lost",
+      "registry": "live",
+      "before": ["manage_members", "manage_stock"],
+      "after": ["legacy_key"],
+      "lost": ["manage_members", "manage_stock"]
+    },
+    {
+      "name": "after is full_access: nothing registered is lost",
+      "registry": "live",
+      "before": ["manage_members", "manage_roles", "manage_stock", "view_financials"],
+      "after": ["full_access"],
+      "lost": []
+    },
+    {
+      "name": "after is full_access: an unknown key in before is still lost (full_access covers registry keys only)",
+      "registry": "live",
+      "before": ["full_access", "legacy_key"],
+      "after": ["full_access"],
+      "lost": ["legacy_key"]
     }
   ]
 }
