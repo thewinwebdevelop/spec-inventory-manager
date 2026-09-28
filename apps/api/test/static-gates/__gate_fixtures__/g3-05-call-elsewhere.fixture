@@ -1,0 +1,11 @@
+// G3-05 red fixture: a second place deciding "is the target below the actor?".
+import { expandCapabilities } from "./expand";
+
+function isProperSubset(a: readonly string[], b: readonly string[]): boolean {
+  const eb = new Set(expandCapabilities(b));
+  return expandCapabilities(a).every((k) => eb.has(k)) && a.length < b.length;
+}
+
+export function mayEditHeldRole(before: readonly string[], actor: readonly string[]): boolean {
+  return isProperSubset(before, actor);
+}

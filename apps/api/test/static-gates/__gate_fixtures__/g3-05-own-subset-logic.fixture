@@ -1,0 +1,7 @@
+// G3-05 red fixture: a wrapper file (member-authz / admin-reset-authz) that
+// grew its own ⊆ comparison instead of calling decideMemberAuthority.
+import { hasCapability } from "../auth/capabilities";
+
+export function canAssignRole(actor: readonly string[], role: readonly string[]): boolean {
+  return role.every((k) => hasCapability(actor, k));
+}
