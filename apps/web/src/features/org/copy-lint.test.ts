@@ -46,7 +46,10 @@ const FORBIDDEN_PHRASES: readonly { readonly phrase: string; readonly why: strin
       phrase: "คัดลอกลิงก์เดิม",
       why: "there is no old link to copy — the server keeps only the hash (D-018)",
     },
-    { phrase: "ใช้ลิงก์เดิม", why: "the previous link stopped working the moment a new one was issued" },
+    {
+      phrase: "ใช้ลิงก์เดิม",
+      why: "the previous link stopped working the moment a new one was issued",
+    },
     { phrase: "ลิงก์เดิมยังใช้ได้", why: "flatly untrue after a reissue (D-027)" },
     // ⚠️ NARROWED, and the narrowing is the interesting part. The bare
     // "ส่งลิงก์เดิม" was on this list until ux's own §9.2 sentence tripped it:
@@ -109,18 +112,25 @@ describe("E-11 · no copy claims the old invitation link still works (AC-3.4 · 
     // A cross-platform lint that quietly scanned one platform would be the
     // usual half-gate: green, and blind on the side nobody checked.
     const relatives = sourceFiles.map((f) => relative(REPO_ROOT, f).split(sep).join("/"));
-    expect(relatives.some((f) => f.startsWith("apps/web/src")), "web tree not scanned").toBe(true);
-    expect(relatives.some((f) => f.startsWith("apps/mobile/lib")), "mobile tree not scanned").toBe(
-      true,
-    );
+    expect(
+      relatives.some((f) => f.startsWith("apps/web/src")),
+      "web tree not scanned",
+    ).toBe(true);
+    expect(
+      relatives.some((f) => f.startsWith("apps/mobile/lib")),
+      "mobile tree not scanned",
+    ).toBe(true);
     expect(sourceFiles.length).toBeGreaterThan(50);
     // …and the test exclusion did not swallow the source. If these two files
     // stopped being scanned, the ban would be enforced over an empty set.
     expect(relatives).toContain("apps/web/src/features/org/i18n.ts");
-    expect(relatives).toContain("apps/mobile/lib/features/org/presentation/screens/invite_link_screen.dart");
-    expect(relatives.every((f) => !f.endsWith(".test.ts")), "a test file slipped into the scan").toBe(
-      true,
+    expect(relatives).toContain(
+      "apps/mobile/lib/features/org/presentation/screens/invite_link_screen.dart",
     );
+    expect(
+      relatives.every((f) => !f.endsWith(".test.ts")),
+      "a test file slipped into the scan",
+    ).toBe(true);
     expect(existsSync(MOBILE_ARB), "the Thai bundle is missing").toBe(true);
   });
 
@@ -171,7 +181,7 @@ describe("E-11 · no copy claims the old invitation link still works (AC-3.4 · 
     // It flags a real string…
     expect(stripComments('const t = "คัดลอกลิงก์เดิม";')).toContain("คัดลอกลิงก์เดิม");
     // …and clears the same words when they are explaining the rule.
-    expect(stripComments('// never write คัดลอกลิงก์เดิม anywhere')).not.toContain(
+    expect(stripComments("// never write คัดลอกลิงก์เดิม anywhere")).not.toContain(
       "คัดลอกลิงก์เดิม",
     );
     expect(stripComments('/// Must never say "คัดลอกลิงก์เดิม" — D-018')).not.toContain(
@@ -190,5 +200,104 @@ describe("E-11 · no copy claims the old invitation link still works (AC-3.4 · 
       "@good": { description: "never say คัดลอกลิงก์เดิม" },
     });
     expect(arbCopyValues(arb)).toEqual(["ลิงก์นี้แสดงครั้งเดียว"]);
+  });
+});
+
+/**
+ * F-003 §0.1 · PM UX01 (D-037 condition) — the "สิทธิ์→บทบาท" move that
+ * T-003-W04 makes must not regress, on either side of the seam it protects:
+ * `packages/core-domain/src/rbac/registry.ts` is D-037's ONE source of the
+ * capability copy, and the org screens (`role-copy.ts`, `i18n.ts`,
+ * `ChangeRoleDialog.tsx`, `invite-error.ts`) are the four places F-002's old
+ * "สิทธิ์" (ROLE) text lived before this task moved it.
+ *
+ * Same shape as the E-11 lint above, on purpose: NEGATIVE bans below, plus a
+ * SELF-CHECK that proves the matcher can still fail and does not eat the one
+ * sentence in this feature that legitimately keeps "เปลี่ยนสิทธิ์" — R3a's
+ * "บันทึกการเปลี่ยนสิทธิ์ของ…" confirms an edit to a role's CAPABILITIES, which
+ * is not the F-002 mistake at all.
+ */
+describe("F-003 §0.1 · role-vs-capability wording must not regress (PM UX01 / D-037)", () => {
+  const TERMINOLOGY_FILES: readonly string[] = Object.freeze([
+    join(REPO_ROOT, "packages/core-domain/src/rbac/registry.ts"),
+    join(WEB_SRC, "features/org/role-copy.ts"),
+    join(WEB_SRC, "features/org/i18n.ts"),
+    join(WEB_SRC, "features/org/components/ChangeRoleDialog.tsx"),
+    join(WEB_SRC, "features/invite/invite-error.ts"),
+  ]);
+
+  const FORBIDDEN_TERM_PATTERNS: readonly { readonly pattern: RegExp; readonly why: string }[] =
+    Object.freeze([
+      {
+        // Negative lookbehind: "การเปลี่ยนสิทธิ์" (nominalised — "the changing
+        // of a role's CAPABILITIES", R3a) is left alone on purpose; only the
+        // bare F-002 verb ("เปลี่ยนสิทธิ์ของ {email}" = "change {email}'s
+        // ROLE") is banned.
+        pattern: /(?<!การ)เปลี่ยนสิทธิ์/,
+        why: '"เปลี่ยนสิทธิ์" is F-002 wording for changing a ROLE — must read "เปลี่ยนบทบาท" (ux-wireframe F-003 §0.1)',
+      },
+      {
+        pattern: /สิทธิ์[^\n]{0,15}\{role/i,
+        why: '"สิทธิ์" glued to a {role…} placeholder names a ROLE, not a capability — the word in front must be "บทบาท"',
+      },
+      { pattern: /องค์กร/, why: 'ux-wireframe §0.1 (D-029): "ร้าน", never "องค์กร"' },
+      { pattern: /โคลน/, why: 'ux-wireframe §0.1: "ทำสำเนา", never "โคลน"' },
+      {
+        pattern: /read-only/i,
+        why: 'ux-wireframe §0.1: "ดูได้อย่างเดียว", never the English "read-only"',
+      },
+      {
+        // `\b` fails to match immediately after `_`, so this does not trip on
+        // the API's own snake_case reason codes (`exceeds_your_permissions`,
+        // `equal_permissions_in_use`, …), which are data, not copy.
+        pattern: /\bpermissions?\b/i,
+        why: 'ux-wireframe §0.1: "สิทธิ์", never the bare English "permission"',
+      },
+    ]);
+
+  it("the scan reached every terminology file, including the registry (D-037)", () => {
+    for (const file of TERMINOLOGY_FILES) {
+      expect(
+        existsSync(file),
+        `${relative(REPO_ROOT, file)} is missing — the scan would cover nothing`,
+      ).toBe(true);
+    }
+  });
+
+  it("★ no terminology file carries a forbidden F-002/off-token term", () => {
+    const offenders: string[] = [];
+    for (const file of TERMINOLOGY_FILES) {
+      const code = stripComments(readFileSync(file, "utf8"));
+      for (const { pattern, why } of FORBIDDEN_TERM_PATTERNS) {
+        if (pattern.test(code)) {
+          offenders.push(
+            `${relative(REPO_ROOT, file).split(sep).join("/")}: /${pattern.source}/ — ${why}`,
+          );
+        }
+      }
+    }
+    expect(offenders).toEqual([]);
+  });
+
+  it("★ no mobile arb value carries one either", () => {
+    const offenders: string[] = [];
+    for (const value of arbCopyValues(readFileSync(MOBILE_ARB, "utf8"))) {
+      for (const { pattern, why } of FORBIDDEN_TERM_PATTERNS) {
+        if (pattern.test(value)) offenders.push(`app_th.arb: "${value}" — ${why}`);
+      }
+    }
+    expect(offenders).toEqual([]);
+  });
+
+  it("SELF-CHECK: R3a's own confirm title (a correct capability edit) is not caught", () => {
+    const correct = 'บันทึกการเปลี่ยนสิทธิ์ของ "{name}"?';
+    for (const { pattern } of FORBIDDEN_TERM_PATTERNS) {
+      expect(pattern.test(correct), `false positive: /${pattern.source}/`).toBe(false);
+    }
+  });
+
+  it("SELF-CHECK: the matcher can still fail on the exact F-002 mistake", () => {
+    expect(FORBIDDEN_TERM_PATTERNS[0]!.pattern.test("เปลี่ยนสิทธิ์ของ malee@shop.com")).toBe(true);
+    expect(FORBIDDEN_TERM_PATTERNS[1]!.pattern.test("คำเชิญเดิม: สิทธิ์ {roleName}")).toBe(true);
   });
 });
