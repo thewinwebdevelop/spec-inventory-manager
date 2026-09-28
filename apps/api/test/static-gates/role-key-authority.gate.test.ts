@@ -73,7 +73,7 @@ const PRESENTATION_ALLOWLIST: readonly PresentationAllowance[] = Object.freeze([
       "`roleLabel()` maps a system roleKey to its Thai label and falls back to roleName " +
       "for an unknown/custom key (api-spec: roleKey is an open set). Display only.",
     lines: [
-      "export function roleLabel(roleKey: string | null | undefined, roleName: string | undefined): string {",
+      "export function roleLabel(",
       "switch (roleKey) {",
       'case "owner":',
       'case "admin":',
@@ -117,6 +117,18 @@ const PRESENTATION_ALLOWLIST: readonly PresentationAllowance[] = Object.freeze([
     lines: [
       "const { name, roleKey, nameCustomized } = params;",
       "if (roleKey && roleKey in ROLE_KEY_LABEL) return ROLE_KEY_LABEL[roleKey];",
+    ],
+  },
+  {
+    file: "packages/core-domain/src/rbac/role-validation.ts",
+    reason:
+      "`reservedRoleNames()` (AC-3.5 · data-model §2.1, T-003-B04): picks WHICH system-role translations " +
+      "are reserved as names (a live, un-renamed admin/staff role's label; minus the caller's own). " +
+      "A naming policy — it never grants or refuses a capability.",
+    lines: [
+      "if (role.nameCustomized || role.key === ctx.selfKey) continue;",
+      'if (role.key === "admin" || role.key === "staff") {',
+      "out.add(roleNameComparisonKey(labels[role.key]));",
     ],
   },
   // ── display call sites: a role key handed to `roleLabel` to render a label.
