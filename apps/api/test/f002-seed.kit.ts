@@ -228,7 +228,11 @@ export interface SeedKit {
   /** Switch an EXISTING role's `key` (including to `null`) — I-45. */
   setRoleKey(roleId: string, key: string | null): Promise<SeededRole>;
   /** Point a membership at another role — the "switch a member's role" path. */
-  setMembershipRole(organizationId: string, userId: string, roleId: string): Promise<SeededMembership>;
+  setMembershipRole(
+    organizationId: string,
+    userId: string,
+    roleId: string,
+  ): Promise<SeededMembership>;
   createInvitation(options: {
     organizationId: string;
     email: string;
@@ -283,7 +287,10 @@ export function createSeedKit(prisma: SeedPrismaClient, options: SeedKitOptions 
     opts: { name?: string; roles?: readonly RoleSpec[] } = {},
   ): Promise<SeededOrg> {
     const name = opts.name ?? `${label}-org-${unique()}`;
-    const org = await prisma.organization.create({ data: { name }, select: { id: true, name: true } });
+    const org = await prisma.organization.create({
+      data: { name },
+      select: { id: true, name: true },
+    });
     created.orgs.push(org.id);
 
     const roles: Record<string, SeededRole> = {};
@@ -299,7 +306,12 @@ export function createSeedKit(prisma: SeedPrismaClient, options: SeedKitOptions 
         select: { id: true, name: true, key: true, capabilities: true },
       });
       created.roles.push(role.id);
-      roles[role.name] = { id: role.id, name: role.name, key: role.key, capabilities: role.capabilities };
+      roles[role.name] = {
+        id: role.id,
+        name: role.name,
+        key: role.key,
+        capabilities: role.capabilities,
+      };
     }
     return { id: org.id, name: org.name, roles };
   }
@@ -367,10 +379,12 @@ export function createSeedKit(prisma: SeedPrismaClient, options: SeedKitOptions 
   }): Promise<SeededInvitation> {
     // Resolves LAZILY so every non-invitation scenario stays usable while the
     // production hasher is still unwritten.
-    const dbModule = options.dbModule ?? ((await import("@omnistock/db")) as Record<string, unknown>);
+    const dbModule =
+      options.dbModule ?? ((await import("@omnistock/db")) as Record<string, unknown>);
     const hashInvitationToken = resolveInvitationTokenHasher(dbModule);
 
-    const rawToken = opts.rawToken ?? randomUUID().replace(/-/g, "") + randomUUID().replace(/-/g, "");
+    const rawToken =
+      opts.rawToken ?? randomUUID().replace(/-/g, "") + randomUUID().replace(/-/g, "");
     const now = new Date();
     const row = await prisma.invitation.create({
       data: {
@@ -422,10 +436,17 @@ export function createSeedKit(prisma: SeedPrismaClient, options: SeedKitOptions 
           const org = await createOrg({ name: `${label}-cap-${i}-${unique()}` });
           orgs.push(org);
           memberships.push(
-            await addMember({ organizationId: org.id, userId: user.id, roleId: org.roles.Owner.id }),
+            await addMember({
+              organizationId: org.id,
+              userId: user.id,
+              roleId: org.roles.Owner.id,
+            }),
           );
         }
-        return result(name, orgs, [user], memberships, [], { userId: user.id, orgCount: orgs.length });
+        return result(name, orgs, [user], memberships, [], {
+          userId: user.id,
+          orgCount: orgs.length,
+        });
       }
 
       case "revoked-member": {
@@ -473,11 +494,17 @@ export function createSeedKit(prisma: SeedPrismaClient, options: SeedKitOptions 
         // Two custom roles with `key: null` must coexist (Postgres treats each
         // NULL as distinct) — and the Staff role's key is then FLIPPED to
         // "owner" while its capabilities stay put: I-45's fixture exactly.
+        //
+        // F-003 R3-03: "Custom B" used to hold `capabilities: []`. F-003's
+        // migration adds CHECK "Role_capabilities_nonempty" (and
+        // "Role_full_access_system_only"), so an empty custom role is a row the
+        // database will refuse. Nothing in I-44(c)/I-45 depends on it being
+        // empty — only on `key: null` and on it NOT holding `full_access`.
         const org = await createOrg({
           roles: [
             ...DEFAULT_ROLE_SPECS,
             { name: "Custom A", key: null, capabilities: ["manage_products"] },
-            { name: "Custom B", key: null, capabilities: [] },
+            { name: "Custom B", key: null, capabilities: ["manage_orders"] },
           ],
         });
         const user = await createUser();
@@ -555,20 +582,13 @@ export function createSeedKit(prisma: SeedPrismaClient, options: SeedKitOptions 
         expiresAt: new Date(now.getTime() + 86_400_000),
         invitedByUserId: owner.id,
       });
-      return result(
-        name,
-        [org],
-        [owner, invitee],
-        [ownerMembership, membership],
-        [invitation],
-        {
-          orgId: org.id,
-          invitationId: invitation.id,
-          rawToken: invitation.rawToken,
-          tokenIssuedAt: issuedAt.toISOString(),
-          revokedAt: revokedAt.toISOString(),
-        },
-      );
+      return result(name, [org], [owner, invitee], [ownerMembership, membership], [invitation], {
+        orgId: org.id,
+        invitationId: invitation.id,
+        rawToken: invitation.rawToken,
+        tokenIssuedAt: issuedAt.toISOString(),
+        revokedAt: revokedAt.toISOString(),
+      });
     }
 
     // high-role-invite — an Owner invitation, TTL 24h (D-028): the row Owner-only
@@ -609,6 +629,15 @@ export function createSeedKit(prisma: SeedPrismaClient, options: SeedKitOptions 
     }
     if (created.memberships.length > 0) {
       await prisma.membership.deleteMany({ where: { id: { in: created.memberships } } });
+    }
+    if (created.orgs.length > 0) {
+      // T-003-QA01: rows an ENDPOINT wrote into a kit-seeded org (an invitation
+      // created through `POST …/invitations`) are unknown to `created.*` but
+      // still reference the kit's roles — so they must go BEFORE the roles, or
+      // the role delete below dies on `Invitation_organizationId_roleId_fkey`.
+      // Scoped by organizationId: still only rows belonging to MY orgs.
+      await prisma.invitation.deleteMany({ where: { organizationId: { in: created.orgs } } });
+      await prisma.membership.deleteMany({ where: { organizationId: { in: created.orgs } } });
     }
     if (created.roles.length > 0) {
       await prisma.role.deleteMany({ where: { id: { in: created.roles } } });
