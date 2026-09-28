@@ -50,12 +50,17 @@ d("withOrgScope against a real database (M-9 — row by row)", () => {
   let roleB: string;
 
   const newUser = async () =>
-    (await base.user.create({ data: { email: `${TAG}-${Math.random().toString(36).slice(2)}@t.co`, passwordHash: "x" } }))
-      .id;
+    (
+      await base.user.create({
+        data: { email: `${TAG}-${Math.random().toString(36).slice(2)}@t.co`, passwordHash: "x" },
+      })
+    ).id;
 
   /** A membership row that belongs to `org` — the "other org's row" under test. */
   async function seedMembership(org: string, role: string) {
-    return base.membership.create({ data: { organizationId: org, userId: await newUser(), roleId: role, status: "active" } });
+    return base.membership.create({
+      data: { organizationId: org, userId: await newUser(), roleId: role, status: "active" },
+    });
   }
 
   beforeAll(async () => {
@@ -66,8 +71,30 @@ d("withOrgScope against a real database (M-9 — row by row)", () => {
     await base.$connect();
     orgA = (await base.organization.create({ data: { name: `${TAG}-A` } })).id;
     orgB = (await base.organization.create({ data: { name: `${TAG}-B` } })).id;
-    roleA = (await base.role.create({ data: { organizationId: orgA, name: "Owner", key: "owner", capabilities: ["full_access"] } })).id;
-    roleB = (await base.role.create({ data: { organizationId: orgB, name: "Owner", key: "owner", capabilities: ["full_access"] } })).id;
+    // isSystem: true = an Owner as provisioning writes it; since F-003 the CHECK
+    // "Role_full_access_system_only" refuses full_access on a non-system role.
+    roleA = (
+      await base.role.create({
+        data: {
+          organizationId: orgA,
+          name: "Owner",
+          key: "owner",
+          capabilities: ["full_access"],
+          isSystem: true,
+        },
+      })
+    ).id;
+    roleB = (
+      await base.role.create({
+        data: {
+          organizationId: orgB,
+          name: "Owner",
+          key: "owner",
+          capabilities: ["full_access"],
+          isSystem: true,
+        },
+      })
+    ).id;
     scoped = withOrgScope(base, { organizationId: orgA });
   });
 
@@ -97,12 +124,17 @@ d("withOrgScope against a real database (M-9 — row by row)", () => {
     expect(rows.every((r) => r.organizationId === orgA)).toBe(true);
 
     expect(await scoped.membership.findFirst({ where: { id: b.id } })).toBeNull();
-    expect(await scoped.membership.count()).toBe(await base.membership.count({ where: { organizationId: orgA } }));
+    expect(await scoped.membership.count()).toBe(
+      await base.membership.count({ where: { organizationId: orgA } }),
+    );
 
     const agg = await scoped.membership.aggregate({ _count: { _all: true } });
     expect(agg._count._all).toBe(await base.membership.count({ where: { organizationId: orgA } }));
 
-    const grouped = await scoped.membership.groupBy({ by: ["organizationId"], _count: { _all: true } });
+    const grouped = await scoped.membership.groupBy({
+      by: ["organizationId"],
+      _count: { _all: true },
+    });
     expect(grouped.map((g) => g.organizationId)).toEqual([orgA]);
   });
 
@@ -115,8 +147,12 @@ d("withOrgScope against a real database (M-9 — row by row)", () => {
 
   it("findUniqueOrThrow / findFirstOrThrow give the SAME P2025 as a row that never existed (no existence oracle — I-5)", async () => {
     const b = await seedMembership(orgB, roleB);
-    const foreign = await scoped.membership.findUniqueOrThrow({ where: { id: b.id } }).catch((e) => e);
-    const absent = await scoped.membership.findUniqueOrThrow({ where: { id: "cl_does_not_exist_00000000" } }).catch((e) => e);
+    const foreign = await scoped.membership
+      .findUniqueOrThrow({ where: { id: b.id } })
+      .catch((e) => e);
+    const absent = await scoped.membership
+      .findUniqueOrThrow({ where: { id: "cl_does_not_exist_00000000" } })
+      .catch((e) => e);
     expect(foreign).toBeInstanceOf(Prisma.PrismaClientKnownRequestError);
     expect((foreign as Prisma.PrismaClientKnownRequestError).code).toBe("P2025");
     expect((absent as Prisma.PrismaClientKnownRequestError).code).toBe("P2025");
@@ -130,9 +166,13 @@ d("withOrgScope against a real database (M-9 — row by row)", () => {
 
   it("update on another org's row fails with P2025 and leaves the row untouched", async () => {
     const b = await seedMembership(orgB, roleB);
-    const err = await scoped.membership.update({ where: { id: b.id }, data: { status: "revoked" } }).catch((e) => e);
+    const err = await scoped.membership
+      .update({ where: { id: b.id }, data: { status: "revoked" } })
+      .catch((e) => e);
     expect((err as Prisma.PrismaClientKnownRequestError).code).toBe("P2025");
-    expect((await base.membership.findUniqueOrThrow({ where: { id: b.id } })).status).toBe("active");
+    expect((await base.membership.findUniqueOrThrow({ where: { id: b.id } })).status).toBe(
+      "active",
+    );
   });
 
   it("delete on another org's row fails with P2025 and the row survives", async () => {
@@ -146,9 +186,16 @@ d("withOrgScope against a real database (M-9 — row by row)", () => {
     const a = await seedMembership(orgA, roleA);
     const b = await seedMembership(orgB, roleB);
 
-    await scoped.membership.updateMany({ where: { status: "active" }, data: { status: "revoked" } });
-    expect((await base.membership.findUniqueOrThrow({ where: { id: a.id } })).status).toBe("revoked");
-    expect((await base.membership.findUniqueOrThrow({ where: { id: b.id } })).status).toBe("active");
+    await scoped.membership.updateMany({
+      where: { status: "active" },
+      data: { status: "revoked" },
+    });
+    expect((await base.membership.findUniqueOrThrow({ where: { id: a.id } })).status).toBe(
+      "revoked",
+    );
+    expect((await base.membership.findUniqueOrThrow({ where: { id: b.id } })).status).toBe(
+      "active",
+    );
 
     const del = await scoped.membership.deleteMany({ where: { status: "revoked" } });
     expect(del.count).toBeGreaterThanOrEqual(1);
@@ -159,7 +206,9 @@ d("withOrgScope against a real database (M-9 — row by row)", () => {
   // ── creates ──────────────────────────────────────────────────────────────
 
   it("create / createMany / createManyAndReturn land in the ctx org without the caller saying so", async () => {
-    const created = await scoped.membership.create({ data: { userId: await newUser(), roleId: roleA } as never });
+    const created = await scoped.membership.create({
+      data: { userId: await newUser(), roleId: roleA } as never,
+    });
     expect(created.organizationId).toBe(orgA);
 
     const many = await scoped.membership.createMany({
@@ -227,7 +276,9 @@ d("withOrgScope against a real database (M-9 — row by row)", () => {
     });
     expect(out.id).not.toBe(b.id);
     expect(out.organizationId).toBe(orgA);
-    expect((await base.membership.findUniqueOrThrow({ where: { id: b.id } })).status).toBe("active");
+    expect((await base.membership.findUniqueOrThrow({ where: { id: b.id } })).status).toBe(
+      "active",
+    );
   });
 
   // ── nested write: not scoped, and provably NOT silent ────────────────────
@@ -255,9 +306,13 @@ d("withOrgScope against a real database (M-9 — row by row)", () => {
   // ── explicit cross-org attempt ───────────────────────────────────────────
 
   it("an explicit foreign organizationId is refused before it reaches the database", async () => {
-    await expect(scoped.membership.findMany({ where: { organizationId: orgB } })).rejects.toThrow(OrgScopeViolationError);
+    await expect(scoped.membership.findMany({ where: { organizationId: orgB } })).rejects.toThrow(
+      OrgScopeViolationError,
+    );
     await expect(
-      scoped.membership.create({ data: { organizationId: orgB, userId: await newUser(), roleId: roleB } }),
+      scoped.membership.create({
+        data: { organizationId: orgB, userId: await newUser(), roleId: roleB },
+      }),
     ).rejects.toThrow(OrgScopeViolationError);
   });
 
@@ -266,7 +321,9 @@ d("withOrgScope against a real database (M-9 — row by row)", () => {
   it("U-DB-10 · $transaction (callback form) keeps org scoping inside the transaction", async () => {
     const b = await seedMembership(orgB, roleB);
     const result = await scoped.$transaction(async (tx) => {
-      const created = await tx.membership.create({ data: { userId: await newUser(), roleId: roleA } as never });
+      const created = await tx.membership.create({
+        data: { userId: await newUser(), roleId: roleA } as never,
+      });
       const leak = await tx.membership.findUnique({ where: { id: b.id } });
       const all = await tx.membership.findMany({});
       return { created, leak, all };
@@ -391,9 +448,15 @@ d("withOrgScope against a real database (M-9 — row by row)", () => {
   // ── C-3 / NEW-8: the nested-read gap is real (that is why USER_SELECT exists)
 
   it("C-3/NEW-8 · a relation walk through User DOES return other orgs' rows — the gap USER_SELECT closes", async () => {
-    const user = await base.user.create({ data: { email: `${TAG}-multi@t.co`, passwordHash: "secret-hash" } });
-    await base.membership.create({ data: { organizationId: orgA, userId: user.id, roleId: roleA, status: "active" } });
-    await base.membership.create({ data: { organizationId: orgB, userId: user.id, roleId: roleB, status: "active" } });
+    const user = await base.user.create({
+      data: { email: `${TAG}-multi@t.co`, passwordHash: "secret-hash" },
+    });
+    await base.membership.create({
+      data: { organizationId: orgA, userId: user.id, roleId: roleA, status: "active" },
+    });
+    await base.membership.create({
+      data: { organizationId: orgB, userId: user.id, roleId: roleB, status: "active" },
+    });
 
     // The forbidden shape (test-plan I-35(b)) — proven to leak, hence banned by
     // rule, by the grep gate, and structurally by USER_SELECT.

@@ -75,6 +75,14 @@ function realMigration(name: string): MigrationSource {
   return { name, sql: () => readFileSync(file, "utf8") };
 }
 
+/** The committed migration whose directory name ends in `_<slug>` (exactly one). */
+export function realMigrationBySlug(slug: string): MigrationSource {
+  const hits = listRealMigrations().filter((n) => n.endsWith(`_${slug}`));
+  if (hits.length !== 1)
+    throw new Error(`expected exactly 1 committed migration *_${slug}, found ${hits.length}`);
+  return realMigration(hits[0]);
+}
+
 /** Every committed migration after `baseline`, in order. */
 export function realMigrationsAfter(baseline: string): MigrationSource[] {
   const names = listRealMigrations();
@@ -185,6 +193,39 @@ export function migrateDeploy(schemaPath: string, url: string): CommandResult {
   if (res.error) throw new Error(`prisma migrate deploy could not run: ${res.error.message}`);
   if (res.status === null)
     throw new Error(`prisma migrate deploy was killed (${res.signal})\n${res.stderr}`);
+  return { status: res.status, stdout: res.stdout, stderr: res.stderr };
+}
+
+/**
+ * Real `prisma migrate diff` from the live database at `url` to the datamodel
+ * in `schemaPath`, with `--exit-code`: status 0 = no drift, 2 = drift (the SQL
+ * that would fix it is on stdout). A CLI that could not run THROWS.
+ */
+export function migrateDiff(schemaPath: string, url: string): CommandResult {
+  if (!existsSync(PRISMA_BIN))
+    throw new Error(`prisma CLI not found at ${PRISMA_BIN} — run pnpm install`);
+  const res = spawnSync(
+    PRISMA_BIN,
+    [
+      "migrate",
+      "diff",
+      "--from-url",
+      url,
+      "--to-schema-datamodel",
+      schemaPath,
+      "--script",
+      "--exit-code",
+    ],
+    {
+      cwd: join(schemaPath, ".."),
+      env: { ...process.env, PRISMA_HIDE_UPDATE_MESSAGE: "1" },
+      encoding: "utf8",
+      timeout: 90_000,
+    },
+  );
+  if (res.error) throw new Error(`prisma migrate diff could not run: ${res.error.message}`);
+  if (res.status === null)
+    throw new Error(`prisma migrate diff was killed (${res.signal})\n${res.stderr}`);
   return { status: res.status, stdout: res.stdout, stderr: res.stderr };
 }
 
