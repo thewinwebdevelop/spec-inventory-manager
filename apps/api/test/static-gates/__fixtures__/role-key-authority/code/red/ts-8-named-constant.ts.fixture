@@ -1,0 +1,11 @@
+// G-12 red fixture TS-8 — a key compared to a named constant instead of a
+// literal, and a bare `switch (key)` after destructuring.
+export function gate(r: { key: string }, { key }: { key: string }) {
+  if (r.key === OWNER) return 1; // ← hit
+  if (r.key !== RoleKeys.Admin) return 2; // ← hit
+  if (STAFF_KEY == key) return 3; // ← hit
+  switch (key) { // ← hit
+    default:
+      return 0;
+  }
+}

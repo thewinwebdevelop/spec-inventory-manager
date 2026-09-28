@@ -15,5 +15,12 @@ export function ok(caps: string[], m: { roleKey: string | null; roleName: string
       break;
   }
   const found = personas.find((p) => p.key === key);
-  return Boolean(row && label && found);
+  // TS-6/7/8 neighbours
+  if (status === "active") return false;
+  const cls = "admin-panel";
+  if (e.key === "Enter") return false;
+  const shown = roleLabel(role.key, role.name);
+  const ratio = total / count / 2;
+  const url = "https://example.test/*not-a-comment*/";
+  return Boolean(row && label && found && cls && shown && ratio && url);
 }

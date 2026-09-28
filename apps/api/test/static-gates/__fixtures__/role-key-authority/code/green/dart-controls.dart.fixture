@@ -6,4 +6,9 @@ class Tile extends StatelessWidget {
   bool get isOwner => m.capabilities.contains('full_access');
   Membership copy() => Membership(roleKey: m.roleKey, key: r.key);
   bool esc(KeyEvent e) => e.logicalKey == LogicalKeyboardKey.escape;
+  // DART-3/4 neighbours
+  bool get active => status == 'active';
+  Widget title(AppLocalizations t, Role role) => Text(roleLabel(t, role.key, role.name));
+  final String cls = 'admin-panel';
+  final Map<String, int> sizes = {'small': 1, 'large': 2};
 }

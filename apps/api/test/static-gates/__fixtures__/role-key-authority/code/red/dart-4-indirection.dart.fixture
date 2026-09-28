@@ -1,0 +1,14 @@
+// G-12 red fixture DART-4 — indirection, named constant, bare switch (key).
+int gate(Role role, Membership m, String key) {
+  final limit = kPolicy[role.key]; // ← hit
+  final rank = kRanks[m.roleKey!]; // ← hit
+  final norm = role.key.toLowerCase(); // ← hit
+  final allowed = can(m.roleKey, 'manage_roles'); // ← hit
+  final String? alias = m.role?.key; // ← hit
+  if (role.key == kOwner) return 1; // ← hit DART-1
+  if (m.role.key != RoleKeys.admin) return 2; // ← hit DART-1
+  if (key == ownerKey) return 3; // ← hit
+  return switch (key) { // ← hit
+    _ => 0,
+  };
+}

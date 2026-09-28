@@ -5,25 +5,27 @@
 // data-model §4.2 (bridge trigger) · F-002 test-plan G-12 / I-45.
 //
 // Two layers, one rule:
-//   1. CODE — apps/api, apps/web, apps/back-office (TS) and apps/mobile (Dart):
-//      5 TS shapes + 2 Dart shapes. The only way out is a per-file PRESENTATION
-//      allowlist (a label map), each entry with its reason.
+//   1. CODE — apps/api, apps/web, apps/back-office, packages/core-domain (TS)
+//      and apps/mobile (Dart): 8 TS + 4 Dart rule families (see the scanner).
+//      The only way out is a PRESENTATION allowlist pinned per LINE.
 //   2. SQL (SR-10) — every `CREATE [OR REPLACE] FUNCTION … $tag$…$tag$` body in
 //      packages/db/prisma/migrations/**/migration.sql that compares `key` to
 //      'owner'|'admin'|'staff'. The only way out is a per-(migration, function)
 //      allowlist entry with a `removeBy` date. Past that date, the function must
-//      have been dropped by a later migration — otherwise red. The clock is a
-//      parameter, so the expiry is tested with fixtures, not by waiting.
+//      have been dropped by a LATER migration (same schema + signature, not in
+//      a string, not inside another function body) — otherwise red. The clock
+//      is a parameter, so the expiry is tested with fixtures, not by waiting.
 //
-// ⚠️ What this does NOT prove: grep sees only the shapes it knows. Passing the
-// key into a helper, `ROLE_KEYS.indexOf`, a lookup table keyed by role key —
-// none of those are caught. The behavioural proof is I-45 / I3-56 (swap keys on
-// a real DB; permissions must not move). This gate is the fast layer only.
+// ⚠️ What this does NOT prove: grep sees only the shapes it knows — the blind
+// spots are listed in the scanner's header. The behavioural proof is I-45 /
+// I3-56 (swap keys on a real DB; permissions must not move). This gate is the
+// fast layer only; the two are required together (architecture §14).
 import { describe, it, expect } from "vitest";
 import { existsSync, readFileSync, readdirSync } from "node:fs";
 import { join } from "node:path";
 import {
   type CodeRuleId,
+  type Migration,
   type SqlAllowance,
   type PresentationAllowance,
   CODE_RULE_IDS,
@@ -34,6 +36,8 @@ import {
   parseMigration,
   scanCode,
   sqlOffenders,
+  stalePins,
+  stripComments,
 } from "./role-key-authority.gate";
 
 const REPO = join(process.cwd(), "..", "..");
@@ -46,11 +50,13 @@ const CODE_ROOTS = [
   "apps/web/src",
   "apps/back-office/src",
   "apps/mobile/lib",
+  "packages/core-domain/src", // where permission rules live (golden rule 6)
 ] as const;
 
 /**
- * Presentation-only files allowed to branch on a role key — a label map, never
- * a permission input. Per FILE, never per directory.
+ * Presentation-only lines allowed to read a role key — label maps and display
+ * choices, never a permission input. Pinned per FILE + exact LINE text: a new
+ * key read in the same file is red until reviewed and pinned here.
  */
 const PRESENTATION_ALLOWLIST: readonly PresentationAllowance[] = Object.freeze([
   {
@@ -58,23 +64,36 @@ const PRESENTATION_ALLOWLIST: readonly PresentationAllowance[] = Object.freeze([
     reason:
       "`roleLabel()` maps a system roleKey to its Thai label and falls back to roleName " +
       "for an unknown/custom key (api-spec: roleKey is an open set). Display only.",
-    hits: 1,
+    lines: ["switch (roleKey) {", 'case "owner":', 'case "admin":', 'case "staff":'],
   },
   {
     file: "apps/mobile/lib/features/org/presentation/widgets/role_label.dart",
     reason:
       "`roleLabel()` — the Dart twin of the web label map above; unknown key falls back to roleName.",
-    hits: 1,
+    lines: [
+      "String roleLabel(AppLocalizations t, String? roleKey, String roleName) => switch (roleKey) {",
+      "'owner' => t.roleOwner,",
+      "'admin' => t.roleAdmin,",
+      "'staff' => t.roleStaff,",
+    ],
   },
   {
     file: "apps/mobile/lib/features/org/presentation/screens/invite_member_screen.dart",
     reason:
-      "Invite screen display choices: default radio selection (`staff`), per-key description " +
-      "sentence, and which TTL warning sentence to show (`_isElevated`). The server decides " +
-      "the role and the expiry; none of these gate a request. T-003-M09 rewrites this screen " +
-      "(server-driven roles) and must re-pin `hits`. See QA03 report: `_isElevated` drifts " +
-      "from the server's isElevatedRole once custom roles exist (display defect, not authority).",
-    hits: 3,
+      "Invite screen display choices: default radio selection (`staff` / preset key), per-key " +
+      "description sentence, and which TTL warning sentence to show (`_isElevated`). The server " +
+      "decides the role and the expiry; none of these gate a request. T-003-M09 rewrites this " +
+      "screen (server-driven roles) and must re-pin. QA03 finding F1: `_isElevated` drifts from " +
+      "the server's isElevatedRole once custom roles exist (display defect, not authority).",
+    lines: [
+      "final preset = widget.initialRoleKey;",
+      "final staff = roles.where((r) => r.key == 'staff').firstOrNull;",
+      "return selected.grantsOwnership || selected.key == 'admin';",
+      "final description = switch (role.key) {",
+      "'owner' => t.inviteRoleOwnerDesc,",
+      "'admin' => t.inviteRoleAdminDesc,",
+      "'staff' => t.inviteRoleStaffDesc,",
+    ],
   },
 ]);
 
@@ -87,25 +106,36 @@ const PRESENTATION_ALLOWLIST: readonly PresentationAllowance[] = Object.freeze([
  */
 const SQL_FUNCTION_ALLOWLIST: readonly SqlAllowance[] = Object.freeze([]);
 
-/** Marker in red fixtures: this line MUST be flagged. */
-const HIT = /\/\/ ← hit\s*$/;
+/** Marker in red fixtures: `// ← hit` (fixture's own rule) or `// ← hit TS-6`. */
+const HIT = /\/\/ ← hit(?: ([A-Z]+-\d+))?\s*$/;
 
 function readFixture(rel: string): string {
   return readFileSync(join(FIXTURES, rel), "utf8");
 }
 
-function expectedHitLines(source: string): number[] {
-  return source.split("\n").flatMap((line, i) => (HIT.test(line) ? [i + 1] : []));
+function expectedHits(source: string, rule: CodeRuleId): Map<number, string> {
+  const out = new Map<number, string>();
+  source.split("\n").forEach((line, i) => {
+    const m = HIT.exec(line);
+    if (m) out.set(i + 1, m[1] ?? rule);
+  });
+  return out;
 }
 
 const RED_CODE_FIXTURES: ReadonlyArray<readonly [string, CodeRuleId]> = [
   ["code/red/ts-1-role-dot-key-compare.ts.fixture", "TS-1"],
+  ["code/red/ts-1b-after-regex-literal.ts.fixture", "TS-1"],
   ["code/red/ts-2-role-key-var-compare.ts.fixture", "TS-2"],
   ["code/red/ts-3-key-literal-compare.ts.fixture", "TS-3"],
   ["code/red/ts-4-includes-role-key.ts.fixture", "TS-4"],
   ["code/red/ts-5-switch-role-key.ts.fixture", "TS-5"],
+  ["code/red/ts-6-system-literal.ts.fixture", "TS-6"],
+  ["code/red/ts-7-indirection.ts.fixture", "TS-7"],
+  ["code/red/ts-8-named-constant.ts.fixture", "TS-8"],
   ["code/red/dart-1-key-equality.dart.fixture", "DART-1"],
   ["code/red/dart-2-switch-contains.dart.fixture", "DART-2"],
+  ["code/red/dart-3-system-literal.dart.fixture", "DART-3"],
+  ["code/red/dart-4-indirection.dart.fixture", "DART-4"],
 ];
 
 const BRIDGE: SqlAllowance = {
@@ -117,6 +147,8 @@ const BRIDGE: SqlAllowance = {
   removeBy: "2026-11-30",
 };
 const at = (iso: string) => new Date(`${iso}T12:00:00Z`);
+const AFTER = at("2027-06-01");
+const later = (sql: string): Migration => ({ name: "20261201000000_later", sql });
 
 // ─────────────────────────────────────────────────────────────────────────────
 describe("G-12 · the real tree: no role key decides a permission", () => {
@@ -128,6 +160,9 @@ describe("G-12 · the real tree: no role key decides a permission", () => {
       expect(existsSync(join(REPO, root)), `missing scan root ${root}`).toBe(true);
       expect(files.filter((f) => f.path.startsWith(`${root}/`)).length, root).toBeGreaterThan(0);
     }
+    expect(
+      files.filter((f) => f.path.startsWith("packages/core-domain/src/")).length,
+    ).toBeGreaterThan(10);
     expect(files.filter((f) => f.path.endsWith(".ts")).length).toBeGreaterThan(100);
     expect(files.filter((f) => f.path.endsWith(".tsx")).length).toBeGreaterThan(10);
     expect(files.filter((f) => f.path.endsWith(".dart")).length).toBeGreaterThan(20);
@@ -138,44 +173,40 @@ describe("G-12 · the real tree: no role key decides a permission", () => {
     // If this ever reads 0, the patterns stopped matching real syntax and the
     // green below means nothing.
     const byFile = (file: string) => hits.filter((h) => h.file === file).map((h) => h.rule);
-    expect(byFile("apps/web/src/features/org/i18n.ts")).toContain("TS-5");
-    expect(byFile("apps/mobile/lib/features/org/presentation/widgets/role_label.dart")).toContain(
-      "DART-2",
+    expect(byFile("apps/web/src/features/org/i18n.ts")).toEqual(
+      expect.arrayContaining(["TS-5", "TS-6"]),
+    );
+    expect(byFile("apps/mobile/lib/features/org/presentation/widgets/role_label.dart")).toEqual(
+      expect.arrayContaining(["DART-2", "DART-3"]),
     );
   });
 
-  it("★ no file outside the presentation allowlist uses a role key as authority", () => {
+  it("★ no line outside the presentation allowlist reads a role key as authority", () => {
     const offenders = codeOffenders(hits, PRESENTATION_ALLOWLIST);
     expect(
       offenders.map((h) => `${h.file}:${h.line} [${h.rule}] ${h.text}`),
       "G-12: decide by `capabilities`, never by `key`/`roleKey`. A label map may be " +
-        "allowlisted per file (presentation only) — a permission check may not.",
+        "allowlisted per line (presentation only) — a permission check may not.",
     ).toEqual([]);
   });
 
-  it("the presentation allowlist has no stale or vague entries, and each is pinned to its hit count", () => {
+  it("the presentation allowlist has reasons and no stale pins", () => {
     for (const entry of PRESENTATION_ALLOWLIST) {
       expect(entry.reason.length, `${entry.file}: reason required`).toBeGreaterThan(20);
+      expect(entry.lines.length, `${entry.file}: pin at least one line`).toBeGreaterThan(0);
       expect(
         files.some((f) => f.path === entry.file),
         `${entry.file} is not a scanned file`,
       ).toBe(true);
-      const found = hits.filter((h) => h.file === entry.file);
-      expect(entry.hits, `${entry.file}: an entry must allow ≥ 1 hit`).toBeGreaterThan(0);
-      // Ratchet: allowlisting a file is not a blank cheque for the next key read
-      // someone adds to it. More = review it; fewer = re-pin (or drop the entry).
-      expect(
-        found.map((h) => `${h.line} [${h.rule}] ${h.text}`),
-        `${entry.file}: pinned at ${entry.hits} hit(s) — review the change, then re-pin`,
-      ).toHaveLength(entry.hits);
     }
+    expect(stalePins(hits, PRESENTATION_ALLOWLIST)).toEqual([]);
   });
 
   it("non-vacuity: the SQL layer read real migrations and parsed a real function", () => {
     const migrations = loadMigrations(MIGRATIONS);
     expect(migrations.length).toBeGreaterThanOrEqual(6);
     const fns = migrations.flatMap((m) => parseMigration(m.name, m.sql).creates);
-    expect(fns.map((f) => f.fn)).toContain("omnistock_reject_ledger_mutation");
+    expect(fns.map((f) => f.fn)).toContain("public.omnistock_reject_ledger_mutation");
   });
 
   it("★ no migration creates a function that reads Role.key, unless allowlisted and in date", () => {
@@ -185,71 +216,114 @@ describe("G-12 · the real tree: no role key decides a permission", () => {
 });
 
 // ─────────────────────────────────────────────────────────────────────────────
-describe("G-12 · self-check: every shape turns the gate red (fixtures)", () => {
-  it("the fixture set covers all 7 code shapes", () => {
-    expect(RED_CODE_FIXTURES.map(([, rule]) => rule).sort()).toEqual([...CODE_RULE_IDS].sort());
+describe("G-12 · self-check: every code shape turns the gate red (fixtures)", () => {
+  it("the fixture set covers every rule", () => {
+    expect([...new Set(RED_CODE_FIXTURES.map(([, rule]) => rule))].sort()).toEqual(
+      [...CODE_RULE_IDS].sort(),
+    );
   });
 
-  it.each(RED_CODE_FIXTURES)("%s → exactly the tagged lines, each by %s", (rel, rule) => {
-    const source = readFixture(rel);
-    const expected = expectedHitLines(source);
-    expect(expected.length, "fixture has no tagged lines").toBeGreaterThan(0);
+  it.each(RED_CODE_FIXTURES)(
+    "%s → exactly the tagged lines, each by its tagged rule (%s)",
+    (rel, rule) => {
+      const source = readFixture(rel);
+      const expected = expectedHits(source, rule);
+      expect(expected.size, "fixture has no tagged lines").toBeGreaterThan(0);
 
-    const hits = scanCode(rel, source);
-    expect([...new Set(hits.map((h) => h.line))].sort((a, b) => a - b)).toEqual(expected);
-    for (const line of expected) {
-      expect(
-        hits.filter((h) => h.line === line).map((h) => h.rule),
-        `${rel}:${line} not flagged by ${rule}`,
-      ).toContain(rule);
-    }
-    // and the red actually reaches the verdict
-    expect(codeOffenders(hits, []).length).toBe(hits.length);
-  });
+      const hits = scanCode(rel, source);
+      expect([...new Set(hits.map((h) => h.line))].sort((a, b) => a - b)).toEqual(
+        [...expected.keys()].sort((a, b) => a - b),
+      );
+      for (const [line, want] of expected) {
+        expect(
+          hits.filter((h) => h.line === line).map((h) => h.rule),
+          `${rel}:${line} not flagged by ${want}`,
+        ).toContain(want);
+      }
+      // and the red actually reaches the verdict
+      expect(codeOffenders(hits, []).length).toBe(hits.length);
+    },
+  );
 
   it.each(["code/green/ts-controls.ts.fixture", "code/green/dart-controls.dart.fixture"])(
-    "control %s → zero hits (comments, labels, other `.key`s)",
+    "control %s → zero hits (comments, labels, other `.key`s, lookalike literals)",
     (rel) => {
       expect(scanCode(rel, readFixture(rel))).toEqual([]);
     },
   );
 
-  it("a TS shape in a .dart file (and vice versa) is judged by that file's language", () => {
-    expect(scanCode("x.dart", "switch (roleKey) {").map((h) => h.rule)).toEqual(["DART-2"]);
+  it("the comment stripper does not open a comment inside a regex literal or a string", () => {
+    const src = 'const a = /x\\/*y/;\nconst b = "p/*q";\nconst c = 1; /* gone */ const d = 2;';
+    expect(stripComments(src, "ts").split("\n")).toEqual([
+      "const a = /x\\/*y/;",
+      'const b = "p/*q";',
+      "const c = 1;            const d = 2;",
+    ]);
+  });
+
+  it("a shape is judged by the file's language", () => {
+    expect(scanCode("x.dart", "switch (roleKey) {").map((h) => h.rule)).toContain("DART-2");
     expect(scanCode("x.ts", "if (role.key == 'owner') {}").map((h) => h.rule)).toContain("TS-1");
     expect(scanCode("x.md", "role.key === 'owner'")).toEqual([]);
   });
 
-  it("the presentation allowlist is per FILE: a sibling is still red", () => {
+  it("the label-callee exemption is by name: any other callee is red", () => {
+    expect(scanCode("x.ts", "f(roleLabel(role.key, role.name));")).toEqual([]);
+    expect(scanCode("x.ts", "f(roleLabels(role.key, role.name));").map((h) => h.rule)).toEqual([
+      "TS-7",
+    ]);
+  });
+
+  it("the presentation allowlist is per FILE and per LINE: a sibling file or a new line is red", () => {
     const src = readFixture("code/red/ts-5-switch-role-key.ts.fixture");
     const listed = scanCode("apps/web/src/a/labels.ts", src);
     const sibling = scanCode("apps/web/src/a/labels2.ts", src);
-    const allow = [{ file: "apps/web/src/a/labels.ts", reason: "fixture", hits: listed.length }];
-    expect(codeOffenders([...listed, ...sibling], allow).map((h) => h.file)).toEqual(
-      sibling.map(() => "apps/web/src/a/labels2.ts"),
-    );
+    const allow = [
+      { file: "apps/web/src/a/labels.ts", reason: "fixture", lines: listed.map((h) => h.text) },
+    ];
     expect(sibling.length).toBeGreaterThan(0);
+    expect(
+      codeOffenders([...listed, ...sibling], allow).every((h) => h.file.endsWith("labels2.ts")),
+    ).toBe(true);
+
+    // a NEW key read added to the allowlisted file is not covered by the old pins
+    const grown = scanCode("apps/web/src/a/labels.ts", `${src}\nif (role.key === "owner") {}`);
+    expect(codeOffenders(grown, allow).map((h) => h.text)).toEqual(
+      expect.arrayContaining(['if (role.key === "owner") {}']),
+    );
+    // a pin whose line disappeared is stale
+    const pinnedExtra = [{ ...allow[0]!, lines: [...allow[0]!.lines, "gone();"] }];
+    expect(stalePins(listed, pinnedExtra)).toEqual([expect.stringMatching(/gone\(\);/)]);
   });
 });
 
 // ─────────────────────────────────────────────────────────────────────────────
 describe("G-12 · self-check: the SQL layer and its removeBy clock (fixtures)", () => {
-  const unlisted = loadMigrations(join(FIXTURES, "sql", "unlisted"));
-  const bridge = loadMigrations(join(FIXTURES, "sql", "bridge"));
-  const bridgeDrop = loadMigrations(join(FIXTURES, "sql", "bridge-drop"));
+  const load = (dir: string) => loadMigrations(join(FIXTURES, "sql", dir));
+  const unlisted = load("unlisted");
+  const bridge = load("bridge");
+  const bridgeDrop = load("bridge-drop");
+  const fakeDrops = load("bridge-fake-drops");
+  const dropInDo = load("bridge-drop-in-do");
 
   it("fixture trees load (non-vacuity)", () => {
-    expect([unlisted.length, bridge.length, bridgeDrop.length]).toEqual([1, 1, 1]);
-    expect(readdirSync(join(FIXTURES, "sql"))).toEqual(
-      expect.arrayContaining(["unlisted", "bridge", "bridge-drop"]),
-    );
+    expect([unlisted, bridge, bridgeDrop, fakeDrops, dropInDo].map((m) => m.length)).toEqual([
+      1, 1, 1, 1, 1,
+    ]);
+    expect(readdirSync(join(FIXTURES, "sql")).sort()).toEqual([
+      "bridge",
+      "bridge-drop",
+      "bridge-drop-in-do",
+      "bridge-fake-drops",
+      "unlisted",
+    ]);
   });
 
   it("★ SQL-FN: an unlisted function reading key → red, naming only that function", () => {
     const parsed = parseMigration(unlisted[0]!.name, unlisted[0]!.sql);
-    expect(parsed.creates.map((c) => [c.fn, c.readsRoleKey])).toEqual([
-      ["omnistock_reject_mutation", false],
-      ["rogue_owner_only", true],
+    expect(parsed.creates.map((c) => [c.fn, c.args, c.readsRoleKey])).toEqual([
+      ["public.omnistock_reject_mutation", [], false],
+      ["public.rogue_owner_only", ["text"], true],
     ]);
     const problems = sqlOffenders(unlisted, [], at("2026-09-28"));
     expect(problems).toHaveLength(1);
@@ -259,7 +333,7 @@ describe("G-12 · self-check: the SQL layer and its removeBy clock (fixtures)", 
 
   it("backfill UPDATE and DO blocks that name key='admin'/'owner' are not functions", () => {
     const parsed = parseMigration(bridge[0]!.name, bridge[0]!.sql);
-    expect(parsed.creates.map((c) => c.fn)).toEqual(["role_f003_admin_bridge"]);
+    expect(parsed.creates.map((c) => c.fn)).toEqual(["public.role_f003_admin_bridge"]);
     expect(parsed.creates[0]!.readsRoleKey).toBe(true);
   });
 
@@ -279,11 +353,46 @@ describe("G-12 · self-check: the SQL layer and its removeBy clock (fixtures)", 
     expect(problems[0]).toMatch(/removeBy 2026-11-30/);
   });
 
-  it("…and a later migration that drops it turns it green again", () => {
-    expect(sqlOffenders([...bridge, ...bridgeDrop], [BRIDGE], at("2027-06-01"))).toEqual([]);
-    // order matters: a drop BEFORE the create does not retire it
-    const reversed = [{ name: "20260101000000_early_drop", sql: bridgeDrop[0]!.sql }, ...bridge];
-    expect(sqlOffenders(reversed, [BRIDGE], at("2027-06-01"))).toHaveLength(1);
+  it("…a later real drop turns it green (plain, or inside a DO block, quoted, no signature)", () => {
+    expect(sqlOffenders([...bridge, ...bridgeDrop], [BRIDGE], AFTER)).toEqual([]);
+    expect(sqlOffenders([...bridge, ...dropInDo], [BRIDGE], AFTER)).toEqual([]);
+  });
+
+  it("★ a drop that is not a drop keeps it red (string · other schema · other signature · inside a fn body)", () => {
+    const parsed = parseMigration(fakeDrops[0]!.name, fakeDrops[0]!.sql);
+    // only (b) and (c) are real statements — and they name something else
+    expect(parsed.drops.map((d) => [d.fn, d.args])).toEqual([
+      ["audit.role_f003_admin_bridge", []],
+      ["public.role_f003_admin_bridge", ["text"]],
+    ]);
+    expect(sqlOffenders([...bridge, ...fakeDrops], [BRIDGE], AFTER)).toEqual([
+      expect.stringMatching(/past removeBy/),
+    ]);
+    // one at a time, so no case hides behind another
+    for (const sql of [
+      "SELECT 'DROP FUNCTION role_f003_admin_bridge();';",
+      "DROP FUNCTION IF EXISTS audit.role_f003_admin_bridge();",
+      "DROP FUNCTION IF EXISTS role_f003_admin_bridge(text);",
+      "CREATE FUNCTION later_fn() RETURNS void LANGUAGE plpgsql AS $$ BEGIN DROP FUNCTION role_f003_admin_bridge(); END $$;",
+    ]) {
+      expect(sqlOffenders([...bridge, later(sql)], [BRIDGE], AFTER), sql).toHaveLength(1);
+    }
+    // control: the same statement, for real
+    expect(
+      sqlOffenders(
+        [...bridge, later("DROP FUNCTION IF EXISTS public.role_f003_admin_bridge();")],
+        [BRIDGE],
+        AFTER,
+      ),
+    ).toEqual([]);
+  });
+
+  it("order matters: a drop BEFORE the create does not retire it; a later keyed re-create revives it", () => {
+    const early = { name: "20260101000000_early_drop", sql: bridgeDrop[0]!.sql };
+    expect(sqlOffenders([early, ...bridge], [BRIDGE], AFTER)).toHaveLength(1);
+    const recreate = { name: "20270101000000_recreate", sql: bridge[0]!.sql };
+    // the re-create is itself unlisted (another migration) AND the entry's fn is live again
+    expect(sqlOffenders([...bridge, ...bridgeDrop, recreate], [BRIDGE], AFTER)).toHaveLength(2);
   });
 
   it("an entry for another migration does not cover this one (per-file)", () => {

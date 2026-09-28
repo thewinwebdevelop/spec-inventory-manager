@@ -1,0 +1,10 @@
+// G-12 red fixture TS-1 (stripper) — a `/*` inside a regex literal must not open
+// a fake block comment that swallows the checks after it.
+export function gate(role: { key: string }, a: number, b: number) {
+  const GLOB = /src\/*\.ts/;
+  if (role.key === "owner") return 1; // ← hit
+  const CLASS = /[/*]/g;
+  if (role.key === "admin") return 2; // ← hit
+  const x = a / b; /* a real comment */ if (role.key === "staff") return 3; // ← hit
+  return [GLOB, CLASS, x];
+}

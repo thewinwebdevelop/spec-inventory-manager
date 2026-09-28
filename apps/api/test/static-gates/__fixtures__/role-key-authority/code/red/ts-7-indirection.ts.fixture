@@ -1,0 +1,15 @@
+// G-12 red fixture TS-7 — the key is carried somewhere a later decision reads it:
+// index · method on the key · argument · alias · destructure.
+export function gate(role: { key: string }, member: { roleKey: string | null; role: { key: string } }) {
+  const limit = POLICY[role.key]; // ← hit
+  const rank = { owner: 3, admin: 2 }[member.roleKey!]; // ← hit
+  const norm = role.key.trim(); // ← hit
+  const up = member.roleKey?.toUpperCase(); // ← hit
+  const idx = ROLE_KEYS.indexOf(role.key); // ← hit
+  const allowed = can(role.key, "manage_roles"); // ← hit
+  const also = can("manage_roles", member.roleKey); // ← hit
+  const s = String(member.role.key); // ← hit
+  let alias = role.key; // ← hit
+  const { key } = member.role; // ← hit
+  return [limit, rank, norm, up, idx, allowed, also, s, alias, key];
+}
