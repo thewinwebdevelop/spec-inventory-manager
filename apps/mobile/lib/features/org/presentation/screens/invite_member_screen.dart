@@ -230,14 +230,12 @@ class _RoleOption extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final t = AppLocalizations.of(context);
-    final description = switch (role.key) {
-      'owner' => t.inviteRoleOwnerDesc,
-      'admin' => t.inviteRoleAdminDesc,
-      'staff' => t.inviteRoleStaffDesc,
-      // An F-003 custom role has no ux-written description. Better an honest
-      // blank than a sentence invented about what it can do.
-      _ => null,
-    };
+    // Only the Owner description stays — it is server-locked, always true.
+    // Admin/staff descriptions were dropped (ux-wireframe §0.1): now that a
+    // store can edit what a role can do (F-003), a fixed sentence tied to
+    // the `key` would lie about what the role actually grants, and
+    // `GET /roles` does not send capabilities to check it against.
+    final description = role.key == 'owner' ? t.inviteRoleOwnerDesc : null;
 
     return RadioListTile<String>(
       value: role.id,
