@@ -238,13 +238,20 @@ describe("★ capability questions go through the shared rule, never Set members
     ).toEqual([]);
   });
 
-  it("the rule itself still holds: an Owner holding only full_access can do anything", () => {
+  it("the rule itself still holds: an Owner holding only full_access can do every REGISTERED capability", () => {
     // The tripwire above is about WHERE the question is asked. This is the
     // answer it must give — the case no component test had ever supplied.
+    // F-003 (T-003-B03, security-reviewed): `full_access` expands to every key
+    // in core-domain's CAPABILITY_REGISTRY — not to any string. A capability a
+    // later feature adds is registered there first (the server's
+    // @RequireCapability refuses an unregistered key at boot), so it is covered
+    // the day it exists; an unregistered string is fail-closed.
     const ownersRole = new Set(["full_access"]);
     expect(can(ownersRole, "manage_members")).toBe(true);
     expect(can(ownersRole, "manage_org_settings")).toBe(true);
-    expect(can(ownersRole, "anything_f003_invents_later")).toBe(true);
+    expect(can(ownersRole, "manage_roles")).toBe(true);
+    expect(can(ownersRole, "view_financials")).toBe(true);
+    expect(can(ownersRole, "not_a_registered_capability")).toBe(false);
 
     const staff = new Set(["view_products"]);
     expect(can(staff, "manage_members")).toBe(false);

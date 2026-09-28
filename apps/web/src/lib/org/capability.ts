@@ -4,7 +4,8 @@
  * It exists because the answer is not `set.has(x)`, and getting that wrong is
  * invisible in every unit test that supplies its own capability list.
  *
- * `full_access` is a WILDCARD (core-domain `hasCapability`, and the server's
+ * `full_access` is a WILDCARD over every REGISTERED capability (core-domain
+ * `hasCapability` expands it via CAPABILITY_REGISTRY — F-003; the server's
  * `CapabilityGuard` honours it). A system Owner's role carries `full_access`
  * and NOTHING else — `SYSTEM_ROLE_BLUEPRINT` grants no `manage_members`, no
  * `manage_org_settings` — so a membership test written as `has("manage_x")`
