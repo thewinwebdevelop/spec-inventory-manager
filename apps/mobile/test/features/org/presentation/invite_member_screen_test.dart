@@ -26,13 +26,21 @@ Future<void> _pump(
 }
 
 void main() {
-  testWidgets('data — the three roles, each with what it can do', (tester) async {
+  testWidgets(
+      'data — the three roles; only Owner (server-locked) carries a description',
+      (tester) async {
     await _pump(tester, FakeOrgScoped(roles: threeRoles));
 
     expect(find.text('อีเมลของคนที่จะเชิญ'), findsOneWidget);
     expect(find.text('เจ้าของร้าน'), findsOneWidget);
+    expect(find.text('ผู้ดูแล'), findsOneWidget);
+    expect(find.text('พนักงาน'), findsOneWidget);
     expect(find.text('ทำได้ทุกอย่าง รวมถึงตั้ง/ถอดเจ้าของร้านคนอื่น'), findsOneWidget);
-    expect(find.text('ทำงานประจำวัน ไม่เห็นรายชื่อทีมงานและข้อมูลผู้เสียภาษี'), findsOneWidget);
+    // ux-wireframe §0.1 — admin/staff descriptions were dropped: a store can
+    // now edit what a role can do, so a fixed sentence tied to `key` would
+    // lie about it, and `GET /roles` sends no capabilities to check against.
+    expect(find.text('จัดการทีมงานและงานประจำวันได้ แต่ตั้งเจ้าของร้านไม่ได้'), findsNothing);
+    expect(find.text('ทำงานประจำวัน ไม่เห็นรายชื่อทีมงานและข้อมูลผู้เสียภาษี'), findsNothing);
     // D-012 — the expectation is set BEFORE the button.
     expect(find.textContaining('ระบบยังไม่ส่งอีเมลให้อัตโนมัติ'), findsOneWidget);
   });
@@ -109,7 +117,8 @@ void main() {
     await tester.tap(find.text('ผู้ดูแล'));
     await tester.pumpAndSettle();
 
-    expect(find.text('สิทธิ์ระดับนี้ ลิงก์คำเชิญจะมีอายุสั้นกว่าปกติเพื่อความปลอดภัย'),
+    expect(
+        find.text('บทบาทนี้มีสิทธิ์สูง ลิงก์คำเชิญจึงมีอายุสั้นกว่าปกติเพื่อความปลอดภัย'),
         findsOneWidget);
     expect(find.textContaining('24 ชั่วโมง'), findsNothing);
   });
@@ -172,7 +181,7 @@ void main() {
     await tester.pumpAndSettle();
 
     expect(find.text('อีเมลนี้มีคำเชิญค้างอยู่แล้ว'), findsOneWidget);
-    expect(find.textContaining('สิทธิ์ ผู้ดูแล'), findsOneWidget);
+    expect(find.textContaining('บทบาท ผู้ดูแล'), findsOneWidget);
     expect(find.textContaining('ลิงก์ใช้ได้ถึง 9 ส.ค. 2026, 14:30'), findsOneWidget);
 
     // And the way back — never a dead end.
@@ -202,7 +211,7 @@ void main() {
   testWidgets('roles failing to load is its own error, with a retry', (tester) async {
     await _pump(tester, FakeOrgScoped(rolesFailure: const NetworkFailure()));
 
-    expect(find.text('โหลดรายการสิทธิ์ไม่สำเร็จ'), findsOneWidget);
+    expect(find.text('โหลดรายการบทบาทไม่สำเร็จ'), findsOneWidget);
     expect(find.text('ลองใหม่'), findsOneWidget);
   });
 }

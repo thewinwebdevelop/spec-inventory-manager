@@ -94,19 +94,18 @@ const PRESENTATION_ALLOWLIST: readonly PresentationAllowance[] = Object.freeze([
   {
     file: "apps/mobile/lib/features/org/presentation/screens/invite_member_screen.dart",
     reason:
-      "Invite screen display choices: default radio selection (`staff` / preset key), per-key " +
-      "description sentence, and which TTL warning sentence to show (`_isElevated`). The server " +
-      "decides the role and the expiry; none of these gate a request. T-003-M09 rewrites this " +
-      "screen (server-driven roles) and must re-pin. QA03 finding F1: `_isElevated` drifts from " +
-      "the server's isElevatedRole once custom roles exist (display defect, not authority).",
+      "Invite screen display choices: default radio selection (`staff` / preset key), the Owner-" +
+      "only description sentence (T-003-M04 — ux-wireframe §0.1 dropped admin/staff descriptions " +
+      "as no longer honest once a shop can edit a role), and which TTL warning sentence to show " +
+      "(`_isElevated`). The server decides the role and the expiry; none of these gate a request. " +
+      "T-003-M09 rewrites this screen (server-driven roles) and must re-pin. QA03 finding F1: " +
+      "`_isElevated` drifts from the server's isElevatedRole once custom roles exist (display " +
+      "defect, not authority).",
     lines: [
       "final preset = widget.initialRoleKey;",
       "final staff = roles.where((r) => r.key == 'staff').firstOrNull;",
       "return selected.grantsOwnership || selected.key == 'admin';",
-      "final description = switch (role.key) {",
-      "'owner' => t.inviteRoleOwnerDesc,",
-      "'admin' => t.inviteRoleAdminDesc,",
-      "'staff' => t.inviteRoleStaffDesc,",
+      "final description = role.key == 'owner' ? t.inviteRoleOwnerDesc : null;",
       "title: Text(roleLabel(t, role.key, role.name)),",
     ],
   },
