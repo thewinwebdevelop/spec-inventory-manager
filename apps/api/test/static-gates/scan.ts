@@ -125,13 +125,52 @@ export const fixtureNames = (prefix: string): string[] =>
 export const lineOf = (text: string, index: number): number =>
   text.slice(0, index).split("\n").length;
 
-/** Text inside the parentheses that open at `open` (which must be a "("). */
+const OPEN = "([{";
+const CLOSE = ")]}";
+
+/** Text inside the bracket that opens at `open` ("(", "[" or "{"). */
 export function balancedArgs(text: string, open: number): string {
-  if (text[open] !== "(") throw new Error(`balancedArgs: expected "(" at ${open}`);
+  if (!OPEN.includes(text[open])) throw new Error(`balancedArgs: expected a bracket at ${open}`);
   let depth = 0;
   for (let i = open; i < text.length; i++) {
-    if (text[i] === "(") depth++;
-    else if (text[i] === ")" && --depth === 0) return text.slice(open + 1, i);
+    if (OPEN.includes(text[i])) depth++;
+    else if (CLOSE.includes(text[i]) && --depth === 0) return text.slice(open + 1, i);
   }
   return text.slice(open + 1);
 }
+
+/**
+ * Top-level `key: value` entries of an object literal's inner text (shorthand
+ * `{ create }` yields value = the key). Nested brackets are skipped whole.
+ */
+export function topLevelEntries(inner: string): { key: string; value: string }[] {
+  const parts: string[] = [];
+  let depth = 0;
+  let start = 0;
+  for (let i = 0; i < inner.length; i++) {
+    if (OPEN.includes(inner[i])) depth++;
+    else if (CLOSE.includes(inner[i])) depth--;
+    else if (inner[i] === "," && depth === 0) {
+      parts.push(inner.slice(start, i));
+      start = i + 1;
+    }
+  }
+  parts.push(inner.slice(start));
+  return parts
+    .map((p) => p.trim())
+    .filter((p) => p !== "")
+    .map((p) => {
+      const m = /^([\w$]+)\s*:\s*([\s\S]*)$/.exec(p);
+      return m ? { key: m[1], value: m[2].trim() } : { key: p, value: p };
+    });
+}
+
+/** A value that is one object or an array of them → each element's text. */
+export function elements(value: string): string[] {
+  if (!value.startsWith("[")) return [value];
+  return topLevelEntries(balancedArgs(value, 0)).map((e) => e.value);
+}
+
+/** Inner text of an object-literal value, or null when it is not a literal. */
+export const objectInner = (value: string): string | null =>
+  value.startsWith("{") ? balancedArgs(value, 0) : null;
