@@ -110,9 +110,22 @@ const PRESENTATION_ALLOWLIST: readonly PresentationAllowance[] = Object.freeze([
       "title: Text(roleLabel(t, role.key, role.name)),",
     ],
   },
+  {
+    file: "apps/web/src/features/org/role-copy.ts",
+    reason:
+      "`displayRoleName()` (ux §0.2, T-003-W03): translates a system roleKey to its label unless " +
+      "the shop renamed the role (`nameCustomized`); unknown key falls back to name. Display only.",
+    lines: [
+      "const { name, roleKey, nameCustomized } = params;",
+      "if (roleKey && roleKey in ROLE_KEY_LABEL) return ROLE_KEY_LABEL[roleKey];",
+    ],
+  },
   // ── display call sites: a role key handed to `roleLabel` to render a label.
   // Exempt ONLY here, line by line; the helper's result used as a condition
   // (TS-10 / DART-6) is red even on a pinned line.
+  labelCalls("apps/mobile/lib/features/org/presentation/copy/role_display_copy.dart", [
+    "return roleLabel(t, roleKey, name);",
+  ]),
   labelCalls("apps/web/src/features/invite/components/InviteScreen.tsx", [
     "<p>{inviteScreenTh.invitedAs(roleLabel(previewed.roleKey, previewed.roleName))}</p>",
     "roleName: roleLabel(result.membership.roleKey, result.membership.roleName),",
