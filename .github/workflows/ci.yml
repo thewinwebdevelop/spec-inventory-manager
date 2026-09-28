@@ -66,6 +66,39 @@ jobs:
       # protected by the lane-enabled guard (I-37). Do not read a green node-ci
       # as "tenancy isolation was proven".
       - run: pnpm turbo lint typecheck test --filter='!./apps/mobile'
+      # F-003 T-003-DV04 (G3-13, test-plan §5.2) — the turbo `test` step above
+      # already runs these four static gates (G-06/G-09/G-11 role-write/mailer/
+      # email-normalise + G-12 role-key-authority) as part of apps/api's full
+      # suite, but a plain `pnpm turbo test` going green proves nothing specific
+      # about THEM: a rename, a deleted file, or a narrowed `include` glob would
+      # still leave the job green (same I-37 lesson as the DB-backed lanes).
+      # Re-run just these four files with a JSON reporter so the guard below can
+      # assert they were the ones that actually ran, with a floor on case counts.
+      # `@omnistock/db`/`@omnistock/core-domain` are already built by the turbo
+      # step above (turbo `test` dependsOn `build` dependsOn `db:generate`), so
+      # this direct `vitest run` needs no extra build/generate step.
+      - name: G3-13 — apps/api RBAC static gates (JSON report for the guard)
+        run: |
+          pnpm --filter api exec vitest run \
+            test/static-gates/g06-no-invited-write.test.ts \
+            test/static-gates/g09-no-mailer.test.ts \
+            test/static-gates/g11-email-normalize.test.ts \
+            test/static-gates/role-key-authority.gate.test.ts \
+            --reporter=default --reporter=json --outputFile.json=/tmp/api-unit-gates.json
+      - name: G3-13 lane-enabled guard — a renamed/deleted/weakened RBAC gate is RED, not green
+        # Counts are the real ones at the time of writing, taken from this
+        # lane's own JSON report (g06=10, g09=8, g11=7 → 25 combined per the
+        # brief, role-key-authority.gate.test.ts=44). Raising a floor is free;
+        # lowering one is a reviewable diff (I-37).
+        run: |
+          node tool/ci/assert-tests-ran.mjs \
+            --report /tmp/api-unit-gates.json \
+            --lane "node-ci · apps/api RBAC static gates (G-06/G-09/G-11/G-12)" \
+            --require "test/static-gates/g06-no-invited-write.test.ts=10" \
+            --require "test/static-gates/g09-no-mailer.test.ts=8" \
+            --require "test/static-gates/g11-email-normalize.test.ts=7" \
+            --require "test/static-gates/role-key-authority.gate.test.ts=44" \
+            --min-passed 69
 
   # AC4/AC5/AC6/AC7/AC8 — one ephemeral Postgres, empty → migrated → introspected → trigger-armed (§3).
   db-migrate:
@@ -488,7 +521,8 @@ jobs:
             --require "test/response-header-policy.int.test.ts=4" \
             --require "test/concurrency-matrix.int.test.ts=14" \
             --require "test/perf-smoke.int.test.ts=5" \
-            --min-passed 206
+            --require "test/role-key-authority.int.test.ts=25" \
+            --min-passed 231
       - name: dump api log on failure
         if: failure()
         run: cat /tmp/api.log || true
