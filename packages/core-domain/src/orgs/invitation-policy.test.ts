@@ -275,9 +275,11 @@ describe("U-RB-16 · isElevatedRole counts manage_roles (AC-10.3)", () => {
     expect(isElevatedRole(["manage_org_settings", "view_financials"])).toBe(false);
   });
 
-  it("goes through hasCapability: full_access covers manage_roles without listing it", () => {
-    // A role that holds only the wildcard is elevated because hasCapability
-    // expands it — not because the fn special-cases the string.
+  it("a wildcard-only role (full_access) is elevated and gets the elevated TTL", () => {
+    // Note: this does NOT prove hasCapability expansion — ELEVATING_CAPABILITIES
+    // lists full_access itself, so this passes either way. No registry key
+    // implies manage_members/manage_roles today, so the "implies" leg of U-RB-16
+    // is not exercisable yet (B07 security review L-2).
     expect(isElevatedRole(["full_access"])).toBe(true);
     expect(invitationTtlHours(["manage_roles"])).toBe(INVITATION_TTL_HOURS_ELEVATED);
   });
