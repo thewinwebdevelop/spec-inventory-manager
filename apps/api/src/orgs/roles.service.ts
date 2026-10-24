@@ -1,6 +1,7 @@
 // F-002 · T-002-16b — the role list behind the invite dropdown (api-spec §3.6).
 import { Inject, Injectable } from "@nestjs/common";
 import { isOwnerRole } from "@omnistock/core-domain";
+import { LIVE_ROLE_WHERE } from "../common";
 import { ORG_PRISMA, type OrgScopedPrismaClient } from "../tenancy";
 
 /**
@@ -62,6 +63,8 @@ export class RolesService {
     // adding a second one here would suggest the client is trustworthy without
     // it. No lock — this decides nothing.
     const rows = (await this.prisma.role.findMany({
+      // LIVE (data-model §2.2): a deleted role is not a choice in the dropdown.
+      where: { ...LIVE_ROLE_WHERE },
       // `capabilities` is selected and NEVER published — it is read here only
       // to derive `grantsOwnership` below. The projection at the end is what
       // keeps it off the wire.

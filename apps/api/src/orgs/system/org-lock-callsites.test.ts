@@ -38,18 +38,63 @@ const SRC = join(process.cwd(), "src");
 const SERVICE_FILES: Readonly<Record<string, string>> = Object.freeze({
   MembersService: "orgs/members.service.ts",
   InvitationsService: "orgs/invitations.service.ts",
+  RolesService: "orgs/roles.service.ts",
 });
+
+/**
+ * F-003 · T-003-B15 — rows registered ahead of the method that implements them
+ * (arch §3 lists the operations; tasks B23/B24/B25 build the methods). Exempt
+ * ONLY from "the method exists" — and only while it does not: the moment a
+ * method lands, the row below must be deleted (test "pending list is honest").
+ */
+const PENDING_METHODS: ReadonlyMap<string, string> = new Map([
+  ["RolesService.create", "T-003-B23"],
+  ["RolesService.update", "T-003-B24"],
+  ["RolesService.delete", "T-003-B25"],
+]);
+
+const methodDeclared = (source: string, method: string): boolean =>
+  new RegExp(`\\b(async\\s+)?${method}\\s*\\(`).test(source);
 
 describe("every org-lock operation names a real, anchored call site (B-5)", () => {
   it("the list is not empty (a list that is empty pins nothing)", () => {
-    expect(ORG_LOCK_REQUIRED_OPERATIONS.length).toBeGreaterThanOrEqual(7);
+    expect(ORG_LOCK_REQUIRED_OPERATIONS.length).toBeGreaterThanOrEqual(10);
+  });
+
+  it("★ the pending list is honest: every row is listed, and none has been built yet", () => {
+    const listed = new Set(ORG_LOCK_REQUIRED_OPERATIONS.map((op) => op.serviceMethod));
+    for (const [serviceMethod, task] of PENDING_METHODS) {
+      expect(listed.has(serviceMethod), `${serviceMethod} (${task}) is not in the list`).toBe(true);
+      const [service, method] = serviceMethod.split(".");
+      const source = readFileSync(join(SRC, SERVICE_FILES[service]!), "utf8");
+      expect(
+        methodDeclared(source, method!),
+        `${serviceMethod} exists now — delete its PENDING_METHODS row (${task}) so the checks below apply`,
+      ).toBe(false);
+    }
+  });
+
+  it("★ every built operation passes its operationKey to runInOrgLockTransaction (ORG_TX_TIMEOUTS busy mapping + metric label)", () => {
+    // `{ operation: "<key>" }` is what labels `org_tx_lock_timeout_total` and
+    // the 409/busy diagnostic; the timeouts themselves come from ORG_TX_TIMEOUTS
+    // inside the helper, never per call site.
+    for (const op of ORG_LOCK_REQUIRED_OPERATIONS) {
+      if (PENDING_METHODS.has(op.serviceMethod)) continue;
+      const [service] = op.serviceMethod.split(".");
+      const source = readFileSync(join(SRC, SERVICE_FILES[service]!), "utf8");
+      expect(source, op.serviceMethod).toContain(`operation: "${op.operationKey}"`);
+    }
   });
 
   it("★ every `serviceMethod` exists, in a file this test knows how to find", () => {
     for (const op of ORG_LOCK_REQUIRED_OPERATIONS) {
+      if (PENDING_METHODS.has(op.serviceMethod)) continue;
       const [service, method] = op.serviceMethod.split(".");
       const file = SERVICE_FILES[service];
-      expect(file, `no file mapped for ${service} — add it here rather than dropping the check`).toBeDefined();
+      expect(
+        file,
+        `no file mapped for ${service} — add it here rather than dropping the check`,
+      ).toBeDefined();
       const path = join(SRC, file);
       expect(existsSync(path), `${file} does not exist`).toBe(true);
       const source = readFileSync(path, "utf8");
@@ -65,8 +110,14 @@ describe("every org-lock operation names a real, anchored call site (B-5)", () =
   it("★ every listed service opens its transactions through runInOrgLockTransaction", () => {
     // The anchor helper is what issues `SET LOCAL lock_timeout` and takes the
     // row lock. A service that reached for a bare `$transaction` instead would
-    // be doing the write with no lock at all.
-    for (const file of new Set(Object.values(SERVICE_FILES))) {
+    // be doing the write with no lock at all. (A service whose every row is
+    // still PENDING has no transaction to open yet.)
+    const built = new Set(
+      ORG_LOCK_REQUIRED_OPERATIONS.filter((op) => !PENDING_METHODS.has(op.serviceMethod)).map(
+        (op) => SERVICE_FILES[op.serviceMethod.split(".")[0]!]!,
+      ),
+    );
+    for (const file of built) {
       const source = readFileSync(join(SRC, file), "utf8");
       expect(source, `${file} never calls runInOrgLockTransaction`).toContain(
         "runInOrgLockTransaction",
@@ -103,3 +154,8 @@ describe("every org-lock operation names a real, anchored call site (B-5)", () =
     expect(new RegExp(`\\b(async\\s+)?revoke\\s*\\(`).test(source)).toBe(true);
   });
 });
+
+// G3-11 (every membership write that grants a role sits in a method of this
+// list) lives in test/static-gates/g3-11-membership-write-under-lock.test.ts:
+// it needs the shared static-gate scanner, which `src/` tests cannot import
+// (tsconfig rootDir).

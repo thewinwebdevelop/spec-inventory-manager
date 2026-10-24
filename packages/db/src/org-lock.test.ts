@@ -68,8 +68,16 @@ function fakeClient(rows: unknown[] = [{ id: "org_a" }]) {
 const ctxA = { organizationId: "org_a" };
 
 /** Prisma-shaped error (structurally what the real client throws). */
-function prismaError(code: string, meta?: Record<string, unknown>, message = `Prisma error ${code}`) {
-  const err = new Error(message) as Error & { code: string; meta?: Record<string, unknown>; clientVersion: string };
+function prismaError(
+  code: string,
+  meta?: Record<string, unknown>,
+  message = `Prisma error ${code}`,
+) {
+  const err = new Error(message) as Error & {
+    code: string;
+    meta?: Record<string, unknown>;
+    clientVersion: string;
+  };
   err.name = "PrismaClientKnownRequestError";
   err.code = code;
   err.clientVersion = "5.22.0";
@@ -86,7 +94,11 @@ const rawLockTimeout = () =>
     "Invalid `prisma.$queryRawUnsafe()` invocation:\nRaw query failed. Code: `55P03`.",
   );
 const rawDeadlock = () =>
-  prismaError("P2010", { code: "40P01", message: "ERROR: deadlock detected" }, "Raw query failed. Code: `40P01`.");
+  prismaError(
+    "P2010",
+    { code: "40P01", message: "ERROR: deadlock detected" },
+    "Raw query failed. Code: `40P01`.",
+  );
 const rawSerialization = () =>
   prismaError(
     "P2010",
@@ -109,8 +121,8 @@ const poolTimeout = () =>
 // ── §12.2 row 6 — the list qa asserts call sites against ────────────────────
 
 describe("ORG_LOCK_REQUIRED_OPERATIONS (architecture §5 · §12.2 row 6)", () => {
-  it("holds exactly the 7 operations §5 requires the anchor for", () => {
-    expect(ORG_LOCK_REQUIRED_OPERATIONS).toHaveLength(7);
+  it("holds exactly the 7 F-002 operations + the 3 F-003 role writes (F-003 arch §3)", () => {
+    expect(ORG_LOCK_REQUIRED_OPERATIONS).toHaveLength(10);
     expect(ORG_LOCK_REQUIRED_OPERATIONS.map((op) => `${op.method} ${op.path}`)).toEqual([
       "PATCH /orgs/{orgId}/members/{userId}",
       "DELETE /orgs/{orgId}/members/{userId}",
@@ -119,6 +131,17 @@ describe("ORG_LOCK_REQUIRED_OPERATIONS (architecture §5 · §12.2 row 6)", () =
       "POST /orgs/{orgId}/invitations",
       "POST /orgs/{orgId}/invitations/{invitationId}/link",
       "DELETE /orgs/{orgId}/invitations/{invitationId}",
+      "POST /orgs/{orgId}/roles",
+      "PATCH /orgs/{orgId}/roles/{roleId}",
+      "DELETE /orgs/{orgId}/roles/{roleId}",
+    ]);
+    // operationKey = the metric label of org_tx_lock_timeout_total (arch §8 "+3 label").
+    expect(
+      ORG_LOCK_REQUIRED_OPERATIONS.slice(7).map((op) => [op.operationKey, op.serviceMethod]),
+    ).toEqual([
+      ["createRole", "RolesService.create"],
+      ["updateRole", "RolesService.update"],
+      ["deleteRole", "RolesService.delete"],
     ]);
   });
 
@@ -150,7 +173,9 @@ describe("lockCurrentOrganization (U-DB-08)", () => {
     await runWithOrgContext(ctxA, () => lockCurrentOrganization(tx));
 
     const lock = calls.find((c) => c.kind === "query");
-    expect(lock?.sql.replace(/\s+/g, " ").trim()).toBe('SELECT id FROM "Organization" WHERE id = $1 FOR UPDATE');
+    expect(lock?.sql.replace(/\s+/g, " ").trim()).toBe(
+      'SELECT id FROM "Organization" WHERE id = $1 FOR UPDATE',
+    );
     expect(lock?.values).toEqual(["org_a"]); // parameterized — never interpolated
   });
 
@@ -195,7 +220,9 @@ describe("lockCurrentOrganization (U-DB-08)", () => {
   it("(ข · N-2) refuses a bare organizationId string — the org is never a caller-supplied string", async () => {
     const { tx } = fakeTx();
     await expect(
-      runWithOrgContext(ctxA, () => lockCurrentOrganization(tx, "org_a" as unknown as { organizationId: string })),
+      runWithOrgContext(ctxA, () =>
+        lockCurrentOrganization(tx, "org_a" as unknown as { organizationId: string }),
+      ),
     ).rejects.toBeInstanceOf(OrgScopeViolationError);
   });
 
@@ -213,9 +240,9 @@ describe("lockCurrentOrganization (U-DB-08)", () => {
 
   it("(ค) throws when called outside an interactive transaction (a full client was passed)", async () => {
     const { client, calls } = fakeClient();
-    await expect(runWithOrgContext(ctxA, () => lockCurrentOrganization(client))).rejects.toBeInstanceOf(
-      OrgLockOutsideTransactionError,
-    );
+    await expect(
+      runWithOrgContext(ctxA, () => lockCurrentOrganization(client)),
+    ).rejects.toBeInstanceOf(OrgLockOutsideTransactionError);
     expect(calls).toHaveLength(0);
     await expect(runWithOrgContext(ctxA, () => lockCurrentOrganization(client))).rejects.toThrow(
       /interactive transaction/i,
@@ -234,11 +261,26 @@ describe("lockCurrentOrganization (U-DB-08)", () => {
 
 describe("busy-error mapping (U-API-21 · architecture §5.2)", () => {
   const cases = [
-    { name: "55P03 lock_not_available", make: rawLockTimeout, reason: "lock_timeout", alert: false },
+    {
+      name: "55P03 lock_not_available",
+      make: rawLockTimeout,
+      reason: "lock_timeout",
+      alert: false,
+    },
     { name: "40P01 deadlock_detected", make: rawDeadlock, reason: "deadlock", alert: true },
-    { name: "40001 serialization_failure", make: rawSerialization, reason: "serialization", alert: true },
+    {
+      name: "40001 serialization_failure",
+      make: rawSerialization,
+      reason: "serialization",
+      alert: true,
+    },
     { name: "P2028 transaction timeout", make: txTimeout, reason: "tx_timeout", alert: false },
-    { name: "P2024 connection-pool timeout (maxWait)", make: poolTimeout, reason: "pool_timeout", alert: false },
+    {
+      name: "P2024 connection-pool timeout (maxWait)",
+      make: poolTimeout,
+      reason: "pool_timeout",
+      alert: false,
+    },
   ] as const;
 
   it.each(cases)("$name → 409 CONFLICT + details.reason=busy", ({ make, reason, alert }) => {
@@ -258,8 +300,23 @@ describe("busy-error mapping (U-API-21 · architecture §5.2)", () => {
 
   it.each(cases)("$name leaks no SQLSTATE / Prisma code / table name on the wire", ({ make }) => {
     const busy = toOrgBusyError(make(), "acceptInvitation");
-    const wire = JSON.stringify({ message: busy?.message, details: busy?.details, code: busy?.errorCode });
-    for (const forbidden of ["55P03", "40P01", "40001", "P2028", "P2024", "P2010", "prisma", "Organization", "Membership", "Invitation"]) {
+    const wire = JSON.stringify({
+      message: busy?.message,
+      details: busy?.details,
+      code: busy?.errorCode,
+    });
+    for (const forbidden of [
+      "55P03",
+      "40P01",
+      "40001",
+      "P2028",
+      "P2024",
+      "P2010",
+      "prisma",
+      "Organization",
+      "Membership",
+      "Invitation",
+    ]) {
       expect(wire.toLowerCase()).not.toContain(forbidden.toLowerCase());
     }
     // the diagnostics still exist for the server-side log — just not on the wire
@@ -270,8 +327,16 @@ describe("busy-error mapping (U-API-21 · architecture §5.2)", () => {
   it("does NOT swallow other errors (a 409 that is too wide hides every real bug)", () => {
     const others: unknown[] = [
       prismaError("P2002", { target: ["organizationId", "userId"] }, "Unique constraint failed"),
-      prismaError("P2025", undefined, "An operation failed because it depends on one or more records"),
-      prismaError("P2010", { code: "42703", message: "column does not exist" }, "Raw query failed. Code: `42703`."),
+      prismaError(
+        "P2025",
+        undefined,
+        "An operation failed because it depends on one or more records",
+      ),
+      prismaError(
+        "P2010",
+        { code: "42703", message: "column does not exist" },
+        "Raw query failed. Code: `42703`.",
+      ),
       new OrgScopeViolationError("Membership", "update", "test"),
       new Error("boom"),
       "not an error",
@@ -318,7 +383,7 @@ describe("runInOrgLockTransaction (architecture §5.1/§5.2)", () => {
 
     expect(calls.map((c) => c.sql.slice(0, 24))).toEqual([
       "SET LOCAL lock_timeout =",
-      "SELECT id FROM \"Organiza",
+      'SELECT id FROM "Organiza',
       "-- caller work --",
     ]);
     expect(work).toHaveBeenCalledTimes(1);
@@ -329,7 +394,9 @@ describe("runInOrgLockTransaction (architecture §5.1/§5.2)", () => {
     const work = vi.fn(async () => {
       throw rawLockTimeout();
     });
-    const err = await runWithOrgContext(ctxA, () => runInOrgLockTransaction(client, work, { operation: "leaveOrg" }))
+    const err = await runWithOrgContext(ctxA, () =>
+      runInOrgLockTransaction(client, work, { operation: "leaveOrg" }),
+    )
       .then(() => null)
       .catch((e: unknown) => e);
 
@@ -341,7 +408,11 @@ describe("runInOrgLockTransaction (architecture §5.1/§5.2)", () => {
 
   it("rethrows a non-contention failure untouched (fail loud)", async () => {
     const { client } = fakeClient();
-    const original = prismaError("P2002", { target: ["organizationId", "email"] }, "Unique constraint failed");
+    const original = prismaError(
+      "P2002",
+      { target: ["organizationId", "email"] },
+      "Unique constraint failed",
+    );
     const err = await runWithOrgContext(ctxA, () =>
       runInOrgLockTransaction(client, async () => {
         throw original;
@@ -355,7 +426,9 @@ describe("runInOrgLockTransaction (architecture §5.1/§5.2)", () => {
 
   it("refuses to open the tx without an org context", async () => {
     const { client, txOptions } = fakeClient();
-    await expect(runInOrgLockTransaction(client, async () => 1)).rejects.toBeInstanceOf(MissingOrgContextError);
+    await expect(runInOrgLockTransaction(client, async () => 1)).rejects.toBeInstanceOf(
+      MissingOrgContextError,
+    );
     expect(txOptions).toHaveLength(0);
   });
 });

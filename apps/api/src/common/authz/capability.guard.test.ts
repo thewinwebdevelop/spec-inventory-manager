@@ -74,7 +74,7 @@ const findUnique = vi.fn(
       id: "mem_1",
       status: membershipStatus,
       roleId: "role_1",
-      role: { capabilities },
+      role: { capabilities, deletedAt: null }, // F-003: selected; null = live role
     };
   },
 );

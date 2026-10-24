@@ -13,7 +13,7 @@
 // `req.orgAuth` and `OrgScopeGuard` turns it into 401/422/403. Keeping status
 // decisions out of here is what guarantees this layer cannot change the wire
 // behaviour of a route that governs itself.
-import { Inject, Injectable, type NestMiddleware } from "@nestjs/common";
+import { Inject, Injectable, Logger, type NestMiddleware } from "@nestjs/common";
 import type { NextFunction, Response } from "express";
 import type { GuardedPrismaClient } from "../prisma/prisma.service";
 import { OrgContextStore, type OrgRequestContext } from "./org-context";
@@ -28,6 +28,8 @@ export const ORG_HEADER = "x-organization-id";
 
 @Injectable()
 export class OrgContextMiddleware implements NestMiddleware {
+  private readonly logger = new Logger(OrgContextMiddleware.name);
+
   constructor(
     // Explicit @Inject on EVERY param (not just the symbol tokens): type-based
     // DI needs `emitDecoratorMetadata`, which esbuild/tsx (`pnpm dev`) does not
@@ -114,7 +116,9 @@ export class OrgContextMiddleware implements NestMiddleware {
           id: true,
           status: true,
           roleId: true,
-          role: { select: { capabilities: true } },
+          // role-read is a HISTORY read (data-model §2.2): the deleted row must be
+          // SEEN so it can be refused below, not filtered into "no membership".
+          role: { select: { capabilities: true, deletedAt: true } },
         },
       });
 
@@ -131,12 +135,29 @@ export class OrgContextMiddleware implements NestMiddleware {
         return;
       }
 
+      // F-003 (data-model §2.2 · architecture §8): an active membership on a
+      // soft-deleted role. The DB trigger forbids it; reaching here means that
+      // layer failed — so the member gets NO context, never the deleted role's
+      // capabilities. `!== null` (not truthy): an absent field is also refused.
+      if (!membership.role || membership.role.deletedAt !== null) {
+        this.logger.error(
+          `membership_on_deleted_role ${JSON.stringify({
+            organizationId,
+            membershipId: membership.id,
+            roleId: membership.roleId,
+          })}`,
+        );
+        auth.orgOutcome = "role_deleted";
+        next();
+        return;
+      }
+
       const ctx: OrgRequestContext = {
         organizationId,
         userId: auth.userId,
         membershipId: membership.id,
         roleId: membership.roleId,
-        capabilities: Object.freeze([...(membership.role?.capabilities ?? [])]),
+        capabilities: Object.freeze([...membership.role.capabilities]),
       };
       auth.orgOutcome = "ok";
       // The ONE storage: packages/db's, so `lockCurrentOrganization` (T-002-03)

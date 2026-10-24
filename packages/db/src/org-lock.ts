@@ -58,7 +58,8 @@ export interface OrgLockRequiredOperation {
  *   - `orgs/system/org-lock-callsites.test.ts` walks FROM this list TO the
  *     source: every `serviceMethod` must exist, and no listed service may open
  *     a bare `$transaction` (the shape that writes with no lock).
- *   - per-method tests cover the seven operations below individually.
+ *   - per-method tests cover the seven F-002 operations below individually;
+ *     the three F-003 role writes get theirs with their methods (B23-B25).
  *
  * What is still NOT enforced: that `SET LOCAL lock_timeout` is the first
  * statement on the wire. That needs the running app and a driver spy — a
@@ -110,6 +111,28 @@ export const ORG_LOCK_REQUIRED_OPERATIONS: readonly OrgLockRequiredOperation[] =
     method: "DELETE",
     path: "/orgs/{orgId}/invitations/{invitationId}",
     serviceMethod: "InvitationsService.cancel",
+  }),
+  // F-003 architecture §3 — role writes take the SAME anchor (Organization →
+  // Role → Invitation clamp). Timeouts are the shared ORG_TX_TIMEOUTS policy;
+  // operationKey is the new metric label. The methods land in T-003-B23/B24/B25
+  // (org-lock-callsites.test.ts holds them as PENDING until they exist).
+  Object.freeze({
+    operationKey: "createRole",
+    method: "POST",
+    path: "/orgs/{orgId}/roles",
+    serviceMethod: "RolesService.create",
+  }),
+  Object.freeze({
+    operationKey: "updateRole",
+    method: "PATCH",
+    path: "/orgs/{orgId}/roles/{roleId}",
+    serviceMethod: "RolesService.update",
+  }),
+  Object.freeze({
+    operationKey: "deleteRole",
+    method: "DELETE",
+    path: "/orgs/{orgId}/roles/{roleId}",
+    serviceMethod: "RolesService.delete",
   }),
 ] as const);
 
@@ -189,7 +212,8 @@ export class OrgLockAnchorMissingError extends Error {
 // ── §5.2 — what lock contention becomes on the wire ────────────────────────
 
 /** Why the transaction gave up. Kept for logs/metrics, never for the client. */
-export type OrgBusyReason = "lock_timeout" | "deadlock" | "serialization" | "tx_timeout" | "pool_timeout";
+export type OrgBusyReason =
+  "lock_timeout" | "deadlock" | "serialization" | "tx_timeout" | "pool_timeout";
 
 /** §5.2: `409`, because every endpoint in the §5 list already declares 409.
  *  A `503` would add a status to a LOCKED contract. */
@@ -287,7 +311,8 @@ function readErrorCodes(error: unknown): { sqlState?: string; prismaCode?: strin
   if (typeof error !== "object" || error === null) return {};
   const err = error as { code?: unknown; meta?: unknown; message?: unknown };
 
-  const prismaCode = typeof err.code === "string" && /^P\d{4}$/.test(err.code) ? err.code : undefined;
+  const prismaCode =
+    typeof err.code === "string" && /^P\d{4}$/.test(err.code) ? err.code : undefined;
 
   // Raw queries surface the real SQLSTATE in `meta.code` (probed against the
   // real Postgres: P2010 + meta.code = '55P03'). Some driver/engine paths only
@@ -346,7 +371,10 @@ export async function lockCurrentOrganization(
   // is proven to be a positive integer above, so nothing else can reach the SQL.
   await tx.$executeRawUnsafe(`SET LOCAL lock_timeout = '${lockTimeoutMs}ms'`);
 
-  const rows = await tx.$queryRawUnsafe('SELECT id FROM "Organization" WHERE id = $1 FOR UPDATE', organizationId);
+  const rows = await tx.$queryRawUnsafe(
+    'SELECT id FROM "Organization" WHERE id = $1 FOR UPDATE',
+    organizationId,
+  );
   // `FOR UPDATE` on zero rows succeeds and locks NOTHING — that must not read
   // as "locked". (An unknown result shape is left alone: a test double may
   // legitimately not model rows.)
@@ -382,7 +410,11 @@ function assertContextShape(ctx: unknown, where: string): asserts ctx is OrgScop
         `caller-supplied id (N-2) — pass the context object (or establish it with runWithOrgContext)`,
     );
   }
-  if (typeof ctx !== "object" || ctx === null || typeof (ctx as OrgScopeContext).organizationId !== "string") {
+  if (
+    typeof ctx !== "object" ||
+    ctx === null ||
+    typeof (ctx as OrgScopeContext).organizationId !== "string"
+  ) {
     throw new OrgScopeViolationError(
       "Organization",
       "lockCurrentOrganization",

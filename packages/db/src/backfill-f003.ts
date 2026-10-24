@@ -126,6 +126,7 @@ export async function runBackfillF003(
 }
 
 /** architecture §12 — must be 0 before rolling F-003 code back to F-002. */
+// role-read: history — counts deleted rows on purpose (they block a rollback)
 export const ROLLBACK_SAFETY_SQL = `SELECT count(*)::int AS n FROM "Role"
  WHERE key IS NULL OR "lastEditedAt" IS NOT NULL OR "deletedAt" IS NOT NULL`;
 
@@ -151,6 +152,7 @@ export async function rolesOutsideRegistry(
   registeredKeys: readonly string[],
 ): Promise<RoleOutsideRegistry[]> {
   if (registeredKeys.length === 0) throw new Error("rolesOutsideRegistry: registry is empty");
+  // role-read: history — deleted rows can be read back, so they are checked too
   return client.$queryRawUnsafe<RoleOutsideRegistry[]>(
     `SELECT r."organizationId", r.id AS "roleId",
             array(SELECT u.c FROM (SELECT DISTINCT c FROM unnest(r.capabilities) c

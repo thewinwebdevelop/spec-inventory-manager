@@ -1,0 +1,8 @@
+// G3-04 red: a live-looking read with no LIVE_ROLE_WHERE and no label.
+async function resolve(tx, id) {
+  const role = await tx.role.findUniqueOrThrow({
+    where: { id },
+    select: { id: true },
+  });
+  return role;
+}

@@ -23,11 +23,18 @@ interface FakeRole {
   key: string | null;
   isSystem: boolean;
   capabilities: string[];
+  deletedAt?: Date | null;
 }
 
 function serviceOver(roles: FakeRole[]): RolesService {
   const prisma = {
-    role: { findMany: async () => roles },
+    role: {
+      // Honours `deletedAt: null` like Postgres (F-003 · LIVE_ROLE_WHERE).
+      findMany: async (args: { where?: { deletedAt?: null } } = {}) =>
+        args.where && "deletedAt" in args.where && args.where.deletedAt === null
+          ? roles.filter((r) => !r.deletedAt)
+          : roles,
+    },
   };
   return new RolesService(prisma as never);
 }
@@ -49,12 +56,14 @@ const ADMIN: FakeRole = {
 
 describe("RolesService.list — grantsOwnership", () => {
   it("★ true for the role that carries full_access, false for the rest", () => {
-    return serviceOver([OWNER, ADMIN]).list().then(({ items }) => {
-      expect(items.map((r) => [r.name, r.grantsOwnership])).toEqual([
-        ["Owner", true],
-        ["Admin", false],
-      ]);
-    });
+    return serviceOver([OWNER, ADMIN])
+      .list()
+      .then(({ items }) => {
+        expect(items.map((r) => [r.name, r.grantsOwnership])).toEqual([
+          ["Owner", true],
+          ["Admin", false],
+        ]);
+      });
   });
 
   it("★ a Staff role whose KEY says owner does not grant ownership (I-45)", async () => {
@@ -106,5 +115,20 @@ describe("RolesService.list — grantsOwnership", () => {
   it("keeps the F-002 pagination shape", async () => {
     const { nextCursor } = await serviceOver([OWNER]).list();
     expect(nextCursor).toBeNull();
+  });
+});
+
+describe("RolesService.list — live roles only (F-003 · data-model §2.2 · MUT-10)", () => {
+  it("★ a soft-deleted role is not offered in the dropdown", async () => {
+    const deleted: FakeRole = {
+      id: "rol_gone",
+      name: "Packer",
+      key: null,
+      isSystem: false,
+      capabilities: ["view_products"],
+      deletedAt: new Date("2026-10-01T00:00:00Z"),
+    };
+    const { items } = await serviceOver([OWNER, ADMIN, deleted]).list();
+    expect(items.map((r) => r.id)).toEqual([OWNER.id, ADMIN.id]);
   });
 });

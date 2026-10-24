@@ -47,7 +47,7 @@ import {
   type StoredInvitationStatus,
 } from "@omnistock/core-domain";
 import { generateInvitationToken, hashInvitationToken } from "../prisma/invitation-token";
-import { domainError, type ErrorCodeKey } from "../common";
+import { LIVE_ROLE_WHERE, domainError, type ErrorCodeKey } from "../common";
 import { paginate, type KeysetCursor } from "../common/cursor";
 import { SecurityEventsService } from "../auth";
 import {
@@ -711,8 +711,10 @@ export class InvitationsService {
           // M-6 — `ORG_PRISMA` confines this to the invitation's org, so "the
           // role was deleted" and "the role belongs to another shop" are the
           // same answer by construction.
+          // LIVE (B07 review L-4): a soft-deleted role is `role_unavailable`,
+          // the same answer as a role that never existed here.
           const role = (await tx.role.findFirst({
-            where: { id: invitation.roleId },
+            where: { id: invitation.roleId, ...LIVE_ROLE_WHERE },
             select: { id: true, name: true, key: true, capabilities: true },
           })) as { id: string; name: string; key: string | null; capabilities: string[] } | null;
 
@@ -900,8 +902,9 @@ export class InvitationsService {
   // ── helpers (every one takes `tx` — M-2) ─────────────────────────────────
 
   private async readRole(tx: OrgLockTx, roleId: string) {
+    // LIVE: invite create/reissue may not hand out a soft-deleted role.
     const role = (await tx.role.findUnique({
-      where: { id: roleId },
+      where: { id: roleId, ...LIVE_ROLE_WHERE },
       select: ROLE_SELECT,
     })) as { id: string; name: string; key: string | null; capabilities: string[] } | null;
     // 422 rather than 404: the role id is INPUT the client sent, and the org is

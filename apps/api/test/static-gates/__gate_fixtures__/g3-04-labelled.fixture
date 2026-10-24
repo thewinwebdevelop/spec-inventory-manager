@@ -1,0 +1,17 @@
+// G3-04 green twins: live via the helper in the argument, history via the label.
+async function ok(tx, id) {
+  const a = await tx.role.findUniqueOrThrow({ where: { id, ...LIVE_ROLE_WHERE } });
+  // role-read: history — deleted-row cap counts the rows that are gone
+  const b = await tx.role.groupBy({ by: ["isSystem"], where: { deletedAt: { not: null } } });
+  const c = await tx.role.findFirst({
+    where: {
+      id,
+      ...LIVE_ROLE_WHERE,
+    },
+  });
+  // role-read: history — rollback check must see deleted rows
+  return tx.$queryRawUnsafe(
+    `SELECT count(*) FROM "Role"
+      WHERE "deletedAt" IS NOT NULL`,
+  );
+}
