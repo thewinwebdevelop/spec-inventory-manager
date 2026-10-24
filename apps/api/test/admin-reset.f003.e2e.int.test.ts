@@ -24,12 +24,13 @@
 // Every refusal asserts that the password HASH in the database did not change.
 // The status code alone would be satisfied by an endpoint that never works,
 // so every block has a 200 control.
-import { describe, it, expect, beforeAll, afterAll, beforeEach } from "vitest";
+import { describe, it, expect, beforeAll, afterAll } from "vitest";
 import request from "supertest";
 import { Redis } from "ioredis";
 import { PrismaClient } from "@omnistock/db";
 import { decideAdminResetVisible, decideMemberAuthority } from "@omnistock/core-domain";
 import { AccessTokenService } from "../src/auth/access-token.service";
+import { THROTTLE_ACCT_PREFIX } from "../src/auth/auth.constants";
 import { AuthService } from "../src/auth/auth.service";
 import { HashingService } from "../src/auth/hashing.service";
 import { RefreshTokenService } from "../src/auth/refresh-token.service";
@@ -110,15 +111,18 @@ d("T-003-B20 admin-reset — D-034 ⊊ + SR-05 lock order (E2E, DB+Redis)", () =
 
   // The reset route counts every 404 against the caller's own throttle
   // (api-spec §2.8). These suites make many refused calls on purpose, so the
-  // window is cleared before each call: the throttle is not what is under test.
-  const clearThrottle = async (): Promise<void> => {
-    const keys = await redis.keys("throttle:*");
-    if (keys.length > 0) await redis.del(...keys);
+  // caller's window is cleared before each call: the throttle is not what is
+  // under test. Only THIS caller's key is touched (never `throttle:*`), because
+  // Redis is shared with suites that run in parallel and DO assert on throttling.
+  const clearCallerThrottle = async (callerAccess: string): Promise<void> => {
+    const payload = JSON.parse(
+      Buffer.from(callerAccess.split(".")[1], "base64url").toString("utf8"),
+    ) as { sub: string };
+    await redis.del(`${THROTTLE_ACCT_PREFIX}${payload.sub}:reset-password`);
   };
-  beforeEach(clearThrottle);
 
   const reset = async (orgId: string, callerAccess: string, targetUserId: string) => {
-    await clearThrottle();
+    await clearCallerThrottle(callerAccess);
     return request(app.server())
       .post(`/orgs/${orgId}/members/${targetUserId}/reset-password`)
       .set("Content-Type", "application/json")
