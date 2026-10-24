@@ -45,3 +45,12 @@ export {
   type MemberAuthorityResult,
   type TargetRelation,
 } from "./member-authority";
+// T-003-B06 — create / edit / delete a role (D-034 Addendum + Addendum 2).
+export {
+  decideRoleWrite,
+  ROLE_WRITE_OPS,
+  type RoleWriteInput,
+  type RoleWriteOp,
+  type RoleWriteResult,
+  type RoleWriteTarget,
+} from "./role-write";
