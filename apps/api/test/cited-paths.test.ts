@@ -68,6 +68,7 @@ const CITED = /`((?:apps|packages|docs|\.github)\/[A-Za-z0-9_./-]+\.[A-Za-z0-9]{
  */
 const NOT_YET_BUILT: ReadonlyMap<string, string> = new Map([
   ["packages/db/src/ledger-write.ts", "the ledger write primitive — F-011, backend.md §3.1"],
+  ["apps/api/scripts/backfill-f003.ts", "F-003 build — T-003-B11 (on claude/f003-build, not yet on trunk)"],
   ["apps/web/src/features/org/role-copy.ts", "F-003 build — T-003-W04 (on claude/f003-build, not yet on trunk)"],
   ["docs/features/F-003/runbook.md", "F-003 build — T-003-DV06 (on claude/f003-build, not yet on trunk)"],
   ["apps/api/test/f003-concurrency.int.test.ts", "F-003 Gate 2 design — T-003-B26b (docs/features/F-003/tasks.md)"],

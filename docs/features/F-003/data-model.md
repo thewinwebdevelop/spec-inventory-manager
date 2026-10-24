@@ -11,6 +11,12 @@ signoff: approved     # user 2026-09-27 (+ รับ D-036/D-037)
 > **amendment 2026-09-29 (build · review ของ T-003-B10):** CHECK ชื่อ (§3.1) และ pre-flight (§4.1) **ไม่ใช้ `btrim()`/`\s` ของ Postgres** (ตัดแค่ U+0020 / ขึ้นกับ ctype) —
 > ใช้ชุด whitespace ของ JS `\s` ที่สร้างด้วยเครื่อง: ห้ามหัว/ท้าย · ห้ามซ้อน · **ห้าม whitespace อื่นนอก U+0020 ทุกตำแหน่ง** (ค่าที่ service เขียนผ่านเสมอเพราะ normalize ยุบเป็น U+0020 แล้ว — CHECK กันเฉพาะ raw SQL/เส้นทางที่ข้าม normalize) ·
 > migration ตั้ง `SET lock_timeout = '5s'` · ข้อจำกัดคงเหลือ: `lower()` ใต้ `LC_CTYPE=C` fold เฉพาะ ASCII (ไทยไม่มีตัวพิมพ์ — service ยังจับได้) → forward-commitments (devops)
+> **amendment 2026-10-25 (build · T-003-B11 + security review ของ B11 — High/Medium):** §4.2 แก้ 5 จุด —
+> (1) array literal ใน SQL ตัวอย่าง**เรียงผิด** (`manage_org_settings` ก่อน `manage_orders`) ⇒ ตามที่เขียนจะ match 0 แถวทุก collation · ของจริงเปรียบเทียบแบบ byte order (`COLLATE "C"`) และเก็บ array เรียงแบบเดียวกัน (blueprint Admin เรียงตามนั้น) ·
+> (2) backfill · WARNING นับแถวไม่ตรงชุด · bridge trigger **ต้องมี `"lastEditedAt" IS NULL`** — กันรัน `backfill:f003` ซ้ำหลัง Owner ถอด `manage_roles` จาก Admin เองแล้วถูกคืนสิทธิ์เงียบ ๆ (ไม่มี event + `lastEditedAt` ค้าง) ·
+> (3) **ไม่ `DROP TRIGGER IF EXISTS` ทุกรอบ** (ACCESS EXCLUSIVE บน `"Role"` ค้างตลอดการสแกน) → สร้าง trigger เฉพาะเมื่อยังไม่มี + ตรวจ Owner ≥ 1 **ก่อน** สร้าง bridge · `SET LOCAL lock_timeout '5s'` ·
+> (4) CLI `backfill:f003` **ปฏิเสธ (exit 1) เมื่อมี migration `f003_drop_admin_bridge`** ใน repo หรือ apply แล้ว — กันสร้าง bridge กลับหลังถอด (G-12 สแกนแค่ไฟล์ migration มองไม่เห็น) ·
+> (5) CLI อยู่ที่ `apps/api/scripts/backfill-f003.ts` (`pnpm --filter api backfill:f003`) เพราะ `packages/db` พึ่ง core-domain ไม่ได้ (ต้องใช้ registry ตรวจ caps ⊆ registry — exit 1 ถ้ามี key นอก registry) · `packages/db/src/backfill-f003.ts` = ตัวรัน SQL ไฟล์เดียวกันใน 1 tx
 > อ้างอิง/ต่อยอดจาก [docs/01-data-model.md](../../01-data-model.md) + schema ที่ ship จริง (`packages/db/prisma/schema.prisma`)
 > ต่อจาก [architecture.md](architecture.md) · data-model ขับ [api-spec.md](api-spec.md) · D-028 · D-030 · D-032 · D-033 · D-034 · D-035
 > รอบ 3 (2026-09-27): แก้ตาม security-review SR-03/04/06/07/09/10/12 — ตารางรวมที่ architecture §15
