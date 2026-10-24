@@ -118,13 +118,18 @@ interface MemberListRow {
   readonly activatedAt: Date | null;
   readonly revokedAt: Date | null;
   readonly createdAt: Date;
-  readonly role: { readonly name: string; readonly key: string | null; readonly capabilities: string[] };
+  readonly role: {
+    readonly name: string;
+    readonly key: string | null;
+    readonly capabilities: string[];
+  };
   readonly user: { readonly email: string };
 }
 
 /** A membership whose CURRENT role holds `full_access` — any status (§5). */
 interface OwnerCandidateRow {
   readonly userId: string;
+  readonly roleId: string;
   readonly status: string;
   readonly role: { readonly capabilities: string[] };
 }
@@ -166,10 +171,7 @@ export class MembersService {
     // `invited` is a dead state (data-model §7): no production write path
     // produces it, so it is filtered OUT of `all` rather than shown as a row a
     // client would have to interpret. `?status=invited` is not an option at all.
-    const statusFilter =
-      status === "all"
-        ? { status: { in: ["active", "revoked"] } }
-        : { status };
+    const statusFilter = status === "all" ? { status: { in: ["active", "revoked"] } } : { status };
 
     const where = {
       ...statusFilter,
@@ -298,7 +300,10 @@ export class MembersService {
           where: { id: input.roleId },
           select: { id: true, name: true, key: true, capabilities: true },
         });
-        if (!newRole) throw domainError("ROLE_INVALID", { fieldErrors: { roleId: "บทบาทนี้ไม่ใช่บทบาทของร้านนี้" } });
+        if (!newRole)
+          throw domainError("ROLE_INVALID", {
+            fieldErrors: { roleId: "บทบาทนี้ไม่ใช่บทบาทของร้านนี้" },
+          });
 
         // C-1/D-028 — touching ownership in EITHER direction (granting
         // `full_access`, or modifying somebody who holds it) requires the actor
@@ -539,7 +544,10 @@ export class MembersService {
    * holder no longer has. The guard already used the snapshot to answer "may you
    * be here at all"; this is the finer decision, and it belongs under the lock.
    */
-  private async readActorCapabilities(tx: OrgLockTx, actorUserId: string): Promise<readonly string[]> {
+  private async readActorCapabilities(
+    tx: OrgLockTx,
+    actorUserId: string,
+  ): Promise<readonly string[]> {
     const actor = await this.readActiveMembership(tx, actorUserId);
     // Refused, not defaulted to `[]`: an actor whose membership vanished
     // mid-flight is a caller who no longer belongs here.
@@ -572,10 +580,16 @@ export class MembersService {
     const organizationId = this.requireOrganizationId();
     const owners: readonly OwnerCandidateRow[] = await tx.membership.findMany({
       where: { role: { organizationId, capabilities: { has: "full_access" } } },
-      select: { userId: true, status: true, role: { select: { capabilities: true } } },
+      select: {
+        userId: true,
+        roleId: true,
+        status: true,
+        role: { select: { capabilities: true } },
+      },
     });
     const input: readonly OwnerMembership[] = owners.map((row) => ({
       userId: row.userId,
+      roleId: row.roleId,
       status: row.status as MembershipStatus,
       capabilities: row.role.capabilities,
     }));
