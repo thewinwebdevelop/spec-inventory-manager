@@ -6,7 +6,7 @@
 // verify (§9); wrong-password and unknown-email both return the identical
 // INVALID_CREDENTIALS shape. Throttle is ALWAYS its own 429 (M-1), never folded
 // into the 401.
-import { Injectable } from "@nestjs/common";
+import { Injectable, Logger } from "@nestjs/common";
 import { ORG_TX_TIMEOUTS } from "@omnistock/config";
 import {
   checkPasswordPolicy,
@@ -68,7 +68,54 @@ const ADMIN_RESET_REFUSAL_EVENTS: Readonly<
 > = Object.freeze({
   target_active_in_other_org: "auth.password.admin_reset_blocked_multi_org",
   target_is_owner: "auth.password.admin_reset_blocked_owner_target",
+  // F-003 · T-003-B20 (D-034 · architecture §7): the target is not strictly
+  // below the caller (equal / more / incomparable). Its own type, so "an Admin
+  // tried to reset an equal Admin" is not mistaken for the Owner signal.
+  target_not_proper_subset: "auth.password.admin_reset_blocked_privilege",
 });
+
+// ── T-003-B20 ★ SR-05 — the locks under the decision (architecture §3 · api-spec §6) ──
+//
+// Order: `User` FOR UPDATE (target) → `Membership` FOR SHARE (caller + target,
+// by `userId` asc) → `Role` FOR SHARE (their roles, by `id` asc) → decide.
+//
+// Why: PATCH/DELETE member UPDATEs the `Membership` row, which conflicts with
+// FOR SHARE. So a reset cannot decide on a `roleId` that is being changed: a
+// PATCH that is already in flight makes the reset wait, then the reset reads
+// the committed row (Read Committed re-checks a locked row after the wait). A
+// PATCH that arrives later waits for the reset to commit. Locking the `Role`
+// rows does the same against a role edit (UPDATE `Role`). The facts the
+// decision uses are built from THESE rows and from nothing read before them.
+//
+// Both statements are org-scoped (golden rule 3), and the id lists are sorted
+// so two transactions can never take the same locks in opposite orders (the
+// lock graph stays a DAG — architecture §3).
+//
+// role-read: history — a member's CURRENT role is read without the live filter
+// on purpose. A role an active member holds cannot be soft-deleted (trigger
+// `f003_role_in_use`). Filtering `deletedAt` here would turn a missing row into
+// `[]`, and `[]` is strictly below EVERY caller, so it would ALLOW the reset.
+// A missing row therefore fails loud instead (see `lockFacts`).
+// (No `LIVE_ROLE_WHERE` — B15's helper — on purpose, for the reason above.)
+const LOCK_MEMBERSHIPS_SQL =
+  'SELECT "userId", "roleId", "status"::text AS "status" FROM "Membership" ' +
+  'WHERE "organizationId" = $1 AND "userId" = ANY($2::text[]) ' +
+  'ORDER BY "userId" ASC FOR SHARE';
+const LOCK_ROLES_SQL =
+  // role-read: history — the role a member HOLDS; a missing row must fail loud, never read as [] (above)
+  'SELECT id, capabilities FROM "Role" ' +
+  'WHERE "organizationId" = $1 AND id = ANY($2::text[]) ' +
+  "ORDER BY id ASC FOR SHARE";
+
+interface LockedMembershipRow {
+  userId: string;
+  roleId: string;
+  status: string;
+}
+interface LockedRoleRow {
+  id: string;
+  capabilities: string[];
+}
 
 /**
  * `SET LOCAL lock_timeout` value for the admin-reset transaction. Read from
@@ -87,6 +134,8 @@ function adminResetLockTimeoutMs(): number {
 
 @Injectable()
 export class AuthService {
+  private readonly logger = new Logger(AuthService.name);
+
   constructor(
     private readonly prisma: PrismaService,
     private readonly hashing: HashingService,
@@ -283,6 +332,51 @@ export class AuthService {
     };
   }
 
+  /**
+   * T-003-B20 · SR-05 — lock the caller's and the target's `Membership` rows
+   * (FOR SHARE, `userId` asc), then the `Role` rows they point at (FOR SHARE,
+   * `id` asc), and build both sides' facts from those locked rows only.
+   *
+   * Must run after the target `User` row is locked (architecture §3 order).
+   * A missing membership row = `status: null` (refused by the decision as
+   * before). A membership whose role row did not come back is impossible
+   * under the composite FK. It throws: deciding on `[]` would read as "below
+   * everyone" and allow the reset.
+   */
+  private async lockMembershipFacts(
+    tx: { $queryRawUnsafe: <T>(sql: string, ...params: unknown[]) => Promise<T> },
+    organizationId: string,
+    callerUserId: string,
+    targetUserId: string,
+  ): Promise<{ caller: AdminResetMembershipFacts; target: AdminResetMembershipFacts }> {
+    const userIds = [...new Set([callerUserId, targetUserId])].sort();
+    const memberships = await tx.$queryRawUnsafe<LockedMembershipRow[]>(
+      LOCK_MEMBERSHIPS_SQL,
+      organizationId,
+      userIds,
+    );
+    const roleIds = [...new Set(memberships.map((m) => m.roleId))].sort();
+    const roles =
+      roleIds.length === 0
+        ? []
+        : await tx.$queryRawUnsafe<LockedRoleRow[]>(LOCK_ROLES_SQL, organizationId, roleIds);
+    const capsByRole = new Map(roles.map((r) => [r.id, r.capabilities]));
+
+    const factsOf = (userId: string): AdminResetMembershipFacts => {
+      const m = memberships.find((row) => row.userId === userId);
+      if (!m) return { status: null, capabilities: [] };
+      const capabilities = capsByRole.get(m.roleId);
+      if (capabilities === undefined) {
+        throw new Error(
+          `adminResetPassword: membership ${organizationId}/${userId} points at role ${m.roleId}, ` +
+            "which the Role FOR SHARE read did not return",
+        );
+      }
+      return { status: m.status as AdminResetMembershipFacts["status"], capabilities };
+    };
+    return { caller: factsOf(callerUserId), target: factsOf(targetUserId) };
+  }
+
   async adminResetPassword(
     callerUserId: string,
     orgId: string,
@@ -356,8 +450,16 @@ export class AuthService {
             // outside the transaction: a membership revoked while we were
             // hashing must stop the write, and the pre-check is an optimisation,
             // never the authority.
-            const caller = await this.readMembershipFacts(tx, orgId, callerUserId);
-            const target = await this.readMembershipFacts(tx, orgId, targetUserId);
+            //
+            // T-003-B20 · SR-05: both memberships and their roles come from
+            // the LOCKED rows (Membership FOR SHARE → Role FOR SHARE), never
+            // from a read taken before the lock.
+            const { caller, target } = await this.lockMembershipFacts(
+              tx,
+              orgId,
+              callerUserId,
+              targetUserId,
+            );
             // The ONE deliberately cross-org query in this file (C-2). It is
             // legal here because `auth/` is on the SYSTEM_PRISMA allowlist
             // (architecture §2.1) and because the whole point of the check is
@@ -429,6 +531,15 @@ export class AuthService {
         if (type) {
           this.securityEvents.emit(type, { actorUserId: callerUserId, orgId, targetUserId });
         }
+      }
+      // T-003-B20 — the two copies of "who may" disagreed. The caller still
+      // gets the uniform 404 (fail-closed, and a 500 would be an oracle). We
+      // log it at error level so on-call sees it. Ids only: no password, no hash.
+      if (refused.refusals.some((r) => r === "authority_rule_drift")) {
+        this.logger.error(
+          `admin reset refused on authority_rule_drift (decideMemberAuthority answered ` +
+            `a reason reset cannot produce) actor=${callerUserId} org=${orgId} target=${targetUserId}`,
+        );
       }
       // The SAME 404 as "user not found" — same code, same message, same
       // fields. Constructed at ONE place for all four refusals so the bodies

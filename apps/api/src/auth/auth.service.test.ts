@@ -51,6 +51,8 @@ const NEW_HASH = "$argon2id$v=19$fake$newhash";
 interface MembershipFixture {
   status: MembershipStatus | null;
   capabilities: string[];
+  /** Role id the membership points at. Defaults to `role_<userId>`. */
+  roleId?: string;
 }
 
 interface Scenario {
@@ -60,6 +62,15 @@ interface Scenario {
   otherOrgActiveCounts?: number[];
   targetUserRow?: boolean;
 }
+
+// T-003-B20 · SR-05 — the statements the transaction locks with. Matched by
+// shape, so the fake answers what Postgres would and the assertions can read
+// the exact lock order back out of `calls`.
+const USER_LOCK_SQL = /FROM "User" WHERE id = \$1 FOR UPDATE/;
+const MEMBERSHIP_LOCK_SQL = /FROM "Membership"[\s\S]*ORDER BY "userId" ASC[\s\S]*FOR SHARE/;
+const ROLE_LOCK_SQL = /FROM "Role"[\s\S]*ORDER BY id ASC[\s\S]*FOR SHARE/;
+/** The bound parameters of a logged `tx:$queryRawUnsafe(<sql>|<params>)` call. */
+const paramsOf = (call: string): string => call.slice(call.indexOf("|") + 1, -1);
 
 function buildHarness(scenario: Scenario = {}) {
   // F-003 · T-003-B05 (D-034): reset needs target ⊊ caller, so the default
@@ -108,15 +119,42 @@ function buildHarness(scenario: Scenario = {}) {
     };
   }
 
+  /** Membership fixture by user id — read live, so a test can flip it mid-transaction. */
+  const fixtures = { caller, target };
+  const fixtureOf = (userId: string): MembershipFixture =>
+    userId === CALLER
+      ? fixtures.caller
+      : userId === TARGET
+        ? fixtures.target
+        : { status: null, capabilities: [] };
+  const roleIdOf = (userId: string): string => fixtureOf(userId).roleId ?? `role_${userId}`;
+
   const tx = {
     ...delegates("tx"),
     $executeRawUnsafe: vi.fn(async (sql: string) => {
       calls.push(`tx:$executeRawUnsafe(${sql})`);
       return 0;
     }),
-    $queryRawUnsafe: vi.fn(async (sql: string, ...params: unknown[]) => {
-      calls.push(`tx:$queryRawUnsafe(${sql}|${params.join(",")})`);
-      return targetUserRow ? [{ id: TARGET, email: TARGET_EMAIL }] : [];
+    $queryRawUnsafe: vi.fn(async (sql: string, ...params: unknown[]): Promise<unknown[]> => {
+      calls.push(`tx:$queryRawUnsafe(${sql}|${params.map((p) => String(p)).join(",")})`);
+      if (USER_LOCK_SQL.test(sql)) {
+        return targetUserRow ? [{ id: TARGET, email: TARGET_EMAIL }] : [];
+      }
+      if (MEMBERSHIP_LOCK_SQL.test(sql)) {
+        const [, userIds] = params as [string, string[]];
+        return [...userIds]
+          .sort()
+          .filter((u) => fixtureOf(u).status !== null)
+          .map((u) => ({ userId: u, roleId: roleIdOf(u), status: fixtureOf(u).status }));
+      }
+      if (ROLE_LOCK_SQL.test(sql)) {
+        const [, roleIds] = params as [string, string[]];
+        return [...roleIds].sort().map((id) => {
+          const owner = [CALLER, TARGET].find((u) => roleIdOf(u) === id);
+          return { id, capabilities: owner ? fixtureOf(owner).capabilities : [] };
+        });
+      }
+      throw new Error(`fake tx: unexpected raw SQL ${sql}`);
     }),
   };
 
@@ -151,7 +189,7 @@ function buildHarness(scenario: Scenario = {}) {
     throttle as unknown as ThrottleService,
   );
 
-  return { service, client, tx, calls, state, hashing, refresh, throttle, sink };
+  return { service, client, tx, calls, state, hashing, refresh, throttle, sink, fixtures };
 }
 
 type Harness = ReturnType<typeof buildHarness>;
@@ -332,31 +370,21 @@ describe("U-API-07 · adminResetPassword — fail-closed × 2 conditions, one tr
     expect(h.refresh.revokeAllForUser).not.toHaveBeenCalled();
     expect(h.throttle.clearAccount).not.toHaveBeenCalled();
     expect(h.sink.types()).toEqual(["auth.password.admin_reset_blocked_multi_org"]);
-    // Both reads happened: two count()s, four findUnique()s (2 per decision).
+    // Both reads happened: two count()s, and the locked membership + role
+    // reads once per decision (T-003-B20: facts come from the LOCKED rows).
     expect(h.tx.membership.count).toHaveBeenCalledTimes(2);
-    expect(h.tx.membership.findUnique).toHaveBeenCalledTimes(4);
+    expect(h.calls.filter((c) => MEMBERSHIP_LOCK_SQL.test(c))).toHaveLength(2);
+    expect(h.calls.filter((c) => ROLE_LOCK_SQL.test(c))).toHaveLength(2);
+    expect(h.tx.membership.findUnique).not.toHaveBeenCalled();
   });
 
   it("(2b) the target BECOMES an Owner after the write → rollback + 404 + blocked_owner_target", async () => {
     h = buildHarness();
-    // Flip the target's role between the two decisions.
-    let seen = 0;
-    h.tx.membership.findUnique.mockImplementation(
-      async (args: { where: { organizationId_userId: { userId: string } } }) => {
-        const { userId } = args.where.organizationId_userId;
-        if (userId === CALLER) {
-          return {
-            status: "active",
-            role: { capabilities: [CAPABILITY_MANAGE_MEMBERS, "manage_products"] },
-          };
-        }
-        seen += 1;
-        return {
-          status: "active",
-          role: { capabilities: seen > 1 ? [CAPABILITY_FULL_ACCESS] : ["manage_products"] },
-        };
-      },
-    );
+    // Flip the target's role between the two decisions (the write sits between them).
+    h.tx.user.update.mockImplementation(async () => {
+      h.fixtures.target = { status: "active", capabilities: [CAPABILITY_FULL_ACCESS] };
+      return { email: TARGET_EMAIL };
+    });
     expect404(await run(h));
     expect(h.state.rolledBack).toBe(true);
     expect(h.sink.types()).toEqual(["auth.password.admin_reset_blocked_owner_target"]);
@@ -400,6 +428,26 @@ describe("U-API-07 · adminResetPassword — fail-closed × 2 conditions, one tr
         { target: { status: "active", capabilities: [CAPABILITY_FULL_ACCESS] } },
       ],
       ["NEW-5ก concurrent membership", { otherOrgActiveCounts: [0, 1] }],
+      // T-003-B20 · D-034 — the ⊊ refusal joins the same single 404.
+      [
+        "D-034 Admin → Admin (equal)",
+        {
+          target: {
+            status: "active",
+            capabilities: [CAPABILITY_MANAGE_MEMBERS, "manage_products"],
+          },
+        },
+      ],
+      ["D-034 incomparable", { target: { status: "active", capabilities: ["manage_orders"] } }],
+      [
+        "D-034 superset",
+        {
+          target: {
+            status: "active",
+            capabilities: [CAPABILITY_MANAGE_MEMBERS, "manage_products", "manage_orders"],
+          },
+        },
+      ],
     ];
     const bodies: string[] = [];
     for (const [, scenario] of scenarios) {
@@ -510,5 +558,115 @@ describe("U-API-07 · adminResetPassword — fail-closed × 2 conditions, one tr
     const bug = new Error("column does not exist");
     broken.tx.$queryRawUnsafe.mockRejectedValueOnce(bug);
     await expect(broken.service.adminResetPassword(CALLER, ORG, TARGET, NEW_PW)).rejects.toBe(bug);
+  });
+});
+
+// ── T-003-B20 ★ — lock order (SR-05) + the ⊊ refusal (D-034 · api-spec §6) ──
+describe("T-003-B20 · adminResetPassword — User → Membership FOR SHARE → Role FOR SHARE, then decide", () => {
+  const ADMIN_CAPS = [CAPABILITY_MANAGE_MEMBERS, "manage_products"];
+
+  it("SR-05 · the lock order is User FOR UPDATE → Membership (caller, target) FOR SHARE by userId asc → Role FOR SHARE by id asc → facts", async () => {
+    // Role ids chosen so that id order is the REVERSE of (caller, target): a
+    // lock list built in argument order instead of sorted order shows up here.
+    const h = buildHarness({
+      caller: { status: "active", capabilities: ADMIN_CAPS, roleId: "role_z_admin" },
+      target: { status: "active", capabilities: ["manage_products"], roleId: "role_a_staff" },
+    });
+    expect(await run(h)).toBeNull();
+
+    const inTx = h.calls.filter((c) => c.startsWith("tx:"));
+    expect(inTx[0]).toMatch(/SET LOCAL lock_timeout/);
+    expect(inTx[1]).toMatch(USER_LOCK_SQL);
+    expect(inTx[2]).toMatch(MEMBERSHIP_LOCK_SQL);
+    expect(inTx[3]).toMatch(ROLE_LOCK_SQL);
+    // Params: org first, then the ids SORTED ascending.
+    expect(paramsOf(inTx[2])).toBe(`${ORG},${[CALLER, TARGET].sort().join(",")}`);
+    expect(paramsOf(inTx[3])).toBe(`${ORG},role_a_staff,role_z_admin`);
+    // Both lock statements are org-scoped (golden rule 3).
+    expect(inTx[2]).toMatch(/"organizationId" = \$1/);
+    expect(inTx[3]).toMatch(/"organizationId" = \$1/);
+    // The decision reads nothing about the membership/role other than the
+    // locked rows: no ORM read of either inside the transaction.
+    expect(h.tx.membership.findUnique).not.toHaveBeenCalled();
+    // Re-evaluation after the write (NEW-5ก) runs the same locked reads again.
+    expect(inTx.filter((c) => MEMBERSHIP_LOCK_SQL.test(c))).toHaveLength(2);
+  });
+
+  it("caller and target holding the SAME role → one Role row locked, not two (no duplicate ids in the lock list)", async () => {
+    const h = buildHarness({
+      caller: { status: "active", capabilities: ADMIN_CAPS, roleId: "role_admin" },
+      target: { status: "active", capabilities: ADMIN_CAPS, roleId: "role_admin" },
+    });
+    expect404(await run(h));
+    const roleLock = h.calls.find((c) => ROLE_LOCK_SQL.test(c));
+    expect(paramsOf(roleLock ?? "")).toBe(`${ORG},role_admin`);
+  });
+
+  it("the role is read from the LOCKED membership row: a role change landing before the lock is what gets decided", async () => {
+    // The pre-check (root client, outside the tx) sees the target as Staff…
+    const h = buildHarness();
+    // …but by the time the Membership row is locked it points at an equal role.
+    h.tx.$executeRawUnsafe.mockImplementation(async (sql: string) => {
+      h.calls.push(`tx:$executeRawUnsafe(${sql})`);
+      h.fixtures.target = { status: "active", capabilities: ADMIN_CAPS, roleId: "role_admin2" };
+      return 0;
+    });
+    expect404(await run(h));
+    expectNoEffect(h);
+    expect(h.sink.types()).toEqual(["auth.password.admin_reset_blocked_privilege"]);
+  });
+
+  for (const [label, targetCaps] of [
+    ["Admin → Admin (equal)", ADMIN_CAPS],
+    ["incomparable (MMS → R_BILL shape)", ["manage_billing", "manage_orders"]],
+    ["superset (target holds more)", [...ADMIN_CAPS, "manage_orders"]],
+  ] as const) {
+    it(`D-034 · ${label} → 404, password NOT written, one admin_reset_blocked_privilege event`, async () => {
+      const h = buildHarness({ target: { status: "active", capabilities: [...targetCaps] } });
+      const err = expect404(await run(h));
+      expectNoEffect(h);
+      expect(h.state.rolledBack).toBe(true);
+      expect(h.sink.types()).toEqual(["auth.password.admin_reset_blocked_privilege"]);
+      expect(h.sink.ofType("auth.password.admin_reset_blocked_privilege")[0].payload).toEqual({
+        actorUserId: CALLER,
+        orgId: ORG,
+        targetUserId: TARGET,
+      });
+      // Same body as "not a member" — the one place the 404 is built.
+      const notMember = expect404(
+        await run(buildHarness({ target: { status: null, capabilities: [] } })),
+      );
+      expect(JSON.stringify(err.getResponse())).toBe(JSON.stringify(notMember.getResponse()));
+    });
+  }
+
+  it("Admin → Staff (⊊) still succeeds — the refusal is not just 'reset is broken'", async () => {
+    const h = buildHarness();
+    expect(await run(h)).toBeNull();
+    expect(h.tx.user.update).toHaveBeenCalledTimes(1);
+    expect(h.sink.types()).toEqual(["auth.password.admin_reset"]);
+  });
+
+  it("an Owner target still emits ONLY …_owner_target (never also …_privilege)", async () => {
+    const h = buildHarness({
+      target: { status: "active", capabilities: [CAPABILITY_FULL_ACCESS] },
+    });
+    expect404(await run(h));
+    expect(h.sink.types()).toEqual(["auth.password.admin_reset_blocked_owner_target"]);
+  });
+
+  it("a membership whose Role row did not come back from the lock → fails loud (FK says it cannot happen), never decides on []", async () => {
+    // An empty capability set is ⊊ EVERY caller — deciding on it would allow
+    // the reset. A missing row must therefore never be read as "no capabilities".
+    const h = buildHarness();
+    const real = h.tx.$queryRawUnsafe.getMockImplementation()!;
+    h.tx.$queryRawUnsafe.mockImplementation(async (sql: string, ...params: unknown[]) =>
+      ROLE_LOCK_SQL.test(sql) ? [] : real(sql, ...params),
+    );
+    const err = await run(h);
+    expect(err).toBeInstanceOf(Error);
+    expect(err).not.toBeInstanceOf(HttpException);
+    expect(h.tx.user.update).not.toHaveBeenCalled();
+    expect(h.state.committed).toBe(false);
   });
 });
