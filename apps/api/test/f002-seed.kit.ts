@@ -242,6 +242,12 @@ export interface SeedKit {
     expiresAt?: Date;
     createdAt?: Date;
     invitedByUserId?: string | null;
+    /** F-003 (D-035): who issued the CURRENT link. Omitted ⇒ null (fallback to invitedByUserId). */
+    issuedByUserId?: string | null;
+    /** Lifecycle evidence for `accepted` / `cancelled` rows. */
+    acceptedAt?: Date | null;
+    acceptedByUserId?: string | null;
+    cancelledAt?: Date | null;
     rawToken?: string;
   }): Promise<SeededInvitation>;
   scenario(name: F002Scenario): Promise<ScenarioResult>;
@@ -375,6 +381,10 @@ export function createSeedKit(prisma: SeedPrismaClient, options: SeedKitOptions 
     expiresAt?: Date;
     createdAt?: Date;
     invitedByUserId?: string | null;
+    issuedByUserId?: string | null;
+    acceptedAt?: Date | null;
+    acceptedByUserId?: string | null;
+    cancelledAt?: Date | null;
     rawToken?: string;
   }): Promise<SeededInvitation> {
     // Resolves LAZILY so every non-invitation scenario stays usable while the
@@ -396,6 +406,10 @@ export function createSeedKit(prisma: SeedPrismaClient, options: SeedKitOptions 
         tokenIssuedAt: opts.tokenIssuedAt ?? now,
         expiresAt: opts.expiresAt ?? new Date(now.getTime() + 168 * 3_600_000),
         invitedByUserId: opts.invitedByUserId ?? null,
+        ...(opts.issuedByUserId !== undefined ? { issuedByUserId: opts.issuedByUserId } : {}),
+        ...(opts.acceptedAt !== undefined ? { acceptedAt: opts.acceptedAt } : {}),
+        ...(opts.acceptedByUserId !== undefined ? { acceptedByUserId: opts.acceptedByUserId } : {}),
+        ...(opts.cancelledAt !== undefined ? { cancelledAt: opts.cancelledAt } : {}),
         ...(opts.createdAt ? { createdAt: opts.createdAt } : {}),
       },
       select: { id: true, organizationId: true, email: true, roleId: true, status: true },
