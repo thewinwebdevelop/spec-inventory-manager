@@ -101,3 +101,6 @@ protocol (แตะ gate/กติกาหลัก = Type 1 รอ user เส
 ### F-003 · friction log (Gate 2 · 2026-09-27)
 - 2026-09-27 · @security-reviewer · spec review ของ Gate 2 ตายกลางทางเพราะ fable ชน monthly spend limit (ครั้งที่ 2 — F-002 เลื่อน delta review ด้วยเหตุเดียวกัน) · user เลือกรันด้วย opus override แทน ⇒ เสียหลัก "reviewer คนละ model กับผู้เขียน" บางส่วน · WEB_TEAM §3.6 pin fable ให้ security-reviewer โดยไม่มี fallback ที่เขียนไว้
 - 2026-09-27 · @backend-api · consult ก่อน lock contract: qa ตอบ "ยังไม่พอ" ครบ 4/4 ข้อ (spy ไม่ครอบ updateMany, regex gate หลุด *OrThrow/raw) · brief ของ backend มี "consult qa" แต่ไม่มี seam checklist จาก test-plan เดิม ⇒ แก้ร่างรอบสอง · §3.2 ลำดับ contract→qa
+- 2026-09-29 · @pm · monthly spend limit ตัดงานกลางคัน **3 ครั้งใน build เดียว** (batch 1 ×2, batch 2 ×1) — 6–11 agent ถูกตัดพร้อมกันทุกครั้ง · resume ด้วย SendMessage ได้ (งานไม่หาย) แต่ review รอบซ้ำ + context เดิมเผาโควตาต่อ · ลด batch เหลือ ~5 แล้วยังชน · WEB_TEAM §3.6 ไม่มีงบ/เพดาน concurrency ต่อ build
+- 2026-09-29 · @pm · integration break เจอเฉพาะตอน merge (cited-paths NOT_YET_BUILT · error-code UNDOCUMENTED · G-12 presentation pins) — agent ขนานสร้างบน base เก่า ไม่เห็นกัน · แก้บน build branch ได้ แต่ควรมี step "rebase ก่อนรายงาน done" ใน BUILD-RULES
+
