@@ -132,7 +132,7 @@ d("f003-seed.kit (DB)", () => {
     }
   });
 
-  it("★ the F-003 CHECKs accept every seeded role (no empty set, full_access only on the system row)", async () => {
+  it("★ read back: no seeded role is empty, none but the system row holds full_access, one system row per shop", async () => {
     const orgIds = [personas.shops.A.org.id, personas.shops.B.org.id];
     const rows = await prisma.role.findMany({
       where: { organizationId: { in: orgIds } },

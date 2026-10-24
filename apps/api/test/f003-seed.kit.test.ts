@@ -26,6 +26,17 @@ interface Row {
 }
 type Args = { data?: Row; where?: Row };
 
+/** Honours the WHERE the way Postgres would: id AND (when given) organizationId. */
+function match(table: Map<string, Row>, where: Row): Row | undefined {
+  const row = table.get(where.id as string);
+  if (!row) return undefined;
+  if (where.organizationId !== undefined && row.organizationId !== where.organizationId) {
+    return undefined;
+  }
+  if (where.deletedAt === null && row.deletedAt != null) return undefined;
+  return row;
+}
+
 function recordingPrisma(opts: { updateCount?: number } = {}) {
   const roles = new Map<string, Row>();
   const invitations = new Map<string, Row>();
@@ -60,7 +71,7 @@ function recordingPrisma(opts: { updateCount?: number } = {}) {
       updateMany: async (args: { where: Row; data: Row }) => {
         calls.push("role.updateMany");
         updateMany.push(args);
-        const row = roles.get(args.where.id as string);
+        const row = match(roles, args.where);
         const count = opts.updateCount ?? (row ? 1 : 0);
         if (row && count > 0) Object.assign(row, args.data);
         return { count };
@@ -89,7 +100,7 @@ function recordingPrisma(opts: { updateCount?: number } = {}) {
       updateMany: async (args: { where: Row; data: Row }) => {
         calls.push("invitation.updateMany");
         updateMany.push(args);
-        const row = invitations.get(args.where.id as string);
+        const row = match(invitations, args.where);
         const count = opts.updateCount ?? (row ? 1 : 0);
         if (row && count > 0) Object.assign(row, args.data);
         return { count };
@@ -107,6 +118,13 @@ describe("personaRoleSpecs — derived from production, never retyped", () => {
   it("R_B holds exactly the Admin blueprint's capabilities (read from SYSTEM_ROLE_BLUEPRINT)", () => {
     const admin = SYSTEM_ROLE_BLUEPRINT.find((r) => r.key === "admin")!;
     expect([...specs.R_B].sort()).toEqual([...admin.capabilities].sort());
+  });
+
+  it("MMS and R_BILL are incomparable: neither capability set contains the other (§0)", () => {
+    const mms = new Set(specs.R_MMS);
+    const bill = new Set(specs.R_BILL);
+    expect([...bill].every((c) => mms.has(c))).toBe(false);
+    expect([...mms].every((c) => bill.has(c))).toBe(false);
   });
 
   it("R_MMS = Staff blueprint + manage_members (and nothing else)", () => {
@@ -211,17 +229,36 @@ describe("role / invitation mutators are org-scoped and fail loudly", () => {
     expect(roles.get(role.id)).toMatchObject({ deletedAt: at, deletedByUserId: "u1" });
   });
 
-  it("RED: a role that is not in THIS org is never touched (count 0 ⇒ throws, no silent no-op)", async () => {
-    const { prisma } = recordingPrisma();
+  it("RED: a role / invitation that belongs to ANOTHER org is never touched (throws, row unchanged)", async () => {
+    const { prisma, roles, invitations } = recordingPrisma();
     const kit = createF003SeedKit(prisma, { dbModule });
-    await expect(kit.softDeleteRole("o1", "ghost")).rejects.toThrow(/softDeleteRole/);
-    await expect(kit.setRoleVersion("o1", "ghost", 5)).rejects.toThrow(/setRoleVersion/);
+    const role = await kit.createCustomRole({
+      organizationId: "o2",
+      name: "Theirs",
+      capabilities: ["manage_orders"],
+    });
+    const inv = await kit.createInvitation({
+      organizationId: "o2",
+      email: "t@y.test",
+      roleId: role.id,
+      issuedByUserId: "u",
+    });
+    const roleBefore = { ...roles.get(role.id)! };
+    const expiryBefore = invitations.get(inv.id)!.expiresAt;
+
+    await expect(kit.softDeleteRole("o1", role.id)).rejects.toThrow(/softDeleteRole/);
+    await expect(kit.setRoleVersion("o1", role.id, 5)).rejects.toThrow(/setRoleVersion/);
     await expect(
-      kit.setLastEdited("o1", "ghost", { at: new Date(), byUserId: "u" }),
+      kit.setLastEdited("o1", role.id, { at: new Date(), byUserId: "u" }),
     ).rejects.toThrow(/setLastEdited/);
-    await expect(kit.setInvitationExpiry("o1", "ghost", new Date())).rejects.toThrow(
+    await expect(kit.setInvitationExpiry("o1", inv.id, new Date(0))).rejects.toThrow(
       /setInvitationExpiry/,
     );
+    expect(roles.get(role.id)).toEqual(roleBefore);
+    expect(invitations.get(inv.id)!.expiresAt).toEqual(expiryBefore);
+    // control: the same call with the right org succeeds
+    await kit.setRoleVersion("o2", role.id, 5);
+    expect(roles.get(role.id)!.version).toBe(5);
   });
 
   it("setRoleVersion rejects a non-integer / < 1 version instead of writing it", async () => {

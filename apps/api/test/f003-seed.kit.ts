@@ -181,7 +181,7 @@ export function createF003SeedKit(
 ): F003SeedKit {
   const label = options.label ?? "f003";
   const base = createSeedKit(prisma, { ...options, label });
-  const myRoles: string[] = [];
+  const myRoles: Array<{ id: string; organizationId: string }> = [];
   const unique = (): string => `${Date.now().toString(36)}-${randomUUID().slice(0, 8)}`;
 
   async function createCustomRole(opts: {
@@ -208,7 +208,7 @@ export function createF003SeedKit(
       },
       select: { id: true, name: true, key: true, capabilities: true },
     });
-    myRoles.push(row.id);
+    myRoles.push({ id: row.id, organizationId: opts.organizationId });
     return { id: row.id, name: row.name, key: row.key, capabilities: row.capabilities };
   }
 
@@ -476,7 +476,9 @@ export function createF003SeedKit(
     // I made in an org this kit did not create — delete exactly those, by id.
     await base.cleanup();
     if (myRoles.length > 0) {
-      await prisma.role.deleteMany({ where: { id: { in: myRoles } } });
+      await prisma.role.deleteMany({
+        where: { OR: myRoles.map((r) => ({ id: r.id, organizationId: r.organizationId })) },
+      });
       myRoles.length = 0;
     }
   }
