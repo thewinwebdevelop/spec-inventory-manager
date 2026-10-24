@@ -213,6 +213,128 @@ d("M3-04 ★ backfill: exact preset · idempotent · fail-closed on a mismatch",
     },
     SLOW,
   );
+
+  it(
+    "★ fix round 1 (security High): an Admin an Owner edited back to the F-002 seven is NOT re-granted by a re-run, and is not reported as a mismatch",
+    async () => {
+      let org = "";
+      const { db } = await expandedDb(async (url) => {
+        org = await seedF002Org(url, { tag: "owneredit", ownerStatus: "active" });
+      });
+      const c = client(db.url);
+      expect((await runBackfillF003(c)).rolesUpdated).toBe(1);
+      // the Owner takes manage_roles away through a role PATCH (F-003 write path shape)
+      const adminId = (await roles(c, org)).admin!.id;
+      await c.$executeRawUnsafe(
+        `UPDATE "Role" SET capabilities = $1::text[], version = version + 1,
+                "lastEditedAt" = now(), "lastEditedByUserId" = $2
+          WHERE id = $3`,
+        ADMIN_F002,
+        `user-owner-${org.slice("org-".length)}`,
+        adminId,
+      );
+      const edited = (await roles(c, org)).admin!;
+
+      const rerun = await runBackfillF003(c);
+      expect(rerun.rolesUpdated).toBe(0);
+      const after = (await roles(c, org)).admin!;
+      expect(after.capabilities).toEqual(ADMIN_F002);
+      expect(after.version).toBe(edited.version);
+
+      // the same file through a notice handler: no NOTICE, no mismatch WARNING
+      const res = sql(db.url, readBackfillF003Sql());
+      expect(res.notices.filter((n) => n.startsWith("f003_backfill "))).toEqual([]);
+      expect(res.warnings).toEqual([]);
+    },
+    SLOW,
+  );
+});
+
+// ── fix round 1 (security Medium ×2): bridge lifecycle + locks ────────────────
+d("bridge lifecycle after f003_drop_admin_bridge · no ACCESS EXCLUSIVE on Role", () => {
+  /** Modes this transaction holds on "Role" after running the backfill file (then ROLLBACK). */
+  function roleLocksDuring(url: string): string[] {
+    const res = runSqlCapturingNotices(
+      url,
+      `\\pset format unaligned\n\\pset tuples_only on\nBEGIN;\n${readBackfillF003Sql()}\n` +
+        `SELECT 'LOCKS:' || coalesce(string_agg(DISTINCT mode, ',' ORDER BY mode), '')
+           FROM pg_locks WHERE pid = pg_backend_pid() AND relation = '"Role"'::regclass;\nROLLBACK;\n`,
+    );
+    expect(res.status, res.stderr).toBe(0);
+    const line = res.stdout.split("\n").find((l) => l.startsWith("LOCKS:"));
+    expect(line, res.stdout).toBeDefined();
+    return line!.slice("LOCKS:".length).split(",").filter(Boolean);
+  }
+  const bridgeTriggers = async (c: PrismaClient) =>
+    (
+      await c.$queryRawUnsafe<{ n: number }[]>(
+        `SELECT count(*)::int AS n FROM pg_trigger
+          WHERE tgrelid = '"Role"'::regclass AND tgname = 'role_f003_admin_bridge'`,
+      )
+    )[0]!.n;
+
+  it(
+    "★ a re-run (bridge already there) and a first run take no AccessExclusiveLock on Role",
+    async () => {
+      const { db, staged } = await expandedDb(async (url) => {
+        await seedF002Org(url, { tag: "locks", ownerStatus: "active" });
+      });
+      const first = roleLocksDuring(db.url); // bridge not created yet
+      expect(first).not.toContain("AccessExclusiveLock");
+      expect(first.length, "non-vacuity: the UPDATE/CREATE TRIGGER did lock Role").toBeGreaterThan(
+        0,
+      );
+      staged.add(realMigrationBySlug(BACKFILL_F003_SLUG));
+      expect(migrateDeploy(staged.schemaPath, db.url).status).toBe(0);
+      expect(await bridgeTriggers(client(db.url))).toBe(1);
+      expect(roleLocksDuring(db.url)).not.toContain("AccessExclusiveLock");
+    },
+    SLOW,
+  );
+
+  it(
+    "★ once f003_drop_admin_bridge is applied: backfill:f003 refuses (nothing written), and the file never re-creates the trigger",
+    async () => {
+      let org = "";
+      const { db, staged } = await expandedDb(async (url) => {
+        org = await seedF002Org(url, { tag: "dropped", ownerStatus: "active" });
+      });
+      staged.add(realMigrationBySlug(BACKFILL_F003_SLUG));
+      expect(migrateDeploy(staged.schemaPath, db.url).status).toBe(0);
+      const c = client(db.url);
+      // stand-in for the future drop migration, recorded the way prisma records it
+      await c.$executeRawUnsafe(`DROP TRIGGER IF EXISTS role_f003_admin_bridge ON "Role"`);
+      await c.$executeRawUnsafe(`DROP FUNCTION IF EXISTS role_f003_admin_bridge()`);
+      await c.$executeRawUnsafe(
+        `INSERT INTO _prisma_migrations (id, checksum, finished_at, migration_name, started_at, applied_steps_count)
+         VALUES ('drop-standin', 'x', now(), '20270101000000_f003_drop_admin_bridge', now(), 1)`,
+      );
+      // an Admin row the backfill would otherwise change
+      await c.$executeRawUnsafe(
+        `UPDATE "Role" SET capabilities = $1::text[] WHERE "organizationId" = $2 AND key = 'admin'`,
+        ADMIN_F002,
+        org,
+      );
+
+      await expect(runBackfillF003(c)).rejects.toThrow(/f003_drop_admin_bridge.*applied/);
+      expect((await roles(c, org)).admin!.capabilities).toEqual(ADMIN_F002);
+      expect(await bridgeTriggers(c)).toBe(0);
+
+      // even the raw file (no CLI guard) leaves the trigger dropped
+      sql(db.url, readBackfillF003Sql());
+      expect(await bridgeTriggers(c)).toBe(0);
+
+      // control: a ROLLED-BACK drop migration does not count
+      await c.$executeRawUnsafe(
+        `UPDATE _prisma_migrations SET rolled_back_at = now() WHERE id = 'drop-standin'`,
+      );
+      // (the raw file above already ran §1, so the row count here is 0 — the point
+      // is that the CLI runs again and the missing trigger is created again)
+      await expect(runBackfillF003(c)).resolves.toMatchObject({ rolesUpdated: 0 });
+      expect(await bridgeTriggers(c)).toBe(1);
+    },
+    SLOW,
+  );
 });
 
 // ── M3-05 ─────────────────────────────────────────────────────────────────────

@@ -49,6 +49,15 @@ export function backfillF003MigrationPath(migrationsDir: string = MIGRATIONS_DIR
   return join(migrationsDir, hits[0]!, "migration.sql");
 }
 
+/** The migration that retires the bridge trigger (data-model §4.2). */
+export const DROP_BRIDGE_SLUG = "f003_drop_admin_bridge";
+
+function retiredBridgeMigrations(migrationsDir: string = MIGRATIONS_DIR): string[] {
+  return readdirSync(migrationsDir, { withFileTypes: true })
+    .filter((e) => e.isDirectory() && e.name.endsWith(`_${DROP_BRIDGE_SLUG}`))
+    .map((e) => e.name);
+}
+
 export function readBackfillF003Sql(migrationsDir?: string): string {
   return readFileSync(backfillF003MigrationPath(migrationsDir), "utf8");
 }
@@ -66,10 +75,32 @@ export interface BackfillF003Result {
  */
 export async function runBackfillF003(
   client: TransactionalRawSqlClient,
-  sql: string = readBackfillF003Sql(),
+  opts: { readonly migrationsDir?: string } = {},
 ): Promise<BackfillF003Result> {
+  // Security review B11 (Medium): once the bridge is retired, re-running this
+  // file would only resurrect a key-reading function G-12 believes is gone.
+  const retiredInRepo = retiredBridgeMigrations(opts.migrationsDir);
+  if (retiredInRepo.length > 0) {
+    throw new Error(
+      `backfill:f003 refused: ${retiredInRepo.join(", ")} (${DROP_BRIDGE_SLUG}) exists — ` +
+        "the admin bridge is retired; this backfill must not run again",
+    );
+  }
+  const sql = readBackfillF003Sql(opts.migrationsDir);
   return client.$transaction(
     async (tx) => {
+      const applied = await tx.$queryRawUnsafe<{ migration_name: string }[]>(
+        `SELECT migration_name FROM _prisma_migrations
+          WHERE migration_name LIKE $1 AND finished_at IS NOT NULL AND rolled_back_at IS NULL`,
+        `%\\_${DROP_BRIDGE_SLUG.replace(/_/g, "\\_")}`,
+      );
+      if (applied.length > 0) {
+        throw new Error(
+          `backfill:f003 refused: ${applied.map((m) => m.migration_name).join(", ")} ` +
+            `(${DROP_BRIDGE_SLUG}) is applied in this database — the admin bridge is retired; ` +
+            "this backfill must not run again",
+        );
+      }
       await tx.$queryRawUnsafe(`SELECT set_config($1, $2, true)`, SQL_SETTING, sql);
       await tx.$executeRawUnsafe(
         `DO $f003$ BEGIN EXECUTE current_setting('${SQL_SETTING}'); END $f003$`,

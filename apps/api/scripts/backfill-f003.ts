@@ -9,8 +9,11 @@
 // meet; it adds no logic of its own.
 //
 // Exit 0 = backfill ran AND every Role.capabilities ⊆ registry.
-// Exit 1 = a role holds an unregistered key (listed), or the run failed (e.g.
-//          f003_owner_invariant_violation org=<id> — nothing was written).
+// Exit 1 = either (a) the backfill COMMITTED ("backfill committed rows_updated=N"
+//          is printed first) but a role holds an unregistered key (listed), or
+//          (b) the run failed and nothing was written: e.g.
+//          f003_owner_invariant_violation org=<id>, or refused because
+//          f003_drop_admin_bridge exists/is applied (the bridge is retired).
 // Needs DATABASE_URL.
 import { CAPABILITY_REGISTRY } from "@omnistock/core-domain";
 import { PrismaClient, backfillF003Report } from "@omnistock/db";
@@ -24,7 +27,7 @@ async function main(): Promise<number> {
       CAPABILITY_REGISTRY.map((c) => c.key),
     );
     console.log(
-      `backfill:f003 rows_updated=${report.rolesUpdated} sql_sha256=${report.executedSha256}`,
+      `backfill:f003 backfill committed rows_updated=${report.rolesUpdated} sql_sha256=${report.executedSha256}`,
     );
     console.log(
       `backfill:f003 rollback_safety_count=${report.rollbackSafetyCount} (architecture §12: 0 = code rollback safe)`,
