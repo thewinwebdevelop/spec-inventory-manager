@@ -35,7 +35,12 @@ import {
 } from "./member-authority";
 import { decideRoleWrite, type RoleWriteInput, type RoleWriteResult } from "./role-write";
 import { decideAdminReset } from "../orgs/admin-reset-authz";
-import { canAcceptInvitation, decideInviterRecheck } from "../orgs/invitation-policy";
+import {
+  canAcceptInvitation,
+  decideInviterRecheck,
+  type InviterRecheckDecision,
+  type InviterRecheckInput,
+} from "../orgs/invitation-policy";
 
 // ── fixture registry as bit masks ───────────────────────────────────────────
 const X = "manage_orders";
@@ -174,10 +179,12 @@ function* opsOf(s: State, actorIds: readonly string[], scope: Scope = "all"): Ge
 interface Rules {
   readonly memberAuthority: (i: MemberAuthorityInput) => MemberAuthorityResult;
   readonly roleWrite: (i: RoleWriteInput) => RoleWriteResult;
+  readonly inviterRecheck: (i: InviterRecheckInput) => InviterRecheckDecision;
 }
 const REAL: Rules = {
   memberAuthority: (i) => decideMemberAuthority(i),
   roleWrite: (i) => decideRoleWrite(i),
+  inviterRecheck: (i) => decideInviterRecheck(i),
 };
 const OK = { ok: true } as const;
 /**
@@ -241,6 +248,50 @@ const CONTROLS = {
       const r = decideMemberAuthority(i);
       return i.op === "change_role" && i.actorIsTarget && !r.ok && r.reason === "exceeds_actor"
         ? OK
+        : r;
+    },
+  },
+  /**
+   * c5 — drop the D-035 accept re-check (§1.3 leg 3): an issuer who lost the
+   * `manage_members` floor (Addendum P2) or no longer covers the role is let
+   * through. `inviter_not_active` stays refused (no issuer to blame).
+   */
+  c5: {
+    ...REAL,
+    inviterRecheck: (i) => {
+      const r = decideInviterRecheck(i);
+      return r === "inviter_not_authorized" || r === "inviter_exceeds" ? "ok" : r;
+    },
+  },
+  /**
+   * o1 — the accept re-check lets a non-Owner's link to the OWNER role through
+   * (Owner-set leg, D-030). Re-asked with an empty role so the floor still
+   * applies: only "the role is the Owner's" is out of the way.
+   */
+  o1: {
+    ...REAL,
+    inviterRecheck: (i) => {
+      const r = decideInviterRecheck(i);
+      return r === "inviter_exceeds" &&
+        i.invitationRoleCapabilities.includes(CAPABILITY_FULL_ACCESS)
+        ? decideInviterRecheck({ ...i, invitationRoleCapabilities: [] })
+        : r;
+    },
+  },
+  /**
+   * o2 — a non-Owner may PATCH someone (incl. itself) to the OWNER role
+   * (`owner_only` via the grant + the grant-axis backstop, D-030). Re-asked with
+   * an empty grant so floor + target axis still apply; an Owner TARGET stays refused.
+   */
+  o2: {
+    ...REAL,
+    memberAuthority: (i) => {
+      const r = decideMemberAuthority(i);
+      return i.op === "change_role" &&
+        !r.ok &&
+        r.reason === "owner_only" &&
+        !i.targetCurrentCapabilities.includes(CAPABILITY_FULL_ACCESS)
+        ? decideMemberAuthority({ ...i, grantCapabilities: [] })
         : r;
     },
   },
@@ -398,7 +449,7 @@ class Decider {
         }).allowed,
     );
   }
-  /** Always REAL: `canAcceptInvitation` (new user) then the D-035 re-check of the issuer. */
+  /** `canAcceptInvitation` (new user, always real) then the D-035 re-check of the issuer (rules variant). */
   accept(role: number | null, issuer: number | null) {
     return this.memo(pack(8, role ?? 31, issuer ?? 31), () => {
       const roleCaps = role === null ? null : CAPS[role];
@@ -414,7 +465,7 @@ class Decider {
       });
       if (verdict !== "ok" || roleCaps === null) return false;
       return (
-        decideInviterRecheck({
+        this.rules.inviterRecheck({
           inviter: issuer === null ? null : { capabilities: CAPS[issuer] },
           invitationRoleCapabilities: roleCaps,
         }) === "ok"
@@ -539,7 +590,8 @@ function apply(s: State, op: Op): State {
   switch (op.kind) {
     case "patch": {
       const [s1, r] = op.grantRole === null ? withRole(s, op.grantMask) : [s, op.grantRole];
-      return setMember(s1, op.target, (m) => ({ ...m, role: r }));
+      // the PATCH-ed member IS an Owner iff the role is the Owner role (as on accept)
+      return setMember(s1, op.target, (m) => ({ ...m, role: r, owner: s1.roles[r] === OWNER }));
     }
     case "remove":
       return setMember(s, op.target, (m) => ({ ...m, active: false, role: -1 }));
@@ -712,7 +764,22 @@ interface Report {
   /** (T ∈ U(s), T ≠ actor, T active in s′) pairs actually checked. */
   checks: number;
   counterexamples: Counterexample[];
+  /** assert 3 — allowed non-Owner ops after which MORE members hold the Owner role. */
+  ownerMints: OwnerMint[];
+  /** Ops tried that WOULD add an Owner if allowed (PATCH to the Owner role · accept of an Owner-role link) — non-vacuity of assert 3. */
+  ownerAttempts: number;
 }
+
+/** Members holding the Owner role (by the role's capabilities, not the `owner` flag). */
+const ownersIn = (s: State) =>
+  s.members.filter((m) => m.active && s.roles[m.role] === OWNER).length;
+interface OwnerMint {
+  readonly s: State;
+  readonly op: Op;
+  readonly s2: State;
+}
+const fmtMint = (m: OwnerMint) =>
+  `${fmt(m.s)}  ${fmtOp(m.op)}  ⇒ Owners ${ownersIn(m.s)} → ${ownersIn(m.s2)}  ${fmt(m.s2)}`;
 
 function runProperty(rules: Rules, opts: { fullProduct?: boolean; every?: number } = {}): Report {
   const d = new Decider(rules);
@@ -724,6 +791,8 @@ function runProperty(rules: Rules, opts: { fullProduct?: boolean; every?: number
     statesWithNonEmptyU: 0,
     checks: 0,
     counterexamples: [],
+    ownerMints: [],
+    ownerAttempts: 0,
   };
   for (const { s, ops } of cases(opts.fullProduct, opts.every)) {
     rep.states++;
@@ -732,9 +801,16 @@ function runProperty(rules: Rules, opts: { fullProduct?: boolean; every?: number
     assertUMeansNoReset(s, u, real);
     for (const op of ops) {
       rep.opsTried++;
+      if (
+        (op.kind === "patch" && op.grantMask === OWNER) ||
+        (op.kind === "accept" && s.roles[s.inv!.role] === OWNER)
+      )
+        rep.ownerAttempts++;
       if (!allowed(s, op, d)) continue;
       for (const k of kindsOf(s, op)) rep.passed[k]++;
       const s2 = apply(s, op);
+      // assert 3 (D-030): no non-Owner op adds a holder of the Owner role
+      if (ownersIn(s2) > ownersIn(s)) rep.ownerMints.push({ s, op, s2 });
       for (const t of u) {
         if (t === op.actor) continue;
         const t2 = member(s2, t);
@@ -781,6 +857,8 @@ function fmtOp(op: Op): string {
       return `${op.actor} PATCH ${op.target} → ${op.grantRole === null ? "new role" : `R${op.grantRole}`}${show(op.grantMask)}`;
     case "role_update":
       return `${op.actor} UPDATE R${op.role} → ${op.next === "unchanged" ? "unchanged" : show(op.next)}`;
+    case "accept":
+      return `${op.actor} ACCEPT`;
     default:
       return `${op.actor} ${op.kind} ${JSON.stringify(op)}`;
   }
@@ -816,9 +894,13 @@ describe("U-RB-18 · property single-step (every state × every op of every non-
       const ms = Math.round(performance.now() - t0);
       console.log(
         `U-RB-18: ${rep.states} states · ${rep.opsTried} ops tried · ${rep.checks} (T∈U) checks · ` +
-          `${rep.statesWithNonEmptyU} states with U≠∅ · ${ms} ms\n  passed by kind: ${JSON.stringify(rep.passed)}`,
+          `${rep.statesWithNonEmptyU} states with U≠∅ · ${rep.ownerAttempts} Owner-minting attempts · ${ms} ms\n` +
+          `  passed by kind: ${JSON.stringify(rep.passed)}`,
       );
       expect(rep.counterexamples.slice(0, 3).map(fmtCx)).toEqual([]);
+      // assert 3 (D-030): the Owner set is closed under non-Owner ops — and it was really tried
+      expect(rep.ownerMints.slice(0, 3).map(fmtMint)).toEqual([]);
+      expect(rep.ownerAttempts).toBeGreaterThan(0);
       // non-vacuity: every op kind really passed somewhere, U is non-empty somewhere, checks ran
       for (const k of KINDS)
         expect(rep.passed[k], `no allowed ${k} — the model does not cover it`).toBeGreaterThan(0);
@@ -836,6 +918,7 @@ describe("U-RB-18 · property single-step (every state × every op of every non-
         `U-RB-18 full-product slice: ${rep.states} states · ${rep.opsTried} ops · ${rep.checks} checks`,
       );
       expect(rep.counterexamples.slice(0, 3).map(fmtCx)).toEqual([]);
+      expect(rep.ownerMints.slice(0, 3).map(fmtMint)).toEqual([]);
       expect(rep.checks).toBeGreaterThan(0);
     },
     SLOW,
@@ -844,22 +927,40 @@ describe("U-RB-18 · property single-step (every state × every op of every non-
 
 /**
  * The counterexample shape each control must produce — one rule = one leg of
- * the proof. `every` must hold for EVERY counterexample (a control that goes
+ * the proof. A finding is either an assert-1 counterexample (T left U) or an
+ * assert-3 Owner mint. `every` must hold for EVERY finding (a control that goes
  * red for another reason proves nothing about its leg); `some` is the textbook
  * form from §1.3/§13.6, which must be among them.
  */
+type Finding =
+  | { readonly kind: "reset"; readonly cx: Counterexample }
+  | { readonly kind: "owner"; readonly m: OwnerMint };
+const fmtFinding = (f: Finding) => (f.kind === "reset" ? fmtCx(f.cx) : fmtMint(f.m));
 interface Shape {
-  readonly every: (c: Counterexample) => string | null;
-  readonly some: (c: Counterexample) => boolean;
+  readonly every: (f: Finding) => string | null;
+  readonly some: (f: Finding) => boolean;
   readonly someLabel: string;
 }
 const realReset = new Decider(REAL);
 const resetPasses = (s: State, by: string, t: string) =>
   realReset.reset(maskIn(s, member(s, by)), maskIn(s, member(s, t)), by === t);
+/** A leg of the reset argument: Owner mints are a DIFFERENT leg, so they are a wrong shape here. */
+const onReset =
+  <R>(f: (c: Counterexample) => R, ownerAnswer: R) =>
+  (x: Finding): R =>
+    x.kind === "reset" ? f(x.cx) : ownerAnswer;
+/** An Owner-set leg: a reset counterexample is a wrong shape here. */
+const onOwner =
+  <R>(f: (m: OwnerMint) => R, resetAnswer: R) =>
+  (x: Finding): R =>
+    x.kind === "owner" ? f(x.m) : resetAnswer;
+const MINTED = "an Owner was minted (that is o1/o2's leg)";
+const issuerOf = (s: State) => member(s, s.inv!.issuer);
+
 const SHAPE: Record<ControlName, Shape> = {
   // c1: an actor (holding manage_members) lowers a role EQUAL to itself that T holds.
   c1: {
-    every: (c) => {
+    every: onReset((c) => {
       const { op, s } = c;
       if (op.kind !== "role_update" || op.next === "unchanged") return "not a role update";
       const a = maskIn(s, member(s, op.actor));
@@ -868,14 +969,14 @@ const SHAPE: Record<ControlName, Shape> = {
       if (!strictlyBelow(op.next, a)) return "not a lowering";
       if (member(s, c.t).role !== op.role) return "T does not hold the edited role";
       return null;
-    },
-    some: (c) => resetPasses(c.s2, c.op.actor, c.t),
+    }, MINTED),
+    some: onReset((c) => resetPasses(c.s2, c.op.actor, c.t), false),
     someLabel:
       "ONE actor: lower the equal role, then the same actor resets T (real decideAdminReset)",
   },
   // c2: PATCH moves T (not ⊊ actor before) and a real reset of T then passes.
   c2: {
-    every: (c) => {
+    every: onReset((c) => {
       const { op, s } = c;
       if (op.kind !== "patch" || op.target !== c.t || op.actor === c.t)
         return "not a PATCH of T by another";
@@ -883,16 +984,19 @@ const SHAPE: Record<ControlName, Shape> = {
         return "T was already below the actor";
       if (!c.witnesses.some((w) => resetPasses(c.s2, w, c.t))) return "no real reset afterwards";
       return null;
-    },
-    some: (c) =>
-      c.op.kind === "patch" &&
-      strictlyBelow(c.op.grantMask, maskIn(c.s, member(c.s, c.op.actor))) &&
-      resetPasses(c.s2, c.op.actor, c.t),
+    }, MINTED),
+    some: onReset(
+      (c) =>
+        c.op.kind === "patch" &&
+        strictlyBelow(c.op.grantMask, maskIn(c.s, member(c.s, c.op.actor))) &&
+        resetPasses(c.s2, c.op.actor, c.t),
+      false,
+    ),
     someLabel: "PATCH-lower T below the actor, then the actor resets T",
   },
   // c3: M without manage_members edits T's role; a DIFFERENT non-Owner A becomes the resetter.
   c3: {
-    every: (c) => {
+    every: onReset((c) => {
       const { op, s } = c;
       if (op.kind !== "role_update") return "not a role update";
       if (holdsMM(maskIn(s, member(s, op.actor)))) return "editor holds manage_members";
@@ -900,49 +1004,96 @@ const SHAPE: Record<ControlName, Shape> = {
       if (!c.witnesses.some((w) => w !== op.actor && w !== c.t && resetPasses(c.s2, w, c.t)))
         return "no second non-Owner whose real reset passes";
       return null;
-    },
-    some: (c) =>
-      maskIn(c.s, member(c.s, c.op.actor)) === (MR | XB | YB) &&
-      maskIn(c.s, member(c.s, c.t)) === XB &&
-      c.op.kind === "role_update" &&
-      c.op.next === YB &&
-      c.witnesses.some((w) => maskIn(c.s, member(c.s, w)) === (MM | YB)),
+    }, MINTED),
+    some: onReset(
+      (c) =>
+        maskIn(c.s, member(c.s, c.op.actor)) === (MR | XB | YB) &&
+        maskIn(c.s, member(c.s, c.t)) === XB &&
+        c.op.kind === "role_update" &&
+        c.op.next === YB &&
+        c.witnesses.some((w) => maskIn(c.s, member(c.s, w)) === (MM | YB)),
+      false,
+    ),
     someLabel: "§1.3 M/A: M={mr,X,Y} edits R_T {X}→{Y}, A={mm,Y} resets T",
   },
   // c4: the actor PATCHes ITSELF to a role ⊄ its own and becomes T's resetter.
   c4: {
-    every: (c) => {
+    every: onReset((c) => {
       const { op, s } = c;
       if (op.kind !== "patch" || op.target !== op.actor) return "not a PATCH of yourself";
       const a = maskIn(s, member(s, op.actor));
       if ((EXP[op.grantMask] & EXP[a]) === EXP[op.grantMask]) return "not a raise beyond the actor";
       if (!c.witnesses.includes(op.actor)) return "the self-raiser is not the resetter";
       return null;
-    },
-    some: (c) => resetPasses(c.s2, c.op.actor, c.t),
+    }, MINTED),
+    some: onReset((c) => resetPasses(c.s2, c.op.actor, c.t), false),
     someLabel: "the self-raiser then resets T",
+  },
+  // c5: a new member joins through an issuer who lost the floor or no longer covers the role.
+  // (An Owner-role link by a non-Owner also gets through — the same leg, seen as an Owner mint.)
+  c5: {
+    every: (f) => {
+      const { s, op } = f.kind === "reset" ? f.cx : f.m;
+      if (op.kind !== "accept") return "not an accept";
+      const issuer = issuerOf(s);
+      if (!issuer.active || issuer.owner) return "issuer not an active non-Owner";
+      const role = s.roles[s.inv!.role];
+      const covers = role !== OWNER && (EXP[role] & EXP[maskIn(s, issuer)]) === EXP[role];
+      if (holdsMM(maskIn(s, issuer)) && covers) return "issuer still passes D-035";
+      if (f.kind === "reset" && !f.cx.witnesses.includes(op.actor))
+        return "the new member is not the resetter";
+      return null;
+    },
+    some: onReset(
+      (c) => !holdsMM(maskIn(c.s, issuerOf(c.s))) && resetPasses(c.s2, c.op.actor, c.t),
+      false,
+    ),
+    someLabel: "Addendum P2: issuer lost manage_members, the new member resets T",
+  },
+  // o1: a non-Owner's link to the Owner role is accepted → a new Owner.
+  o1: {
+    every: onOwner((m) => {
+      if (m.op.kind !== "accept") return "not an accept";
+      if (m.s.roles[m.s.inv!.role] !== OWNER) return "invitation role is not the Owner role";
+      if (issuerOf(m.s).owner) return "issued by the Owner (out of scope)";
+      return null;
+    }, "a reset counterexample (not the Owner-set leg)"),
+    some: onOwner(() => true, false),
+    someLabel: "non-Owner's Owner-role link accepted ⇒ one more Owner",
+  },
+  // o2: a non-Owner PATCHes a member (itself included) to the Owner role.
+  o2: {
+    every: onOwner((m) => {
+      if (m.op.kind !== "patch" || m.op.grantMask !== OWNER) return "not a PATCH to the Owner role";
+      if (member(m.s, m.op.actor).owner) return "actor is the Owner";
+      return null;
+    }, "a reset counterexample (not the Owner-set leg)"),
+    some: onOwner((m) => m.op.kind === "patch" && m.op.actor === m.op.target, false),
+    someLabel: "non-Owner PATCHes ITSELF to the Owner role",
   },
 };
 
-describe("U-RB-19 · controls c1–c4 — each disabled leg turns the property red with ITS counterexample shape", () => {
+describe("U-RB-19 · controls c1–c5 + o1/o2 — each disabled leg turns the property red with ITS counterexample shape", () => {
   it.each(Object.keys(CONTROLS) as ControlName[])(
     "%s",
     (name) => {
       const rep = runProperty(CONTROLS[name]);
       const shape = SHAPE[name];
-      const textbook = rep.counterexamples.find(shape.some);
+      const findings: Finding[] = [
+        ...rep.counterexamples.map((cx): Finding => ({ kind: "reset", cx })),
+        ...rep.ownerMints.map((m): Finding => ({ kind: "owner", m })),
+      ];
+      const textbook = findings.find(shape.some);
       console.log(
-        `U-RB-19 ${name}: ${rep.counterexamples.length} counterexamples · ${shape.someLabel}:\n  ` +
-          (textbook ? fmtCx(textbook) : "(none)"),
+        `U-RB-19 ${name}: ${rep.counterexamples.length} counterexamples · ${rep.ownerMints.length} Owner mints · ` +
+          `${shape.someLabel}:\n  ${textbook ? fmtFinding(textbook) : "(none)"}`,
       );
-      expect(rep.counterexamples.length, `${name} did not turn the property red`).toBeGreaterThan(
-        0,
-      );
-      const wrongShape = rep.counterexamples
-        .map((c) => [shape.every(c), c] as const)
+      expect(findings.length, `${name} did not turn the property red`).toBeGreaterThan(0);
+      const wrongShape = findings
+        .map((f) => [shape.every(f), f] as const)
         .filter(([why]) => why !== null)
         .slice(0, 3)
-        .map(([why, c]) => `${why}: ${fmtCx(c)}`);
+        .map(([why, f]) => `${why}: ${fmtFinding(f)}`);
       expect(wrongShape).toEqual([]);
       expect(textbook, shape.someLabel).toBeDefined();
     },
@@ -986,10 +1137,12 @@ interface BfsResult {
   starts: number;
   /** Distinct states stored (depth < maxDepth). */
   visited: number;
-  /** Successors at the last level — reset-checked, not stored. */
+  /** Successors at the last level — checked, not stored. */
   lastLevelChecked: number;
   /** Shortest find: a state where some non-Owner's REAL reset of T passes. */
   hit: { depth: number; path: string[]; resetBy: string } | null;
+  /** Shortest find: an op after which more members hold the Owner role (assert 3). */
+  ownerHit: { depth: number; path: string[] } | null;
 }
 
 /** Some active non-Owner other than T whose REAL `decideAdminReset` of T passes. */
@@ -1003,20 +1156,50 @@ function resetterOfT(s: State, real: Decider): string | null {
 }
 
 /**
- * Multi-source BFS from every start (Owner + A, M, T active, every sharing ×
- * every mask) with T ∈ U, over the allowed ops of A and M (same op set as
- * U-RB-18, accept by a new user included). The reset is checked on every state
- * reached within `maxDepth` ops; the last level is checked without being stored.
+ * Start families, all with Owner + A, M, T active (every sharing × every mask)
+ * and T ∈ U:
+ *  - `plain`: no pending invitation (invitations are created along the path);
+ *  - `pending-invitation`: one link already out, issued by A or M on any role
+ *    (a held role, the Owner role, or an unheld role of every mask) — the
+ *    "issuer has since lost power" situations D-035's re-check exists for,
+ *    which no ≤ 4-op path from `plain` can set up.
  */
-function bfs(rules: Rules, maxDepth: number, stopAtFirst: boolean): BfsResult {
+type StartFamily = "plain" | "pending-invitation";
+function* bfsStarts(family: StartFamily): Generator<State> {
+  for (const s0 of coreStates(["A", "M", "T"], true)) {
+    if (!U(s0).includes("T")) continue;
+    if (family === "plain") {
+      yield s0;
+      continue;
+    }
+    const roles: [State, number][] = [
+      ...s0.roles.map((_, r): [State, number] => [s0, r]),
+      ...MASKS.map((m) => withRole(s0, m)),
+    ];
+    for (const [base, role] of roles)
+      for (const issuer of ["A", "M"]) yield { ...base, inv: { role, issuer } };
+  }
+}
+
+/**
+ * Multi-source BFS over the allowed ops of A and M (same op set as U-RB-18,
+ * accept by a new user included). On every state reached within `maxDepth`
+ * ops: no non-Owner's real reset of T passes, and no op added an Owner. The
+ * last level is checked without being stored.
+ */
+function bfs(
+  rules: Rules,
+  maxDepth: number,
+  stopAtFirst: boolean,
+  family: StartFamily = "plain",
+): BfsResult {
   const d = new Decider(rules);
   const real = new Decider(REAL);
   const parent = new Map<string, { from: string | null; op: string; s: State }>();
   let frontier: string[] = [];
   let starts = 0;
   let lastLevelChecked = 0;
-  for (const s0 of coreStates(["A", "M", "T"], true)) {
-    if (!U(s0).includes("T")) continue;
+  for (const s0 of bfsStarts(family)) {
     const { key, s } = canonical(s0);
     if (parent.has(key)) continue;
     parent.set(key, { from: null, op: `start ${fmt(s)}`, s });
@@ -1030,6 +1213,7 @@ function bfs(rules: Rules, maxDepth: number, stopAtFirst: boolean): BfsResult {
     return out;
   };
   let hit: BfsResult["hit"] = null;
+  let ownerHit: BfsResult["ownerHit"] = null;
   const found = (depth: number, path: string[], resetBy: string) => {
     if (hit === null || depth < hit.depth) hit = { depth, path, resetBy };
   };
@@ -1038,7 +1222,7 @@ function bfs(rules: Rules, maxDepth: number, stopAtFirst: boolean): BfsResult {
     if (by) found(0, pathTo(key), by);
   }
   for (let depth = 0; depth < maxDepth && frontier.length > 0; depth++) {
-    if (stopAtFirst && hit) break;
+    if (stopAtFirst && (hit || ownerHit)) break;
     const next: string[] = [];
     const last = depth + 1 === maxDepth;
     for (const key of frontier) {
@@ -1048,6 +1232,8 @@ function bfs(rules: Rules, maxDepth: number, stopAtFirst: boolean): BfsResult {
         const s2 = apply(s, op);
         const by = resetterOfT(s2, real);
         if (by) found(depth + 1, [...pathTo(key), fmtOp(op)], by);
+        if (ownerHit === null && ownersIn(s2) > ownersIn(s))
+          ownerHit = { depth: depth + 1, path: [...pathTo(key), fmtOp(op)] };
         if (last) {
           lastLevelChecked++;
           continue;
@@ -1060,8 +1246,10 @@ function bfs(rules: Rules, maxDepth: number, stopAtFirst: boolean): BfsResult {
     }
     frontier = next;
   }
-  return { starts, visited: parent.size, lastLevelChecked, hit };
+  return { starts, visited: parent.size, lastLevelChecked, hit, ownerHit };
 }
+
+const PENDING_DEPTH = 2;
 
 describe("U-RB-20 · BFS — 2 non-Owner actors (A, M) + T, same op set, depth 4", () => {
   it(
@@ -1072,7 +1260,11 @@ describe("U-RB-20 · BFS — 2 non-Owner actors (A, M) + T, same op set, depth 4
       let i = 0;
       for (const s0 of coreStates(["A", "M", "T"])) {
         if (i++ % 29 !== 0) continue;
-        const variants = [s0, { ...s0, inv: { role: s0.roles.length - 1, issuer: "A" } }];
+        const variants = [
+          s0,
+          { ...s0, inv: { role: s0.roles.length - 1, issuer: "A" } },
+          { ...s0, inv: { role: 0, issuer: "M" } },
+        ];
         for (const s of variants) {
           for (const rules of [REAL, ...Object.values(CONTROLS)]) {
             const d = new Decider(rules);
@@ -1092,7 +1284,7 @@ describe("U-RB-20 · BFS — 2 non-Owner actors (A, M) + T, same op set, depth 4
   );
 
   it(
-    "from every start with T ∈ U, no state within 4 ops lets any non-Owner reset T (real decideAdminReset)",
+    "from every start with T ∈ U, no state within 4 ops lets any non-Owner reset T, and no op adds an Owner",
     () => {
       const t0 = performance.now();
       const r = bfs(REAL, 4, false);
@@ -1102,7 +1294,9 @@ describe("U-RB-20 · BFS — 2 non-Owner actors (A, M) + T, same op set, depth 4
           `${r.lastLevelChecked} depth-4 successors checked · ${ms} ms`,
       );
       const hit = r.hit as BfsResult["hit"];
+      const ownerHit = r.ownerHit as BfsResult["ownerHit"];
       expect(hit && `${hit.path.join("  →  ")}  →  ${hit.resetBy} resets T`).toBeNull();
+      expect(ownerHit && `${ownerHit.path.join("  →  ")}  ⇒ one more Owner`).toBeNull();
       expect(r.starts).toBeGreaterThan(0);
       expect(r.visited).toBeGreaterThan(r.starts);
       expect(r.lastLevelChecked).toBeGreaterThan(r.visited);
@@ -1110,10 +1304,33 @@ describe("U-RB-20 · BFS — 2 non-Owner actors (A, M) + T, same op set, depth 4
     SLOW,
   );
 
-  it.each(["c1", "c2", "c3", "c4"] as const)(
-    "control %s finds a path (≤ 3 ops incl. the reset)",
+  it(
+    `pending-invitation starts (issuer A or M, any role): same two checks within ${PENDING_DEPTH} ops`,
+    () => {
+      const t0 = performance.now();
+      const r = bfs(REAL, PENDING_DEPTH, false, "pending-invitation");
+      const ms = Math.round(performance.now() - t0);
+      console.log(
+        `U-RB-20 pending-invitation: ${r.starts} starts · ${r.visited} states stored · ` +
+          `${r.lastLevelChecked} depth-${PENDING_DEPTH} successors checked · ${ms} ms`,
+      );
+      const hit = r.hit as BfsResult["hit"];
+      const ownerHit = r.ownerHit as BfsResult["ownerHit"];
+      expect(hit && `${hit.path.join("  →  ")}  →  ${hit.resetBy} resets T`).toBeNull();
+      expect(ownerHit && `${ownerHit.path.join("  →  ")}  ⇒ one more Owner`).toBeNull();
+      expect(r.starts).toBeGreaterThan(0);
+      expect(r.lastLevelChecked).toBeGreaterThan(r.visited);
+    },
+    SLOW,
+  );
+
+  it.each(["c1", "c2", "c3", "c4", "c5"] as const)(
+    "control %s finds a reset path (≤ 3 ops incl. the reset)",
     (name) => {
-      const r = bfs(CONTROLS[name], 4, true);
+      const r =
+        name === "c5"
+          ? bfs(CONTROLS[name], PENDING_DEPTH, true, "pending-invitation")
+          : bfs(CONTROLS[name], 4, true);
       const hit = r.hit as BfsResult["hit"];
       console.log(`U-RB-20 ${name}: ${hit?.path.join("  →  ")}  →  ${hit?.resetBy} resets T`);
       expect(hit).not.toBeNull();
@@ -1132,6 +1349,28 @@ describe("U-RB-20 · BFS — 2 non-Owner actors (A, M) + T, same op set, depth 4
       }
       if (name === "c4")
         expect(steps).toContainEqual(expect.stringMatching(new RegExp(`^${by} PATCH ${by} `)));
+      if (name === "c5") {
+        // the joiner through the stale link is the resetter
+        expect(by).toMatch(/^N\d+$/);
+        expect(steps).toContainEqual(`${by} ACCEPT`);
+      }
+    },
+    SLOW,
+  );
+
+  it.each(["o1", "o2"] as const)(
+    "control %s finds a path that adds an Owner",
+    (name) => {
+      const r =
+        name === "o1"
+          ? bfs(CONTROLS[name], PENDING_DEPTH, true, "pending-invitation")
+          : bfs(CONTROLS[name], 4, true);
+      const ownerHit = r.ownerHit as BfsResult["ownerHit"];
+      console.log(`U-RB-20 ${name}: ${ownerHit?.path.join("  →  ")}  ⇒ one more Owner`);
+      expect(ownerHit).not.toBeNull();
+      const lastStep = ownerHit!.path[ownerHit!.path.length - 1];
+      if (name === "o1") expect(lastStep).toMatch(/^N\d+ ACCEPT$/);
+      if (name === "o2") expect(lastStep).toMatch(/^[AM] PATCH [AMT] → R0\{full_access\}$/);
     },
     SLOW,
   );
