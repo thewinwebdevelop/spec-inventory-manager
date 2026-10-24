@@ -229,17 +229,18 @@ describe("U-RB-01 · CAPABILITY_REGISTRY invariants", () => {
     }
     expect(SYSTEM_ROLE_BLUEPRINT.map((r) => [r.key, [...r.capabilities]])).toEqual([
       ["owner", ["full_access"]],
-      // T-003-B11 adds manage_roles here together with the backfill migration
-      // (data-model §4.2) — this pin flips to 8 entries in that commit.
+      // T-003-B11 (data-model §4.2/§5): the F-002 seven + manage_roles, in byte
+      // order — the exact array the backfill migration writes to F-002 shops.
       [
         "admin",
         [
+          "manage_channels",
           "manage_members",
+          "manage_orders",
           "manage_org_settings",
           "manage_products",
+          "manage_roles",
           "manage_stock",
-          "manage_channels",
-          "manage_orders",
           "view_financials",
         ],
       ],

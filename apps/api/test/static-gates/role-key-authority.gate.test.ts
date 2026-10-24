@@ -174,12 +174,26 @@ const PRESENTATION_ALLOWLIST: readonly PresentationAllowance[] = Object.freeze([
 
 /**
  * Database functions allowed to read `Role.key` — each with an owner and a
- * deadline. EMPTY until B11 (T-003-B11) lands `role_f003_admin_bridge`; that PR
- * adds its row here: migration dir, fn name, owner "backend-api",
- * addedOn = merge date of the build PR, removeBy = addedOn + 60 days
- * (architecture §14, data-model §4.2). A window over 60 days is itself red.
+ * deadline (architecture §14, data-model §4.2). A window over 60 days is itself
+ * red. Past `removeBy` the function must be dropped by a LATER migration
+ * (`f003_drop_admin_bridge`) or this gate is red — moving the date needs a new
+ * review, not an edit to make CI green.
  */
-const SQL_FUNCTION_ALLOWLIST: readonly SqlAllowance[] = Object.freeze([]);
+const SQL_FUNCTION_ALLOWLIST: readonly SqlAllowance[] = Object.freeze([
+  {
+    migration: "20261024000000_f003_backfill_manage_roles",
+    fn: "role_f003_admin_bridge",
+    owner: "backend-api",
+    reason:
+      "T-003-B11 bridge trigger (data-model §4.2): an Admin inserted by F-002 code during a rolling " +
+      "deploy gets manage_roles. Drop it (migration f003_drop_admin_bridge) in the release after " +
+      "devops confirms no F-002 instance is left (architecture §12).",
+    // addedOn = the day the task landed on the build branch; PM may re-base it
+    // to the build PR's merge date (still ≤ 60 days).
+    addedOn: "2026-10-24",
+    removeBy: "2026-12-23",
+  },
+]);
 
 /** Marker in red fixtures: `// ← hit` (fixture's own rule) or `// ← hit TS-6`. */
 const HIT = /\/\/ ← hit(?: ([A-Z]+-\d+))?\s*$/;

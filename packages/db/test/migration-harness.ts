@@ -103,17 +103,14 @@ export function fixtureMigration(slug: string): MigrationSource {
 }
 
 /**
- * What M3-01 applies on top of the F-002 baseline.
- *
- * ▶ T-003-B11 (the migration that carries `RAISE EXCEPTION
- *   'f003_owner_invariant_violation org=%'`) switches this to
- *   `{ kind: "real", migrations: realMigrationsAfter(F002_BASELINE) }` and deletes
- *   test/fixtures/migrations/f003_owner_invariant_standin. Forgetting to is caught:
- *   M3-01's "source guard" goes red once a real migration carries the invariant.
+ * What M3-01 applies on top of the F-002 baseline: every committed F-003
+ * migration, in order — `*_f003_role_expand` then `*_f003_backfill_manage_roles`,
+ * whose §3 carries `RAISE EXCEPTION 'f003_owner_invariant_violation org=%'`.
+ * (T-003-B11 switched this from the QA05 stand-in fixture, now deleted.)
  */
 export const F003_MIGRATION_SOURCE: F003Source = {
-  kind: "stand-in",
-  migrations: [fixtureMigration("f003_owner_invariant_standin")],
+  kind: "real",
+  migrations: realMigrationsAfter(F002_BASELINE),
 };
 
 // ── staging a migrations directory ────────────────────────────────────────────

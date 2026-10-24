@@ -210,7 +210,11 @@ d("M3-03 f003_role_expand re-applies cleanly and leaves no drift", () => {
       expect(before).toEqual(
         expect.arrayContaining([expect.stringMatching(/^col Role\.version integer/)]),
       );
-      expect(before.filter((l) => l.startsWith("trg "))).toHaveLength(5);
+      // 5 from f003_role_expand + role_f003_admin_bridge from the next migration in
+      // the chain (*_f003_backfill_manage_roles, T-003-B11)
+      const triggers = before.filter((l) => l.startsWith("trg "));
+      expect(triggers).toHaveLength(6);
+      expect(triggers.filter((l) => !l.startsWith("trg role_f003_admin_bridge "))).toHaveLength(5);
       expect(before.filter((l) => l.startsWith("fn "))).toHaveLength(4);
 
       const again = sql(db.url, roleExpand().sql());

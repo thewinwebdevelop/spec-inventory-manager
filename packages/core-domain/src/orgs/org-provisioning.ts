@@ -16,6 +16,7 @@ import {
   CAPABILITY_MANAGE_MEMBERS,
   CAPABILITY_MANAGE_ORG_SETTINGS,
 } from "../auth/capabilities";
+import { CAPABILITY_MANAGE_ROLES, type CapabilityKey } from "../rbac/registry";
 import { isOwnerRole } from "./member-authz";
 
 // ── the fixed shape of a new org (D-013 · architecture §6.1) ────────────────
@@ -50,38 +51,46 @@ export interface SystemRoleBlueprint {
   readonly capabilities: readonly string[];
 }
 
+/** Typed against the registry (F-003 data-model §5): an unregistered key does not compile. */
+const caps = (...keys: CapabilityKey[]): readonly string[] => Object.freeze(keys);
+
 /**
- * data-model §5.2, verbatim and in order. Capability names come from the
- * open-ended registry in docs/01 §2 — F-002 invents none and enforces only two
- * of them (`manage_members`, `manage_org_settings`); the rest are values F-003+
- * will start reading.
+ * data-model §5.2, in order (Owner / Admin / Staff). Every key is a registry
+ * key (`CapabilityKey`).
+ *
+ * Admin = the F-002 seven + `manage_roles` (F-003 AC-1.2 · data-model §4.2/§5),
+ * listed in BYTE ORDER: that is exactly the array the `f003_backfill_manage_roles`
+ * migration writes to shops F-002 created (it sorts `COLLATE "C"`), so a migrated
+ * shop and a new one hold the same array (pinned by G3-10). Owner and Staff are
+ * unchanged since F-002 and keep their shipped order.
  */
 export const SYSTEM_ROLE_BLUEPRINT: readonly SystemRoleBlueprint[] = Object.freeze([
   Object.freeze({
     name: "Owner",
     key: "owner",
     isSystem: true,
-    capabilities: Object.freeze([CAPABILITY_FULL_ACCESS]),
+    capabilities: caps(CAPABILITY_FULL_ACCESS),
   }),
   Object.freeze({
     name: "Admin",
     key: "admin",
     isSystem: false,
-    capabilities: Object.freeze([
+    capabilities: caps(
+      "manage_channels",
       CAPABILITY_MANAGE_MEMBERS,
+      "manage_orders",
       CAPABILITY_MANAGE_ORG_SETTINGS,
       "manage_products",
+      CAPABILITY_MANAGE_ROLES,
       "manage_stock",
-      "manage_channels",
-      "manage_orders",
       "view_financials",
-    ]),
+    ),
   }),
   Object.freeze({
     name: "Staff",
     key: "staff",
     isSystem: false,
-    capabilities: Object.freeze(["manage_products", "manage_stock", "manage_orders"]),
+    capabilities: caps("manage_products", "manage_stock", "manage_orders"),
   }),
 ]) as readonly SystemRoleBlueprint[];
 
@@ -155,7 +164,8 @@ export const ORG_TIMEZONE_INVALID_MESSAGE = "ไม่รู้จักเข�
  * human and 240+ to `String.length`.
  */
 export function validateOrgName(raw: unknown): FieldValidation<string> {
-  if (typeof raw !== "string") return { ok: false, fieldErrors: { name: ORG_NAME_REQUIRED_MESSAGE } };
+  if (typeof raw !== "string")
+    return { ok: false, fieldErrors: { name: ORG_NAME_REQUIRED_MESSAGE } };
   const value = raw.trim();
   const length = [...value].length;
   if (length < ORG_NAME_MIN_LENGTH) {

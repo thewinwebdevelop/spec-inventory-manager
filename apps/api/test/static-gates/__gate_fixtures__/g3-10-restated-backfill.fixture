@@ -1,0 +1,8 @@
+// G3-10 red fixture: backfill:f003 restating the migration's UPDATE instead of
+// executing the committed file — the copy has already lost the exact-set guard.
+export async function runBackfillF003(client: { $executeRawUnsafe(q: string): Promise<number> }) {
+  return client.$executeRawUnsafe(
+    `UPDATE "Role" SET capabilities = array_append(capabilities, 'manage_roles')
+      WHERE key = 'admin' AND NOT ('manage_roles' = ANY (capabilities))`,
+  );
+}
