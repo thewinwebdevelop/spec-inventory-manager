@@ -25,8 +25,8 @@
 // from the root client, so it runs here and fails on the assertions that matter
 // (fail-closed, no write, events) rather than on a TypeError — the red is about
 // the security condition, not about the mock.
-import { describe, it, expect, beforeEach, vi } from "vitest";
-import { HttpException } from "@nestjs/common";
+import { describe, it, expect, beforeEach, afterEach, vi } from "vitest";
+import { HttpException, Logger } from "@nestjs/common";
 import {
   CAPABILITY_FULL_ACCESS,
   CAPABILITY_MANAGE_MEMBERS,
@@ -53,6 +53,8 @@ interface MembershipFixture {
   capabilities: string[];
   /** Role id the membership points at. Defaults to `role_<userId>`. */
   roleId?: string;
+  /** The held role is soft-deleted (only reachable with the DB triggers bypassed — L-1). */
+  roleDeleted?: boolean;
 }
 
 interface Scenario {
@@ -151,7 +153,11 @@ function buildHarness(scenario: Scenario = {}) {
         const [, roleIds] = params as [string, string[]];
         return [...roleIds].sort().map((id) => {
           const owner = [CALLER, TARGET].find((u) => roleIdOf(u) === id);
-          return { id, capabilities: owner ? fixtureOf(owner).capabilities : [] };
+          return {
+            id,
+            capabilities: owner ? fixtureOf(owner).capabilities : [],
+            deletedAt: owner && fixtureOf(owner).roleDeleted ? new Date(0) : null,
+          };
         });
       }
       throw new Error(`fake tx: unexpected raw SQL ${sql}`);
@@ -439,6 +445,21 @@ describe("U-API-07 · adminResetPassword — fail-closed × 2 conditions, one tr
         },
       ],
       ["D-034 incomparable", { target: { status: "active", capabilities: ["manage_orders"] } }],
+      // T-003-B20 fix 1 (L-1) — a broken role invariant joins the same single 404.
+      [
+        "L-1 caller on a soft-deleted role",
+        {
+          caller: {
+            status: "active",
+            capabilities: [CAPABILITY_MANAGE_MEMBERS, "manage_products"],
+            roleDeleted: true,
+          },
+        },
+      ],
+      [
+        "L-1 target on a soft-deleted role",
+        { target: { status: "active", capabilities: ["manage_products"], roleDeleted: true } },
+      ],
       [
         "D-034 superset",
         {
@@ -654,19 +675,84 @@ describe("T-003-B20 · adminResetPassword — User → Membership FOR SHARE → 
     expect404(await run(h));
     expect(h.sink.types()).toEqual(["auth.password.admin_reset_blocked_owner_target"]);
   });
+});
 
-  it("a membership whose Role row did not come back from the lock → fails loud (FK says it cannot happen), never decides on []", async () => {
-    // An empty capability set is ⊊ EVERY caller — deciding on it would allow
-    // the reset. A missing row must therefore never be read as "no capabilities".
+// ── T-003-B20 fix round 1 (security review L-1 + L-2) — one fail-closed path ──
+//
+// A held role that the locked read shows to be MISSING (L-2, impossible under
+// the composite FK) or SOFT-DELETED under an ACTIVE membership (L-1, impossible
+// while the triggers hold) means the database broke an invariant. The same
+// refusal as a rule drift: `authority_rule_drift` → the uniform 404 (never a
+// 500, which would be an oracle), no write, no security event, one error log
+// naming the cause. Never decided on: `[]` would sit below every caller, and a
+// deleted role's caps would authorize a caller B15's middleware refuses.
+describe("T-003-B20 fix 1 · broken role invariant → the uniform 404 + error log (L-1 · L-2)", () => {
+  let errorLog: ReturnType<typeof vi.spyOn>;
+  beforeEach(() => {
+    errorLog = vi.spyOn(Logger.prototype, "error").mockImplementation(() => undefined);
+  });
+  afterEach(() => errorLog.mockRestore());
+
+  const notMemberBody = async () =>
+    JSON.stringify(
+      expect404(
+        await run(buildHarness({ target: { status: null, capabilities: [] } })),
+      ).getResponse(),
+    );
+
+  async function expectFailClosed(h: Harness, cause: RegExp): Promise<void> {
+    const err = expect404(await run(h));
+    expect(JSON.stringify(err.getResponse())).toBe(await notMemberBody());
+    expectNoEffect(h);
+    expect(h.state.committed).toBe(false);
+    expect(h.sink.types()).toEqual([]);
+    const drift = errorLog.mock.calls.filter((c) => String(c[0]).includes("authority_rule_drift"));
+    expect(drift).toHaveLength(1);
+    expect(String(drift[0][0])).toMatch(cause);
+    expect(String(drift[0][0])).not.toContain(NEW_PW);
+  }
+
+  it("L-2 · a membership whose Role row did not come back from the lock → 404, no write, logged (never decided on [])", async () => {
     const h = buildHarness();
     const real = h.tx.$queryRawUnsafe.getMockImplementation()!;
     h.tx.$queryRawUnsafe.mockImplementation(async (sql: string, ...params: unknown[]) =>
       ROLE_LOCK_SQL.test(sql) ? [] : real(sql, ...params),
     );
-    const err = await run(h);
-    expect(err).toBeInstanceOf(Error);
-    expect(err).not.toBeInstanceOf(HttpException);
-    expect(h.tx.user.update).not.toHaveBeenCalled();
-    expect(h.state.committed).toBe(false);
+    await expectFailClosed(h, /role_missing/);
+  });
+
+  it("L-1 · the CALLER's active membership holds a soft-deleted role → 404, no write, logged", async () => {
+    const h = buildHarness({
+      caller: {
+        status: "active",
+        capabilities: [CAPABILITY_MANAGE_MEMBERS, "manage_products"],
+        roleDeleted: true,
+      },
+    });
+    await expectFailClosed(h, /role_deleted/);
+  });
+
+  it("L-1 · the TARGET's active membership holds a soft-deleted role → 404, no write, logged", async () => {
+    const h = buildHarness({
+      target: { status: "active", capabilities: ["manage_products"], roleDeleted: true },
+    });
+    await expectFailClosed(h, /role_deleted/);
+  });
+
+  it("history stays readable: a REVOKED target on a deleted role is the ordinary silent 404 (no drift log)", async () => {
+    const h = buildHarness({
+      target: { status: "revoked", capabilities: ["manage_products"], roleDeleted: true },
+    });
+    expect404(await run(h));
+    expectNoEffect(h);
+    expect(errorLog).not.toHaveBeenCalled();
+  });
+
+  it("the Role lock reads deletedAt (the history read reveals it; nothing filters it out)", async () => {
+    const h = buildHarness();
+    await run(h);
+    const roleLock = h.calls.find((c) => ROLE_LOCK_SQL.test(c)) ?? "";
+    expect(roleLock).toMatch(/"deletedAt"/);
+    expect(roleLock).not.toMatch(/"deletedAt"\s+IS\s+NULL/i);
   });
 });

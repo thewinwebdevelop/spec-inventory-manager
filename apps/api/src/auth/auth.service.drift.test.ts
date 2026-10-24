@@ -62,6 +62,7 @@ function harness(targetStatus: "active" | null = "active") {
             id === "role_admin"
               ? [CAPABILITY_MANAGE_MEMBERS, "manage_products"]
               : ["manage_products"],
+          deletedAt: null,
         }));
       }
       throw new Error(`unexpected SQL ${sql}`);

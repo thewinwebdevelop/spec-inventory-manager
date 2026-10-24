@@ -91,19 +91,23 @@ const ADMIN_RESET_REFUSAL_EVENTS: Readonly<
 // so two transactions can never take the same locks in opposite orders (the
 // lock graph stays a DAG — architecture §3).
 //
-// role-read: history — a member's CURRENT role is read without the live filter
-// on purpose. A role an active member holds cannot be soft-deleted (trigger
-// `f003_role_in_use`). Filtering `deletedAt` here would turn a missing row into
-// `[]`, and `[]` is strictly below EVERY caller, so it would ALLOW the reset.
-// A missing row therefore fails loud instead (see `lockFacts`).
+// A member's CURRENT role is read without the live filter on purpose (a
+// history read). A role an active member holds cannot be soft-deleted (trigger
+// `f003_role_in_use`). Filtering `deletedAt` here would turn the row into
+// "missing" → `[]`, and `[]` is strictly below EVERY caller, so it would ALLOW
+// the reset. Instead the row is read WITH `deletedAt`, and what it reveals is
+// refused (fix round 1, security review L-1/L-2): a missing row, or an ACTIVE
+// membership on a deleted role, is a broken invariant → `authority_rule_drift`
+// → the uniform 404 + error log. That matches B15's OrgContextMiddleware, which
+// this `@UserScoped` route does not pass through.
 // (No `LIVE_ROLE_WHERE` — B15's helper — on purpose, for the reason above.)
 const LOCK_MEMBERSHIPS_SQL =
   'SELECT "userId", "roleId", "status"::text AS "status" FROM "Membership" ' +
   'WHERE "organizationId" = $1 AND "userId" = ANY($2::text[]) ' +
   'ORDER BY "userId" ASC FOR SHARE';
+// role-read: history — the role a member HOLDS; deleted/missing is refused fail-closed, never read as []
 const LOCK_ROLES_SQL =
-  // role-read: history — the role a member HOLDS; a missing row must fail loud, never read as [] (above)
-  'SELECT id, capabilities FROM "Role" ' +
+  'SELECT id, capabilities, "deletedAt" FROM "Role" ' +
   'WHERE "organizationId" = $1 AND id = ANY($2::text[]) ' +
   "ORDER BY id ASC FOR SHARE";
 
@@ -115,7 +119,26 @@ interface LockedMembershipRow {
 interface LockedRoleRow {
   id: string;
   capabilities: string[];
+  deletedAt: Date | null;
 }
+
+/**
+ * Fix round 1 (L-1 · L-2) — the locked read revealed a broken role invariant.
+ * Thrown out of `lockMembershipFacts` to roll back. The service maps it to
+ * `authority_rule_drift` (the uniform 404 + one error log). It never reaches
+ * the wire and is never decided on.
+ */
+class RoleInvariantBroken extends Error {
+  constructor(kind: "role_missing" | "role_deleted", detail: string) {
+    super(`${kind}: ${detail}`);
+    this.name = "RoleInvariantBroken";
+  }
+}
+
+const DRIFT_REFUSAL: AdminResetDecision = Object.freeze({
+  allowed: false,
+  refusals: Object.freeze(["authority_rule_drift"]) as readonly AdminResetRefusal[],
+});
 
 /**
  * `SET LOCAL lock_timeout` value for the admin-reset transaction. Read from
@@ -339,9 +362,11 @@ export class AuthService {
    *
    * Must run after the target `User` row is locked (architecture §3 order).
    * A missing membership row = `status: null` (refused by the decision as
-   * before). A membership whose role row did not come back is impossible
-   * under the composite FK. It throws: deciding on `[]` would read as "below
-   * everyone" and allow the reset.
+   * before). A membership whose role row did not come back (impossible under
+   * the composite FK), or an ACTIVE membership on a soft-deleted role
+   * (impossible while the triggers hold) → `RoleInvariantBroken`, which the
+   * caller maps to the uniform 404 + error log. It is never decided on:
+   * `[]` reads as "below everyone" and would allow the reset.
    */
   private async lockMembershipFacts(
     tx: { $queryRawUnsafe: <T>(sql: string, ...params: unknown[]) => Promise<T> },
@@ -360,19 +385,24 @@ export class AuthService {
       roleIds.length === 0
         ? []
         : await tx.$queryRawUnsafe<LockedRoleRow[]>(LOCK_ROLES_SQL, organizationId, roleIds);
-    const capsByRole = new Map(roles.map((r) => [r.id, r.capabilities]));
+    const roleById = new Map(roles.map((r) => [r.id, r]));
 
     const factsOf = (userId: string): AdminResetMembershipFacts => {
       const m = memberships.find((row) => row.userId === userId);
       if (!m) return { status: null, capabilities: [] };
-      const capabilities = capsByRole.get(m.roleId);
-      if (capabilities === undefined) {
-        throw new Error(
-          `adminResetPassword: membership ${organizationId}/${userId} points at role ${m.roleId}, ` +
-            "which the Role FOR SHARE read did not return",
-        );
+      const role = roleById.get(m.roleId);
+      const where = `membership ${organizationId}/${userId} role ${m.roleId}`;
+      if (role === undefined) throw new RoleInvariantBroken("role_missing", where);
+      // History stays readable: only an ACTIVE membership on a deleted role is
+      // refused (B15's middleware policy). A revoked/invited one is refused by
+      // the decision anyway, silently, as before.
+      if (role.deletedAt !== null && m.status === "active") {
+        throw new RoleInvariantBroken("role_deleted", where);
       }
-      return { status: m.status as AdminResetMembershipFacts["status"], capabilities };
+      return {
+        status: m.status as AdminResetMembershipFacts["status"],
+        capabilities: role.capabilities,
+      };
     };
     return { caller: factsOf(callerUserId), target: factsOf(targetUserId) };
   }
@@ -386,9 +416,15 @@ export class AuthService {
     // Carried out of the transaction callback in a box: the values must survive
     // the deliberate rollback, and TypeScript does not track assignments made
     // inside a callback.
-    const outcome: { refused: AdminResetDecision | null; targetEmail: string | null } = {
+    const outcome: {
+      refused: AdminResetDecision | null;
+      targetEmail: string | null;
+      /** Why `authority_rule_drift` fired — for the error log only. */
+      driftCause: string;
+    } = {
       refused: null,
       targetEmail: null,
+      driftCause: "decideMemberAuthority answered a reason reset cannot produce",
     };
 
     // (0) Password policy FIRST, before anything reads the database.
@@ -508,6 +544,11 @@ export class AuthService {
       // Our own rollback signal is the ONLY thing swallowed here.
       if (err instanceof AdminResetRefusedRollback) {
         // fall through to the refusal handling below
+      } else if (err instanceof RoleInvariantBroken) {
+        // Fix round 1 (L-1 · L-2): the same fail-closed path as a rule drift —
+        // rolled back, the uniform 404, one error log. Never a 500 (an oracle).
+        outcome.refused = DRIFT_REFUSAL;
+        outcome.driftCause = err.message;
       } else {
         // §15 row 6b — `SET LOCAL lock_timeout` firing, a deadlock, or a pool
         // timeout is "the database made us stop", not "we are broken". Left
@@ -532,13 +573,14 @@ export class AuthService {
           this.securityEvents.emit(type, { actorUserId: callerUserId, orgId, targetUserId });
         }
       }
-      // T-003-B20 — the two copies of "who may" disagreed. The caller still
-      // gets the uniform 404 (fail-closed, and a 500 would be an oracle). We
-      // log it at error level so on-call sees it. Ids only: no password, no hash.
+      // T-003-B20 — the two copies of "who may" disagreed, or (fix round 1)
+      // the locked read showed a broken role invariant. The caller still gets
+      // the uniform 404 (fail-closed, and a 500 would be an oracle). We log it
+      // at error level so on-call sees it. Ids only: no password, no hash.
       if (refused.refusals.some((r) => r === "authority_rule_drift")) {
         this.logger.error(
-          `admin reset refused on authority_rule_drift (decideMemberAuthority answered ` +
-            `a reason reset cannot produce) actor=${callerUserId} org=${orgId} target=${targetUserId}`,
+          `admin reset refused on authority_rule_drift (${outcome.driftCause}) ` +
+            `actor=${callerUserId} org=${orgId} target=${targetUserId}`,
         );
       }
       // The SAME 404 as "user not found" — same code, same message, same

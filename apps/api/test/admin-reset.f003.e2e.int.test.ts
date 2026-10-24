@@ -332,6 +332,35 @@ d("T-003-B20 admin-reset — D-034 ⊊ + SR-05 lock order (E2E, DB+Redis)", () =
       const res = await reset(org.id, token(people.admin.id), people.staff.id);
       expect(res.status).toBe(200);
     });
+
+    it("fix 1 · L-1 · a caller whose ACTIVE membership holds a soft-deleted role → the same byte-identical 404, password unchanged", async () => {
+      // Only reachable with the DB triggers bypassed (manual SQL, a botched
+      // rollback). Reproduced the same way: `session_replication_role = replica`
+      // switches the guard triggers off for this one transaction.
+      const { org, people } = await smallShop({ admin: "Admin", staff: "Staff" });
+      const access = token(people.admin.id);
+      const notMember = await reset(org.id, access, (await kit.createUser()).id);
+
+      await prisma.$transaction(async (tx) => {
+        await tx.$executeRawUnsafe("SET LOCAL session_replication_role = replica");
+        await tx.$executeRawUnsafe(
+          'UPDATE "Role" SET "deletedAt" = now() WHERE "organizationId" = $1 AND id = $2',
+          org.id,
+          org.roles.Admin.id,
+        );
+      });
+      const before = await hashOf(people.staff.id);
+      sink.clear();
+      const res = await reset(org.id, access, people.staff.id);
+
+      expect(res.status).toBe(404);
+      expect(await hashOf(people.staff.id)).toBe(before);
+      expect(sink.ofType("auth.password.admin_reset")).toHaveLength(0);
+      expect(res.headers["content-length"]).toBe(notMember.headers["content-length"]);
+      expect(res.text.replace(res.body.error.traceId as string, "<trace>")).toBe(
+        notMember.text.replace(notMember.body.error.traceId as string, "<trace>"),
+      );
+    });
   });
 
   // ── I3-37 ────────────────────────────────────────────────────────────────
@@ -432,22 +461,34 @@ d("T-003-B20 admin-reset — D-034 ⊊ + SR-05 lock order (E2E, DB+Redis)", () =
   // ── IC3-02 · SR-05 ───────────────────────────────────────────────────────
 
   describe("IC3-02 · SR-05 lock order against a concurrent PATCH member", () => {
-    /** Backends of THIS database currently waiting on a heavyweight lock. */
-    const lockWaiters = async (): Promise<Array<{ query: string }>> =>
+    /**
+     * Backends blocked by exactly `holderPid` (`pg_blocking_pids`). Scoped to
+     * the holder on purpose: other suites run in parallel against the same
+     * database and produce lock waits of their own (an unscoped "anyone
+     * waiting?" returned a neighbour's wait and flaked under load).
+     */
+    const blockedBy = async (holderPid: number): Promise<Array<{ query: string }>> =>
       prisma.$queryRawUnsafe<Array<{ query: string }>>(
         `SELECT query FROM pg_stat_activity
-          WHERE datname = current_database() AND wait_event_type = 'Lock' AND pid <> pg_backend_pid()`,
+          WHERE datname = current_database() AND $1::int = ANY(pg_blocking_pids(pid))`,
+        holderPid,
       );
 
-    async function waitForLockWaiter(what: string): Promise<Array<{ query: string }>> {
+    async function waitForWaiterBehind(
+      holderPid: number,
+      what: string,
+    ): Promise<Array<{ query: string }>> {
       const deadline = Date.now() + 2_500;
       while (Date.now() < deadline) {
-        const rows = await lockWaiters();
+        const rows = await blockedBy(holderPid);
         if (rows.length > 0) return rows;
         await new Promise((r) => setTimeout(r, 25));
       }
       throw new Error(`no backend ever waited on a lock: ${what}`);
     }
+
+    const backendPid = async (tx: { $queryRawUnsafe: PrismaClient["$queryRawUnsafe"] }) =>
+      (await tx.$queryRawUnsafe<Array<{ pid: number }>>("SELECT pg_backend_pid() AS pid"))[0].pid;
 
     /**
      * An AuthService identical to the app's except that its transaction pauses
@@ -458,7 +499,7 @@ d("T-003-B20 admin-reset — D-034 ⊊ + SR-05 lock order (E2E, DB+Redis)", () =
      */
     function barrierAuthService(
       client: PrismaClient,
-      onMembershipLocked: () => Promise<void>,
+      onMembershipLocked: (holderPid: number) => Promise<void>,
       onCommitted: () => void = () => undefined,
     ) {
       let fired = false;
@@ -470,7 +511,7 @@ d("T-003-B20 admin-reset — D-034 ⊊ + SR-05 lock order (E2E, DB+Redis)", () =
                 const out = await (target as PrismaClient).$queryRawUnsafe(sql, ...params);
                 if (!fired && /FROM "Membership"[\s\S]*FOR SHARE/.test(sql)) {
                   fired = true;
-                  await onMembershipLocked();
+                  await onMembershipLocked(await backendPid(target as PrismaClient));
                 }
                 return out;
               };
@@ -517,9 +558,11 @@ d("T-003-B20 admin-reset — D-034 ⊊ + SR-05 lock order (E2E, DB+Redis)", () =
       const reached = deferred();
       const release = deferred();
       const order: string[] = [];
+      let resetPid = 0;
       const service = barrierAuthService(
         prisma,
-        async () => {
+        async (pid) => {
+          resetPid = pid;
           reached.resolve();
           await release.promise;
         },
@@ -540,7 +583,10 @@ d("T-003-B20 admin-reset — D-034 ⊊ + SR-05 lock order (E2E, DB+Redis)", () =
         return res;
       });
 
-      const waiters = await waitForLockWaiter("PATCH member should queue behind the reset");
+      const waiters = await waitForWaiterBehind(
+        resetPid,
+        "PATCH member should queue behind the reset",
+      );
       expect(waiters.some((w) => /Membership/.test(w.query))).toBe(true);
       expect(order).toEqual([]); // the PATCH is blocked, not finished
 
@@ -565,8 +611,10 @@ d("T-003-B20 admin-reset — D-034 ⊊ + SR-05 lock order (E2E, DB+Redis)", () =
       try {
         const updated = deferred();
         const commit = deferred();
+        let holderPid = 0;
         const txB = other.$transaction(
           async (tx) => {
+            holderPid = await backendPid(tx);
             await tx.membership.update({
               where: { organizationId_userId: { organizationId: org.id, userId: people.staff.id } },
               data: { roleId: org.roles.Admin.id },
@@ -586,7 +634,8 @@ d("T-003-B20 admin-reset — D-034 ⊊ + SR-05 lock order (E2E, DB+Redis)", () =
           return res;
         });
 
-        const waiters = await waitForLockWaiter(
+        const waiters = await waitForWaiterBehind(
+          holderPid,
           "the reset should wait on the in-flight Membership row",
         );
         expect(waiters.some((w) => /Membership/.test(w.query))).toBe(true);
