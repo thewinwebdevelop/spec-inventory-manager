@@ -14,12 +14,11 @@
 //      apply cleanly.
 //   3. The NOTICE-capture helper M3-04 will read `f003_backfill …` lines with.
 //
-// SOURCE OF THE F-003 MIGRATION: until T-003-B11 lands the real
-// `*_f003_backfill_manage_roles` (which carries the RAISE), M3-01 runs against
-// a stand-in fixture that implements the data-model §4.2 invariant check. The
-// "source guard" test turns RED the moment a real migration under
-// prisma/migrations carries the invariant while the stand-in is still in use —
-// so the stand-in cannot silently outlive the real thing.
+// SOURCE OF THE F-003 MIGRATION: the real committed chain after the F-002
+// baseline (`*_f003_role_expand` + `*_f003_backfill_manage_roles`, which carries
+// the RAISE) — switched from the QA05 stand-in fixture by T-003-B11. The
+// "source guard" test keeps both directions: a stand-in may not outlive a real
+// migration carrying the invariant, and the real source must contain it.
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import {
   F002_BASELINE,
@@ -133,6 +132,8 @@ d(
         expect(real.length).toBeGreaterThan(0);
         for (const name of real)
           expect(F003_MIGRATION_SOURCE.migrations.map((m) => m.name)).toContain(name);
+        // and the stand-in is gone, so nothing can quietly switch back to it
+        expect(() => fixtureMigration("f003_owner_invariant_standin")).toThrow(/not found/);
       }
       // non-vacuity: whatever we apply actually contains the RAISE text
       expect(

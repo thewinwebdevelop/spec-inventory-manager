@@ -17,6 +17,13 @@
     // green on my machine and red on every other one.
     "types": ["node"]
   },
-  "include": ["src/index.ts", "src/ledger-guard.ts", "src/tenancy.ts", "src/org-lock.ts", "src/invitation-token.ts"],
+  "include": [
+    "src/index.ts",
+    "src/ledger-guard.ts",
+    "src/tenancy.ts",
+    "src/org-lock.ts",
+    "src/invitation-token.ts",
+    "src/backfill-f003.ts"
+  ],
   "exclude": ["src/generated", "node_modules", "dist", "**/*.test.ts", "**/*.compile-test.ts"]
 }

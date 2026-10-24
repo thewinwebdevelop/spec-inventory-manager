@@ -13,7 +13,8 @@
     "dev:compile:watch": "tsc -p tsconfig.json --watch --preserveWatchOutput",
     "dev:run:watch": "node --watch dist/main.js",
     "start": "node dist/main.js",
-    "check-env": "tsx scripts/check-env.ts"
+    "check-env": "tsx scripts/check-env.ts",
+    "backfill:f003": "tsx scripts/backfill-f003.ts"
   },
   "dependencies": {
     "@nestjs/common": "^11.1.27",
