@@ -43,6 +43,14 @@ export interface OrgLockRequiredOperation {
   readonly path: string;
   /** `Service.method` that owns the transaction (qa greps call sites against this). */
   readonly serviceMethod: string;
+  /**
+   * F-003 · T-003-B15 — set ONLY on a row registered before its method exists:
+   * the task that builds it. The static gates then check that the method is
+   * NOT declared yet (an honest placeholder) and skip the method-scoped lock
+   * check. The building task deletes this field in the same commit, which
+   * turns the method-scoped check on (g3-11-membership-write-under-lock.test.ts).
+   */
+  readonly pendingTask?: string;
 }
 
 /**
@@ -114,25 +122,28 @@ export const ORG_LOCK_REQUIRED_OPERATIONS: readonly OrgLockRequiredOperation[] =
   }),
   // F-003 architecture §3 — role writes take the SAME anchor (Organization →
   // Role → Invitation clamp). Timeouts are the shared ORG_TX_TIMEOUTS policy;
-  // operationKey is the new metric label. The methods land in T-003-B23/B24/B25
-  // (org-lock-callsites.test.ts holds them as PENDING until they exist).
+  // operationKey is the new metric label. The methods land in T-003-B23/B24/B25;
+  // until then `pendingTask` marks them (delete it when the method lands).
   Object.freeze({
     operationKey: "createRole",
     method: "POST",
     path: "/orgs/{orgId}/roles",
     serviceMethod: "RolesService.create",
+    pendingTask: "T-003-B23",
   }),
   Object.freeze({
     operationKey: "updateRole",
     method: "PATCH",
     path: "/orgs/{orgId}/roles/{roleId}",
     serviceMethod: "RolesService.update",
+    pendingTask: "T-003-B24",
   }),
   Object.freeze({
     operationKey: "deleteRole",
     method: "DELETE",
     path: "/orgs/{orgId}/roles/{roleId}",
     serviceMethod: "RolesService.delete",
+    pendingTask: "T-003-B25",
   }),
 ] as const);
 

@@ -133,7 +133,8 @@ describe("OrgOwnershipGuard — shapes 3/4 (architecture §2 input contract)", (
     const line = String(error.mock.calls[0]![0]);
     expect(line).toContain("role_invariant_violation");
     expect(JSON.parse(line.slice(line.indexOf("{")))).toEqual({
-      operation: "role_delete",
+      operation: "deleteRole",
+      change: "role_delete",
       organizationId: ORG,
       roleId: "rol_owner",
     });

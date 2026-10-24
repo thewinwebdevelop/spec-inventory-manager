@@ -1,0 +1,9 @@
+// G3-04 red (review L-2): one history label above a statement holding two reads.
+async function f(tx) {
+  // role-read: history — deleted-row cap
+  const [rows, n] = await Promise.all([
+    tx.role.findMany({ select: { name: true } }),
+    tx.role.count({ where: { deletedAt: { not: null } } }),
+  ]);
+  return { rows, n };
+}

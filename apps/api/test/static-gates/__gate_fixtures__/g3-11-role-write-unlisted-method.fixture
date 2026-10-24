@@ -1,0 +1,13 @@
+// G3-11 red: "clone" (D-032) as its own method — it even takes the lock, but it
+// is not a registered operation, so nothing pins its key, guard or tests.
+class RolesService {
+  async clone(sourceId) {
+    return runInOrgLockTransaction(
+      this.prisma,
+      async (tx) => {
+        return tx.role.create({ data: { name: "copy", capabilities: [] } });
+      },
+      { operation: "createRole" },
+    );
+  }
+}

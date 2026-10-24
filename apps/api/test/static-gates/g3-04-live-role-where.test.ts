@@ -13,12 +13,14 @@ import { describe, it, expect } from "vitest";
 import * as ts from "typescript";
 import {
   balancedArgs,
+  enclosingMethod,
   fixture,
   fixtureNames,
   lineOf,
   productionFiles,
   readCode,
   readRaw,
+  topLevelEntries,
   type Violation,
 } from "./scan";
 
@@ -32,6 +34,26 @@ export interface RoleReadSite {
   line: number;
   kind: "live" | "history" | "unlabelled";
   snippet: string;
+  /** `Class.method` holding the read (AST) — live reads are pinned per method. */
+  owner: string;
+  /** Line where the enclosing statement starts — the label goes right above it. */
+  stmt: number;
+}
+
+/**
+ * LIVE only when the call's own `where` IS the helper, or is an object literal
+ * whose LAST top-level entry is `...LIVE_ROLE_WHERE` (review L-2): inside an
+ * `OR` it can be bypassed, and a later spread/key can override `deletedAt`.
+ */
+function liveWhere(args: string): boolean {
+  const inner = args.trim();
+  if (!inner.startsWith("{")) return false;
+  const where = topLevelEntries(balancedArgs(inner, 0)).find((e) => e.key === "where")?.value;
+  if (where === undefined) return false;
+  if (where === "LIVE_ROLE_WHERE") return true;
+  if (!where.startsWith("{")) return false;
+  const entries = topLevelEntries(balancedArgs(where, 0));
+  return entries.length > 0 && entries[entries.length - 1]!.value === "...LIVE_ROLE_WHERE";
 }
 
 /** Line (1-based) where the statement enclosing `pos` starts. */
@@ -60,27 +82,29 @@ function statementLine(raw: string, pos: number): number {
 
 export function roleReadSites(file: string, raw: string, code: string): RoleReadSite[] {
   const lines = raw.split("\n");
-  const labelled = (pos: number) => LABEL.test(lines[statementLine(raw, pos) - 2] ?? "");
   const sites: RoleReadSite[] = [];
-  for (const m of code.matchAll(CALL)) {
-    const open = m.index! + m[0].length - 1;
-    const live = /\bLIVE_ROLE_WHERE\b/.test(balancedArgs(code, open));
+  const site = (pos: number, snippet: string, live: boolean) => {
+    const stmt = statementLine(raw, pos);
+    const labelled = LABEL.test(lines[stmt - 2] ?? "");
     sites.push({
       file,
-      line: lineOf(code, m.index!),
-      kind: live ? "live" : labelled(m.index!) ? "history" : "unlabelled",
-      snippet: m[0],
+      line: lineOf(code, pos),
+      kind: live ? "live" : labelled ? "history" : "unlabelled",
+      snippet,
+      owner: enclosingMethod(code, pos),
+      stmt,
     });
+  };
+  for (const m of code.matchAll(CALL))
+    site(m.index!, m[0], liveWhere(balancedArgs(code, m.index! + m[0].length - 1)));
+  for (const m of code.matchAll(RAW)) site(m.index!, m[0], false);
+  // One label, one read (review L-2): a single history label above a statement
+  // holding two non-live reads (`Promise.all([...])`) covers neither.
+  for (const s of sites) {
+    const shared = sites.filter((o) => o.stmt === s.stmt && o.kind !== "live");
+    if (s.kind === "history" && shared.length > 1) s.kind = "unlabelled";
   }
-  for (const m of code.matchAll(RAW)) {
-    sites.push({
-      file,
-      line: lineOf(code, m.index!),
-      kind: labelled(m.index!) ? "history" : "unlabelled",
-      snippet: m[0],
-    });
-  }
-  return sites;
+  return sites.sort((a, b) => a.line - b.line);
 }
 
 const g304 = (file: string, raw: string, code: string): Violation[] =>
@@ -105,34 +129,45 @@ describe("G3-04 · every Role read is labelled live or history", () => {
   const files = productionFiles();
   const sites = files.flatMap((f) => roleReadSites(f, readRaw(f), readCode(f)));
 
-  it("non-vacuity: the scan finds the known call sites (api + db raw SQL)", () => {
+  it("non-vacuity: at least the known call sites (api + db raw SQL) — new files may join", () => {
     expect(sites.length).toBeGreaterThanOrEqual(6);
-    expect(new Set(sites.map((s) => s.file))).toEqual(
-      new Set([
-        "apps/api/src/orgs/members.service.ts",
-        "apps/api/src/orgs/roles.service.ts",
-        "apps/api/src/orgs/invitations.service.ts",
-        "packages/db/src/backfill-f003.ts",
-      ]),
-    );
+    const seen = new Set(sites.map((s) => s.file));
+    for (const known of [
+      "apps/api/src/orgs/members.service.ts",
+      "apps/api/src/orgs/roles.service.ts",
+      "apps/api/src/orgs/invitations.service.ts",
+      "packages/db/src/backfill-f003.ts",
+    ])
+      expect(seen, known).toContain(known);
   });
 
   it("★ no production Role read is unlabelled", () => {
     expect(files.flatMap((f) => g304(f, readRaw(f), readCode(f)))).toEqual([]);
   });
 
-  it("★ the dm §2.2 live reads stay LIVE — a history label cannot be used to dodge (MUT-10)", () => {
-    // GET /roles · PATCH member (new role) · invite create/reissue · accept.
-    for (const file of [
-      "apps/api/src/orgs/roles.service.ts",
-      "apps/api/src/orgs/members.service.ts",
-      "apps/api/src/orgs/invitations.service.ts",
-    ]) {
-      const kinds = sites.filter((s) => s.file === file).map((s) => s.kind);
-      expect(kinds.length, file).toBeGreaterThan(0);
+  /**
+   * dm §2.2 live reads, pinned per METHOD (review M-2): another method in the
+   * same file may legitimately be history (B25's deleted-row cap count in
+   * roles.service.ts), but these may not — a history label here is a dodge.
+   * B21–B25 add their live methods to this list.
+   */
+  const LIVE_METHODS: readonly (readonly [string, string])[] = [
+    ["apps/api/src/orgs/roles.service.ts", "RolesService.list"], // GET /roles (MUT-10)
+    ["apps/api/src/orgs/members.service.ts", "MembersService.updateRole"], // PATCH member new role
+    ["apps/api/src/orgs/invitations.service.ts", "InvitationsService.accept"], // accept (B07 L-4)
+    ["apps/api/src/orgs/invitations.service.ts", "InvitationsService.readRole"], // invite create
+  ];
+
+  it("★ the dm §2.2 live reads stay LIVE, per method — a history label cannot be used to dodge (MUT-10)", () => {
+    for (const [file, method] of LIVE_METHODS) {
+      const kinds = sites.filter((s) => s.file === file && s.owner === method).map((s) => s.kind);
+      expect(
+        kinds.length,
+        `${method}: no Role read found — renamed? update LIVE_METHODS`,
+      ).toBeGreaterThan(0);
       expect(
         kinds.every((k) => k === "live"),
-        `${file}: ${kinds.join(",")}`,
+        `${method}: ${kinds.join(",")}`,
       ).toBe(true);
     }
   });
@@ -150,6 +185,25 @@ describe("G3-04 · every Role read is labelled live or history", () => {
     }
   });
 
+  it("FIXTURES (L-2): helper not last / inside OR · one label over two reads → red", () => {
+    for (const [name, n] of [
+      ["g3-04-live-not-last.fixture", 2],
+      ["g3-04-shared-label.fixture", 2],
+    ] as const) {
+      const { raw, code } = fixtureSites(name);
+      expect(g304(name, raw, code).length, name).toBe(n);
+    }
+  });
+
+  it("FIXTURE: a raw FOR SHARE read held in a `const … =` with the label above the const (B20 shape) → green; label inside the initializer → red", () => {
+    const { raw, code } = fixtureSites("g3-04-const-sql-label.fixture");
+    expect(roleReadSites("x.ts", raw, code).map((s) => s.kind)).toEqual([
+      "history",
+      "history",
+      "unlabelled",
+    ]);
+  });
+
   it("FIXTURE: the labelled / live twins of the same shapes are green", () => {
     const { raw, code } = fixtureSites("g3-04-labelled.fixture");
     const found = roleReadSites("x.ts", raw, code);
@@ -158,11 +212,14 @@ describe("G3-04 · every Role read is labelled live or history", () => {
 
   it("every g3-04 fixture on disk is exercised above", () => {
     expect(fixtureNames("g3-04-")).toEqual([
+      "g3-04-const-sql-label.fixture",
       "g3-04-find-unique-or-throw.fixture",
       "g3-04-group-by.fixture",
       "g3-04-label-no-reason.fixture",
       "g3-04-labelled.fixture",
+      "g3-04-live-not-last.fixture",
       "g3-04-raw-from-role.fixture",
+      "g3-04-shared-label.fixture",
     ]);
   });
 

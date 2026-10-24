@@ -137,12 +137,18 @@ describe("ORG_LOCK_REQUIRED_OPERATIONS (architecture §5 · §12.2 row 6)", () =
     ]);
     // operationKey = the metric label of org_tx_lock_timeout_total (arch §8 "+3 label").
     expect(
-      ORG_LOCK_REQUIRED_OPERATIONS.slice(7).map((op) => [op.operationKey, op.serviceMethod]),
+      ORG_LOCK_REQUIRED_OPERATIONS.slice(7).map((op) => [
+        op.operationKey,
+        op.serviceMethod,
+        op.pendingTask,
+      ]),
     ).toEqual([
-      ["createRole", "RolesService.create"],
-      ["updateRole", "RolesService.update"],
-      ["deleteRole", "RolesService.delete"],
+      ["createRole", "RolesService.create", "T-003-B23"],
+      ["updateRole", "RolesService.update", "T-003-B24"],
+      ["deleteRole", "RolesService.delete", "T-003-B25"],
     ]);
+    // the F-002 seven are built — none may carry a pending marker
+    expect(ORG_LOCK_REQUIRED_OPERATIONS.slice(0, 7).filter((op) => op.pendingTask)).toEqual([]);
   });
 
   it("is frozen and has a unique key + service method per row", () => {

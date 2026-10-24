@@ -85,7 +85,9 @@ export class OrgOwnershipGuard {
         // should have refused first — reaching this line means one of them did not.
         this.logger.error(
           `role_invariant_violation ${JSON.stringify({
-            operation: change.kind,
+            // the ORG_LOCK operationKey (metric/log label, §8 — review L-4)
+            operation: change.kind === "role_delete" ? "deleteRole" : "updateRole",
+            change: change.kind,
             organizationId,
             roleId: change.roleId,
           })}`,

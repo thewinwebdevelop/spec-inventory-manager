@@ -1,0 +1,22 @@
+// G3-11 (registry) red: `operation: "updateRole"` appears in the FILE, but not in
+// RolesService.update's own lock call; delete takes no lock at all. create is
+// the green twin.
+class RolesService {
+  async create(input) {
+    return runInOrgLockTransaction(this.prisma, async (tx) => tx.role.create({ data: input }), {
+      operation: "createRole",
+    });
+  }
+
+  async update(input) {
+    return runInOrgLockTransaction(this.prisma, async (tx) => tx.role.update({ where: { id: input.id }, data: input }));
+  }
+
+  async delete(id) {
+    return this.prisma.role.update({ where: { id }, data: { deletedAt: new Date() } });
+  }
+
+  describe() {
+    return { operation: "updateRole" };
+  }
+}
