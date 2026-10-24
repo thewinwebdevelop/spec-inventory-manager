@@ -7,15 +7,12 @@
 // the one workspace that sees both packages (packages/db does not depend on
 // core-domain).
 //
-// TWO STATES, decided by what core-domain exports — never by a flag a human
-// has to remember to flip:
-//   • before T-003-B04 is on this base (`validateRoleName` not exported): the
-//     SQL class is compared with the db-side definition. Nothing to compare in
-//     core-domain yet, and the test says so in its name.
-//   • after B04 lands (`validateRoleName` exported): core-domain MUST also
-//     export `ROLE_NAME_FORBIDDEN_CHARACTER` (a RegExp) and its code-point set
-//     must be set-equal to the SQL class. B04 renamed it / narrowed it back to
-//     Cc ∪ Cf ⇒ red, with the missing code points listed.
+// core-domain MUST export `ROLE_NAME_FORBIDDEN_CHARACTER` (a RegExp) and its
+// code-point set must be set-equal to the SQL class. Renamed / narrowed back to
+// Cc ∪ Cf ⇒ red, with the missing code points listed.
+// (Before T-003-B04 landed this file fell back to the db-side definition when
+// core-domain had no `validateRoleName`. B04 is merged, so the fallback is gone:
+// a renamed export used to turn this test silently weaker — DV05 review.)
 import { readFileSync, readdirSync } from "node:fs";
 import { join } from "node:path";
 import { pathToFileURL } from "node:url";
@@ -48,59 +45,47 @@ function roleExpandSql(): string {
 }
 
 const exported = coreDomain as unknown as Record<string, unknown>;
-const B04_ON_BASE = typeof exported.validateRoleName === "function";
 
 describe("G3-07 (core-domain half) — role-name forbidden characters: core-domain ≡ DB CHECK", () => {
-  it(
-    B04_ON_BASE
-      ? "core-domain ROLE_NAME_FORBIDDEN_CHARACTER is set-equal to the SQL class"
-      : "B04 not on this base yet — SQL class is set-equal to the db-side definition (core-domain compared once B04 lands)",
-    async () => {
-      const h = await helpers();
-      // the whitespace classes (leading/trailing/doubled/non-space JS \s) are pinned by
-      // packages/db unicode-parity.test.ts; every OTHER escaped class is a forbidden class
-      const isWs = (body: string) => {
-        const set = h.parseEscapedBracketClass(body);
-        return [h.jsWhitespaceSet(), h.jsWhitespaceNonSpaceSet()].some(
-          (ws) => h.difference(ws, set).length === 0 && h.difference(set, ws).length === 0,
-        );
-      };
-      const classes = h.extractEscapedClasses(roleExpandSql()).filter((b) => !isWs(b));
-      expect(classes.length, "no forbidden-character class in f003_role_expand").toBeGreaterThan(0);
-
-      let expected: Set<number>;
-      if (B04_ON_BASE) {
-        const re = exported.ROLE_NAME_FORBIDDEN_CHARACTER;
-        expect(
-          re,
-          "B04 is on this base but core-domain exports no ROLE_NAME_FORBIDDEN_CHARACTER RegExp — " +
-            "point this test at the constant B04 actually exports",
-        ).toBeInstanceOf(RegExp);
-        const single = new RegExp(
-          `^(?:${(re as RegExp).source})$`,
-          (re as RegExp).flags.replace("g", ""),
-        );
-        expected = h.codePointSet(single);
-      } else {
-        expected = h.forbiddenRoleNameSet();
-      }
-      // non-vacuity: whichever side we compare with is the widened set
-      for (const n of [0x200b, 0x202e, 0x3164, 0x2800, 0xe000]) expect(expected.has(n)).toBe(true);
-
-      // visible non-vacuity in the CI log (T-003-DV05)
-      console.info(
-        `[G3-07] ${classes.length} forbidden-character class(es) in f003_role_expand compared with ` +
-          `${B04_ON_BASE ? "core-domain ROLE_NAME_FORBIDDEN_CHARACTER" : "the db-side definition"} ` +
-          `(${expected.size} code points, Node ${process.versions.node}, Unicode ${process.versions.unicode})`,
+  it("core-domain ROLE_NAME_FORBIDDEN_CHARACTER is set-equal to the SQL class", async () => {
+    const h = await helpers();
+    // the whitespace classes (leading/trailing/doubled/non-space JS \s) are pinned by
+    // packages/db unicode-parity.test.ts; every OTHER escaped class is a forbidden class
+    const isWs = (body: string) => {
+      const set = h.parseEscapedBracketClass(body);
+      return [h.jsWhitespaceSet(), h.jsWhitespaceNonSpaceSet()].some(
+        (ws) => h.difference(ws, set).length === 0 && h.difference(set, ws).length === 0,
       );
-      for (const body of classes) {
-        const sqlSet = h.parseEscapedBracketClass(body);
-        expect({
-          missingFromSql: h.difference(expected, sqlSet),
-          extraInSql: h.difference(sqlSet, expected),
-        }).toEqual({ missingFromSql: [], extraInSql: [] });
-      }
-    },
-    60_000,
-  );
+    };
+    const classes = h.extractEscapedClasses(roleExpandSql()).filter((b) => !isWs(b));
+    expect(classes.length, "no forbidden-character class in f003_role_expand").toBeGreaterThan(0);
+
+    const re = exported.ROLE_NAME_FORBIDDEN_CHARACTER;
+    expect(
+      re,
+      "core-domain exports no ROLE_NAME_FORBIDDEN_CHARACTER RegExp — " +
+        "point this test at the constant core-domain actually exports",
+    ).toBeInstanceOf(RegExp);
+    const single = new RegExp(
+      `^(?:${(re as RegExp).source})$`,
+      (re as RegExp).flags.replace("g", ""),
+    );
+    const expected = h.codePointSet(single);
+    // non-vacuity: the constant is the widened set
+    for (const n of [0x200b, 0x202e, 0x3164, 0x2800, 0xe000]) expect(expected.has(n)).toBe(true);
+
+    // visible non-vacuity in the CI log (T-003-DV05)
+    console.info(
+      `[G3-07] ${classes.length} forbidden-character class(es) in f003_role_expand compared with ` +
+        "core-domain ROLE_NAME_FORBIDDEN_CHARACTER " +
+        `(${expected.size} code points, Node ${process.versions.node}, Unicode ${process.versions.unicode})`,
+    );
+    for (const body of classes) {
+      const sqlSet = h.parseEscapedBracketClass(body);
+      expect({
+        missingFromSql: h.difference(expected, sqlSet),
+        extraInSql: h.difference(sqlSet, expected),
+      }).toEqual({ missingFromSql: [], extraInSql: [] });
+    }
+  }, 60_000);
 });
