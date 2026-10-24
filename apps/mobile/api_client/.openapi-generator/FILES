@@ -151,17 +151,3 @@ lib/src/model/update_role_request.dart
 lib/src/model/warehouse_summary.dart
 lib/src/serializers.dart
 pubspec.yaml
-test/capability_catalog_test.dart
-test/capability_entry_test.dart
-test/capability_group_test.dart
-test/create_role_request_test.dart
-test/deleted_role_test.dart
-test/role_detail_list_page_test.dart
-test/role_detail_list_viewer_test.dart
-test/role_detail_test.dart
-test/role_detail_viewer_test.dart
-test/role_last_edited_by_test.dart
-test/role_last_edited_test.dart
-test/role_usage_test.dart
-test/role_write_verdict_test.dart
-test/update_role_request_test.dart
