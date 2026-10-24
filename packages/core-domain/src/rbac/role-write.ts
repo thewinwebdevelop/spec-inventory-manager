@@ -28,6 +28,7 @@ import {
 import { byKey, expandCapabilities } from "./expand";
 import { lostCapabilities } from "./canonical";
 import { decideMemberAuthority, type TargetRelation } from "./member-authority";
+import type { ValidatedCapabilities } from "./role-validation";
 
 export const ROLE_WRITE_OPS = Object.freeze(["create", "update", "delete"] as const);
 export type RoleWriteOp = (typeof ROLE_WRITE_OPS)[number];
@@ -45,23 +46,45 @@ interface Actor {
   readonly actorCapabilities: readonly string[];
 }
 
+declare const unchangedBrand: unique symbol;
+
+/**
+ * "The role's capabilities stay as they are" — the `next` of a rename-only
+ * PATCH (and of the `viewer.canEdit` verdict). Built only by
+ * {@link unchangedCapabilities}; stored caps cannot be re-validated into
+ * `ValidatedCapabilities` (a key may have become non-selectable since), and
+ * must not be cast into it (G3-02). Accepted on `update` only.
+ */
+export type UnchangedCapabilities = readonly string[] & { readonly [unchangedBrand]: true };
+
+/** The explicit rename-only `next`: a frozen copy of the role's current capabilities. */
+export function unchangedCapabilities(role: RoleWriteTarget): UnchangedCapabilities {
+  return Object.freeze([...role.capabilities]) as unknown as UnchangedCapabilities;
+}
+
 /**
  * Discriminated by `op`. `otherActiveHolders` is REQUIRED (no default 0): the
  * call site must count active memberships of this role whose user is not the
  * actor (architecture §1.3 "นับผู้ถือ"). A new role has no holder — `0` literal.
+ *
+ * `next` (fix round 1 — security review M-1 · L-1; tightens architecture §1's
+ * `next?`) is REQUIRED on create and update and must be validated
+ * (`validateRoleCapabilities`) — or `unchangedCapabilities(role)` for a
+ * rename-only update. A forgotten / unvalidated `next` does not compile, and at
+ * runtime a missing one throws instead of skipping the after-⊆ check.
  */
 export type RoleWriteInput =
   | (Actor & {
       readonly op: "create";
-      /** Capabilities of the new role (clone = the source role's). */
-      readonly next: readonly string[];
+      /** Capabilities of the new role (clone = the source role's, validated). */
+      readonly next: ValidatedCapabilities;
       readonly otherActiveHolders: 0;
     })
   | (Actor & {
       readonly op: "update";
       readonly role: RoleWriteTarget;
-      /** Capabilities AFTER the write; absent = unchanged (rename-only PATCH). */
-      readonly next?: readonly string[];
+      /** Capabilities AFTER the write. Rename-only: `unchangedCapabilities(role)`. */
+      readonly next: ValidatedCapabilities | UnchangedCapabilities;
       readonly otherActiveHolders: number;
     })
   | (Actor & {
@@ -123,8 +146,11 @@ function readInput(input: RoleWriteInput): {
     fail(op, "role { isSystem, capabilities } is required");
   }
   if (input.op === "delete") return { before: role.capabilities, after: null, role, holders };
-  if (input.next !== undefined && !Array.isArray(input.next)) fail(op, "next must be an array");
-  return { before: role.capabilities, after: input.next ?? role.capabilities, role, holders };
+  // M-1: no default — a forgotten `next` must not read as "unchanged" and skip the after-⊆ leg.
+  if (!Array.isArray(input.next)) {
+    fail(op, "next is required (rename-only: pass unchangedCapabilities(role))");
+  }
+  return { before: role.capabilities, after: input.next, role, holders };
 }
 
 export function decideRoleWrite(

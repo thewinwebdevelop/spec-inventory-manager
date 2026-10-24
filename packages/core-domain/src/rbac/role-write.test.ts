@@ -8,22 +8,39 @@
 import { describe, it, expect } from "vitest";
 import {
   decideRoleWrite,
+  unchangedCapabilities,
   ROLE_WRITE_OPS,
   type RoleWriteInput,
   type RoleWriteResult,
 } from "./role-write";
-import type { RegistryLike } from "./registry";
+import {
+  validateRoleCapabilities,
+  type ValidatableRegistry,
+  type ValidatedCapabilities,
+} from "./role-validation";
 
 /** Small registry with ONE implies edge, plus `w` that no non-Owner actor below holds. */
-const REG: RegistryLike = [
-  { key: "full_access", implies: [] },
-  { key: "manage_members", implies: [] },
-  { key: "manage_roles", implies: [] },
-  { key: "manage_x", implies: ["view_x"] },
-  { key: "view_x", implies: [] },
-  { key: "y", implies: [] },
-  { key: "w", implies: [] },
+const sel = { tier: "all", selectable: true } as const;
+const REG: ValidatableRegistry = [
+  { key: "full_access", implies: [], tier: "full", selectable: false },
+  { key: "manage_members", implies: [], ...sel },
+  { key: "manage_roles", implies: [], ...sel },
+  { key: "manage_x", implies: ["view_x"], ...sel },
+  { key: "view_x", implies: [], ...sel },
+  { key: "y", implies: [], ...sel },
+  { key: "w", implies: [], ...sel },
 ];
+
+/**
+ * `next` is `ValidatedCapabilities` (security review L-1): build it with the
+ * REAL constructor whenever the list is valid. Lists validation would refuse
+ * (empty, unknown key, `full_access`) are FORGED here on purpose — they model a
+ * call site that cast the brand, and the fn must still fail closed on them.
+ */
+function next(caps: readonly string[]): ValidatedCapabilities {
+  const v = validateRoleCapabilities(caps, REG);
+  return v.ok ? v.capabilities : (caps as unknown as ValidatedCapabilities);
+}
 
 const decide = (i: RoleWriteInput) => decideRoleWrite(i, REG);
 
@@ -70,8 +87,21 @@ const update = (
   otherActiveHolders: number,
 ): RoleWriteInput =>
   after === undefined
-    ? { op: "update", actorCapabilities, role: custom(before), otherActiveHolders }
-    : { op: "update", actorCapabilities, role: custom(before), next: after, otherActiveHolders };
+    ? // rename-only: the call site passes the role's CURRENT caps explicitly (review M-1)
+      {
+        op: "update",
+        actorCapabilities,
+        role: custom(before),
+        next: unchangedCapabilities(custom(before)),
+        otherActiveHolders,
+      }
+    : {
+        op: "update",
+        actorCapabilities,
+        role: custom(before),
+        next: next(after),
+        otherActiveHolders,
+      };
 const del = (
   actorCapabilities: readonly string[],
   before: readonly string[],
@@ -82,10 +112,10 @@ const del = (
   role: custom(before),
   otherActiveHolders,
 });
-const create = (actorCapabilities: readonly string[], next: readonly string[]): RoleWriteInput => ({
+const create = (actorCapabilities: readonly string[], caps: readonly string[]): RoleWriteInput => ({
   op: "create",
   actorCapabilities,
-  next,
+  next: next(caps),
   otherActiveHolders: 0,
 });
 
@@ -112,7 +142,7 @@ describe("U-RB-12 · decideRoleWrite = architecture §13.6 D-034 Addendum table 
     ],
     [
       "R04",
-      "Admin A · custom R_B = A → rename only (no `next`) · B holds",
+      "Admin A · custom R_B = A → rename only (`next` = unchangedCapabilities) · B holds",
       update(A, A, undefined, 1),
       TNBA_EQUAL,
     ],
@@ -213,12 +243,18 @@ describe("U-RB-12 · the 8 extra rows (floor · lock · bypass · create · hold
           op: "update",
           actorCapabilities: actor,
           role: ownerRole,
-          next: [],
+          next: next(["y"]),
           otherActiveHolders: 0,
         }),
       ).toEqual(LOCKED);
       expect(
-        decide({ op: "update", actorCapabilities: actor, role: ownerRole, otherActiveHolders: 0 }),
+        decide({
+          op: "update",
+          actorCapabilities: actor,
+          role: ownerRole,
+          next: unchangedCapabilities(ownerRole),
+          otherActiveHolders: 0,
+        }),
       ).toEqual(LOCKED);
       expect(
         decide({ op: "delete", actorCapabilities: actor, role: ownerRole, otherActiveHolders: 3 }),
@@ -233,7 +269,7 @@ describe("U-RB-12 · the 8 extra rows (floor · lock · bypass · create · hold
         op: "update",
         actorCapabilities: OWNER,
         role: sneaky,
-        next: ["y"],
+        next: next(["y"]),
         otherActiveHolders: 0,
       }),
     ).toEqual(LOCKED);
@@ -383,7 +419,13 @@ describe("U-RB-13 · reason order: floor → role_locked → bypass → exceeds_
 
   it("role_locked before bypass: the Owner editing the Owner role is still locked", () => {
     expect(
-      decide({ op: "update", actorCapabilities: OWNER, role: ownerRole, otherActiveHolders: 0 }),
+      decide({
+        op: "update",
+        actorCapabilities: OWNER,
+        role: ownerRole,
+        next: unchangedCapabilities(ownerRole),
+        otherActiveHolders: 0,
+      }),
     ).toEqual(LOCKED);
   });
 
@@ -430,6 +472,40 @@ describe("U-RB-13 · reason order: floor → role_locked → bypass → exceeds_
     expect(() => decide(u)).toThrow(/otherActiveHolders/);
     expect(() => decide(d)).toThrow(/otherActiveHolders/);
     expect(() => decide(r)).toThrow(/role/);
+  });
+
+  it("`next` is REQUIRED on update (security review M-1) — omitting it throws, it never skips the after-⊆ check", () => {
+    // The review's escalation: Admin A is the ONLY holder of R_A (= A), the call
+    // site forgets `next` and then writes `A + w`. Omission must not decide `ok`.
+    const forgot = {
+      op: "update",
+      actorCapabilities: A,
+      role: custom(A),
+      otherActiveHolders: 0,
+    } as unknown as RoleWriteInput;
+    expect(() => decide(forgot)).toThrow(/next is required/);
+    // Same for M widening an unheld role, and for a non-array `next`.
+    const forgotM = {
+      op: "update",
+      actorCapabilities: M,
+      role: custom(BELOW_M),
+      otherActiveHolders: 0,
+    };
+    expect(() => decide(forgotM as unknown as RoleWriteInput)).toThrow(/next is required/);
+    const notArray = { ...forgotM, next: "y" };
+    expect(() => decide(notArray as unknown as RoleWriteInput)).toThrow(/next is required/);
+    // control: the same call WITH the escalating `next` is refused by ⊆, and the
+    // explicit rename-only form passes.
+    expect(decide(update(A, A, [...A, "w"], 0))).toEqual(exceeds(["w"]));
+    expect(decide(update(A, A, undefined, 0))).toEqual(OK);
+  });
+
+  it("`unchangedCapabilities(role)` is a frozen copy of the role's current caps", () => {
+    const role = custom(["y", "manage_x"]);
+    const u = unchangedCapabilities(role);
+    expect([...u]).toEqual(["y", "manage_x"]);
+    expect(Object.isFrozen(u)).toBe(true);
+    expect(u).not.toBe(role.capabilities);
   });
 
   it("fails loud on a nonsensical count, an unknown op, or a create that claims holders", () => {

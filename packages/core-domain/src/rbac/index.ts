@@ -48,7 +48,9 @@ export {
 // T-003-B06 — create / edit / delete a role (D-034 Addendum + Addendum 2).
 export {
   decideRoleWrite,
+  unchangedCapabilities,
   ROLE_WRITE_OPS,
+  type UnchangedCapabilities,
   type RoleWriteInput,
   type RoleWriteOp,
   type RoleWriteResult,
