@@ -87,6 +87,12 @@ describe("G3-07 (core-domain half) — role-name forbidden characters: core-doma
       // non-vacuity: whichever side we compare with is the widened set
       for (const n of [0x200b, 0x202e, 0x3164, 0x2800, 0xe000]) expect(expected.has(n)).toBe(true);
 
+      // visible non-vacuity in the CI log (T-003-DV05)
+      console.info(
+        `[G3-07] ${classes.length} forbidden-character class(es) in f003_role_expand compared with ` +
+          `${B04_ON_BASE ? "core-domain ROLE_NAME_FORBIDDEN_CHARACTER" : "the db-side definition"} ` +
+          `(${expected.size} code points, Node ${process.versions.node}, Unicode ${process.versions.unicode})`,
+      );
       for (const body of classes) {
         const sqlSet = h.parseEscapedBracketClass(body);
         expect({

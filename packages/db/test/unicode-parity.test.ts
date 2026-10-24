@@ -121,6 +121,12 @@ describe("G3-07 Unicode parity — SQL role-name classes ≡ the Node sets", () 
       }
     }
     expect(seen, "no escaped class found in any migration").toBeGreaterThan(0);
+    // visible non-vacuity in the CI log (T-003-DV05): how much was actually compared
+    console.info(
+      `[G3-07] ${seen} escaped class(es) in ${listRealMigrations().length} migration(s) compared ` +
+        `with the Node ${process.versions.node} (Unicode ${process.versions.unicode}) sets; ` +
+        `forbidden set = ${FORBIDDEN.size} code points`,
+    );
     expect(
       problems,
       `Node ${process.versions.node} (Unicode ${process.versions.unicode}) disagrees with the SQL. ` +
