@@ -6,9 +6,11 @@ import { CAPABILITY_FULL_ACCESS, CAPABILITY_MANAGE_MEMBERS } from "../auth/capab
 import {
   decideAdminReset,
   decideAdminResetVisible,
+  mapResetAuthorityRefusal,
   type AdminResetInput,
   type AdminResetRefusal,
 } from "./admin-reset-authz";
+import type { MemberAuthorityResult } from "../rbac/member-authority";
 
 const OWNER = [CAPABILITY_FULL_ACCESS];
 // F-003 · T-003-B05: D-034 makes reset require target ⊊ caller. F-002's
@@ -338,5 +340,103 @@ describe("U-RB-14 · decideAdminResetVisible (MemberRow.viewerCanResetPassword �
   it("the new refusal is a plain AdminResetRefusal value (no wire value — the route still answers the uniform 404)", () => {
     const r: AdminResetRefusal = "target_not_proper_subset";
     expect(r).toBe("target_not_proper_subset");
+  });
+});
+
+// ── T-003-B20 ★ (review of B05): the mapper must never turn a refusal into a 500 ──
+//
+// Once step 1 has passed, `decideMemberAuthority(reset_password)` can only
+// answer `ok`, `owner_only` or `target_not_below_actor` (same `manage_members`
+// floor, no grant axis). Any other answer means the two copies of "who may"
+// drifted. The old mapper THREW, which reached the wire as a 500: a status that
+// stands out against this endpoint's uniform 404, and so an oracle of its own.
+// Fail-closed now means refusing with `authority_rule_drift`, which maps to the
+// same 404. The service logs it at error level, so the drift is still loud.
+describe("T-003-B20 · mapResetAuthorityRefusal — fail closed, never throw", () => {
+  const cases: Array<[string, MemberAuthorityResult, AdminResetRefusal | null]> = [
+    ["ok", { ok: true }, null],
+    [
+      "owner_only",
+      { ok: false, reason: "owner_only", excess: [CAPABILITY_FULL_ACCESS] },
+      "target_is_owner",
+    ],
+    [
+      "target_not_below_actor / equal",
+      { ok: false, reason: "target_not_below_actor", relation: "equal", excess: [] },
+      "target_not_proper_subset",
+    ],
+    [
+      "target_not_below_actor / superset",
+      { ok: false, reason: "target_not_below_actor", relation: "superset", excess: ["x"] },
+      "target_not_proper_subset",
+    ],
+    [
+      "target_not_below_actor / incomparable",
+      { ok: false, reason: "target_not_below_actor", relation: "incomparable", excess: ["x"] },
+      "target_not_proper_subset",
+    ],
+    [
+      "forbidden (step 1 drifted)",
+      { ok: false, reason: "forbidden", excess: [CAPABILITY_MANAGE_MEMBERS] },
+      "authority_rule_drift",
+    ],
+    [
+      "exceeds_actor (reset has no grant axis — drift)",
+      { ok: false, reason: "exceeds_actor", excess: ["x"] },
+      "authority_rule_drift",
+    ],
+  ];
+
+  for (const [label, result, expected] of cases) {
+    it(`${label} → ${String(expected)}`, () => {
+      expect(() => mapResetAuthorityRefusal(result)).not.toThrow();
+      expect(mapResetAuthorityRefusal(result)).toBe(expected);
+    });
+  }
+
+  it("a reason this file has never heard of → authority_rule_drift (refused): no throw, never allowed", () => {
+    const future = {
+      ok: false,
+      reason: "some_future_reason",
+      excess: [],
+    } as unknown as MemberAuthorityResult;
+    expect(() => mapResetAuthorityRefusal(future)).not.toThrow();
+    expect(mapResetAuthorityRefusal(future)).toBe("authority_rule_drift");
+  });
+
+  it("decideAdminReset never throws over every caller × target pair of a small universe; every refusal is a known value", () => {
+    const keys = [
+      CAPABILITY_MANAGE_MEMBERS,
+      "manage_products",
+      "manage_orders",
+      "view_orders",
+      "mystery_key",
+    ];
+    const sets: string[][] = [[CAPABILITY_FULL_ACCESS]];
+    for (let mask = 0; mask < 1 << keys.length; mask++) {
+      sets.push(keys.filter((_, i) => mask & (1 << i)));
+    }
+    const known = new Set<AdminResetRefusal>([
+      "caller_not_authorized",
+      "target_not_active_member",
+      "target_active_in_other_org",
+      "target_is_owner",
+      "target_not_proper_subset",
+      "caller_is_target",
+      "authority_rule_drift",
+    ]);
+    let refusedOnSubset = 0;
+    let evaluated = 0;
+    for (const c of sets)
+      for (const t of sets) {
+        const d = decideAdminReset(input({ caller: active(c), target: active(t) }));
+        evaluated += 1;
+        for (const r of d.refusals) expect(known.has(r), r).toBe(true);
+        // Reached through the real authority fn, the drift refusal never fires.
+        expect(d.refusals).not.toContain("authority_rule_drift");
+        if (d.refusals.includes("target_not_proper_subset")) refusedOnSubset += 1;
+      }
+    expect(evaluated).toBe(sets.length * sets.length);
+    expect(refusedOnSubset).toBeGreaterThan(100); // non-vacuity
   });
 });

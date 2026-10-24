@@ -81,7 +81,15 @@ export type AdminResetRefusal =
    * change-password, and someone who does not needs the F-081 recovery flow —
    * which D-030 already made the only route to an Owner account.
    */
-  | "caller_is_target";
+  | "caller_is_target"
+  /**
+   * T-003-B20 — `decideMemberAuthority` answered something this route cannot
+   * produce once the caller passed step 1 (`forbidden`, `exceeds_actor`, or a
+   * reason added later). The rules drifted apart. Refused (fail-closed) with
+   * the same 404; the service logs it at error level. No security event: it
+   * says nothing about the target, only about our code.
+   */
+  | "authority_rule_drift";
 
 /** One side's membership as read INSIDE the transaction (M-2: never a client
  *  read from before the lock). `status: null` = no membership row at all. */
@@ -196,14 +204,25 @@ export function decideAdminReset(input: AdminResetInput): AdminResetDecision {
     actorIsTarget: input.callerIsTarget,
     targetCurrentCapabilities: input.target.capabilities,
   });
-  const refusal = mapAuthorityRefusal(authority);
+  const refusal = mapResetAuthorityRefusal(authority);
   if (refusal !== null) refusals.push(refusal);
 
   return refusals.length > 0 ? refuse(...refusals) : ALLOWED;
 }
 
-/** `decideMemberAuthority(reset_password)` → this route's refusal names (architecture §1 table). */
-function mapAuthorityRefusal(result: MemberAuthorityResult): AdminResetRefusal | null {
+/**
+ * `decideMemberAuthority(reset_password)` → this route's refusal names
+ * (architecture §1 table). Exported for its own tests only (not on the barrel).
+ *
+ * T-003-B20 (review of B05): this NEVER throws. `forbidden` is step 1's job
+ * (the same `manage_members` floor) and `reset_password` has no grant axis, so
+ * any other answer means the two copies of "who may" drifted. It used to throw,
+ * which reached the wire as a 500: a status that stands out against the
+ * uniform 404, so the refusal itself became an oracle. Now it refuses with
+ * `authority_rule_drift`. That is fail-closed (never "allowed"), it maps to
+ * the same 404, and the service logs it at error level, so it is still loud.
+ */
+export function mapResetAuthorityRefusal(result: MemberAuthorityResult): AdminResetRefusal | null {
   if (result.ok) return null;
   switch (result.reason) {
     case "owner_only":
@@ -211,10 +230,7 @@ function mapAuthorityRefusal(result: MemberAuthorityResult): AdminResetRefusal |
     case "target_not_below_actor":
       return "target_not_proper_subset";
     default:
-      // `forbidden` is step 1's job (same `manage_members` check) and
-      // `reset_password` has no grant axis — reaching here means the two
-      // copies of "who may" drifted. Fail loud, never map to "allowed".
-      throw new Error(`decideAdminReset: unexpected authority refusal ${result.reason}`);
+      return "authority_rule_drift";
   }
 }
 
