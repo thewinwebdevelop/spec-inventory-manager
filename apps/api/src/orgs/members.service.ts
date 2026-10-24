@@ -37,19 +37,16 @@
 //    `409 CONFLICT` + `details.reason="busy"` (§5.2) via `runInOrgLockTransaction`.
 import { Inject, Injectable } from "@nestjs/common";
 import {
-  LastOwnerError,
-  assertOwnerRemains,
   canAssignRole,
   isOwnerRole,
   toMemberRow,
   type MemberRow,
   type MembershipStatus,
-  type OwnerChange,
-  type OwnerMembership,
 } from "@omnistock/core-domain";
-import { domainError } from "../common";
+import { LIVE_ROLE_WHERE, domainError } from "../common";
 import { paginate, type KeysetCursor } from "../common/cursor";
 import { SecurityEventsService } from "../auth";
+import { OrgOwnershipGuard } from "./org-ownership.guard";
 import {
   ORG_PRISMA,
   OrgContextStore,
@@ -126,14 +123,6 @@ interface MemberListRow {
   readonly user: { readonly email: string };
 }
 
-/** A membership whose CURRENT role holds `full_access` — any status (§5). */
-interface OwnerCandidateRow {
-  readonly userId: string;
-  readonly roleId: string;
-  readonly status: string;
-  readonly role: { readonly capabilities: string[] };
-}
-
 /** A pending invitation being cancelled alongside a revocation (I-1). */
 interface PendingInvitationRow {
   readonly id: string;
@@ -147,6 +136,8 @@ export class MembersService {
     @Inject(ORG_PRISMA) private readonly prisma: OrgScopedPrismaClient,
     @Inject(OrgContextStore) private readonly store: OrgContextStore,
     @Inject(SecurityEventsService) private readonly events: SecurityEventsService,
+    // F-003 (architecture §2): the ONE "who are the owners" query, shared with RolesService.
+    @Inject(OrgOwnershipGuard) private readonly ownership: OrgOwnershipGuard,
   ) {}
 
   // ── §3.7 GET /orgs/{orgId}/members ───────────────────────────────────────
@@ -296,8 +287,9 @@ export class MembersService {
         //
         // A comment that overstates a guarantee is worse than none, because the
         // next reader stops checking.
+        // LIVE: a soft-deleted role answers exactly like an unknown id (I3-10).
         const newRole = await tx.role.findFirst({
-          where: { id: input.roleId },
+          where: { id: input.roleId, ...LIVE_ROLE_WHERE },
           select: { id: true, name: true, key: true, capabilities: true },
         });
         if (!newRole)
@@ -315,7 +307,7 @@ export class MembersService {
         });
         if (!allowed) throw domainError("FORBIDDEN");
 
-        await this.assertOwnerRemainsInTx(tx, {
+        await this.ownership.assertOwnerRemainsInTx(tx, {
           kind: "role_change",
           userId: input.targetUserId,
           newRoleCapabilities: newRole.capabilities,
@@ -416,7 +408,10 @@ export class MembersService {
         });
         if (!allowed) throw domainError("FORBIDDEN");
 
-        await this.assertOwnerRemainsInTx(tx, { kind: "revoke", userId: input.targetUserId });
+        await this.ownership.assertOwnerRemainsInTx(tx, {
+          kind: "revoke",
+          userId: input.targetUserId,
+        });
 
         return this.writeRevocation(tx, {
           organizationId,
@@ -484,7 +479,7 @@ export class MembersService {
         const self = await this.readActiveMembership(tx, actorUserId);
         if (!self) throw domainError("ORG_ACCESS_DENIED");
 
-        await this.assertOwnerRemainsInTx(tx, { kind: "revoke", userId: actorUserId });
+        await this.ownership.assertOwnerRemainsInTx(tx, { kind: "revoke", userId: actorUserId });
 
         const written = await this.writeRevocation(tx, {
           organizationId,
@@ -553,54 +548,6 @@ export class MembersService {
     // mid-flight is a caller who no longer belongs here.
     if (!actor) throw domainError("ORG_ACCESS_DENIED");
     return actor.role.capabilities;
-  }
-
-  /**
-   * `assertOwnerRemains` over the owners of THIS org, read through `tx`.
-   *
-   * The `where` selects memberships whose CURRENT role holds `full_access`, in
-   * ANY status — the pure fn filters the statuses itself and needs the full set
-   * to do it (a caller that pre-filtered to `active` would hide nothing, but a
-   * caller that pre-filtered wrongly would hide the last Owner).
-   */
-  private async assertOwnerRemainsInTx(tx: OrgLockTx, change: OwnerChange): Promise<void> {
-    // ★ B-8 — the `organizationId` filter on the ROLE is explicit.
-    //
-    // `withOrgScope` injects `organizationId` at the top level of `Membership`
-    // (correct), but a nested `role: { … }` condition walks into `Role` with no
-    // org filter of its own. Before B-1's composite foreign key, a membership
-    // could point at another shop's role — and this query would then have
-    // counted that person as an Owner OF THIS SHOP, computing the
-    // "at least one Owner" invariant from a row belonging to somebody else.
-    //
-    // B-1 makes that state unrepresentable, so this line is not what makes the
-    // count correct today. It is here because the invariant should not depend
-    // on a constraint in another package to be readable as correct — and
-    // because `count owners of THIS org` is what the query means.
-    const organizationId = this.requireOrganizationId();
-    const owners: readonly OwnerCandidateRow[] = await tx.membership.findMany({
-      where: { role: { organizationId, capabilities: { has: "full_access" } } },
-      select: {
-        userId: true,
-        roleId: true,
-        status: true,
-        role: { select: { capabilities: true } },
-      },
-    });
-    const input: readonly OwnerMembership[] = owners.map((row) => ({
-      userId: row.userId,
-      roleId: row.roleId,
-      status: row.status as MembershipStatus,
-      capabilities: row.role.capabilities,
-    }));
-    try {
-      assertOwnerRemains({ owners: input, change });
-    } catch (error) {
-      // The pure fn throws its own typed error (it must not know about HTTP);
-      // this is the ONE place it becomes a wire result.
-      if (error instanceof LastOwnerError) throw domainError("LAST_OWNER");
-      throw error;
-    }
   }
 
   /**

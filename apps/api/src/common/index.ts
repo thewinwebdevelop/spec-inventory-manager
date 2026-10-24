@@ -1,11 +1,6 @@
 // R1 — public surface of the cross-cutting `common/` layer (backend.md §2.2).
 // Feature modules import error primitives from here, not from deep files.
-export {
-  ERROR_CODES,
-  codeForStatus,
-  type ErrorCodeDef,
-  type ErrorCodeKey,
-} from "./error-codes";
+export { ERROR_CODES, codeForStatus, type ErrorCodeDef, type ErrorCodeKey } from "./error-codes";
 export {
   DomainException,
   domainError,
@@ -16,3 +11,5 @@ export {
 // server-issued, never read from the request. What the caller sent is only an
 // upstream correlation id, and it is used for logging.
 export { DomainExceptionFilter, extractUpstreamRequestId } from "./domain-exception.filter";
+// F-003 (data-model §2.2) — the live-role filter every `Role` read for use spreads in.
+export { LIVE_ROLE_WHERE } from "./live-role";

@@ -1,0 +1,15 @@
+// G3-11 red: a listed method takes the lock, but the second Role write runs
+// AFTER the callback returned — no lock is held there.
+class RolesService {
+  async update(input) {
+    const before = await runInOrgLockTransaction(
+      this.prisma,
+      async (tx) => {
+        await tx.role.updateMany({ where: { id: input.id, version: input.version }, data: {} });
+        return input;
+      },
+      { operation: "updateRole" },
+    );
+    await this.prisma.role.update({ where: { id: input.id }, data: { name: before.name } });
+  }
+}

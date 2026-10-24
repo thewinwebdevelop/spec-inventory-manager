@@ -36,6 +36,7 @@ import { InvitationRedemptionController } from "./invitation-redemption.controll
 import { InvitationsService } from "./invitations.service";
 import { MembershipController } from "./membership.controller";
 import { MembersService } from "./members.service";
+import { OrgOwnershipGuard } from "./org-ownership.guard";
 import { TaxProfileController } from "./tax-profile.controller";
 import { TaxProfileService } from "./tax-profile.service";
 import { InvitationLookupService } from "./system/invitation-lookup.service";
@@ -82,6 +83,9 @@ import { PlanProvisioningService } from "./system/plan-provisioning.service";
     // T-002-18 — serves both membership controllers: one service, one
     // transaction shape, one place the Owner ≥ 1 invariant is evaluated.
     MembersService,
+    // F-003 (architecture §2) — the Owner ≥ 1 read, shared by MembersService
+    // and (B24/B25) RolesService; one query, no copies.
+    OrgOwnershipGuard,
     InvitationsService,
     RolesService,
     // `system/` providers are registered here, not exported: nothing outside

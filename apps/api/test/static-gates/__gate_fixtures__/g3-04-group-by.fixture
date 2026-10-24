@@ -1,0 +1,4 @@
+// G3-04 red: an aggregate over roles counts deleted rows unless it says it means to.
+async function perCap(prisma) {
+  return prisma.role.groupBy({ by: ["isSystem"], _count: true });
+}

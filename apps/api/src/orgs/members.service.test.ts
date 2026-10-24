@@ -29,6 +29,7 @@ import {
 } from "../auth/security-events.service";
 import { OrgContextStore } from "../tenancy";
 import { MembersService } from "./members.service";
+import { OrgOwnershipGuard } from "./org-ownership.guard";
 
 const ORG_ID = "org_ctx";
 const OWNER = "usr_owner";
@@ -43,7 +44,12 @@ const ROLE_ADMIN = {
   key: "admin",
   capabilities: ["manage_members", "manage_org_settings"],
 };
-const ROLE_STAFF = { id: "rol_staff", name: "Staff", key: "staff", capabilities: ["view_products"] };
+const ROLE_STAFF = {
+  id: "rol_staff",
+  name: "Staff",
+  key: "staff",
+  capabilities: ["view_products"],
+};
 
 interface FakeMembership {
   id: string;
@@ -94,11 +100,20 @@ function createService(options: {
   readonly memberships: readonly FakeMembership[];
   readonly invitations?: readonly FakeInvitation[];
   readonly actor?: string;
-  readonly roles?: readonly { id: string; name: string; key: string; capabilities: string[] }[];
+  readonly roles?: readonly {
+    id: string;
+    name: string;
+    key: string;
+    capabilities: string[];
+    deletedAt?: Date | null;
+  }[];
 }) {
   const memberships = options.memberships.map((m) => ({ ...m }));
   const invitations = (options.invitations ?? []).map((i) => ({ ...i }));
-  const roles = (options.roles ?? ROLES).map((r) => ({ ...r }));
+  const roles = (options.roles ?? ROLES).map((r) => ({
+    deletedAt: null as Date | null | undefined,
+    ...r,
+  }));
   const calls: string[] = [];
   const txOptions: unknown[] = [];
 
@@ -143,9 +158,7 @@ function createService(options: {
         data: Record<string, unknown>;
       }) => {
         calls.push(`${channel}:membership.update`);
-        const found = memberships.find(
-          (m) => m.userId === args.where.organizationId_userId.userId,
-        );
+        const found = memberships.find((m) => m.userId === args.where.organizationId_userId.userId);
         if (!found) throw new Error("membership.update: no such row");
         Object.assign(found, args.data);
         return project(found);
@@ -165,9 +178,12 @@ function createService(options: {
     }),
     membership: membershipDelegate("tx"),
     role: {
-      findFirst: vi.fn(async (args: { where: { id: string } }) => {
+      // Honours `deletedAt: null` like Postgres does — a fake that ignored the
+      // filter would let a live-read bug through (F-003 · LIVE_ROLE_WHERE).
+      findFirst: vi.fn(async (args: { where: { id: string; deletedAt?: null } }) => {
         calls.push("tx:role.findFirst");
-        return roles.find((r) => r.id === args.where.id) ?? null;
+        const liveOnly = "deletedAt" in args.where && args.where.deletedAt === null;
+        return roles.find((r) => r.id === args.where.id && !(liveOnly && r.deletedAt)) ?? null;
       }),
     },
     invitation: {
@@ -201,7 +217,7 @@ function createService(options: {
   const sink: SecurityEventCollector = collectSecurityEvents(events);
   const store = new OrgContextStore();
   const actorUserId = options.actor ?? OWNER;
-  const service = new MembersService(prisma as never, store, events);
+  const service = new MembersService(prisma as never, store, events, new OrgOwnershipGuard(store));
 
   return {
     service,
@@ -284,7 +300,10 @@ describe("MembersService.list — api-spec §3.7", () => {
 
   it("a status filter is passed straight through", async () => {
     const ctx = createService({
-      memberships: [member(OWNER, ROLE_OWNER.id), member(STAFF, ROLE_STAFF.id, { status: "revoked" })],
+      memberships: [
+        member(OWNER, ROLE_OWNER.id),
+        member(STAFF, ROLE_STAFF.id, { status: "revoked" }),
+      ],
     });
     const page = await ctx.run(() =>
       ctx.service.list({ status: "revoked", limit: 25, withTotal: false }),
@@ -373,7 +392,12 @@ describe("MembersService.updateRole — api-spec §3.8", () => {
       where: { organizationId_userId: { organizationId: ORG_ID, userId: STAFF } },
       data: { roleId: ROLE_ADMIN.id },
     });
-    expect(row).toMatchObject({ userId: STAFF, roleName: "Admin", roleKey: "admin", isOwner: false });
+    expect(row).toMatchObject({
+      userId: STAFF,
+      roleName: "Admin",
+      roleKey: "admin",
+      isOwner: false,
+    });
   });
 
   it("★ emits role_changed POST-COMMIT with grantsFullAccess — the escalation flag", async () => {
@@ -542,6 +566,27 @@ describe("MembersService.updateRole — api-spec §3.8", () => {
         ctx.run(() => ctx.service.updateRole({ targetUserId: STAFF, roleId: "rol_other_org" })),
       ),
     ).toBe("ROLE_INVALID");
+    expect(ctx.tx.membership.update).not.toHaveBeenCalled();
+  });
+});
+
+describe("MembersService.updateRole — live roles only (F-003 · data-model §2.2)", () => {
+  it("★ 422 ROLE_INVALID for a soft-deleted role — the same answer as an unknown id (I3-10)", async () => {
+    const deleted = {
+      ...ROLE_ADMIN,
+      id: "rol_deleted",
+      deletedAt: new Date("2026-10-01T00:00:00Z"),
+    };
+    const ctx = createService({
+      memberships: [member(OWNER, ROLE_OWNER.id), member(STAFF, ROLE_STAFF.id)],
+      roles: [...ROLES, deleted],
+    });
+    expect(
+      await codeOf(
+        ctx.run(() => ctx.service.updateRole({ targetUserId: STAFF, roleId: deleted.id })),
+      ),
+    ).toBe("ROLE_INVALID");
+    expect(ctx.tx.role.findFirst.mock.calls[0]![0].where).toMatchObject({ deletedAt: null });
     expect(ctx.tx.membership.update).not.toHaveBeenCalled();
   });
 });

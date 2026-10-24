@@ -67,7 +67,7 @@ export class OrgScopeGuard implements CanActivate {
    * not a proven membership, which is exactly what makes it worth recording.
    */
   private recordDenial(
-    reason: "no_membership" | "revoked" | "not_active" | "mismatch",
+    reason: "no_membership" | "revoked" | "not_active" | "role_deleted" | "mismatch",
     auth: OrgAuthState,
     organizationId: string | undefined,
   ): void {
@@ -148,14 +148,15 @@ export class OrgScopeGuard implements CanActivate {
         // §1.1 declares the tier; F-085 brings `SuperAdminGuard` + `@Audited`.
         // Until then a cross-org route is refused — an unenforced tier must
         // never be the permissive one.
-        this.logger.warn(`@SystemScoped() route ${route} refused: SuperAdminGuard lands with F-085`);
+        this.logger.warn(
+          `@SystemScoped() route ${route} refused: SuperAdminGuard lands with F-085`,
+        );
         throw domainError("FORBIDDEN");
 
-      case "org":
-        {
-          const requested = req.params?.orgId;
-          return this.decideOrgScoped(auth, typeof requested === "string" ? requested : undefined);
-        }
+      case "org": {
+        const requested = req.params?.orgId;
+        return this.decideOrgScoped(auth, typeof requested === "string" ? requested : undefined);
+      }
     }
   }
 
@@ -177,6 +178,10 @@ export class OrgScopeGuard implements CanActivate {
       case "no_membership":
       case "revoked":
       case "not_active":
+      case "role_deleted":
+        // F-003 §8: `role_deleted` (active membership on a soft-deleted role)
+        // is fail-closed into the same answer; the event keeps the real reason.
+        //
         // One code for all three — including "the org does not exist" (I-5).
         // ⛔ Never split these: differentiating them is a cross-tenant existence
         // oracle. `FORBIDDEN` stays reserved for "member, but lacks capability".

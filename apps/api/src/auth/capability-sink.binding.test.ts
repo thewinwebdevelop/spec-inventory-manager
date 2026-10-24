@@ -27,10 +27,7 @@ import {
 import { CAPABILITY_MANAGE_MEMBERS } from "@omnistock/core-domain";
 import { PrismaService } from "../prisma/prisma.service";
 import { TenancyModule } from "../tenancy/tenancy.module";
-import {
-  ACCESS_TOKEN_VERIFIER,
-  type AccessTokenVerifier,
-} from "../tenancy/access-token-verifier";
+import { ACCESS_TOKEN_VERIFIER, type AccessTokenVerifier } from "../tenancy/access-token-verifier";
 import { SecurityEventsService, collectSecurityEvents } from "./security-events.service";
 import { AppModule } from "../app.module";
 
@@ -62,9 +59,7 @@ class FakeAuthModule {}
   imports: [
     TenancyModule.withCompositionRootBindings({
       imports: [FakeAuthModule],
-      providers: [
-        { provide: CAPABILITY_EVENT_SINK_OVERRIDE, useExisting: SecurityEventsService },
-      ],
+      providers: [{ provide: CAPABILITY_EVENT_SINK_OVERRIDE, useExisting: SecurityEventsService }],
     }),
     FakeAuthModule,
   ],
@@ -82,7 +77,7 @@ describe("CAPABILITY_EVENT_SINK → SecurityEventsService (T-002-13)", () => {
     };
     const membership = {
       status: "active",
-      role: { capabilities: [] as string[] },
+      role: { capabilities: [] as string[], deletedAt: null }, // F-003: selected; null = live role
       organization: { status: "active" },
     };
     const fakePrisma: Record<string, unknown> = {
@@ -148,8 +143,7 @@ describe("CAPABILITY_EVENT_SINK → SecurityEventsService (T-002-13)", () => {
     // the log-only sink.
     expect(dynamic).toBeDefined();
     const bound = dynamic?.providers?.find((p) => p.provide === CAPABILITY_EVENT_SINK_OVERRIDE) as
-      | { useExisting?: unknown }
-      | undefined;
+      { useExisting?: unknown } | undefined;
     expect(bound?.useExisting).toBe(SecurityEventsService);
   });
 });

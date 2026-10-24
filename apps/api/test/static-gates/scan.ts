@@ -174,3 +174,88 @@ export function elements(value: string): string[] {
 /** Inner text of an object-literal value, or null when it is not a literal. */
 export const objectInner = (value: string): string | null =>
   value.startsWith("{") ? balancedArgs(value, 0) : null;
+
+// ── AST helpers (F-003 · T-003-B15 fix round 1) — method-scoped, not file-wide ──
+
+const parse = (text: string): ts.SourceFile =>
+  ts.createSourceFile("s.ts", text, ts.ScriptTarget.Latest, true, ts.ScriptKind.TS);
+
+/** A class method DECLARATION (never a call site that happens to share its name). */
+export interface MethodSpan {
+  readonly name: string; // `Class.method`
+  readonly start: number;
+  readonly end: number;
+  readonly node: ts.MethodDeclaration;
+  readonly sf: ts.SourceFile;
+}
+
+/** Every `Class.method` declared in `text`, from the TypeScript AST. */
+export function classMethods(text: string): MethodSpan[] {
+  const sf = parse(text);
+  const out: MethodSpan[] = [];
+  const visit = (node: ts.Node): void => {
+    if (ts.isMethodDeclaration(node) && ts.isClassDeclaration(node.parent) && node.parent.name) {
+      out.push({
+        name: `${node.parent.name.text}.${node.name.getText(sf)}`,
+        start: node.getStart(sf),
+        end: node.getEnd(),
+        node,
+        sf,
+      });
+    }
+    ts.forEachChild(node, visit);
+  };
+  visit(sf);
+  return out;
+}
+
+/** `Class.method` whose declaration encloses `pos`, or `<module>`. */
+export function enclosingMethod(text: string, pos: number): string {
+  const inner = classMethods(text)
+    .filter((m) => pos >= m.start && pos < m.end)
+    .sort((a, b) => b.start - a.start)[0];
+  return inner?.name ?? "<module>";
+}
+
+/** One `runInOrgLockTransaction(client, callback, { operation })` inside a method. */
+export interface LockCall {
+  /** `[start, end)` of the callback argument — the only place the lock is held. */
+  readonly callback: readonly [number, number] | null;
+  /** The string literal passed as `operation`, or null when absent / not a literal. */
+  readonly operation: string | null;
+}
+
+/** Every `runInOrgLockTransaction(…)` call in `method`'s OWN body. */
+export function lockCallsIn(method: MethodSpan): LockCall[] {
+  const out: LockCall[] = [];
+  const visit = (node: ts.Node): void => {
+    if (
+      ts.isCallExpression(node) &&
+      /(?:^|\.)runInOrgLockTransaction$/.test(node.expression.getText(method.sf))
+    ) {
+      const cb = node.arguments[1];
+      const opts = node.arguments[2];
+      let operation: string | null = null;
+      if (opts && ts.isObjectLiteralExpression(opts)) {
+        for (const p of opts.properties) {
+          if (
+            ts.isPropertyAssignment(p) &&
+            p.name.getText(method.sf) === "operation" &&
+            ts.isStringLiteralLike(p.initializer)
+          )
+            operation = p.initializer.text;
+        }
+      }
+      out.push({
+        callback:
+          cb && (ts.isArrowFunction(cb) || ts.isFunctionExpression(cb))
+            ? [cb.getStart(method.sf), cb.getEnd()]
+            : null,
+        operation,
+      });
+    }
+    ts.forEachChild(node, visit);
+  };
+  if (method.node.body) visit(method.node.body);
+  return out;
+}

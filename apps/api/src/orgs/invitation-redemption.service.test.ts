@@ -113,6 +113,7 @@ interface Options {
     name: string;
     key: string | null;
     capabilities: string[];
+    deletedAt?: Date | null;
   }[];
   readonly acceptorEmail?: string;
   readonly acceptorCreatedAt?: Date;
@@ -125,7 +126,10 @@ function createService(options: Options = {}) {
   const txRow = options.inTx === undefined ? located : options.inTx;
   const invitations = txRow ? [{ ...txRow }] : [];
   const memberships = (options.memberships ?? []).map((m) => ({ ...m }));
-  const roles = (options.roles ?? [ROLE_STAFF]).map((r) => ({ ...r }));
+  const roles = (options.roles ?? [ROLE_STAFF]).map((r) => ({
+    deletedAt: null as Date | null | undefined,
+    ...r,
+  }));
   const calls: string[] = [];
   const lockedOrgIds: string[] = [];
 
@@ -155,9 +159,11 @@ function createService(options: Options = {}) {
       }),
     },
     role: {
-      findFirst: vi.fn(async (args: { where: { id: string } }) => {
+      // Honours `deletedAt: null` like Postgres (F-003 · LIVE_ROLE_WHERE).
+      findFirst: vi.fn(async (args: { where: { id: string; deletedAt?: null } }) => {
         calls.push("tx:role.findFirst");
-        return roles.find((r) => r.id === args.where.id) ?? null;
+        const liveOnly = "deletedAt" in args.where && args.where.deletedAt === null;
+        return roles.find((r) => r.id === args.where.id && !(liveOnly && r.deletedAt)) ?? null;
       }),
     },
     membership: {
@@ -655,6 +661,18 @@ describe("InvitationsService.accept — the decision order (api-spec §3.15)", (
       ctx.service.accept({ userId: USER_ID, token: RAW_TOKEN, now: NOW }),
     );
     expect(error.code).toBe("INVITATION_ROLE_UNAVAILABLE");
+    expect(ctx.tx.membership.create).not.toHaveBeenCalled();
+  });
+
+  it("★ INVITATION_ROLE_UNAVAILABLE when the invited role is soft-deleted (B07 review L-4 · LIVE_ROLE_WHERE)", async () => {
+    const ctx = createService({
+      roles: [{ ...ROLE_STAFF, deletedAt: new Date("2026-10-01T00:00:00Z") }],
+    });
+    const error = await refusalOf(
+      ctx.service.accept({ userId: USER_ID, token: RAW_TOKEN, now: NOW }),
+    );
+    expect(error.code).toBe("INVITATION_ROLE_UNAVAILABLE");
+    expect(ctx.tx.role.findFirst.mock.calls[0]![0].where).toMatchObject({ deletedAt: null });
     expect(ctx.tx.membership.create).not.toHaveBeenCalled();
   });
 

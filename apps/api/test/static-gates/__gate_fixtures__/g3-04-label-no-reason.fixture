@@ -1,0 +1,5 @@
+// G3-04 red: the label is there but gives no reason.
+async function names(tx) {
+  // role-read: history
+  return tx.role.findMany({ select: { name: true } });
+}
