@@ -87,18 +87,18 @@ test("S9 · the Owner changes the Staff member's role, and the list says so", as
   // `reopenMembers`.
   await reopenMembers(ownerPage, orgId);
   const row = ownerPage.locator("li", { hasText: staffEmail });
-  await row.getByRole("button", { name: "เปลี่ยนสิทธิ์" }).click();
+  await row.getByRole("button", { name: "เปลี่ยนบทบาท" }).click();
 
-  const dialog = ownerPage.getByRole("dialog", { name: new RegExp(`เปลี่ยนสิทธิ์ของ`) });
+  const dialog = ownerPage.getByRole("dialog", { name: new RegExp(`เปลี่ยนบทบาทของ`) });
   await expect(dialog).toBeVisible();
   // The current role is stated in words, not implied by a filled radio (§14).
-  await expect(dialog.getByText("(สิทธิ์ปัจจุบัน)")).toBeVisible();
+  await expect(dialog.getByText("(บทบาทปัจจุบัน)")).toBeVisible();
   // Saving nothing is not an option: a write that changes nothing still writes
   // an audit row saying somebody did something they did not do.
-  await expect(dialog.getByRole("button", { name: "บันทึกสิทธิ์" })).toBeDisabled();
+  await expect(dialog.getByRole("button", { name: "บันทึกบทบาท" })).toBeDisabled();
 
   await dialog.getByRole("radio", { name: "ผู้ดูแล" }).check();
-  await dialog.getByRole("button", { name: "บันทึกสิทธิ์" }).click();
+  await dialog.getByRole("button", { name: "บันทึกบทบาท" }).click();
 
   await expect(dialog).toBeHidden({ timeout: 20_000 });
   await expect(ownerPage.locator("li", { hasText: staffEmail }).getByText("ผู้ดูแล")).toBeVisible({
