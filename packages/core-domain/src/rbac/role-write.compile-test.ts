@@ -8,9 +8,10 @@
 // (architecture §1 row `decideRoleWrite` · §1.3).
 //
 // Fix round 1 (security review M-1 · L-1): `next` is REQUIRED on update and
-// must be `ValidatedCapabilities` (or, for rename-only, `unchangedCapabilities`
-// of the role) — deciding on a forgotten or unvalidated `next` does not compile.
-import { decideRoleWrite, unchangedCapabilities } from "./role-write";
+// must be `ValidatedCapabilities` — deciding on a forgotten or unvalidated
+// `next` does not compile. Fix round 2 (review L-3): rename-only is the
+// sentinel `next: "unchanged"` (update only); there is no mintable brand.
+import { decideRoleWrite } from "./role-write";
 import { validateRoleCapabilities } from "./role-validation";
 
 const actorCapabilities = ["manage_roles", "manage_members"] as const;
@@ -21,7 +22,6 @@ export function compileOnly(): void {
   const v = validateRoleCapabilities(["manage_roles"]);
   if (!v.ok) return;
   const validated = v.capabilities;
-  const unchanged = unchangedCapabilities(role);
 
   // controls — the well-formed calls compile
   decideRoleWrite({
@@ -35,7 +35,7 @@ export function compileOnly(): void {
     op: "update",
     actorCapabilities,
     role,
-    next: unchanged,
+    next: "unchanged",
     otherActiveHolders: 0,
   });
   decideRoleWrite({ op: "delete", actorCapabilities, role, otherActiveHolders: 2 });
@@ -52,7 +52,7 @@ export function compileOnly(): void {
   // @ts-expect-error — unknown op
   decideRoleWrite({ op: "rename", actorCapabilities, role, otherActiveHolders: 0 });
 
-  // M-1 — update without `next` (rename-only must pass unchangedCapabilities(role))
+  // M-1 — update without `next` (rename-only must pass `next: "unchanged"`)
   // @ts-expect-error — `next` is required on update
   decideRoleWrite({ op: "update", actorCapabilities, role, otherActiveHolders: 0 });
   // L-1 — an unvalidated list is not a `next`
@@ -61,5 +61,7 @@ export function compileOnly(): void {
   // @ts-expect-error — create with a raw string[]
   decideRoleWrite({ op: "create", actorCapabilities, next: raw, otherActiveHolders: 0 });
   // @ts-expect-error — "unchanged" is not a create input (a new role has no current caps)
-  decideRoleWrite({ op: "create", actorCapabilities, next: unchanged, otherActiveHolders: 0 });
+  decideRoleWrite({ op: "create", actorCapabilities, next: "unchanged", otherActiveHolders: 0 });
+  // @ts-expect-error — only the literal "unchanged" is a sentinel
+  decideRoleWrite({ op: "update", actorCapabilities, role, next: "same", otherActiveHolders: 0 });
 }

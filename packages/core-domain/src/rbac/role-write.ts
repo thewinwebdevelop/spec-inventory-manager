@@ -26,7 +26,7 @@ import {
   type RegistryLike,
 } from "./registry";
 import { byKey, expandCapabilities } from "./expand";
-import { lostCapabilities } from "./canonical";
+import { canonicalizeCapabilities, lostCapabilities } from "./canonical";
 import { decideMemberAuthority, type TargetRelation } from "./member-authority";
 import type { ValidatedCapabilities } from "./role-validation";
 
@@ -46,32 +46,27 @@ interface Actor {
   readonly actorCapabilities: readonly string[];
 }
 
-declare const unchangedBrand: unique symbol;
-
 /**
- * "The role's capabilities stay as they are" — the `next` of a rename-only
- * PATCH (and of the `viewer.canEdit` verdict). Built only by
- * {@link unchangedCapabilities}; stored caps cannot be re-validated into
- * `ValidatedCapabilities` (a key may have become non-selectable since), and
- * must not be cast into it (G3-02). Accepted on `update` only.
+ * The rename-only `next` (update only): "the capabilities stay as they are".
+ * `decideRoleWrite` resolves it to `role.capabilities` ITSELF, so it can never
+ * disagree with the role being decided, and no caller can mint a
+ * skip-validation value from arbitrary caps (security review L-3). Stored caps
+ * are not re-validated (a key may have become non-selectable since) — they
+ * still go through every check below as both before and after.
  */
-export type UnchangedCapabilities = readonly string[] & { readonly [unchangedBrand]: true };
-
-/** The explicit rename-only `next`: a frozen copy of the role's current capabilities. */
-export function unchangedCapabilities(role: RoleWriteTarget): UnchangedCapabilities {
-  return Object.freeze([...role.capabilities]) as unknown as UnchangedCapabilities;
-}
+export const UNCHANGED = "unchanged";
 
 /**
  * Discriminated by `op`. `otherActiveHolders` is REQUIRED (no default 0): the
  * call site must count active memberships of this role whose user is not the
  * actor (architecture §1.3 "นับผู้ถือ"). A new role has no holder — `0` literal.
  *
- * `next` (fix round 1 — security review M-1 · L-1; tightens architecture §1's
- * `next?`) is REQUIRED on create and update and must be validated
- * (`validateRoleCapabilities`) — or `unchangedCapabilities(role)` for a
- * rename-only update. A forgotten / unvalidated `next` does not compile, and at
- * runtime a missing one throws instead of skipping the after-⊆ check.
+ * `next` (fix rounds 1–2 — security review M-1 · L-1 · L-3 · L-4; tightens
+ * architecture §1's `next?`) is REQUIRED on create and update and must be
+ * `validateRoleCapabilities` output — or the literal `"unchanged"` for a
+ * rename-only update. A forgotten / unvalidated `next` does not compile; at
+ * runtime a missing one throws instead of skipping the after-⊆ check, and
+ * create refuses a list that is not in validated (frozen, canonical) form.
  */
 export type RoleWriteInput =
   | (Actor & {
@@ -83,8 +78,8 @@ export type RoleWriteInput =
   | (Actor & {
       readonly op: "update";
       readonly role: RoleWriteTarget;
-      /** Capabilities AFTER the write. Rename-only: `unchangedCapabilities(role)`. */
-      readonly next: ValidatedCapabilities | UnchangedCapabilities;
+      /** Capabilities AFTER the write. Rename-only: `"unchanged"`. */
+      readonly next: ValidatedCapabilities | typeof UNCHANGED;
       readonly otherActiveHolders: number;
     })
   | (Actor & {
@@ -120,8 +115,29 @@ function fail(op: string, message: string): never {
   throw new Error(`decideRoleWrite(${op}): ${message}`);
 }
 
+/**
+ * Runtime shadow of the `ValidatedCapabilities` brand (L-4): the brand is
+ * type-only, so a create `next` must at least LOOK like
+ * `validateRoleCapabilities` output — a frozen, non-empty, canonical list of
+ * registry keys without `full_access`. Catches a cast/forged list, `"unchanged"`
+ * and non-arrays. (Selectability needs the full registry — that stays the
+ * validator's job and G3-02's.)
+ */
+function looksValidated(next: unknown, registry: RegistryLike): next is ValidatedCapabilities {
+  if (!Array.isArray(next) || !Object.isFrozen(next) || next.length === 0) return false;
+  const known = new Set(registry.map((c) => c.key));
+  if (next.some((k) => typeof k !== "string" || k === CAPABILITY_FULL_ACCESS || !known.has(k))) {
+    return false;
+  }
+  const canonical = canonicalizeCapabilities(next as readonly string[], registry);
+  return canonical.length === next.length && canonical.every((k, i) => k === next[i]);
+}
+
 /** Validates the shape a call site that bypassed the type could still send — fail loud, never "allowed". */
-function readInput(input: RoleWriteInput): {
+function readInput(
+  input: RoleWriteInput,
+  registry: RegistryLike,
+): {
   before: readonly string[] | null;
   after: readonly string[] | null;
   role: RoleWriteTarget | null;
@@ -138,8 +154,11 @@ function readInput(input: RoleWriteInput): {
   }
   if (input.op === "create") {
     if (holders !== 0) fail(op, "otherActiveHolders must be 0 — a new role has no holder");
-    if (!Array.isArray(input.next)) fail(op, "next is required");
-    return { before: null, after: input.next, role: null, holders };
+    const next: unknown = input.next;
+    if (!looksValidated(next, registry)) {
+      fail(op, "next must be ValidatedCapabilities (validateRoleCapabilities output)");
+    }
+    return { before: null, after: next, role: null, holders };
   }
   const role = (input as { role?: RoleWriteTarget }).role;
   if (!role || typeof role.isSystem !== "boolean" || !Array.isArray(role.capabilities)) {
@@ -147,8 +166,12 @@ function readInput(input: RoleWriteInput): {
   }
   if (input.op === "delete") return { before: role.capabilities, after: null, role, holders };
   // M-1: no default — a forgotten `next` must not read as "unchanged" and skip the after-⊆ leg.
+  // L-3: the sentinel resolves to the role's OWN caps — never to anything the caller supplies.
+  if (input.next === UNCHANGED) {
+    return { before: role.capabilities, after: role.capabilities, role, holders };
+  }
   if (!Array.isArray(input.next)) {
-    fail(op, "next is required (rename-only: pass unchangedCapabilities(role))");
+    fail(op, 'next is required (ValidatedCapabilities, or "unchanged" for rename-only)');
   }
   return { before: role.capabilities, after: input.next, role, holders };
 }
@@ -157,7 +180,7 @@ export function decideRoleWrite(
   input: RoleWriteInput,
   registry: RegistryLike = CAPABILITY_REGISTRY,
 ): RoleWriteResult {
-  const { before, after, role, holders } = readInput(input);
+  const { before, after, role, holders } = readInput(input, registry);
   const actor = input.actorCapabilities;
 
   // (0) floor `manage_roles` (SR-08) — expanded, so the Owner's `full_access` counts.

@@ -8,7 +8,6 @@
 import { describe, it, expect } from "vitest";
 import {
   decideRoleWrite,
-  unchangedCapabilities,
   ROLE_WRITE_OPS,
   type RoleWriteInput,
   type RoleWriteResult,
@@ -92,7 +91,7 @@ const update = (
         op: "update",
         actorCapabilities,
         role: custom(before),
-        next: unchangedCapabilities(custom(before)),
+        next: "unchanged",
         otherActiveHolders,
       }
     : {
@@ -142,7 +141,7 @@ describe("U-RB-12 · decideRoleWrite = architecture §13.6 D-034 Addendum table 
     ],
     [
       "R04",
-      "Admin A · custom R_B = A → rename only (`next` = unchangedCapabilities) · B holds",
+      'Admin A · custom R_B = A → rename only (next = "unchanged" sentinel) · B holds',
       update(A, A, undefined, 1),
       TNBA_EQUAL,
     ],
@@ -232,7 +231,7 @@ describe("U-RB-12 · the 8 extra rows (floor · lock · bypass · create · hold
     expect(decide(create(noRoles, ["y"]))).toEqual(FORBIDDEN);
     expect(decide(update(noRoles, ["y"], [], 0))).toEqual(FORBIDDEN);
     expect(decide(del(noRoles, ["y"], 0))).toEqual(FORBIDDEN);
-    expect(decide(create([], []))).toEqual(FORBIDDEN);
+    expect(decide(create([], ["y"]))).toEqual(FORBIDDEN);
   });
 
   it("+2 `isSystem` role → `role_locked` on update (incl. rename-only) and delete, for Admin and Owner (AC-4.1)", () => {
@@ -252,7 +251,7 @@ describe("U-RB-12 · the 8 extra rows (floor · lock · bypass · create · hold
           op: "update",
           actorCapabilities: actor,
           role: ownerRole,
-          next: unchangedCapabilities(ownerRole),
+          next: "unchanged",
           otherActiveHolders: 0,
         }),
       ).toEqual(LOCKED);
@@ -287,7 +286,8 @@ describe("U-RB-12 · the 8 extra rows (floor · lock · bypass · create · hold
   it("+5 create/clone: ⊆ on the new caps only — `exceeds_actor` when ⊄, ok when = actor", () => {
     expect(decide(create(A, A))).toEqual(OK);
     expect(decide(create(M, ["manage_members"]))).toEqual(exceeds(["manage_members"]));
-    expect(decide(create(A, ["w", "y", "zzz_unknown"]))).toEqual(exceeds(["w", "zzz_unknown"]));
+    // A list validation refuses never reaches the decision on create (L-4): it throws.
+    expect(() => decide(create(A, ["w", "y", "zzz_unknown"]))).toThrow(/ValidatedCapabilities/);
   });
 
   it("+6 otherActiveHolders = 0 / 1 / many on an equal role: only 0 passes", () => {
@@ -423,7 +423,7 @@ describe("U-RB-13 · reason order: floor → role_locked → bypass → exceeds_
         op: "update",
         actorCapabilities: OWNER,
         role: ownerRole,
-        next: unchangedCapabilities(ownerRole),
+        next: "unchanged",
         otherActiveHolders: 0,
       }),
     ).toEqual(LOCKED);
@@ -500,12 +500,72 @@ describe("U-RB-13 · reason order: floor → role_locked → bypass → exceeds_
     expect(decide(update(A, A, undefined, 0))).toEqual(OK);
   });
 
-  it("`unchangedCapabilities(role)` is a frozen copy of the role's current caps", () => {
-    const role = custom(["y", "manage_x"]);
-    const u = unchangedCapabilities(role);
-    expect([...u]).toEqual(["y", "manage_x"]);
-    expect(Object.isFrozen(u)).toBe(true);
-    expect(u).not.toBe(role.capabilities);
+  it('rename-only `next: "unchanged"` resolves to role.capabilities and runs EVERY check (review L-3)', () => {
+    const rename = (actor: readonly string[], before: readonly string[], holders: number) =>
+      decide({
+        op: "update",
+        actorCapabilities: actor,
+        role: custom(before),
+        next: "unchanged",
+        otherActiveHolders: holders,
+      });
+    // floor
+    expect(rename(["manage_members", "y"], ["y"], 0)).toEqual(FORBIDDEN);
+    // role_locked (Owner role, Owner actor)
+    expect(
+      decide({
+        op: "update",
+        actorCapabilities: OWNER,
+        role: { isSystem: true, capabilities: ["full_access"] },
+        next: "unchanged",
+        otherActiveHolders: 0,
+      }),
+    ).toEqual(LOCKED);
+    // ⊆ — before (= after) ⊄ actor
+    expect(rename(A, [...A, "w"], 0)).toEqual(exceeds(["w"]));
+    // held role, actor lacks manage_members → requires_manage_members
+    expect(rename(M, BELOW_M, 1)).toEqual(REQUIRES_MM);
+    // held role equal to the actor → target_not_below_actor (the ⊊ leg)
+    expect(rename(A, A, 1)).toEqual(TNBA_EQUAL);
+    // controls: ⊊ with a holder, and equal with no holder → ok
+    expect(rename(A, BELOW_A, 1)).toEqual(OK);
+    expect(rename(A, A, 0)).toEqual(OK);
+  });
+
+  it('`"unchanged"` is update-only: on create it throws (type half in the compile-test)', () => {
+    const c = { op: "create", actorCapabilities: A, next: "unchanged", otherActiveHolders: 0 };
+    expect(() => decide(c as unknown as RoleWriteInput)).toThrow(/ValidatedCapabilities/);
+    // and any other string on update is not a sentinel
+    const u = {
+      op: "update",
+      actorCapabilities: A,
+      role: custom(A),
+      next: "same",
+      otherActiveHolders: 0,
+    };
+    expect(() => decide(u as unknown as RoleWriteInput)).toThrow(/next is required/);
+  });
+
+  it("create throws on a `next` that is not validateRoleCapabilities output (review L-4)", () => {
+    const forged = (caps: readonly string[]) =>
+      ({
+        op: "create",
+        actorCapabilities: OWNER,
+        next: caps,
+        otherActiveHolders: 0,
+      }) as unknown as RoleWriteInput;
+    // Owner would pass ⊆ on all of these — the guard is what refuses them.
+    expect(() => decide(forged(["y"]))).toThrow(/ValidatedCapabilities/); // not frozen
+    expect(() => decide(forged(Object.freeze([])))).toThrow(/ValidatedCapabilities/); // empty
+    expect(() => decide(forged(Object.freeze(["full_access"])))).toThrow(/ValidatedCapabilities/);
+    expect(() => decide(forged(Object.freeze(["zzz_unknown"])))).toThrow(/ValidatedCapabilities/);
+    expect(() => decide(forged(Object.freeze(["y", "manage_x"])))).toThrow(/ValidatedCapabilities/); // not canonical (order)
+    expect(() => decide(forged(Object.freeze(["manage_x", "view_x"])))).toThrow(
+      /ValidatedCapabilities/,
+    ); // not canonical (implied kept)
+    expect(() => decide(forged("y" as unknown as string[]))).toThrow(/ValidatedCapabilities/);
+    // control: the real constructor's output passes
+    expect(decide(create(OWNER, ["y", "manage_x", "view_x"]))).toEqual(OK);
   });
 
   it("fails loud on a nonsensical count, an unknown op, or a create that claims holders", () => {
