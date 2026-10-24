@@ -99,6 +99,43 @@ jobs:
             --require "test/static-gates/g11-email-normalize.test.ts=7" \
             --require "test/static-gates/role-key-authority.gate.test.ts=44" \
             --min-passed 69
+      # F-003 T-003-DV05 (G3-07, test-plan §5.2) — Unicode parity. The role-name
+      # forbidden-character set of THIS lane's Node (.nvmrc) must be set-equal to
+      # (a) every escaped class in packages/db/prisma/migrations/**/migration.sql
+      # and (b) core-domain's ROLE_NAME_FORBIDDEN_CHARACTER. Both files already run
+      # inside `pnpm turbo test` above; as with G3-13 a green turbo run does not
+      # prove they ran, so re-run just them with a JSON report and guard the count.
+      # Each test also logs "[G3-07] N class(es) ... compared" (non-vacuity).
+      # A Node bump that grows the set is RED here; the fix is a NEW migration.
+      - name: G3-07 — Unicode parity of migration SQL vs Node (JSON report for the guard)
+        run: |
+          pnpm --filter @omnistock/db exec vitest run test/unicode-parity.test.ts \
+            --reporter=default --reporter=json --outputFile.json=/tmp/g307-db.json
+          pnpm --filter api exec vitest run test/role-name-charset-parity.test.ts \
+            --reporter=default --reporter=json --outputFile.json=/tmp/g307-api.json
+      - name: G3-07 lane-enabled guard — a renamed/deleted/skipped parity test is RED, not green
+        # Real counts: unicode-parity.test.ts=12, role-name-charset-parity.test.ts=1.
+        run: |
+          node tool/ci/assert-tests-ran.mjs \
+            --report /tmp/g307-db.json \
+            --lane "node-ci · G3-07 Unicode parity (packages/db)" \
+            --require "test/unicode-parity.test.ts=12" \
+            --min-passed 12
+          node tool/ci/assert-tests-ran.mjs \
+            --report /tmp/g307-api.json \
+            --lane "node-ci · G3-07 Unicode parity (core-domain half)" \
+            --require "test/role-name-charset-parity.test.ts=1" \
+            --min-passed 1
+      # F-003 T-003-DV05 — a Node bump changes the Unicode tables the parity gate
+      # above compares against. Warn (annotation, not a gate) so the reviewer knows
+      # before/why it may go red. PR runs only: there is a base to diff against.
+      - name: G3-07 — warn if .nvmrc changed in this PR
+        if: github.event_name == 'pull_request'
+        env:
+          BASE_SHA: ${{ github.event.pull_request.base.sha }}
+        run: |
+          git fetch --no-tags --depth=1 origin "$BASE_SHA"
+          node tool/ci/warn-nvmrc-changed.mjs --base "$BASE_SHA"
 
   # AC4/AC5/AC6/AC7/AC8 — one ephemeral Postgres, empty → migrated → introspected → trigger-armed (§3).
   db-migrate:
