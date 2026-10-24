@@ -46,11 +46,23 @@ SELECT count(*) FROM "Role"
 1. **ไม่มี instance F-002 เหลือ — ต้องมีหลักฐาน ไม่ใช่คำยืนยันด้วยวาจา (SR-03 delta):**
    รวบรวมรายการ image digest / build SHA ของ **ทุก process** ที่เสิร์ฟ route `members` / `invitations` / `auth` ในทุก region — รวม canary, worker, job runner ใด ๆ ที่เรียก service เหล่านี้ — ต้องตรงกับ commit ของ F-003 ทั้งหมด แนบรายการนี้ไว้ใน release record ของ environment นั้น (เจ้าของหลักฐาน: **devops**)
 2. **`backfill:f003` รายงาน 0 แถว** (idempotent — รันแล้วไม่มี role ที่ต้องเติม `manage_roles` เหลือ)
+   - คำสั่ง: `pnpm --filter api backfill:f003` (CLI อยู่ที่ `apps/api/scripts/backfill-f003.ts` — รันไฟล์ migration `f003_backfill_manage_roles` ไฟล์เดียวกันใน 1 tx · exit 1 ถ้ามี role ถือ key นอก registry)
+   - **หลังมี migration `f003_drop_admin_bridge` แล้ว CLI จะปฏิเสธ (exit 1) โดยตั้งใจ** — environment ที่ต้องตรวจข้อนี้หลังจากนั้น ใช้ query อ่านอย่างเดียวแทน (predicate ต้องตรงกับ §1 ของไฟล์ migration — ถ้าไฟล์เปลี่ยน ให้ยึดไฟล์):
+     ```sql
+     SELECT count(*) FROM "Role"
+      WHERE key = 'admin' AND "deletedAt" IS NULL AND "lastEditedAt" IS NULL
+        AND NOT ('manage_roles' = ANY(capabilities))
+        AND (SELECT array_agg(c COLLATE "C" ORDER BY c COLLATE "C") FROM unnest(capabilities) c)
+            = ARRAY['manage_channels','manage_members','manage_orders','manage_org_settings',
+                    'manage_products','manage_stock','view_financials'] COLLATE "C";
+     ```
+     ต้องได้ 0
 3. **G-06 / G-09 / G-11 / G-12 + I-45 (int) อยู่ในโค้ดของ commit ที่ deploy จริง และ CI log ของ commit นั้นแสดงว่ารันจริง** (นับจำนวนเทสต์ที่รันได้ > 0 — ห้ามเชื่อ "green locally")
    - **G-12 ขยายขอบเขตครอบ migration (SR-10):** ต้องมี fixture แดงจริง + non-vacuity + allowlist ที่มี `removeBy` สำหรับ `role_f003_admin_bridge` **อยู่ในโค้ดของ commit ที่ deploy** — ไม่พบ = ไม่เปิด flag (SR-10 ปิด "ในการออกแบบ" เท่านั้น จนกว่า G-12 จะอยู่ในโค้ดจริง)
    - ตรวจ repo ณ 2026-09-27: G-06/09/11/12 ยังไม่มี implementation, I-45 มีแค่ unit (ไม่มี int) — ต้องทำให้ครบก่อน PR แรกที่มี route เขียน role จึงจะเข้าเงื่อนไขนี้ได้
 
 **ใครทำอะไร:**
+
 - devops: ตั้ง `ROLE_WRITES_ENABLED=true` ต่อ environment หลังตรวจครบ 3 ข้อ + rolling restart F-003→F-003
 - release: เป็นเจ้าของจังหวะเปิด — **ห้าม** ประกาศใน release note/changelog ว่า D-034/D-035 มีผลแล้ว จนกว่าข้อ 1 จะครบสำหรับ environment นั้น (ช่วงสองรุ่น = ยังเป็น baseline F-002)
 
@@ -62,6 +74,7 @@ SELECT count(*) FROM "Role"
 - **เจ้าของการถอด:** backend-api (สร้าง migration `f003_drop_admin_bridge`: `DROP TRIGGER IF EXISTS … ; DROP FUNCTION IF EXISTS …`)
 - **บทบาทของ devops:** เป็นผู้ยืนยัน checkpoint (ข้อ 3.1) ที่ trigger ให้ backend-api เริ่มงานถอด — ไม่ใช่ผู้ถอดเอง
 - **การบังคับ (G-12 ขยายขอบเขต):** bridge อยู่ใน allowlist ที่มี `removeBy` (= วันที่ merge PR build ของ trigger + 60 วัน) — เลยวันแล้ว function ยังถูกสร้างใน migration ที่ไม่มี drop ตามหลัง ⇒ CI แดง (บังคับถอด อัตโนมัติผ่าน gate ไม่ใช่แค่ runbook)
+- **ห้ามรันไฟล์ SQL ของ `f003_backfill_manage_roles` ด้วยมือ (psql) — ใช้ `backfill:f003` เท่านั้น:** CLI มีด่านกันสร้าง bridge กลับหลังถอด (ปฏิเสธเมื่อเจอ `f003_drop_admin_bridge` ใน repo หรือใน `_prisma_migrations`) · รันไฟล์ด้วยมือข้ามด่านนี้ (ผล: function ค้างโดยไม่มี trigger — ไม่ให้สิทธิ์ใคร แต่เป็นขยะ) (security review B11 รอบ 2)
 - **ความเสี่ยงระหว่างที่ยังอยู่:** ฟีเจอร์ในอนาคตที่ insert Admin ด้วยชุด capability แบบ F-002 เป๊ะ จะได้ `manage_roles` เงียบ ๆ ผ่าน trigger — ยอมรับความเสี่ยงนี้ชั่วคราว เพราะ `removeBy` จำกัดอายุ และไม่มีโค้ดรุ่น F-003+ ที่ insert ชุด F-002 อีก
 
 อ้างอิง: `data-model.md` §4.2 (`role_f003_admin_bridge`), `forward-commitments.md` แถว "ถอด bridge trigger ของ backfill"
