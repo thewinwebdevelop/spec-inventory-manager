@@ -19,27 +19,46 @@
 // comparison, and boundaries that cannot be tested to the millisecond are
 // boundaries nobody has checked.
 
-import { CAPABILITY_MANAGE_MEMBERS, hasCapability } from "../auth/capabilities";
+import {
+  CAPABILITY_FULL_ACCESS,
+  CAPABILITY_MANAGE_MEMBERS,
+  hasCapability,
+} from "../auth/capabilities";
+import { CAPABILITY_MANAGE_ROLES } from "../rbac/registry";
+import { decideMemberAuthority } from "../rbac/member-authority";
 import { resolveInvitationStatus, type StoredInvitationStatus } from "./invitation-status";
+import { invitationExpiryFrom } from "./invitation-view";
 import type { MembershipStatus } from "./owner-invariant";
 
-/** TTL for a role that holds `full_access` or `manage_members` (D-028/I-7). */
+/** TTL for a role that holds `full_access`, `manage_members` or `manage_roles` (D-028/I-7 · F-003 AC-10.3). */
 export const INVITATION_TTL_HOURS_ELEVATED = 24;
 /** TTL for every other role — 7 days. */
 export const INVITATION_TTL_HOURS_STANDARD = 168;
 
 /**
- * "This role is a HIGH role" (data-model §5.2) == its capabilities hold
- * `full_access` OR `manage_members`.
+ * The capabilities that make a role "HIGH" (data-model §5.2 · F-003 architecture
+ * §6 / AC-10.3). `manage_roles` joined in F-003: whoever can rewrite roles can
+ * rewrite one they hold into anything below Owner, so a link carrying it is as
+ * powerful as one carrying `manage_members`.
+ */
+const ELEVATING_CAPABILITIES = Object.freeze([
+  CAPABILITY_FULL_ACCESS,
+  CAPABILITY_MANAGE_MEMBERS,
+  CAPABILITY_MANAGE_ROLES,
+] as const);
+
+/**
+ * "This role is a HIGH role" == its capabilities hold `full_access`,
+ * `manage_members` OR `manage_roles`.
  *
- * Expressed through `hasCapability`, whose `full_access` wildcard already covers
- * the first branch (pinned by U-CD-11) — one capability primitive, no second
- * interpretation of what full access means. Never compare `role.name`/`role.key`:
- * F-003 lets users rename roles and build custom ones, and a custom role holding
- * `manage_members` must get the short TTL automatically, with no code change.
+ * Expressed through `hasCapability` (which expands `full_access` and `implies`)
+ * — one capability primitive, no second interpretation of what a key grants.
+ * Takes CAPABILITIES only: never compare `role.name`/`role.key` — F-003 lets
+ * users rename roles and build custom ones, and a custom role holding
+ * `manage_roles` must get the short TTL automatically (U-RB-16).
  */
 export function isElevatedRole(roleCapabilities: readonly string[]): boolean {
-  return hasCapability(roleCapabilities, CAPABILITY_MANAGE_MEMBERS);
+  return ELEVATING_CAPABILITIES.some((key) => hasCapability(roleCapabilities, key));
 }
 
 /**
@@ -97,13 +116,49 @@ export interface AcceptorMembership {
   readonly revokedAt: Date | null;
 }
 
+/** The invitation's role as read LIVE inside the accept tx (org-scoped, not soft-deleted). */
+export interface AcceptableInvitationRole {
+  /** Its CURRENT capabilities — they drive the TTL leg (F-003 architecture §6 layer 2). */
+  readonly capabilities: readonly string[];
+}
+
+/**
+ * Deliberately has NO inviter field (U-RB-17): whether the person who issued
+ * the link may still grant it is `decideInviterRecheck`, run only after `ok`.
+ */
 export interface CanAcceptInvitationInput {
   readonly invitation: AcceptableInvitation;
   /** `null` when the user has no membership row in this org yet. */
   readonly membership: AcceptorMembership | null;
-  /** Does `invitation.roleId` still exist AND still belong to this org? (M-6) */
-  readonly roleExistsInOrg: boolean;
+  /**
+   * The invitation's role if it still exists AND still belongs to this org
+   * (M-6); `null` otherwise → `role_unavailable`. One field instead of a
+   * boolean + capabilities, so "exists" and "its capabilities" cannot disagree.
+   */
+  readonly role: AcceptableInvitationRole | null;
   readonly now: Date;
+}
+
+/**
+ * F-003 architecture §6 layer 2 / AC-10.4 — the expiry that binds at accept:
+ * `min(stored expiresAt, tokenIssuedAt + ttl(CURRENT capabilities))`.
+ * A role that became elevated after the link went out shortens it to 24h from
+ * issue; a role that lost power never extends it (the stored value still binds).
+ * `tokenIssuedAt + ttl` goes through `invitationExpiryFrom` — the same
+ * arithmetic create/reissue store — so the two cannot drift.
+ */
+function effectiveExpiresAt(
+  invitation: AcceptableInvitation,
+  role: AcceptableInvitationRole | null,
+): Date {
+  if (role === null) return invitation.expiresAt; // `role_unavailable` is decided after the clock
+  const byCurrentRole = invitationExpiryFrom(
+    invitation.tokenIssuedAt,
+    invitationTtlHours(role.capabilities),
+  );
+  return byCurrentRole.getTime() < invitation.expiresAt.getTime()
+    ? byCurrentRole
+    : invitation.expiresAt;
 }
 
 /**
@@ -129,19 +184,23 @@ export interface CanAcceptInvitationInput {
 export function canAcceptInvitation({
   invitation,
   membership,
-  roleExistsInOrg,
+  role,
   now,
 }: CanAcceptInvitationInput): AcceptInvitationDecision {
   // 1. The clock first — a dead link is dead regardless of who is holding it.
   //    Reuses the same derivation the read paths use (data-model §3.2), so the
-  //    `expiresAt <= now` boundary exists in exactly one place.
-  const status = resolveInvitationStatus(invitation, now);
+  //    `expiresAt <= now` boundary exists in exactly one place — fed with the
+  //    expiry the role's CURRENT capabilities allow (F-003 §6 layer 2).
+  const status = resolveInvitationStatus(
+    { status: invitation.status, expiresAt: effectiveExpiresAt(invitation, role) },
+    now,
+  );
   if (status === "expired") return "expired";
   if (status === "cancelled") return "cancelled";
   if (status === "accepted") return "already_accepted";
 
   // 2. The role must still be usable in this org (F-003 may delete roles).
-  if (!roleExistsInOrg) return "role_unavailable";
+  if (role === null) return "role_unavailable";
 
   // 3. Existing membership.
   if (membership === null) return "ok";
@@ -157,4 +216,64 @@ export function canAcceptInvitation({
   // `invited` — a dead state with no write path in Phase 0. Treated like a
   // revocation rather than silently accepted.
   return "superseded";
+}
+
+// ── D-035 + Addendum — the accept-time re-check of the inviter ──────────────
+
+/**
+ * Why an accept was refused because of the INVITER (architecture §6.1). Never
+ * shown to the invitee (they get `409 INVITATION_CANCELLED`); carried on the
+ * `org.invitation.accept_blocked_inviter` event for the Owner / F-005.
+ */
+export type InviterRecheckReason =
+  "inviter_not_active" | "inviter_not_authorized" | "inviter_exceeds";
+
+export type InviterRecheckDecision = "ok" | InviterRecheckReason;
+
+export interface InviterRecheckInput {
+  /**
+   * The CURRENT role of `COALESCE(issuedByUserId, invitedByUserId)` through an
+   * ACTIVE membership in this org, read in the accept tx under the org lock.
+   * `null` = no such membership (removed, left, account deleted, or both ids
+   * null on a legacy row) — all fail closed.
+   */
+  readonly inviter: { readonly capabilities: readonly string[] } | null;
+  /** The invitation role's CURRENT capabilities (the same live read `canAcceptInvitation` got). */
+  readonly invitationRoleCapabilities: readonly string[];
+}
+
+/**
+ * D-035 (+ Addendum P2/P3): may the person who issued this link still grant
+ * it? Called ONLY after `canAcceptInvitation` answered `ok`, so no F-002 answer
+ * changes. The rule itself is `decideMemberAuthority(op: invite_accept_recheck)`
+ * — this fn only maps each failing leg to its own reason:
+ *   no active membership                         → `inviter_not_active`
+ *   `forbidden` (floor `manage_members`, P2)     → `inviter_not_authorized`
+ *   `owner_only` / `exceeds_actor` (grant ⊄)     → `inviter_exceeds`
+ * Any other refusal cannot happen for a grant-only op; if it ever does, throw
+ * (fail loud) rather than guess a reason or let the accept through.
+ */
+export function decideInviterRecheck({
+  inviter,
+  invitationRoleCapabilities,
+}: InviterRecheckInput): InviterRecheckDecision {
+  if (inviter === null) return "inviter_not_active";
+  const verdict = decideMemberAuthority({
+    op: "invite_accept_recheck",
+    actorCapabilities: inviter.capabilities,
+    actorIsTarget: false,
+    grantCapabilities: invitationRoleCapabilities,
+  });
+  if (verdict.ok) return "ok";
+  switch (verdict.reason) {
+    case "forbidden":
+      return "inviter_not_authorized";
+    case "owner_only":
+    case "exceeds_actor":
+      return "inviter_exceeds";
+    default:
+      throw new Error(
+        `decideInviterRecheck: unexpected refusal ${JSON.stringify(verdict.reason)} for a grant-only op`,
+      );
+  }
 }

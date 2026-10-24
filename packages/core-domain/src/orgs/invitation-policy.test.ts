@@ -3,6 +3,7 @@ import {
   invitationTtlHours,
   isElevatedRole,
   canAcceptInvitation,
+  decideInviterRecheck,
   INVITATION_TTL_HOURS_ELEVATED,
   INVITATION_TTL_HOURS_STANDARD,
   type AcceptableInvitation,
@@ -97,6 +98,9 @@ const pendingInvitation: AcceptableInvitation = {
   tokenIssuedAt: TOKEN_ISSUED_AT,
 };
 
+/** The invitation's role as read live at accept — Staff, so the stored 168h window is the binding one. */
+const STAFF_ROLE = { capabilities: STAFF_CAPS };
+
 const revokedMembership = (revokedAt: Date | null): AcceptorMembership => ({
   status: "revoked",
   revokedAt,
@@ -108,7 +112,7 @@ const decide = (
   canAcceptInvitation({
     invitation: pendingInvitation,
     membership: null,
-    roleExistsInOrg: true,
+    role: STAFF_ROLE,
     now: NOW,
     ...overrides,
   });
@@ -151,7 +155,7 @@ describe("canAcceptInvitation — invitation state", () => {
 
 describe("canAcceptInvitation — role must still exist (M-6)", () => {
   it("rejects when the invitation's role was deleted or belongs to another org", () => {
-    expect(decide({ roleExistsInOrg: false })).toBe("role_unavailable");
+    expect(decide({ role: null })).toBe("role_unavailable");
   });
 });
 
@@ -195,7 +199,7 @@ describe("canAcceptInvitation — decision ORDER is part of the contract (U-CD-0
       decide({
         now: at(1),
         membership: revokedMembership(issuedAt(1)),
-        roleExistsInOrg: false,
+        role: null,
       }),
     ).toBe("expired");
   });
@@ -205,17 +209,17 @@ describe("canAcceptInvitation — decision ORDER is part of the contract (U-CD-0
       decide({
         invitation: { ...pendingInvitation, status: "cancelled" },
         membership: { status: "active", revokedAt: null },
-        roleExistsInOrg: false,
+        role: null,
       }),
     ).toBe("cancelled");
   });
 
   it("role_unavailable wins over already_member and superseded", () => {
     // api-spec §3.15: … → role unusable → already member → superseded.
-    expect(
-      decide({ roleExistsInOrg: false, membership: { status: "active", revokedAt: null } }),
-    ).toBe("role_unavailable");
-    expect(decide({ roleExistsInOrg: false, membership: revokedMembership(issuedAt(1)) })).toBe(
+    expect(decide({ role: null, membership: { status: "active", revokedAt: null } })).toBe(
+      "role_unavailable",
+    );
+    expect(decide({ role: null, membership: revokedMembership(issuedAt(1)) })).toBe(
       "role_unavailable",
     );
   });
@@ -241,10 +245,207 @@ describe("canAcceptInvitation — purity", () => {
     };
     const membership = revokedMembership(new Date(TOKEN_ISSUED_AT));
     const now = new Date(NOW);
-    canAcceptInvitation({ invitation, membership, roleExistsInOrg: true, now });
+    canAcceptInvitation({ invitation, membership, role: STAFF_ROLE, now });
     expect(invitation.expiresAt.getTime()).toBe(EXPIRES_AT.getTime());
     expect(invitation.tokenIssuedAt.getTime()).toBe(TOKEN_ISSUED_AT.getTime());
     expect(membership.revokedAt?.getTime()).toBe(TOKEN_ISSUED_AT.getTime());
     expect(now.getTime()).toBe(NOW.getTime());
+  });
+});
+
+// ---------------------------------------------------------------------------
+// F-003 · T-003-B07 ★ — architecture §6 / §6.1 · AC-10.3 / AC-10.4 / AC-5.3 ·
+// D-035 + Addendum (test-plan §2.3 U-RB-16 / U-RB-17).
+// ---------------------------------------------------------------------------
+
+const HOUR = 3_600_000;
+const afterIssue = (hours: number, ms = 0) =>
+  new Date(TOKEN_ISSUED_AT.getTime() + hours * HOUR + ms);
+
+describe("U-RB-16 · isElevatedRole counts manage_roles (AC-10.3)", () => {
+  it("full_access / manage_members / manage_roles are elevated", () => {
+    expect(isElevatedRole(["full_access"])).toBe(true);
+    expect(isElevatedRole(["manage_members"])).toBe(true);
+    expect(isElevatedRole(["manage_roles"])).toBe(true);
+    expect(isElevatedRole(["manage_products", "manage_roles"])).toBe(true);
+  });
+
+  it("Staff is not elevated", () => {
+    expect(isElevatedRole(STAFF_CAPS)).toBe(false);
+    expect(isElevatedRole(["manage_org_settings", "view_financials"])).toBe(false);
+  });
+
+  it("goes through hasCapability: full_access covers manage_roles without listing it", () => {
+    // A role that holds only the wildcard is elevated because hasCapability
+    // expands it — not because the fn special-cases the string.
+    expect(isElevatedRole(["full_access"])).toBe(true);
+    expect(invitationTtlHours(["manage_roles"])).toBe(INVITATION_TTL_HOURS_ELEVATED);
+  });
+
+  it("never reads the role key: key='admin' with Staff capabilities is NOT elevated", () => {
+    const adminKeyedStaffRole = { key: "admin", name: "ผู้ดูแล", capabilities: STAFF_CAPS };
+    expect(isElevatedRole(adminKeyedStaffRole.capabilities)).toBe(false);
+    expect(invitationTtlHours(adminKeyedStaffRole.capabilities)).toBe(
+      INVITATION_TTL_HOURS_STANDARD,
+    );
+  });
+});
+
+describe("U-RB-17 · canAcceptInvitation expiry = min(expiresAt, tokenIssuedAt + ttl(current caps)) (AC-10.4)", () => {
+  // Issued while the role was Staff ⇒ stored expiresAt = issued + 168h.
+  const issuedAsStaff: AcceptableInvitation = {
+    status: "pending",
+    tokenIssuedAt: TOKEN_ISSUED_AT,
+    expiresAt: afterIssue(168),
+  };
+  // Issued while the role was elevated ⇒ stored expiresAt = issued + 24h.
+  const issuedAsElevated: AcceptableInvitation = { ...issuedAsStaff, expiresAt: afterIssue(24) };
+
+  it("role became elevated after the link went out — accepted 30h later ⇒ expired", () => {
+    expect(
+      canAcceptInvitation({
+        invitation: issuedAsStaff,
+        membership: null,
+        role: { capabilities: ["manage_products", "manage_roles"] },
+        now: afterIssue(30),
+      }),
+    ).toBe("expired");
+  });
+
+  it("control: the SAME link with the role still Staff is accepted at 30h", () => {
+    expect(
+      canAcceptInvitation({
+        invitation: issuedAsStaff,
+        membership: null,
+        role: { capabilities: STAFF_CAPS },
+        now: afterIssue(30),
+      }),
+    ).toBe("ok");
+  });
+
+  it("elevated window boundary: ok 1ms before tokenIssuedAt + 24h, expired exactly at it", () => {
+    const elevated = { capabilities: ["manage_members"] };
+    const at = (ms: number) =>
+      canAcceptInvitation({
+        invitation: issuedAsStaff,
+        membership: null,
+        role: elevated,
+        now: afterIssue(24, ms),
+      });
+    expect(at(-1)).toBe("ok");
+    expect(at(0)).toBe("expired");
+  });
+
+  it("a role reduced after issue does NOT extend the link (stored 24h still binds)", () => {
+    expect(
+      canAcceptInvitation({
+        invitation: issuedAsElevated,
+        membership: null,
+        role: { capabilities: STAFF_CAPS },
+        now: afterIssue(30),
+      }),
+    ).toBe("expired");
+  });
+
+  it("the clock-derived expiry still comes first in the decision order", () => {
+    // Shortened-window expiry beats already_member, exactly like stored expiry.
+    expect(
+      canAcceptInvitation({
+        invitation: issuedAsStaff,
+        membership: { status: "active", revokedAt: null },
+        role: { capabilities: ["full_access"] },
+        now: afterIssue(30),
+      }),
+    ).toBe("expired");
+  });
+
+  it("terminal states are not rewritten by the shortened window", () => {
+    expect(
+      canAcceptInvitation({
+        invitation: { ...issuedAsStaff, status: "cancelled" },
+        membership: null,
+        role: { capabilities: ["manage_roles"] },
+        now: afterIssue(30),
+      }),
+    ).toBe("cancelled");
+  });
+
+  it("knows nothing about the inviter (type half in invitation-policy.compile-test.ts)", () => {
+    // Same inputs ⇒ same answer; the input type carries no inviter field, so
+    // the inviter re-check cannot leak into this decision.
+    const input = {
+      invitation: issuedAsStaff,
+      membership: null,
+      role: STAFF_ROLE,
+      now: afterIssue(1),
+    } as const;
+    expect(Object.keys(input).sort()).toEqual(["invitation", "membership", "now", "role"]);
+    expect(canAcceptInvitation(input)).toBe("ok");
+  });
+});
+
+describe("D-035 + Addendum · decideInviterRecheck maps each failing leg to its own inviter_* reason", () => {
+  const OWNER = { capabilities: OWNER_CAPS };
+  const ADMIN = { capabilities: ADMIN_CAPS };
+  const STAFF = { capabilities: STAFF_CAPS };
+
+  it("no active membership for the issuer (removed / left / deleted / both ids null) ⇒ inviter_not_active", () => {
+    expect(decideInviterRecheck({ inviter: null, invitationRoleCapabilities: STAFF_CAPS })).toBe(
+      "inviter_not_active",
+    );
+  });
+
+  it("issuer no longer holds manage_members ⇒ inviter_not_authorized, even when caps ⊇ the role (P2)", () => {
+    expect(
+      decideInviterRecheck({
+        inviter: { capabilities: [...STAFF_CAPS, "view_financials"] },
+        invitationRoleCapabilities: STAFF_CAPS,
+      }),
+    ).toBe("inviter_not_authorized");
+  });
+
+  it("missing manage_members wins over exceeding (floor is checked first)", () => {
+    expect(decideInviterRecheck({ inviter: STAFF, invitationRoleCapabilities: ADMIN_CAPS })).toBe(
+      "inviter_not_authorized",
+    );
+  });
+
+  it("issuer holds manage_members but the role exceeds them ⇒ inviter_exceeds", () => {
+    expect(
+      decideInviterRecheck({
+        inviter: { capabilities: ["manage_members"] },
+        invitationRoleCapabilities: ADMIN_CAPS,
+      }),
+    ).toBe("inviter_exceeds");
+  });
+
+  it("non-Owner issuer of an Owner invitation (owner_only) ⇒ inviter_exceeds", () => {
+    expect(decideInviterRecheck({ inviter: ADMIN, invitationRoleCapabilities: OWNER_CAPS })).toBe(
+      "inviter_exceeds",
+    );
+  });
+
+  it("Owner issuer always passes (any role, including Owner)", () => {
+    for (const role of [OWNER_CAPS, ADMIN_CAPS, STAFF_CAPS, ["some_future_capability"]]) {
+      expect(decideInviterRecheck({ inviter: OWNER, invitationRoleCapabilities: role })).toBe("ok");
+    }
+  });
+
+  it("grant ⊆ is not strict: an Admin's Admin invitation and Staff invitation pass", () => {
+    expect(decideInviterRecheck({ inviter: ADMIN, invitationRoleCapabilities: ADMIN_CAPS })).toBe(
+      "ok",
+    );
+    expect(decideInviterRecheck({ inviter: ADMIN, invitationRoleCapabilities: STAFF_CAPS })).toBe(
+      "ok",
+    );
+  });
+
+  it("an unknown key on the invitation's role fails closed for a non-Owner issuer", () => {
+    expect(
+      decideInviterRecheck({
+        inviter: ADMIN,
+        invitationRoleCapabilities: ["manage_products", "some_future_capability"],
+      }),
+    ).toBe("inviter_exceeds");
   });
 });

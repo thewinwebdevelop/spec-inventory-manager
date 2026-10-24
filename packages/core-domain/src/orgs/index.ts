@@ -55,12 +55,17 @@ export {
   invitationTtlHours,
   isElevatedRole,
   canAcceptInvitation,
+  decideInviterRecheck,
   INVITATION_TTL_HOURS_ELEVATED,
   INVITATION_TTL_HOURS_STANDARD,
   type AcceptInvitationDecision,
   type AcceptableInvitation,
+  type AcceptableInvitationRole,
   type AcceptorMembership,
   type CanAcceptInvitationInput,
+  type InviterRecheckDecision,
+  type InviterRecheckInput,
+  type InviterRecheckReason,
 } from "./invitation-policy";
 
 export { maskTaxId, TAX_ID_MASK_CHAR, TAX_ID_VISIBLE_SUFFIX_LENGTH } from "./tax-id-mask";

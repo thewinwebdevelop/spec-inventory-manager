@@ -322,7 +322,11 @@ export class InvitationsService {
 
   // ── §3.11 create ─────────────────────────────────────────────────────────
 
-  async create(input: { readonly email: string; readonly roleId: string; readonly now: Date }): Promise<IssuedInvitation> {
+  async create(input: {
+    readonly email: string;
+    readonly roleId: string;
+    readonly now: Date;
+  }): Promise<IssuedInvitation> {
     const organizationId = this.requireOrganizationId();
     const actorUserId = this.requireUserId();
     // Normalized SERVER-side (api-spec §3.11): the partial unique index that
@@ -429,7 +433,10 @@ export class InvitationsService {
 
   // ── §3.12 reissue link ───────────────────────────────────────────────────
 
-  async reissueLink(input: { readonly invitationId: string; readonly now: Date }): Promise<ReissuedLink> {
+  async reissueLink(input: {
+    readonly invitationId: string;
+    readonly now: Date;
+  }): Promise<ReissuedLink> {
     const organizationId = this.requireOrganizationId();
     const actorUserId = this.requireUserId();
 
@@ -476,7 +483,12 @@ export class InvitationsService {
         //
         // The status must be RESOLVED here rather than compared to the column,
         // for the same reason as A-4 — the column cannot answer this question.
-        if (resolveInvitationStatus({ status: "pending", expiresAt: invitation.expiresAt }, input.now) === "expired") {
+        if (
+          resolveInvitationStatus(
+            { status: "pending", expiresAt: invitation.expiresAt },
+            input.now,
+          ) === "expired"
+        ) {
           throw domainError("INVITATION_EXPIRED");
         }
 
@@ -529,7 +541,10 @@ export class InvitationsService {
 
   // ── §3.13 cancel ─────────────────────────────────────────────────────────
 
-  async cancel(input: { readonly invitationId: string; readonly now: Date }): Promise<{ id: string; status: "cancelled" }> {
+  async cancel(input: {
+    readonly invitationId: string;
+    readonly now: Date;
+  }): Promise<{ id: string; status: "cancelled" }> {
     const organizationId = this.requireOrganizationId();
     const actorUserId = this.requireUserId();
 
@@ -698,8 +713,8 @@ export class InvitationsService {
           // same answer by construction.
           const role = (await tx.role.findFirst({
             where: { id: invitation.roleId },
-            select: { id: true, name: true, key: true },
-          })) as { id: string; name: string; key: string | null } | null;
+            select: { id: true, name: true, key: true, capabilities: true },
+          })) as { id: string; name: string; key: string | null; capabilities: string[] } | null;
 
           const membership = (await tx.membership.findFirst({
             where: { userId: input.userId },
@@ -718,12 +733,18 @@ export class InvitationsService {
                   revokedAt: membership.revokedAt,
                 }
               : null,
-            roleExistsInOrg: role !== null,
+            // F-003 §6 layer 2 — the role's CURRENT capabilities re-derive the
+            // TTL (a role that became elevated shortens a live link).
+            role: role ? { capabilities: role.capabilities } : null,
             now: input.now,
           });
 
           // 1) the clock and the stored status, before anything about the caller.
-          if (decision === "expired" || decision === "cancelled" || decision === "already_accepted") {
+          if (
+            decision === "expired" ||
+            decision === "cancelled" ||
+            decision === "already_accepted"
+          ) {
             return { kind: "refused", decision };
           }
 
@@ -762,7 +783,7 @@ export class InvitationsService {
           }
 
           // ── decision === "ok" — the only path that writes a membership ────
-          // `role` is non-null here: `roleExistsInOrg` was false ⇒
+          // `role` is non-null here: `role` was null ⇒
           // `role_unavailable` ⇒ returned above.
           const grantedRole = role as { id: string; name: string; key: string | null };
           const reactivatedFrom = membership?.status === "revoked" ? membership.revokedAt : null;
@@ -891,7 +912,10 @@ export class InvitationsService {
     return role;
   }
 
-  private async readActorCapabilities(tx: OrgLockTx, actorUserId: string): Promise<readonly string[]> {
+  private async readActorCapabilities(
+    tx: OrgLockTx,
+    actorUserId: string,
+  ): Promise<readonly string[]> {
     const membership = (await tx.membership.findFirst({
       where: { userId: actorUserId, status: "active" },
       select: { role: { select: { capabilities: true } } },

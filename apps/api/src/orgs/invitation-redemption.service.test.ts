@@ -48,7 +48,12 @@ const USER_ID = "usr_invitee";
 const USER_EMAIL = "napa@example.com";
 const RAW_TOKEN = "raw-invitation-token-value";
 
-const ROLE_STAFF = { id: "rol_staff", name: "Staff", key: "staff" };
+const ROLE_STAFF = {
+  id: "rol_staff",
+  name: "Staff",
+  key: "staff",
+  capabilities: ["manage_products", "manage_stock", "manage_orders"],
+};
 const NOW = new Date("2026-08-05T10:00:00.000Z");
 const ISSUED = new Date("2026-08-01T10:00:00.000Z");
 const EXPIRES = new Date("2026-08-08T10:00:00.000Z");
@@ -103,7 +108,12 @@ interface Options {
   /** The row the TRANSACTION finds. Defaults to `located` (the normal case). */
   readonly inTx?: FakeInvitation | null;
   readonly memberships?: readonly FakeMembership[];
-  readonly roles?: readonly { id: string; name: string; key: string | null }[];
+  readonly roles?: readonly {
+    id: string;
+    name: string;
+    key: string | null;
+    capabilities: string[];
+  }[];
   readonly acceptorEmail?: string;
   readonly acceptorCreatedAt?: Date;
   /** `null` = the authenticated user's row has vanished. */
@@ -237,7 +247,18 @@ function createService(options: Options = {}) {
     lookup as unknown as InvitationLookupService,
   );
 
-  return { service, prisma, tx, lookup, calls, lockedOrgIds, sink, invitations, memberships, store };
+  return {
+    service,
+    prisma,
+    tx,
+    lookup,
+    calls,
+    lockedOrgIds,
+    sink,
+    invitations,
+    memberships,
+    store,
+  };
 }
 
 /** The code of the `DomainException` a call rejected with. */
@@ -313,7 +334,9 @@ describe("InvitationsService.preview — api-spec §3.14", () => {
   it("★ a ROTATED token is indistinguishable from one that never existed", async () => {
     // §3.12 overwrites `tokenHash`, so yesterday's link resolves to nothing —
     // the same nothing an invented token resolves to (I-C-05).
-    const ctx = createService({ located: invitation({ tokenHash: hashInvitationToken("rotated") }) });
+    const ctx = createService({
+      located: invitation({ tokenHash: hashInvitationToken("rotated") }),
+    });
     const stale = await refusalOf(ctx.service.preview({ token: RAW_TOKEN, now: NOW }));
     const invented = await refusalOf(ctx.service.preview({ token: "made-up", now: NOW }));
     expect(stale.code).toBe(invented.code);
@@ -427,10 +450,12 @@ describe("InvitationsService.accept — the transaction (architecture §5.1)", (
   it("the context it opens is the invitation's org + the authenticated user", async () => {
     const ctx = createService();
     let seen: unknown;
-    ctx.tx.organization.findUnique.mockImplementationOnce(async (args: { where: { id: string } }) => {
-      seen = ctx.store.get();
-      return { id: args.where.id, name: ORG_NAME };
-    });
+    ctx.tx.organization.findUnique.mockImplementationOnce(
+      async (args: { where: { id: string } }) => {
+        seen = ctx.store.get();
+        return { id: args.where.id, name: ORG_NAME };
+      },
+    );
     await ctx.service.accept({ userId: USER_ID, token: RAW_TOKEN, now: NOW });
     expect(seen).toMatchObject({ organizationId: ORG_ID, userId: USER_ID });
     // …and it does not leak past the call.
@@ -455,7 +480,11 @@ describe("InvitationsService.accept — success", () => {
       membership: { roleId: ROLE_STAFF.id, roleName: "Staff", roleKey: "staff", status: "active" },
     });
     expect(ctx.memberships).toHaveLength(1);
-    expect(ctx.memberships[0]).toMatchObject({ userId: USER_ID, roleId: ROLE_STAFF.id, status: "active" });
+    expect(ctx.memberships[0]).toMatchObject({
+      userId: USER_ID,
+      roleId: ROLE_STAFF.id,
+      status: "active",
+    });
   });
 
   it("★ never passes an organizationId in the write — the scope injects it", async () => {
@@ -563,7 +592,12 @@ describe("InvitationsService.accept — the decision order (api-spec §3.15)", (
     // The draft this replaced upserted the membership, which made "accept a
     // Staff invitation" a way for the last Owner to demote themselves and leave
     // the shop with zero Owners.
-    const ownerRole = { id: "rol_owner", name: "Owner", key: "owner" };
+    const ownerRole = {
+      id: "rol_owner",
+      name: "Owner",
+      key: "owner",
+      capabilities: ["full_access"],
+    };
     const ctx = createService({
       memberships: [member({ roleId: ownerRole.id })],
       roles: [ROLE_STAFF, ownerRole],
@@ -583,9 +617,7 @@ describe("InvitationsService.accept — the decision order (api-spec §3.15)", (
 
   it("★ INVITATION_SUPERSEDED when the link predates the removal (I-1)", async () => {
     const ctx = createService({
-      memberships: [
-        member({ status: "revoked", revokedAt: new Date(ISSUED.getTime() + 60_000) }),
-      ],
+      memberships: [member({ status: "revoked", revokedAt: new Date(ISSUED.getTime() + 60_000) })],
     });
     const error = await refusalOf(
       ctx.service.accept({ userId: USER_ID, token: RAW_TOKEN, now: NOW }),
@@ -643,6 +675,24 @@ describe("InvitationsService.accept — the decision order (api-spec §3.15)", (
     const ctx = createService({ acceptorEmail: "  NAPA@Example.COM " });
     await expect(
       ctx.service.accept({ userId: USER_ID, token: RAW_TOKEN, now: NOW }),
+    ).resolves.toMatchObject({ organization: { id: ORG_ID } });
+  });
+
+  it("★ F-003 §6 layer 2: the invited role's CURRENT capabilities re-derive the TTL at accept", async () => {
+    // Issued 96h before NOW as Staff (stored expiry 168h). The role has since
+    // gained `manage_roles` ⇒ elevated ⇒ the link died 24h after issue. The
+    // service must hand the live capabilities to `canAcceptInvitation`.
+    const elevated = { ...ROLE_STAFF, capabilities: [...ROLE_STAFF.capabilities, "manage_roles"] };
+    const ctx = createService({ roles: [elevated] });
+    expect(
+      (await refusalOf(ctx.service.accept({ userId: USER_ID, token: RAW_TOKEN, now: NOW }))).code,
+    ).toBe("INVITATION_EXPIRED");
+    expect(ctx.tx.membership.create).not.toHaveBeenCalled();
+
+    // control — the same link, the role still Staff, is accepted.
+    const control = createService();
+    await expect(
+      control.service.accept({ userId: USER_ID, token: RAW_TOKEN, now: NOW }),
     ).resolves.toMatchObject({ organization: { id: ORG_ID } });
   });
 
