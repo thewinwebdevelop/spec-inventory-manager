@@ -45,12 +45,16 @@ const blankOrg: OrgProfileRow = {
   taxBranchCode: null,
 };
 
-function viewer(capabilities: readonly string[], over: Partial<OrgProfileViewer> = {}): OrgProfileViewer {
+function viewer(
+  capabilities: readonly string[],
+  over: Partial<OrgProfileViewer> = {},
+): OrgProfileViewer {
   return {
     userId: "usr_1",
     roleId: "rol_1",
     roleName: "Owner",
     roleKey: "owner",
+    roleNameCustomized: false,
     capabilities,
     status: "active",
     ...over,
@@ -117,7 +121,8 @@ describe("validateOrgProfilePatch — api-spec §3.4", () => {
   it("reports every bad field at once", () => {
     const result = validateOrgProfilePatch({ name: "", logo: "x", timezone: "Nowhere" });
     expect(result.ok).toBe(false);
-    if (!result.ok) expect(Object.keys(result.fieldErrors).sort()).toEqual(["logo", "name", "timezone"]);
+    if (!result.ok)
+      expect(Object.keys(result.fieldErrors).sort()).toEqual(["logo", "name", "timezone"]);
   });
 
   it("★ a rejected patch yields NO writable value at all (partial writes are impossible)", () => {
@@ -142,7 +147,9 @@ describe("toTaxProfileView — the three tiers of api-spec §3.3", () => {
   });
 
   it("full_access implies it (Owner sees the same)", () => {
-    expect(toTaxProfileView(declaredOrg, viewer([CAPABILITY_FULL_ACCESS]))).toHaveProperty("taxIdMasked");
+    expect(toTaxProfileView(declaredOrg, viewer([CAPABILITY_FULL_ACCESS]))).toHaveProperty(
+      "taxIdMasked",
+    );
   });
 
   it("★ ux Q13: a Staff member gets `vatRegistered` and NOTHING else", () => {
@@ -162,7 +169,12 @@ describe("toTaxProfileView — the three tiers of api-spec §3.3", () => {
   });
 
   it("★ the FULL tax id never appears, at any tier", () => {
-    for (const caps of [[CAPABILITY_FULL_ACCESS], [CAPABILITY_MANAGE_ORG_SETTINGS], ["manage_products"], []]) {
+    for (const caps of [
+      [CAPABILITY_FULL_ACCESS],
+      [CAPABILITY_MANAGE_ORG_SETTINGS],
+      ["manage_products"],
+      [],
+    ]) {
       expect(JSON.stringify(toTaxProfileView(declaredOrg, viewer(caps)))).not.toContain(TAX_ID);
     }
   });
@@ -221,6 +233,7 @@ describe("toOrgProfileView", () => {
         roleId: "rol_1",
         roleName: "Owner",
         roleKey: "owner",
+        roleNameCustomized: false,
         capabilities: [CAPABILITY_FULL_ACCESS],
         status: "active",
       },
@@ -249,7 +262,7 @@ describe("toOrgProfileView", () => {
       counts,
     });
     const serialized = JSON.stringify(view);
-    expect(serialized).not.toContain("members\":[");
+    expect(serialized).not.toContain('members":[');
     expect(view.counts).toEqual(counts);
   });
 });
@@ -269,33 +282,43 @@ describe("toMyOrganizationItem — api-spec §3.2 / M-10", () => {
           roleId: "rol_1",
           roleName: "Owner",
           roleKey: "owner",
+          roleNameCustomized: true,
           revokedAt: null,
         },
         entitlement,
       }),
     ).toEqual({
       organization: org,
-      membership: { roleId: "rol_1", roleName: "Owner", roleKey: "owner", status: "active" },
+      membership: {
+        roleId: "rol_1",
+        roleName: "Owner",
+        roleKey: "owner",
+        roleNameCustomized: true,
+        status: "active",
+      },
       entitlement,
     });
   });
 
-  it.each(["revoked", "invited"])("★ M-10: a `%s` membership gets the SHORT shape only", (status) => {
-    const revokedAt = new Date("2026-07-28T09:00:00.000Z");
-    const item = toMyOrganizationItem({
-      organization: org,
-      membership: { status, roleId: "rol_1", roleName: "Owner", roleKey: "owner", revokedAt },
-      entitlement,
-    });
-    expect(item).toEqual({
-      organization: org,
-      membership: { status, revokedAt: "2026-07-28T09:00:00.000Z" },
-    });
-    // The role they held and the plan that shop is on are internals of an org
-    // they are no longer part of.
-    expect(JSON.stringify(item)).not.toContain("rol_1");
-    expect(JSON.stringify(item)).not.toContain("comp_full");
-  });
+  it.each(["revoked", "invited"])(
+    "★ M-10: a `%s` membership gets the SHORT shape only",
+    (status) => {
+      const revokedAt = new Date("2026-07-28T09:00:00.000Z");
+      const item = toMyOrganizationItem({
+        organization: org,
+        membership: { status, roleId: "rol_1", roleName: "Owner", roleKey: "owner", revokedAt },
+        entitlement,
+      });
+      expect(item).toEqual({
+        organization: org,
+        membership: { status, revokedAt: "2026-07-28T09:00:00.000Z" },
+      });
+      // The role they held and the plan that shop is on are internals of an org
+      // they are no longer part of.
+      expect(JSON.stringify(item)).not.toContain("rol_1");
+      expect(JSON.stringify(item)).not.toContain("comp_full");
+    },
+  );
 
   it("★ M-10: a WIDER organization row is projected down — extras never survive", () => {
     // The existing cases all pass an org object that is already narrow, so they
@@ -316,7 +339,13 @@ describe("toMyOrganizationItem — api-spec §3.2 / M-10", () => {
     for (const status of ["revoked", "active"]) {
       const item = toMyOrganizationItem({
         organization: wide,
-        membership: { status, roleId: "rol_1", roleName: "Owner", roleKey: "owner", revokedAt: null },
+        membership: {
+          status,
+          roleId: "rol_1",
+          roleName: "Owner",
+          roleKey: "owner",
+          revokedAt: null,
+        },
         entitlement,
       });
       expect(item.organization, status).toEqual({ id: "org_1", name: "ร้าน ก", logo: null });

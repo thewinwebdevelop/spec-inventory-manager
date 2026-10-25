@@ -27,6 +27,12 @@
 // Dates leave as ISO-8601 UTC strings (api-spec §1), converted here so no call
 // site can emit a `Date` that serializes differently per client.
 import type { ResolvedInvitationStatus } from "./invitation-status";
+import {
+  decideInvitationManageVisible,
+  isRoleNameCustomized,
+  viewerVerdictAudience,
+  type GrantBlockedReason,
+} from "./viewer-verdicts";
 
 /** The invitation columns the row is built from. NOTE: no `tokenHash`. */
 export interface InvitationRowSource {
@@ -49,10 +55,16 @@ export interface InvitationRowSource {
   readonly acceptedUserCreatedAt: Date | null;
 }
 
-/** Display-only role fields. `key` translates the name on screen, nothing more. */
+/**
+ * Role fields. `name`/`key`/`nameCustomized` are display only; `capabilities`
+ * feeds ONLY the viewer verdict below and is never projected.
+ */
 export interface InvitationRowRole {
   readonly name: string;
   readonly key: string | null;
+  /** The `Role.nameCustomized` column; the wire bit is derived (AC-1.5). */
+  readonly nameCustomized: boolean;
+  readonly capabilities: readonly string[];
 }
 
 export interface InvitationRow {
@@ -69,6 +81,15 @@ export interface InvitationRow {
   readonly acceptedAt: string | null;
   readonly acceptedByUserId: string | null;
   readonly acceptedUserCreatedAfterInvite: boolean | null;
+  /** AC-1.5 — `roleKey === null || Role.nameCustomized`. */
+  readonly roleNameCustomized: boolean;
+  /**
+   * F-003 — cancel / reissue verdict. Present only when the viewer holds
+   * `manage_members` and the STORED status is `pending` (expired included —
+   * api-spec §3.1). UX input, never enforcement.
+   */
+  readonly viewerCanManage?: boolean;
+  readonly manageBlockedReason?: GrantBlockedReason | null;
 }
 
 /**
@@ -111,11 +132,21 @@ export function userCreatedAfterTokenIssued(userCreatedAt: Date, tokenIssuedAt: 
   return userCreatedAt.getTime() > tokenIssuedAt.getTime();
 }
 
-/** Project one invitation for `GET /orgs/{orgId}/invitations` (§3.10). */
+/**
+ * Project one invitation for `GET /orgs/{orgId}/invitations` (§3.10).
+ * `viewerCapabilities` = the CALLER's (list: org context · create: re-read in tx).
+ */
 export function toInvitationRow(
   invitation: InvitationRowSource,
   role: InvitationRowRole,
+  viewerCapabilities: readonly string[],
 ): InvitationRow {
+  // Resolved `pending` | `expired` ⇔ stored `pending` (expired is derived).
+  const storedPending = invitation.status === "pending" || invitation.status === "expired";
+  const manage =
+    storedPending && viewerVerdictAudience(viewerCapabilities).invitations
+      ? decideInvitationManageVisible(viewerCapabilities, role.capabilities)
+      : null;
   return {
     id: invitation.id,
     email: invitation.email,
@@ -130,6 +161,8 @@ export function toInvitationRow(
     acceptedAt: invitation.acceptedAt ? invitation.acceptedAt.toISOString() : null,
     acceptedByUserId: invitation.acceptedByUserId,
     acceptedUserCreatedAfterInvite: acceptedUserCreatedAfterInvite(invitation),
+    roleNameCustomized: isRoleNameCustomized(role),
+    ...(manage ? { viewerCanManage: manage.allowed, manageBlockedReason: manage.reason } : {}),
   };
 }
 

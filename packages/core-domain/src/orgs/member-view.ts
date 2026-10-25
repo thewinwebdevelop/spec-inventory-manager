@@ -21,8 +21,14 @@
 //
 // Dates leave as ISO-8601 UTC strings (api-spec §1) — the mapper converts, so no
 // call site can forget and emit a `Date` that serializes differently per client.
+import { decideAdminResetVisible } from "./admin-reset-authz";
 import { isOwnerRole } from "./member-authz";
 import type { MembershipStatus } from "./owner-invariant";
+import {
+  decideMemberManageVisible,
+  isRoleNameCustomized,
+  viewerVerdictAudience,
+} from "./viewer-verdicts";
 
 /** The membership columns the row is built from. */
 export interface MemberRowMembership {
@@ -39,6 +45,8 @@ export interface MemberRowRole {
   readonly name: string;
   readonly key: string | null;
   readonly capabilities: readonly string[];
+  /** The `Role.nameCustomized` column (F-003); the wire bit is derived (AC-1.5). */
+  readonly nameCustomized: boolean;
 }
 
 /** The `User` columns — exactly what `USER_SELECT` (packages/db) allows. */
@@ -52,7 +60,17 @@ export interface MemberRowSource {
   readonly user: MemberRowUser;
   /** The CALLER, so `isMe` is decided here and not by comparing ids on the wire. */
   readonly viewerUserId: string;
+  /**
+   * The CALLER's capabilities (F-003 · api-spec §3.1(3)): whether the row
+   * carries verdicts, and what they say. List = the request's org context ·
+   * PATCH = the actor's role as re-read inside the transaction.
+   */
+  readonly viewerCapabilities: readonly string[];
 }
+
+export type MemberManageBlockedReason =
+  "owner_only" | "equal_permissions" | "exceeds_your_permissions";
+export type MemberResetBlockedReason = "self" | MemberManageBlockedReason;
 
 /** api-spec §3.7 — one row of `GET /orgs/{orgId}/members`, and the `200` of §3.8. */
 export interface MemberRow {
@@ -70,10 +88,27 @@ export interface MemberRow {
   readonly isMe: boolean;
   /** Does this row's role hold `full_access`? Capability, never name/key. */
   readonly isOwner: boolean;
+  /** AC-1.5 — `roleKey === null || Role.nameCustomized`. */
+  readonly roleNameCustomized: boolean;
+  /**
+   * F-003 verdicts — present ONLY for a viewer holding `manage_members` ∧
+   * `manage_roles`, and only on `active` rows (architecture §1.2). Absent ⇒
+   * the client keeps F-002 behaviour. UX input, never enforcement.
+   */
+  readonly viewerCanManage?: boolean;
+  readonly manageBlockedReason?: MemberManageBlockedReason | null;
+  readonly viewerCanResetPassword?: boolean;
+  readonly resetBlockedReason?: MemberResetBlockedReason | null;
 }
 
 /** Project one membership + its role + its user into the §3.7 row. */
-export function toMemberRow({ membership, role, user, viewerUserId }: MemberRowSource): MemberRow {
+export function toMemberRow({
+  membership,
+  role,
+  user,
+  viewerUserId,
+  viewerCapabilities,
+}: MemberRowSource): MemberRow {
   return {
     userId: membership.userId,
     email: user.email,
@@ -87,6 +122,35 @@ export function toMemberRow({ membership, role, user, viewerUserId }: MemberRowS
     isMe: membership.userId === viewerUserId,
     // ⛔ NOT `role.key === "owner"` / `role.name === "Owner"`. See the header.
     isOwner: isOwnerRole(role.capabilities),
+    roleNameCustomized: isRoleNameCustomized(role),
+    ...memberRowVerdicts(viewerUserId, viewerCapabilities, membership, role),
+  };
+}
+
+type MemberRowVerdicts = Pick<
+  MemberRow,
+  "viewerCanManage" | "manageBlockedReason" | "viewerCanResetPassword" | "resetBlockedReason"
+>;
+
+/** Both verdict pairs, or none when the viewer / row is outside the audience. */
+function memberRowVerdicts(
+  viewerUserId: string,
+  viewerCapabilities: readonly string[],
+  membership: MemberRowMembership,
+  role: MemberRowRole,
+): MemberRowVerdicts {
+  if (membership.status !== "active" || !viewerVerdictAudience(viewerCapabilities).memberRows) {
+    return {};
+  }
+  const viewer = { userId: viewerUserId, capabilities: viewerCapabilities };
+  const row = { userId: membership.userId, capabilities: role.capabilities };
+  const manage = decideMemberManageVisible(viewer, row);
+  const reset = decideAdminResetVisible(viewer, row);
+  return {
+    viewerCanManage: manage.ok,
+    manageBlockedReason: manage.ok ? null : manage.reason,
+    viewerCanResetPassword: reset.ok,
+    resetBlockedReason: reset.ok ? null : reset.reason,
   };
 }
 

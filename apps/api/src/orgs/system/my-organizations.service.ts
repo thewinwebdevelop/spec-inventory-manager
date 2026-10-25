@@ -78,7 +78,7 @@ export class MyOrganizationsService {
         // Explicit `select` on every relation, never `include` (C-4): `include`
         // returns whole rows, and whole rows are how a column nobody thought
         // about reaches the wire.
-        role: { select: { name: true, key: true } },
+        role: { select: { name: true, key: true, nameCustomized: true } },
         organization: {
           select: {
             id: true,
@@ -121,6 +121,7 @@ export class MyOrganizationsService {
             roleId: row.roleId,
             roleName: row.role.name,
             roleKey: row.role.key,
+            roleNameCustomized: row.role.nameCustomized,
             revokedAt: row.revokedAt,
           },
           entitlement: row.organization.entitlement

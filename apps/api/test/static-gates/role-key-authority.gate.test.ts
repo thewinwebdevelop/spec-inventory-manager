@@ -131,6 +131,13 @@ const PRESENTATION_ALLOWLIST: readonly PresentationAllowance[] = Object.freeze([
       "out.add(roleNameComparisonKey(labels[role.key]));",
     ],
   },
+  {
+    file: "packages/core-domain/src/orgs/viewer-verdicts.ts",
+    reason:
+      "`isRoleNameCustomized()` (api-spec §4.1 · AC-1.5, T-003-B22): the wire bit telling a client " +
+      "whether to show `name` as-is or translate `key`. Display only — it never grants or refuses.",
+    lines: ["return role.key === null || role.nameCustomized;"],
+  },
   // ── display call sites: a role key handed to `roleLabel` to render a label.
   // Exempt ONLY here, line by line; the helper's result used as a condition
   // (TS-10 / DART-6) is red even on a pinned line.

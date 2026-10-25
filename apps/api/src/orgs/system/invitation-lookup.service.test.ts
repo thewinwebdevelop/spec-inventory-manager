@@ -69,12 +69,18 @@ describe("InvitationLookupService.findByTokenHash (§2.4 row 3)", () => {
     // endpoint.
     expect(args).not.toHaveProperty("include");
     expect(args.select.organization).toEqual({ select: { name: true } });
-    expect(args.select.role).toEqual({ select: { name: true, key: true } });
+    // F-003: + `nameCustomized` (AC-1.5 display bit) — still no `capabilities` on this public path.
+    expect(args.select.role).toEqual({ select: { name: true, key: true, nameCustomized: true } });
   });
 
   it("★ projects field by field — a column added to the select cannot ride out", async () => {
     const ctx = subject({
-      invitation: { ...ROW, tokenHash: "SECRET", organization: { name: "ร้าน A", taxId: "0105551234567" }, role: { name: "Staff", key: "staff" } },
+      invitation: {
+        ...ROW,
+        tokenHash: "SECRET",
+        organization: { name: "ร้าน A", taxId: "0105551234567" },
+        role: { name: "Staff", key: "staff" },
+      },
     });
     const result = await ctx.service.findByTokenHash("hash-abc");
     const serialized = JSON.stringify(result);
@@ -89,6 +95,7 @@ describe("InvitationLookupService.findByTokenHash (§2.4 row 3)", () => {
       "roleId",
       "roleKey",
       "roleName",
+      "roleNameCustomized",
       "status",
       "tokenIssuedAt",
     ]);
@@ -102,7 +109,11 @@ describe("InvitationLookupService.findByTokenHash (§2.4 row 3)", () => {
   it("flattens the relations without losing a null role key (ux Q4)", async () => {
     const ctx = subject({ invitation: { ...ROW, role: { name: "หัวหน้าคลัง", key: null } } });
     const result = await ctx.service.findByTokenHash("hash-abc");
-    expect(result).toMatchObject({ roleName: "หัวหน้าคลัง", roleKey: null, organizationName: "ร้าน A" });
+    expect(result).toMatchObject({
+      roleName: "หัวหน้าคลัง",
+      roleKey: null,
+      organizationName: "ร้าน A",
+    });
   });
 });
 

@@ -192,6 +192,7 @@ d("F-002 redeeming an invitation (E2E, DB)", () => {
       organizationName: "ร้านรับคำเชิญ",
       roleName: "Staff",
       roleKey: "staff",
+      roleNameCustomized: false, // F-003 (AC-1.5)
       emailMasked: `${invitee.email[0]}***@seed.test`,
       expiresAt: expect.any(String),
       status: "pending",
@@ -379,7 +380,13 @@ d("F-002 redeeming an invitation (E2E, DB)", () => {
 
     expect(res.body).toEqual({
       organization: { id: orgId, name: "ร้านรับคำเชิญ" },
-      membership: { roleId: staff.id, roleName: "Staff", roleKey: "staff", status: "active" },
+      membership: {
+        roleId: staff.id,
+        roleName: "Staff",
+        roleKey: "staff",
+        roleNameCustomized: false, // F-003 (AC-1.5)
+        status: "active",
+      },
     });
     assertResponseHeaders(res, INVITATION_RESPONSE_HEADERS);
     assertNoSecretFields(res.body);
@@ -553,7 +560,11 @@ d("F-002 redeeming an invitation (E2E, DB)", () => {
       where: { organizationId: orgId, userId: returning.id },
     });
     expect(memberships).toHaveLength(1); // woken up, never duplicated
-    expect(memberships[0]).toMatchObject({ status: "active", revokedAt: null, revokedByUserId: null });
+    expect(memberships[0]).toMatchObject({
+      status: "active",
+      revokedAt: null,
+      revokedByUserId: null,
+    });
   });
 
   it("★ B-1 · a cross-org invitation can no longer EXIST — the state M-6 guarded against is unrepresentable", async () => {

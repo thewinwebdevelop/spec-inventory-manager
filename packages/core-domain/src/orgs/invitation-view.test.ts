@@ -25,11 +25,18 @@ const source = {
   acceptedUserCreatedAt: null,
 };
 
-const role = { name: "Staff", key: "staff" };
+const role = {
+  name: "Staff",
+  key: "staff",
+  nameCustomized: false,
+  capabilities: ["manage_products"],
+};
+/** A viewer outside every verdict audience (no manage_members). */
+const NO_VERDICT: readonly string[] = [];
 
 describe("toInvitationRow", () => {
   it("projects the documented fields, as ISO strings", () => {
-    expect(toInvitationRow(source, role)).toEqual({
+    expect(toInvitationRow(source, role, NO_VERDICT)).toEqual({
       id: "inv_1",
       email: "new@example.com",
       roleId: "rol_1",
@@ -43,6 +50,7 @@ describe("toInvitationRow", () => {
       acceptedAt: null,
       acceptedByUserId: null,
       acceptedUserCreatedAfterInvite: null,
+      roleNameCustomized: false,
     });
   });
 
@@ -58,7 +66,7 @@ describe("toInvitationRow", () => {
       updatedAt: new Date(),
     } as unknown as typeof source;
 
-    const row = toInvitationRow(wide, role);
+    const row = toInvitationRow(wide, role, NO_VERDICT);
     const serialized = JSON.stringify(row);
     expect(serialized).not.toContain("6f1e2c9a");
     expect(Object.keys(row).sort()).toEqual(
@@ -74,6 +82,7 @@ describe("toInvitationRow", () => {
         "roleId",
         "roleKey",
         "roleName",
+        "roleNameCustomized",
         "status",
         "tokenIssuedAt",
       ].sort(),
@@ -85,7 +94,7 @@ describe("toInvitationRow", () => {
     // A null here would force it to guess, on exactly the rows where the answer
     // is already known.
     for (const status of ["accepted", "cancelled", "expired"] as const) {
-      const row = toInvitationRow({ ...source, status }, role);
+      const row = toInvitationRow({ ...source, status }, role, NO_VERDICT);
       expect(row.expiresAt, status).toBe(EXPIRES.toISOString());
     }
   });
@@ -93,7 +102,9 @@ describe("toInvitationRow", () => {
 
 describe("acceptedUserCreatedAfterInvite (NEW-9)", () => {
   it("is null while nobody has accepted — 'unknown' is not 'no'", () => {
-    expect(acceptedUserCreatedAfterInvite({ createdAt: CREATED, acceptedUserCreatedAt: null })).toBeNull();
+    expect(
+      acceptedUserCreatedAfterInvite({ createdAt: CREATED, acceptedUserCreatedAt: null }),
+    ).toBeNull();
   });
 
   it("is true when the account was created after the invitation FIRST existed", () => {
@@ -125,10 +136,67 @@ describe("acceptedUserCreatedAfterInvite (NEW-9)", () => {
     const row = toInvitationRow(
       { ...source, acceptedUserCreatedAt: accountMadeAfterInviteButBeforeReissue },
       role,
+      NO_VERDICT,
     );
     // true because the account postdates `createdAt`. Against `tokenIssuedAt`
     // it would read false — the erasure this test exists to prevent.
     expect(row.acceptedUserCreatedAfterInvite).toBe(true);
+  });
+});
+
+// F-003 · T-003-B22 ★ — `Invitation.viewerCanManage` (api-spec §3.1 · §4.2b).
+describe("toInvitationRow — F-003 viewer verdict", () => {
+  const ADMIN = ["manage_members", "manage_products"];
+  const OWNER_ROLE = {
+    name: "Owner",
+    key: "owner",
+    nameCustomized: false,
+    capabilities: ["full_access"],
+  };
+
+  it("manage_members viewer + stored pending (live or expired): verdict present", () => {
+    for (const status of ["pending", "expired"] as const) {
+      expect(toInvitationRow({ ...source, status }, role, ADMIN), status).toMatchObject({
+        viewerCanManage: true,
+        manageBlockedReason: null,
+      });
+    }
+  });
+
+  it("Owner invitation viewed by an Admin → owner_only; wider role → exceeds_your_permissions", () => {
+    expect(toInvitationRow(source, OWNER_ROLE, ADMIN)).toMatchObject({
+      viewerCanManage: false,
+      manageBlockedReason: "owner_only",
+    });
+    const wider = { ...role, capabilities: ["manage_products", "manage_billing"] };
+    expect(toInvitationRow(source, wider, ADMIN)).toMatchObject({
+      viewerCanManage: false,
+      manageBlockedReason: "exceeds_your_permissions",
+    });
+  });
+
+  it("accepted / cancelled rows, or a viewer without manage_members: keys ABSENT", () => {
+    for (const status of ["accepted", "cancelled"] as const) {
+      expect(Object.keys(toInvitationRow({ ...source, status }, role, ADMIN))).not.toContain(
+        "viewerCanManage",
+      );
+    }
+    const keys = Object.keys(toInvitationRow(source, role, ["manage_roles"]));
+    expect(keys).not.toContain("viewerCanManage");
+    expect(keys).not.toContain("manageBlockedReason");
+  });
+
+  it("never projects the role's capabilities", () => {
+    expect(JSON.stringify(toInvitationRow(source, OWNER_ROLE, ADMIN))).not.toContain("full_access");
+  });
+
+  it("roleNameCustomized: custom role (key null) is always customized", () => {
+    expect(toInvitationRow(source, { ...role, key: null }, NO_VERDICT).roleNameCustomized).toBe(
+      true,
+    );
+    expect(
+      toInvitationRow(source, { ...role, nameCustomized: true }, NO_VERDICT).roleNameCustomized,
+    ).toBe(true);
   });
 });
 
@@ -140,7 +208,10 @@ describe("userCreatedAfterTokenIssued (T-002-20 — the AUDIT-side comparison)",
     // which link was outstanding when the account appeared.
     const accountCreatedAt = new Date("2026-07-29T09:00:00.000Z");
     expect(
-      acceptedUserCreatedAfterInvite({ createdAt: CREATED, acceptedUserCreatedAt: accountCreatedAt }),
+      acceptedUserCreatedAfterInvite({
+        createdAt: CREATED,
+        acceptedUserCreatedAt: accountCreatedAt,
+      }),
     ).toBe(true);
     expect(userCreatedAfterTokenIssued(accountCreatedAt, ISSUED)).toBe(false);
   });

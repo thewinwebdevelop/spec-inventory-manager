@@ -20,6 +20,7 @@ function previewSource(over: Partial<InvitationPreviewSource> = {}): InvitationP
     organizationName: "ร้าน A",
     roleName: "Staff",
     roleKey: "staff",
+    roleNameCustomized: false,
     email: "napa@example.com",
     expiresAt: EXPIRES,
     status: "pending",
@@ -28,15 +29,24 @@ function previewSource(over: Partial<InvitationPreviewSource> = {}): InvitationP
 }
 
 describe("toInvitationPreview (api-spec §3.14)", () => {
-  it("returns EXACTLY the six documented keys — no more", () => {
+  it("returns EXACTLY the seven documented keys — no more (F-003 + roleNameCustomized)", () => {
     expect(Object.keys(toInvitationPreview(previewSource())).sort()).toEqual([
       "emailMasked",
       "expiresAt",
       "organizationName",
       "roleKey",
       "roleName",
+      "roleNameCustomized",
       "status",
     ]);
+  });
+
+  it("F-003 roleNameCustomized = key null || the column (AC-1.5)", () => {
+    expect(toInvitationPreview(previewSource()).roleNameCustomized).toBe(false);
+    expect(
+      toInvitationPreview(previewSource({ roleNameCustomized: true })).roleNameCustomized,
+    ).toBe(true);
+    expect(toInvitationPreview(previewSource({ roleKey: null })).roleNameCustomized).toBe(true);
   });
 
   it("★ masks the address — the full one appears nowhere in the output", () => {
@@ -84,13 +94,19 @@ describe("toInvitationPreview (api-spec §3.14)", () => {
 describe("toInvitationAcceptResult (api-spec §3.15)", () => {
   const source = {
     organization: { id: "org_1", name: "ร้าน A" },
-    membership: { roleId: "rol_1", roleName: "Staff", roleKey: "staff" },
+    membership: { roleId: "rol_1", roleName: "Staff", roleKey: "staff", roleNameCustomized: true },
   } as const;
 
   it("returns exactly the documented shape", () => {
     expect(toInvitationAcceptResult(source)).toEqual({
       organization: { id: "org_1", name: "ร้าน A" },
-      membership: { roleId: "rol_1", roleName: "Staff", roleKey: "staff", status: "active" },
+      membership: {
+        roleId: "rol_1",
+        roleName: "Staff",
+        roleKey: "staff",
+        roleNameCustomized: true,
+        status: "active",
+      },
     });
   });
 

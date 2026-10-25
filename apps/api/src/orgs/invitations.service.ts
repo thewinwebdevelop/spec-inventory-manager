@@ -98,7 +98,8 @@ const INVITATION_SELECT = {
   acceptedAt: true,
   acceptedByUserId: true,
   acceptedUserCreatedAt: true,
-  role: { select: { name: true, key: true } },
+  // `capabilities` feeds ONLY the viewer verdict (F-003) and is never projected.
+  role: { select: { name: true, key: true, nameCustomized: true, capabilities: true } },
 } as const;
 
 interface InvitationSelected {
@@ -113,7 +114,7 @@ interface InvitationSelected {
   acceptedAt: Date | null;
   acceptedByUserId: string | null;
   acceptedUserCreatedAt: Date | null;
-  role: { name: string; key: string | null };
+  role: { name: string; key: string | null; nameCustomized: boolean; capabilities: string[] };
 }
 
 /**
@@ -161,7 +162,11 @@ function invitationStatusFilter(status: string | undefined, now: Date): Record<s
  * (`expiresAt <= now` is already expired) stays testable to the millisecond,
  * and so one listing cannot resolve two rows against two different clocks.
  */
-function toRow(row: InvitationSelected, now: Date): InvitationRow {
+function toRow(
+  row: InvitationSelected,
+  now: Date,
+  viewerCapabilities: readonly string[],
+): InvitationRow {
   return toInvitationRow(
     {
       id: row.id,
@@ -179,7 +184,13 @@ function toRow(row: InvitationSelected, now: Date): InvitationRow {
       acceptedByUserId: row.acceptedByUserId,
       acceptedUserCreatedAt: row.acceptedUserCreatedAt,
     },
-    row.role,
+    {
+      name: row.role.name,
+      key: row.role.key,
+      nameCustomized: row.role.nameCustomized,
+      capabilities: row.role.capabilities,
+    },
+    viewerCapabilities,
   );
 }
 
@@ -252,7 +263,12 @@ type AcceptOutcome =
       readonly invitationId: string;
       readonly tokenIssuedAt: Date;
       readonly organization: { readonly id: string; readonly name: string };
-      readonly role: { readonly id: string; readonly name: string; readonly key: string | null };
+      readonly role: {
+        readonly id: string;
+        readonly name: string;
+        readonly key: string | null;
+        readonly nameCustomized: boolean;
+      };
       /** `revokedAt` of the membership this accept woke up, or `null`. */
       readonly reactivatedFrom: Date | null;
     }
@@ -285,13 +301,19 @@ export class InvitationsService {
     readonly status?: string;
     readonly cursor?: KeysetCursor;
     readonly limit: number;
+    /** F-003 `?roleId=` — ANDed with `status`. */
+    readonly roleId?: string;
   }): Promise<{ items: readonly InvitationRow[]; nextCursor: string | null }> {
+    // Read-only verdict input (api-spec §3.1) — the request's org context.
+    const viewerCapabilities = this.store.get()?.capabilities;
+    if (!viewerCapabilities) throw domainError("INTERNAL");
     // ONE clock for the whole page: the filter and the rendered `status` must
     // agree, and reading `new Date()` twice could put a row on the boundary in
     // one and not the other.
     const now = new Date();
     const where = {
       ...invitationStatusFilter(input.status, now),
+      ...(input.roleId === undefined ? {} : { roleId: input.roleId }),
       // Keyset predicate for the fixed `createdAt desc, id desc` sort (§1).
       // Offset pagination would skip and repeat rows as invitations are created
       // and cancelled under the reader.
@@ -317,7 +339,10 @@ export class InvitationsService {
       createdAt: row.createdAt.toISOString(),
       id: row.id,
     }));
-    return { items: page.items.map((row) => toRow(row, now)), nextCursor: page.nextCursor };
+    return {
+      items: page.items.map((row) => toRow(row, now, viewerCapabilities)),
+      nextCursor: page.nextCursor,
+    };
   }
 
   // ── §3.11 create ─────────────────────────────────────────────────────────
@@ -406,7 +431,7 @@ export class InvitationsService {
           select: INVITATION_SELECT,
         })) as InvitationSelected;
 
-        return { row, token };
+        return { row, token, actorCapabilities };
       },
       { operation: "createInvitation" },
     );
@@ -425,7 +450,8 @@ export class InvitationsService {
     });
 
     return {
-      invitation: toRow(created.row, input.now),
+      // api-spec §4.2b: verdict from the actor caps read inside the create tx.
+      invitation: toRow(created.row, input.now, created.actorCapabilities),
       token: created.token,
       inviteUrl: this.inviteUrl(created.token),
     };
@@ -619,6 +645,7 @@ export class InvitationsService {
       organizationName: row.organizationName,
       roleName: row.roleName,
       roleKey: row.roleKey,
+      roleNameCustomized: row.roleNameCustomized,
       // Masked INSIDE the projection — this service never holds a shape that
       // could put the full address on a public response.
       email: row.email,
@@ -715,8 +742,14 @@ export class InvitationsService {
           // the same answer as a role that never existed here.
           const role = (await tx.role.findFirst({
             where: { id: invitation.roleId, ...LIVE_ROLE_WHERE },
-            select: { id: true, name: true, key: true, capabilities: true },
-          })) as { id: string; name: string; key: string | null; capabilities: string[] } | null;
+            select: { id: true, name: true, key: true, capabilities: true, nameCustomized: true },
+          })) as {
+            id: string;
+            name: string;
+            key: string | null;
+            capabilities: string[];
+            nameCustomized: boolean;
+          } | null;
 
           const membership = (await tx.membership.findFirst({
             where: { userId: input.userId },
@@ -787,7 +820,12 @@ export class InvitationsService {
           // ── decision === "ok" — the only path that writes a membership ────
           // `role` is non-null here: `role` was null ⇒
           // `role_unavailable` ⇒ returned above.
-          const grantedRole = role as { id: string; name: string; key: string | null };
+          const grantedRole = role as {
+            id: string;
+            name: string;
+            key: string | null;
+            nameCustomized: boolean;
+          };
           const reactivatedFrom = membership?.status === "revoked" ? membership.revokedAt : null;
 
           if (membership) {
@@ -895,6 +933,7 @@ export class InvitationsService {
         roleId: outcome.role.id,
         roleName: outcome.role.name,
         roleKey: outcome.role.key,
+        roleNameCustomized: outcome.role.nameCustomized,
       },
     });
   }

@@ -119,6 +119,7 @@ interface MemberListRow {
     readonly name: string;
     readonly key: string | null;
     readonly capabilities: string[];
+    readonly nameCustomized: boolean;
   };
   readonly user: { readonly email: string };
 }
@@ -155,14 +156,20 @@ export class MembersService {
     readonly limit: number;
     readonly cursor?: KeysetCursor;
     readonly withTotal: boolean;
+    /** F-003 `?roleId=` — ANDed with `status`; also narrows `total`. */
+    readonly roleId?: string;
   }): Promise<MemberListPage> {
     const viewerUserId = this.requireUserId();
-    const { status, limit, cursor, withTotal } = input;
+    const viewerCapabilities = this.requireViewerCapabilities();
+    const { status, limit, cursor, withTotal, roleId } = input;
 
     // `invited` is a dead state (data-model §7): no production write path
     // produces it, so it is filtered OUT of `all` rather than shown as a row a
     // client would have to interpret. `?status=invited` is not an option at all.
-    const statusFilter = status === "all" ? { status: { in: ["active", "revoked"] } } : { status };
+    const statusFilter = {
+      ...(status === "all" ? { status: { in: ["active", "revoked"] } } : { status }),
+      ...(roleId === undefined ? {} : { roleId }),
+    };
 
     const where = {
       ...statusFilter,
@@ -192,7 +199,7 @@ export class MembersService {
         activatedAt: true,
         revokedAt: true,
         createdAt: true,
-        role: { select: { name: true, key: true, capabilities: true } },
+        role: { select: { name: true, key: true, capabilities: true, nameCustomized: true } },
         user: { select: USER_SELECT },
       },
     });
@@ -223,9 +230,15 @@ export class MembersService {
             revokedAt: row.revokedAt,
             createdAt: row.createdAt,
           },
-          role: { name: row.role.name, key: row.role.key, capabilities: row.role.capabilities },
+          role: {
+            name: row.role.name,
+            key: row.role.key,
+            capabilities: row.role.capabilities,
+            nameCustomized: row.role.nameCustomized,
+          },
           user: { email: row.user.email },
           viewerUserId,
+          viewerCapabilities,
         }),
       ),
       nextCursor: page.nextCursor,
@@ -323,7 +336,7 @@ export class MembersService {
             activatedAt: true,
             revokedAt: true,
             createdAt: true,
-            role: { select: { name: true, key: true, capabilities: true } },
+            role: { select: { name: true, key: true, capabilities: true, nameCustomized: true } },
             user: { select: USER_SELECT },
           },
         });
@@ -345,9 +358,12 @@ export class MembersService {
               name: updated.role.name,
               key: updated.role.key,
               capabilities: updated.role.capabilities,
+              nameCustomized: updated.role.nameCustomized,
             },
             user: { email: updated.user.email },
             viewerUserId: actorUserId,
+            // api-spec §4.2b: the verdict on a write response uses the actor caps read in THIS tx.
+            viewerCapabilities: actorCapabilities,
           }),
         };
       },
@@ -601,6 +617,16 @@ export class MembersService {
     // is our bug — fail loud, never fall back to a path param.
     if (!ctx?.organizationId) throw domainError("INTERNAL");
     return ctx.organizationId;
+  }
+
+  /**
+   * F-003 — the caller's capabilities from the request's org context, for the
+   * READ-ONLY row verdicts (api-spec §3.1). Never a decision input for a write.
+   */
+  private requireViewerCapabilities(): readonly string[] {
+    const capabilities = this.store.get()?.capabilities;
+    if (!capabilities) throw domainError("INTERNAL");
+    return capabilities;
   }
 
   private requireUserId(): string {

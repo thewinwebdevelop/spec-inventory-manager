@@ -22,6 +22,7 @@
 // Dates leave as ISO-8601 UTC strings (api-spec §1), converted here so no call
 // site can emit a `Date` that serializes differently per client.
 import { maskEmail } from "./invitation-email";
+import { isRoleNameCustomized } from "./viewer-verdicts";
 import type { ResolvedInvitationStatus } from "./invitation-status";
 
 // ── §3.14 preview ───────────────────────────────────────────────────────────
@@ -36,6 +37,8 @@ export interface InvitationPreviewSource {
   readonly roleName: string;
   /** `null` for a role F-003 created; clients must handle it (ux Q4). */
   readonly roleKey: string | null;
+  /** The `Role.nameCustomized` column; the wire bit is derived (AC-1.5). */
+  readonly roleNameCustomized: boolean;
   /** The invited address, NORMALIZED. Masked below; never emitted whole. */
   readonly email: string;
   readonly expiresAt: Date;
@@ -48,6 +51,8 @@ export interface InvitationPreview {
   readonly organizationName: string;
   readonly roleName: string;
   readonly roleKey: string | null;
+  /** AC-1.5 — `roleKey === null || Role.nameCustomized`. */
+  readonly roleNameCustomized: boolean;
   /** `u***@example.com` — enough to pick the right account, not an address. */
   readonly emailMasked: string;
   readonly expiresAt: string;
@@ -66,6 +71,10 @@ export function toInvitationPreview(source: InvitationPreviewSource): Invitation
     organizationName: source.organizationName,
     roleName: source.roleName,
     roleKey: source.roleKey,
+    roleNameCustomized: isRoleNameCustomized({
+      key: source.roleKey,
+      nameCustomized: source.roleNameCustomized,
+    }),
     emailMasked: maskEmail(source.email),
     expiresAt: source.expiresAt.toISOString(),
     status: source.status,
@@ -80,6 +89,8 @@ export interface InvitationAcceptSource {
     readonly roleId: string;
     readonly roleName: string;
     readonly roleKey: string | null;
+    /** The `Role.nameCustomized` column; the wire bit is derived (AC-1.5). */
+    readonly roleNameCustomized: boolean;
   };
 }
 
@@ -98,6 +109,7 @@ export interface InvitationAcceptResult {
     readonly roleId: string;
     readonly roleName: string;
     readonly roleKey: string | null;
+    readonly roleNameCustomized: boolean;
     readonly status: "active";
   };
 }
@@ -116,6 +128,10 @@ export function toInvitationAcceptResult(source: InvitationAcceptSource): Invita
       roleId: source.membership.roleId,
       roleName: source.membership.roleName,
       roleKey: source.membership.roleKey,
+      roleNameCustomized: isRoleNameCustomized({
+        key: source.membership.roleKey,
+        nameCustomized: source.membership.roleNameCustomized,
+      }),
       status: "active",
     },
   };

@@ -43,10 +43,8 @@ import {
   type IssuedInvitation,
   type ReissuedLink,
 } from "./invitations.service";
-import {
-  INVITATION_RESPONSE_HEADERS,
-  applyResponseHeaders,
-} from "./response-headers";
+import { INVITATION_RESPONSE_HEADERS, applyResponseHeaders } from "./response-headers";
+import { resolveRoleIdFilter } from "./role-filter";
 
 /** `?status=` — api-spec §3.10. Default `pending`: the actionable view. */
 const STATUS_FILTERS = ["pending", "accepted", "cancelled", "expired", "all"] as const;
@@ -66,6 +64,7 @@ export class InvitationsController {
     @Query("status") status?: string,
     @Query("cursor") cursor?: string,
     @Query("limit") limit?: string,
+    @Query("roleId") roleId?: unknown,
   ): Promise<{ items: readonly InvitationRow[]; nextCursor: string | null }> {
     const filter = status ?? "pending";
     if (!STATUS_FILTERS.includes(filter as (typeof STATUS_FILTERS)[number])) {
@@ -83,6 +82,8 @@ export class InvitationsController {
       status: filter,
       limit: resolveLimit(limit),
       cursor: requireCursor(cursor),
+      // F-003 (api-spec §4.2b) — ANDed with `status`.
+      roleId: resolveRoleIdFilter(roleId),
     });
   }
 

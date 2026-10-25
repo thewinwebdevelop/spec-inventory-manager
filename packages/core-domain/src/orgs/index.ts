@@ -28,7 +28,22 @@ export {
   type MemberRowMembership,
   type MemberRowRole,
   type MemberRowUser,
+  type MemberManageBlockedReason,
+  type MemberResetBlockedReason,
 } from "./member-view";
+
+// T-003-B22 ★ — viewer verdicts on shipped routes (api-spec §3.1 · architecture §1.2).
+export {
+  decideInvitationManageVisible,
+  decideMemberManageVisible,
+  decideRoleAssignVisible,
+  isRoleNameCustomized,
+  viewerVerdictAudience,
+  type GrantBlockedReason,
+  type GrantVerdict,
+  type MemberManageVisibleVerdict,
+  type ViewerVerdictAudience,
+} from "./viewer-verdicts";
 
 export {
   isValidThaiTaxId,
