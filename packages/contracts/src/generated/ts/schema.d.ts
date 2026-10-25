@@ -474,6 +474,94 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/orgs/{orgId}/roles/{roleId}": {
+        parameters: {
+            query?: never;
+            header?: {
+                /** @description Org context (api-spec §1). Optional on routes that already carry `{orgId}` in the path; if both are sent they MUST match, otherwise `422 ORG_MISMATCH`. User-scoped and public routes ignore this header entirely (I-3). */
+                "X-Organization-Id"?: components["parameters"]["OrgIdHeader"];
+            };
+            path: {
+                /** @description Organization id. On F-002 org-scoped routes this is one of the two accepted sources of org context (the other is the `X-Organization-Id` header, D-025); sending both with different values is `422 ORG_MISMATCH`. */
+                orgId: components["parameters"]["OrgIdParam"];
+                /** @description Role id (`RoleDetail.id`). */
+                roleId: string;
+            };
+            cookie?: never;
+        };
+        /**
+         * One role of this shop, in full (edit and clone screens)
+         * @description F-003 (api-spec §1, §3). The same `RoleDetail` as the matching item of `GET /orgs/{orgId}/role-details`. Requires `manage_roles`.
+         *
+         *     `lastEdited.by` is decided at read time against THIS shop only: `me`, a current member (their CURRENT role here), or `former_member` — never an e-mail, a user id, or anything from another shop.
+         */
+        get: operations["getOrgRoleDetail"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/orgs/{orgId}/role-details": {
+        parameters: {
+            query?: never;
+            header?: {
+                /** @description Org context (api-spec §1). Optional on routes that already carry `{orgId}` in the path; if both are sent they MUST match, otherwise `422 ORG_MISMATCH`. User-scoped and public routes ignore this header entirely (I-3). */
+                "X-Organization-Id"?: components["parameters"]["OrgIdHeader"];
+            };
+            path: {
+                /** @description Organization id. On F-002 org-scoped routes this is one of the two accepted sources of org context (the other is the `X-Organization-Id` header, D-025); sending both with different values is `422 ORG_MISMATCH`. */
+                orgId: components["parameters"]["OrgIdParam"];
+            };
+            cookie?: never;
+        };
+        /**
+         * Every live role of this shop, in full (the role list screen)
+         * @description F-003 (api-spec §1, §3). Each item is a `RoleDetail` — capabilities, usage counts, who edited it last and the caller's per-role verdicts — and the page carries the create verdict and the role ceiling. Requires `manage_roles`.
+         *
+         *     A separate path from `GET /orgs/{orgId}/roles` on purpose: that list is readable by every active member and does NOT publish `capabilities` (AC-6.4); one route, one capability.
+         *
+         *     One page, oldest first (`createdAt asc, id asc`); `nextCursor` is always `null` while the role ceiling fits in a page. `viewer.*` is a UX input — a write re-reads permissions and may still refuse. While role writes are switched off every write verdict is `writes_disabled`.
+         */
+        get: operations["listOrgRoleDetails"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/orgs/{orgId}/capabilities": {
+        parameters: {
+            query?: never;
+            header?: {
+                /** @description Org context (api-spec §1). Optional on routes that already carry `{orgId}` in the path; if both are sent they MUST match, otherwise `422 ORG_MISMATCH`. User-scoped and public routes ignore this header entirely (I-3). */
+                "X-Organization-Id"?: components["parameters"]["OrgIdHeader"];
+            };
+            path: {
+                /** @description Organization id. On F-002 org-scoped routes this is one of the two accepted sources of org context (the other is the `X-Organization-Id` header, D-025); sending both with different values is `422 ORG_MISMATCH`. */
+                orgId: components["parameters"]["OrgIdParam"];
+            };
+            cookie?: never;
+        };
+        /**
+         * The capability catalog this shop can see (role checklist)
+         * @description F-003 (api-spec §1, §3 · D-037). The ONE source of capability keys, their Thai labels and descriptions, groups, status and `implies` edges — clients render the checklist from this and never hard-code a key (AC-7.1).
+         *
+         *     Org-scoped and requires `manage_roles`: a tier that needs an entitlement is HIDDEN entirely, not flagged (AC-7.4), so the answer can differ per shop — cache it per shop. `full_access` is present with `selectable: false` and `group: null` so a role holding it can be labelled; it is never a checklist item.
+         */
+        get: operations["getOrgCapabilityCatalog"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/orgs/{orgId}/membership": {
         parameters: {
             query?: never;
@@ -1153,6 +1241,98 @@ export interface components {
             /** @description Always `null`: every live role fits in one page while the per-shop role ceiling (30) is below the page maximum (100). Present so a client written today survives the day that stops being true. */
             nextCursor: string | null;
         };
+        /** @description How many hold this role — counts only, never who (AC-6.4). */
+        RoleUsage: {
+            activeMembers: number;
+            /** @description Invitations still `pending` for this role, INCLUDING ones whose link has expired (AC-3.9) — both block deletion. */
+            pendingInvitations: number;
+        };
+        /** @description Who last edited the role, as the VIEWER may know it (AC-9.6). Decided at read time against this shop only. There is deliberately no e-mail, user id or display name on the wire (api-spec §3 — `displayName` waits for a profile feature; adding an optional field later is non-breaking). */
+        RoleLastEditedBy: {
+            /** @description OPEN SET. `me` → "คุณ" · `member` → the editor's CURRENT role in this shop (the three `role*` fields below) · `former_member` → "อดีตสมาชิก" (no longer an active member of this shop, including a deleted account). Any other value → generic copy. */
+            kind: string;
+            /** @description Present only when `kind` is `member`. Display per AC-1.5. */
+            roleName?: string;
+            /** @description Present only when `kind` is `member`. Translation only — OPEN SET, fall back to `roleName`. */
+            roleKey?: string | null;
+            /** @description Present only when `kind` is `member`. */
+            roleNameCustomized?: boolean;
+        };
+        RoleLastEdited: {
+            /** Format: date-time */
+            at: string;
+            by: components["schemas"]["RoleLastEditedBy"];
+        };
+        /** @description The server's verdict for THIS caller at read time — whether to enable a button and why not. It is a UX input: every write re-reads the caller's permissions inside its transaction and may still refuse (AC-5.7). */
+        RoleWriteVerdict: {
+            allowed: boolean;
+            /** @description `null` when `allowed` is `true`. OPEN SET (api-spec §3), first match wins in this fixed order: `writes_disabled` → `role_locked` → `exceeds_your_permissions` → `in_use_requires_manage_members` → `equal_permissions_in_use` → `in_use` → `history_limit_reached`; `canClone` uses `owner_role` · `exceeds_your_permissions` · `role_limit_reached` · `writes_disabled`; `canCreate` uses `role_limit_reached` · `writes_disabled`. `writes_disabled` outranks every other reason while role writes are switched off. Any other value → generic copy. */
+            reason: string | null;
+        };
+        /** @description Per-role verdicts. `canEdit` covers renaming too. `canClone` is not affected by who holds the role — cloning never touches anyone's permissions. */
+        RoleDetailViewer: {
+            canEdit: components["schemas"]["RoleWriteVerdict"];
+            canDelete: components["schemas"]["RoleWriteVerdict"];
+            canClone: components["schemas"]["RoleWriteVerdict"];
+        };
+        /**
+         * @description One role in full — the body of the role detail read, each item of the role list page, and the success body of creating or updating a role (api-spec §3). Readable only by a holder of `manage_roles`.
+         *
+         *     Unlike `RoleRow` (readable by every active member), this DOES publish `capabilities`: the reader can already edit roles, so the list is the thing they are here to see.
+         */
+        RoleDetail: {
+            id: string;
+            /** @description The stored name, already normalised (NFC, trimmed, inner whitespace collapsed). Display rule (AC-1.5): `nameCustomized ? name : (translate key ?? name)`. */
+            name: string;
+            /**
+             * @description Stable slug for TRANSLATION ONLY: `owner`, `admin` or `staff` for the system presets, `null` for every role a user created. OPEN SET — on `null` or an unrecognised value fall back to `name`.
+             *
+             *     ⛔ NEVER a permission input. Whether a role grants ownership is `grantsOwnership`; what it allows is `capabilities`.
+             */
+            key: string | null;
+            /** @description The shop renamed this role (always `true` for a role with `key: null`). When `true`, show `name` as-is instead of translating `key`. */
+            nameCustomized: boolean;
+            /** @description The locked Owner role. It can be neither edited, renamed nor deleted. `viewer` already says so per action — use this for labelling only. */
+            isSystem: boolean;
+            /** @description Derived server-side from `capabilities` (`full_access`), never from `key`. */
+            grantsOwnership: boolean;
+            /** @description The CANONICAL stored set, sorted by key (api-spec §2): a key implied by another key in the set is not repeated. The Owner role is exactly `["full_access"]`. May contain keys whose catalog `status` is `upcoming`, and — from an older catalog — keys a client does not know: render those generically, never drop them silently. */
+            capabilities: string[];
+            /** @description Optimistic-concurrency token. Send it back unchanged in `UpdateRoleRequest.version`. On a version conflict the client MUST re-fetch this role and show the difference — it must never resubmit automatically with the newer version (AC-3.12). */
+            version: number;
+            usage: components["schemas"]["RoleUsage"];
+            /** @description `null` = never edited since the system provisioned it ("ค่าเริ่มต้นของระบบ", AC-9.6). */
+            lastEdited: components["schemas"]["RoleLastEdited"] | null;
+            viewer: components["schemas"]["RoleDetailViewer"];
+            /** Format: date-time */
+            createdAt: string;
+        };
+        RoleDetailListViewer: {
+            canCreate: components["schemas"]["RoleWriteVerdict"];
+            /** @description How many live roles this shop may have (the create ceiling). */
+            limit: number;
+        };
+        CapabilityGroup: {
+            /** @description OPEN SET (e.g. `team`, `shop`, `catalog_stock`, `channels`, `orders`, `finance`). */
+            key: string;
+            labelTh: string;
+        };
+        /** @description One capability. The registry's `tier` and `scope` are internal and are not published. */
+        CapabilityEntry: {
+            /** @description Stable snake_case identifier — the value stored in `RoleDetail.capabilities`. OPEN SET: new keys ship with new features. */
+            key: string;
+            labelTh: string;
+            /** @description One sentence — what holding it actually lets someone do. */
+            descriptionTh: string;
+            /** @description A `CapabilityGroup.key`, or `null` for an entry that is not a checklist item (`full_access`). OPEN SET — an unknown group goes in a generic section. */
+            group: string | null;
+            /** @description OPEN SET. `live` · `upcoming` (shown as "เร็ว ๆ นี้"; may be ticked in advance, AC-7.5). Any other value → generic copy. */
+            status: string;
+            /** @description Keys granted automatically with this one (one level only, e.g. `manage_X` → `view_X`). Shown ticked and disabled. */
+            implies: string[];
+            /** @description `false` = may never appear in a create/update request (`full_access`). */
+            selectable: boolean;
+        };
         /** @description `200` of `DELETE /orgs/{orgId}/membership` (api-spec §3.17, D-029). */
         LeaveOrgResult: {
             organizationId: string;
@@ -1292,98 +1472,6 @@ export interface components {
                 name: string;
             };
             membership: components["schemas"]["AcceptedMembership"];
-        };
-        /** @description How many hold this role — counts only, never who (AC-6.4). */
-        RoleUsage: {
-            activeMembers: number;
-            /** @description Invitations still `pending` for this role, INCLUDING ones whose link has expired (AC-3.9) — both block deletion. */
-            pendingInvitations: number;
-        };
-        /** @description Who last edited the role, as the VIEWER may know it (AC-9.6). Decided at read time against this shop only. There is deliberately no e-mail, user id or display name on the wire (api-spec §3 — `displayName` waits for a profile feature; adding an optional field later is non-breaking). */
-        RoleLastEditedBy: {
-            /** @description OPEN SET. `me` → "คุณ" · `member` → the editor's CURRENT role in this shop (the three `role*` fields below) · `former_member` → "อดีตสมาชิก" (no longer an active member of this shop, including a deleted account). Any other value → generic copy. */
-            kind: string;
-            /** @description Present only when `kind` is `member`. Display per AC-1.5. */
-            roleName?: string;
-            /** @description Present only when `kind` is `member`. Translation only — OPEN SET, fall back to `roleName`. */
-            roleKey?: string | null;
-            /** @description Present only when `kind` is `member`. */
-            roleNameCustomized?: boolean;
-        };
-        RoleLastEdited: {
-            /** Format: date-time */
-            at: string;
-            by: components["schemas"]["RoleLastEditedBy"];
-        };
-        /** @description The server's verdict for THIS caller at read time — whether to enable a button and why not. It is a UX input: every write re-reads the caller's permissions inside its transaction and may still refuse (AC-5.7). */
-        RoleWriteVerdict: {
-            allowed: boolean;
-            /** @description `null` when `allowed` is `true`. OPEN SET (api-spec §3), first match wins in this fixed order: `writes_disabled` → `role_locked` → `exceeds_your_permissions` → `in_use_requires_manage_members` → `equal_permissions_in_use` → `in_use` → `history_limit_reached`; `canClone` uses `owner_role` · `exceeds_your_permissions` · `role_limit_reached` · `writes_disabled`; `canCreate` uses `role_limit_reached` · `writes_disabled`. `writes_disabled` outranks every other reason while role writes are switched off. Any other value → generic copy. */
-            reason: string | null;
-        };
-        /** @description Per-role verdicts. `canEdit` covers renaming too. `canClone` is not affected by who holds the role — cloning never touches anyone's permissions. */
-        RoleDetailViewer: {
-            canEdit: components["schemas"]["RoleWriteVerdict"];
-            canDelete: components["schemas"]["RoleWriteVerdict"];
-            canClone: components["schemas"]["RoleWriteVerdict"];
-        };
-        /**
-         * @description One role in full — the body of the role detail read, each item of the role list page, and the success body of creating or updating a role (api-spec §3). Readable only by a holder of `manage_roles`.
-         *
-         *     Unlike `RoleRow` (readable by every active member), this DOES publish `capabilities`: the reader can already edit roles, so the list is the thing they are here to see.
-         */
-        RoleDetail: {
-            id: string;
-            /** @description The stored name, already normalised (NFC, trimmed, inner whitespace collapsed). Display rule (AC-1.5): `nameCustomized ? name : (translate key ?? name)`. */
-            name: string;
-            /**
-             * @description Stable slug for TRANSLATION ONLY: `owner`, `admin` or `staff` for the system presets, `null` for every role a user created. OPEN SET — on `null` or an unrecognised value fall back to `name`.
-             *
-             *     ⛔ NEVER a permission input. Whether a role grants ownership is `grantsOwnership`; what it allows is `capabilities`.
-             */
-            key: string | null;
-            /** @description The shop renamed this role (always `true` for a role with `key: null`). When `true`, show `name` as-is instead of translating `key`. */
-            nameCustomized: boolean;
-            /** @description The locked Owner role. It can be neither edited, renamed nor deleted. `viewer` already says so per action — use this for labelling only. */
-            isSystem: boolean;
-            /** @description Derived server-side from `capabilities` (`full_access`), never from `key`. */
-            grantsOwnership: boolean;
-            /** @description The CANONICAL stored set, sorted by key (api-spec §2): a key implied by another key in the set is not repeated. The Owner role is exactly `["full_access"]`. May contain keys whose catalog `status` is `upcoming`, and — from an older catalog — keys a client does not know: render those generically, never drop them silently. */
-            capabilities: string[];
-            /** @description Optimistic-concurrency token. Send it back unchanged in `UpdateRoleRequest.version`. On a version conflict the client MUST re-fetch this role and show the difference — it must never resubmit automatically with the newer version (AC-3.12). */
-            version: number;
-            usage: components["schemas"]["RoleUsage"];
-            /** @description `null` = never edited since the system provisioned it ("ค่าเริ่มต้นของระบบ", AC-9.6). */
-            lastEdited: components["schemas"]["RoleLastEdited"] | null;
-            viewer: components["schemas"]["RoleDetailViewer"];
-            /** Format: date-time */
-            createdAt: string;
-        };
-        RoleDetailListViewer: {
-            canCreate: components["schemas"]["RoleWriteVerdict"];
-            /** @description How many live roles this shop may have (the create ceiling). */
-            limit: number;
-        };
-        CapabilityGroup: {
-            /** @description OPEN SET (e.g. `team`, `shop`, `catalog_stock`, `channels`, `orders`, `finance`). */
-            key: string;
-            labelTh: string;
-        };
-        /** @description One capability. The registry's `tier` and `scope` are internal and are not published. */
-        CapabilityEntry: {
-            /** @description Stable snake_case identifier — the value stored in `RoleDetail.capabilities`. OPEN SET: new keys ship with new features. */
-            key: string;
-            labelTh: string;
-            /** @description One sentence — what holding it actually lets someone do. */
-            descriptionTh: string;
-            /** @description A `CapabilityGroup.key`, or `null` for an entry that is not a checklist item (`full_access`). OPEN SET — an unknown group goes in a generic section. */
-            group: string | null;
-            /** @description OPEN SET. `live` · `upcoming` (shown as "เร็ว ๆ นี้"; may be ticked in advance, AC-7.5). Any other value → generic copy. */
-            status: string;
-            /** @description Keys granted automatically with this one (one level only, e.g. `manage_X` → `view_X`). Shown ticked and disabled. */
-            implies: string[];
-            /** @description `false` = may never appear in a create/update request (`full_access`). */
-            selectable: boolean;
         };
     };
     responses: never;
@@ -2596,6 +2684,179 @@ export interface operations {
                 };
             };
             /** @description `ORG_MISMATCH` — `X-Organization-Id` disagrees with the path (a client bug; the server never picks a side). */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+        };
+    };
+    getOrgRoleDetail: {
+        parameters: {
+            query?: never;
+            header?: {
+                /** @description Org context (api-spec §1). Optional on routes that already carry `{orgId}` in the path; if both are sent they MUST match, otherwise `422 ORG_MISMATCH`. User-scoped and public routes ignore this header entirely (I-3). */
+                "X-Organization-Id"?: components["parameters"]["OrgIdHeader"];
+            };
+            path: {
+                /** @description Organization id. On F-002 org-scoped routes this is one of the two accepted sources of org context (the other is the `X-Organization-Id` header, D-025); sending both with different values is `422 ORG_MISMATCH`. */
+                orgId: components["parameters"]["OrgIdParam"];
+                /** @description Role id (`RoleDetail.id`). */
+                roleId: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description The role. */
+            200: {
+                headers: {
+                    "Cache-Control": components["headers"]["CacheControlNoStore"];
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["RoleDetail"];
+                };
+            };
+            /** @description Missing/invalid access token (`UNAUTHENTICATED`) */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description `FORBIDDEN` — missing `manage_roles` · `ORG_ACCESS_DENIED` — not an active member of this shop. */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description `NOT_FOUND` — no live role with this id in this shop. A deleted role, another shop's role and an unknown id answer identically. */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description `ORG_MISMATCH` — `X-Organization-Id` disagrees with the path. */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+        };
+    };
+    listOrgRoleDetails: {
+        parameters: {
+            query?: never;
+            header?: {
+                /** @description Org context (api-spec §1). Optional on routes that already carry `{orgId}` in the path; if both are sent they MUST match, otherwise `422 ORG_MISMATCH`. User-scoped and public routes ignore this header entirely (I-3). */
+                "X-Organization-Id"?: components["parameters"]["OrgIdHeader"];
+            };
+            path: {
+                /** @description Organization id. On F-002 org-scoped routes this is one of the two accepted sources of org context (the other is the `X-Organization-Id` header, D-025); sending both with different values is `422 ORG_MISMATCH`. */
+                orgId: components["parameters"]["OrgIdParam"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Every live role, oldest first. */
+            200: {
+                headers: {
+                    "Cache-Control": components["headers"]["CacheControlNoStore"];
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["RoleDetailListPage"];
+                };
+            };
+            /** @description Missing/invalid access token (`UNAUTHENTICATED`) */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description `FORBIDDEN` — missing `manage_roles` · `ORG_ACCESS_DENIED` — not an active member of this shop. */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description `ORG_MISMATCH` — `X-Organization-Id` disagrees with the path. */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+        };
+    };
+    getOrgCapabilityCatalog: {
+        parameters: {
+            query?: never;
+            header?: {
+                /** @description Org context (api-spec §1). Optional on routes that already carry `{orgId}` in the path; if both are sent they MUST match, otherwise `422 ORG_MISMATCH`. User-scoped and public routes ignore this header entirely (I-3). */
+                "X-Organization-Id"?: components["parameters"]["OrgIdHeader"];
+            };
+            path: {
+                /** @description Organization id. On F-002 org-scoped routes this is one of the two accepted sources of org context (the other is the `X-Organization-Id` header, D-025); sending both with different values is `422 ORG_MISMATCH`. */
+                orgId: components["parameters"]["OrgIdParam"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description The catalog, groups in display order. */
+            200: {
+                headers: {
+                    "Cache-Control": components["headers"]["CacheControlNoStore"];
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["CapabilityCatalog"];
+                };
+            };
+            /** @description Missing/invalid access token (`UNAUTHENTICATED`) */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description `FORBIDDEN` — missing `manage_roles` · `ORG_ACCESS_DENIED` — not an active member of this shop. */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description `ORG_MISMATCH` — `X-Organization-Id` disagrees with the path. */
             422: {
                 headers: {
                     [name: string]: unknown;

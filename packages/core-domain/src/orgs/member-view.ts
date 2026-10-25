@@ -24,11 +24,8 @@
 import { decideAdminResetVisible } from "./admin-reset-authz";
 import { isOwnerRole } from "./member-authz";
 import type { MembershipStatus } from "./owner-invariant";
-import {
-  decideMemberManageVisible,
-  isRoleNameCustomized,
-  viewerVerdictAudience,
-} from "./viewer-verdicts";
+import { wireNameCustomized } from "../rbac/role-view";
+import { decideMemberManageVisible, viewerVerdictAudience } from "./viewer-verdicts";
 
 /** The membership columns the row is built from. */
 export interface MemberRowMembership {
@@ -122,7 +119,7 @@ export function toMemberRow({
     isMe: membership.userId === viewerUserId,
     // ⛔ NOT `role.key === "owner"` / `role.name === "Owner"`. See the header.
     isOwner: isOwnerRole(role.capabilities),
-    roleNameCustomized: isRoleNameCustomized(role),
+    roleNameCustomized: wireNameCustomized(role),
     ...memberRowVerdicts(viewerUserId, viewerCapabilities, membership, role),
   };
 }

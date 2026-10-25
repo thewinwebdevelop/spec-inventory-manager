@@ -22,7 +22,7 @@
 // Dates leave as ISO-8601 UTC strings (api-spec §1), converted here so no call
 // site can emit a `Date` that serializes differently per client.
 import { maskEmail } from "./invitation-email";
-import { isRoleNameCustomized } from "./viewer-verdicts";
+import { wireNameCustomized } from "../rbac/role-view";
 import type { ResolvedInvitationStatus } from "./invitation-status";
 
 // ── §3.14 preview ───────────────────────────────────────────────────────────
@@ -71,7 +71,7 @@ export function toInvitationPreview(source: InvitationPreviewSource): Invitation
     organizationName: source.organizationName,
     roleName: source.roleName,
     roleKey: source.roleKey,
-    roleNameCustomized: isRoleNameCustomized({
+    roleNameCustomized: wireNameCustomized({
       key: source.roleKey,
       nameCustomized: source.roleNameCustomized,
     }),
@@ -128,7 +128,7 @@ export function toInvitationAcceptResult(source: InvitationAcceptSource): Invita
       roleId: source.membership.roleId,
       roleName: source.membership.roleName,
       roleKey: source.membership.roleKey,
-      roleNameCustomized: isRoleNameCustomized({
+      roleNameCustomized: wireNameCustomized({
         key: source.membership.roleKey,
         nameCustomized: source.membership.roleNameCustomized,
       }),

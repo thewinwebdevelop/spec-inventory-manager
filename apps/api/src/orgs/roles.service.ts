@@ -3,7 +3,7 @@ import { Inject, Injectable } from "@nestjs/common";
 import {
   decideRoleAssignVisible,
   isOwnerRole,
-  isRoleNameCustomized,
+  wireNameCustomized,
   viewerVerdictAudience,
   type GrantBlockedReason,
 } from "@omnistock/core-domain";
@@ -127,7 +127,7 @@ export class RolesService {
           // this object literal — the field-by-field projection is the control.
           grantsOwnership: isOwnerRole(row.capabilities),
           isSystem: row.isSystem,
-          nameCustomized: isRoleNameCustomized(row),
+          nameCustomized: wireNameCustomized(row),
           ...(verdict
             ? { viewerCanAssign: verdict.allowed, assignBlockedReason: verdict.reason }
             : {}),

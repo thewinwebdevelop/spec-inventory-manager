@@ -27,9 +27,9 @@
 // Dates leave as ISO-8601 UTC strings (api-spec §1), converted here so no call
 // site can emit a `Date` that serializes differently per client.
 import type { ResolvedInvitationStatus } from "./invitation-status";
+import { wireNameCustomized } from "../rbac/role-view";
 import {
   decideInvitationManageVisible,
-  isRoleNameCustomized,
   viewerVerdictAudience,
   type GrantBlockedReason,
 } from "./viewer-verdicts";
@@ -161,7 +161,7 @@ export function toInvitationRow(
     acceptedAt: invitation.acceptedAt ? invitation.acceptedAt.toISOString() : null,
     acceptedByUserId: invitation.acceptedByUserId,
     acceptedUserCreatedAfterInvite: acceptedUserCreatedAfterInvite(invitation),
-    roleNameCustomized: isRoleNameCustomized(role),
+    roleNameCustomized: wireNameCustomized(role),
     ...(manage ? { viewerCanManage: manage.allowed, manageBlockedReason: manage.reason } : {}),
   };
 }

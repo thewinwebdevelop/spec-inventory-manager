@@ -17,14 +17,6 @@ import { hasCapability } from "../rbac/expand";
 import { decideMemberAuthority, type MemberAuthorityResult } from "../rbac/member-authority";
 import { CAPABILITY_MANAGE_ROLES } from "../rbac/registry";
 
-/** api-spec §4.1 — the AC-1.5 display bit: `key === null || Role.nameCustomized`. */
-export function isRoleNameCustomized(role: {
-  readonly key: string | null;
-  readonly nameCustomized: boolean;
-}): boolean {
-  return role.key === null || role.nameCustomized;
-}
-
 export interface ViewerVerdictAudience {
   /** `RoleRow.viewerCanAssign` / `assignBlockedReason` — holder of `manage_members`. */
   readonly assign: boolean;

@@ -95,6 +95,9 @@ Class | Method | HTTP request | Description
 [*OrganizationsApi*](doc/OrganizationsApi.md) | [**putTaxProfile**](doc/OrganizationsApi.md#puttaxprofile) | **PUT** /orgs/{orgId}/tax-profile | Declare (or clear) the shop&#39;s legal tax identity
 [*OrganizationsApi*](doc/OrganizationsApi.md) | [**revealTaxId**](doc/OrganizationsApi.md#revealtaxid) | **POST** /orgs/{orgId}/tax-profile/reveal | Reveal the shop&#39;s full tax id (deliberate, recorded, rate-limited)
 [*OrganizationsApi*](doc/OrganizationsApi.md) | [**updateOrganization**](doc/OrganizationsApi.md#updateorganization) | **PATCH** /orgs/{orgId} | Update the shop&#39;s name / logo / timezone
+[*RolesApi*](doc/RolesApi.md) | [**getOrgCapabilityCatalog**](doc/RolesApi.md#getorgcapabilitycatalog) | **GET** /orgs/{orgId}/capabilities | The capability catalog this shop can see (role checklist)
+[*RolesApi*](doc/RolesApi.md) | [**getOrgRoleDetail**](doc/RolesApi.md#getorgroledetail) | **GET** /orgs/{orgId}/roles/{roleId} | One role of this shop, in full (edit and clone screens)
+[*RolesApi*](doc/RolesApi.md) | [**listOrgRoleDetails**](doc/RolesApi.md#listorgroledetails) | **GET** /orgs/{orgId}/role-details | Every live role of this shop, in full (the role list screen)
 [*SystemApi*](doc/SystemApi.md) | [**getHealth**](doc/SystemApi.md#gethealth) | **GET** /health | Liveness/readiness probe
 
 

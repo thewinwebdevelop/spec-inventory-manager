@@ -10,7 +10,6 @@ import {
   decideInvitationManageVisible,
   decideMemberManageVisible,
   decideRoleAssignVisible,
-  isRoleNameCustomized,
   viewerVerdictAudience,
 } from "./viewer-verdicts";
 
@@ -36,17 +35,6 @@ const SETS: readonly (readonly string[])[] = [
   ["full_access", "manage_members"],
 ];
 const MANAGERS = SETS.filter((s) => viewerVerdictAudience(s).assign);
-
-describe("isRoleNameCustomized — api-spec §4.1 (`key === null || Role.nameCustomized`)", () => {
-  it("custom role (key null) is always customized", () => {
-    expect(isRoleNameCustomized({ key: null, nameCustomized: false })).toBe(true);
-    expect(isRoleNameCustomized({ key: null, nameCustomized: true })).toBe(true);
-  });
-  it("system role: only when the shop renamed it", () => {
-    expect(isRoleNameCustomized({ key: "staff", nameCustomized: false })).toBe(false);
-    expect(isRoleNameCustomized({ key: "staff", nameCustomized: true })).toBe(true);
-  });
-});
 
 describe("viewerVerdictAudience — who sees which verdict (architecture §1.2 · AC-6.4)", () => {
   it("manage_members only: role assign + invitation verdicts, NOT member-row verdicts", () => {

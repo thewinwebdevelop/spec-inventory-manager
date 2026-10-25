@@ -13,7 +13,11 @@
 // Paths use the api-spec dialect (`{orgId}`), so a row here can be compared
 // byte-for-byte with api-spec §2 by a human, and with the live Nest router via
 // `toTemplatePath()` (see route-declarations.ts).
-import { CAPABILITY_MANAGE_MEMBERS, CAPABILITY_MANAGE_ORG_SETTINGS } from "@omnistock/core-domain";
+import {
+  CAPABILITY_MANAGE_MEMBERS,
+  CAPABILITY_MANAGE_ORG_SETTINGS,
+  CAPABILITY_MANAGE_ROLES,
+} from "@omnistock/core-domain";
 
 // T-002-08c — `CAPABILITY_MANAGE_ORG_SETTINGS` now lives next to
 // `CAPABILITY_MANAGE_MEMBERS` in core-domain, where F-001 opened the registry
@@ -107,6 +111,13 @@ export const ROUTE_CAPABILITIES: readonly RouteCapability[] = Object.freeze([
     path: "/orgs/{orgId}/invitations/{invitationId}",
     capability: CAPABILITY_MANAGE_MEMBERS,
   }),
+  // F-003 (api-spec §1) — the role-design reads. `manage_roles`, and NOT
+  // `@AnyActiveMember()`: these publish every role's `capabilities`, which
+  // `GET /roles` deliberately does not (AC-6.4). POST/PATCH/DELETE join with
+  // B23/B24/B25 (Q-T1: a row lands with the route that serves it).
+  row({ method: "GET", path: "/orgs/{orgId}/capabilities", capability: CAPABILITY_MANAGE_ROLES }),
+  row({ method: "GET", path: "/orgs/{orgId}/role-details", capability: CAPABILITY_MANAGE_ROLES }),
+  row({ method: "GET", path: "/orgs/{orgId}/roles/{roleId}", capability: CAPABILITY_MANAGE_ROLES }),
 ]);
 
 /**

@@ -31,7 +31,11 @@ import {
   UseGuards,
 } from "@nestjs/common";
 import type { Response } from "express";
-import { CAPABILITY_MANAGE_MEMBERS, type InvitationRow } from "@omnistock/core-domain";
+import {
+  CAPABILITY_MANAGE_MEMBERS,
+  normalizeEmail,
+  type InvitationRow,
+} from "@omnistock/core-domain";
 import { domainError } from "../common";
 import { RequireCapability } from "../common/authz";
 import { OrgRateLimit } from "../common/org-rate-limit.decorator";
@@ -106,7 +110,9 @@ export class InvitationsController {
     @Body() dto: CreateInvitationDto,
     @Res({ passthrough: true }) res: Response,
   ): Promise<IssuedInvitation> {
-    const email = typeof dto.email === "string" ? dto.email.trim() : "";
+    // The ONE email rule (G-11): a hand-rolled `.trim()` here was a partial
+    // second copy of `normalizeEmail` (QA02 → T-003-B18).
+    const email = typeof dto.email === "string" ? normalizeEmail(dto.email) : "";
     const roleId = typeof dto.roleId === "string" ? dto.roleId.trim() : "";
     const fieldErrors: Record<string, string> = {};
     if (email === "") fieldErrors.email = EMAIL_REQUIRED_MESSAGE;

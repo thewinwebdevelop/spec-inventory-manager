@@ -46,15 +46,13 @@ if (!INT_LANE_ENABLED) {
  * the write starts refusing, the assertion below goes red: delete the entry.
  */
 const AWAITING_WRITE_RULE: Readonly<Record<string, string>> = Object.freeze({
+  // remove when T-003-B17 merges
   "PATCH member · target axis (equal/exceeds → TARGET_NOT_BELOW_ACTOR)": "T-003-B17",
-  "POST invitation · grant axis (exceeds → ROLE_EXCEEDS_ACTOR)": "T-003-B18",
-  "DELETE invitation · grant axis (owner_only → FORBIDDEN · exceeds → ROLE_EXCEEDS_ACTOR)":
-    "T-003-B18",
+  // remove when T-003-B17 merges
+  "DELETE member · target axis (equal/exceeds → TARGET_NOT_BELOW_ACTOR)": "T-003-B17",
 });
 const MEMBER_TARGET = "PATCH member · target axis (equal/exceeds → TARGET_NOT_BELOW_ACTOR)";
-const INVITE_GRANT = "POST invitation · grant axis (exceeds → ROLE_EXCEEDS_ACTOR)";
-const CANCEL_GRANT =
-  "DELETE invitation · grant axis (owner_only → FORBIDDEN · exceeds → ROLE_EXCEEDS_ACTOR)";
+const MEMBER_REMOVE = "DELETE member · target axis (equal/exceeds → TARGET_NOT_BELOW_ACTOR)";
 
 const NEW_PW = "b22-reset-passphrase-7Qz!";
 const ISO = /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d{3}Z$/;
@@ -319,6 +317,22 @@ d("T-003-B22 viewer verdicts on shipped routes (E2E, DB+Redis)", () => {
       }
       expect(refusals).toBeGreaterThanOrEqual(4); // OWN, OWN2, ADM_B, activeInBoth
       expect(passes).toBeGreaterThanOrEqual(5);
+
+      // DELETE leg (the same verdict covers "remove"). Last, because it revokes.
+      // The caller's own row is skipped: removing yourself ends this session.
+      let removed = 0;
+      for (const row of rows.filter((r) => r.userId !== A.users.ADM_A.id)) {
+        const what = `ADM_A removes ${row.userId}`;
+        const res = await send("delete", `/orgs/${A.org.id}/members/${row.userId}`, auth);
+        if (row.viewerCanManage === false) {
+          if (row.manageBlockedReason === "owner_only") expectRefused(res, "FORBIDDEN", null, what);
+          else expectRefused(res, "TARGET_NOT_BELOW_ACTOR", MEMBER_REMOVE, what);
+        } else {
+          expect(res.status, `${what}: ${JSON.stringify(res.body)}`).toBe(200);
+          removed++;
+        }
+      }
+      expect(removed).toBeGreaterThanOrEqual(4);
     });
 
     it("RoleRow.viewerCanAssign (viewers ADM_A, MM) vs POST /invitations with that role", async () => {
@@ -336,7 +350,7 @@ d("T-003-B22 viewer verdicts on shipped routes (E2E, DB+Redis)", () => {
           if (role.viewerCanAssign === false) {
             if (role.assignBlockedReason === "owner_only")
               expectRefused(res, "FORBIDDEN", null, what);
-            else expectRefused(res, "ROLE_EXCEEDS_ACTOR", INVITE_GRANT, what);
+            else expectRefused(res, "ROLE_EXCEEDS_ACTOR", null, what);
           } else {
             expect(res.status, `${what}: ${JSON.stringify(res.body)}`).toBe(201);
             expect(res.body.invitation.viewerCanManage, what).toBe(true);
@@ -356,7 +370,7 @@ d("T-003-B22 viewer verdicts on shipped routes (E2E, DB+Redis)", () => {
         expectRefused(
           res,
           row.manageBlockedReason === "owner_only" ? "FORBIDDEN" : "ROLE_EXCEEDS_ACTOR",
-          CANCEL_GRANT,
+          null,
           `MM cancels ${row.id}`,
         );
       }

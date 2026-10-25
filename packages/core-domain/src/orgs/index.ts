@@ -37,7 +37,6 @@ export {
   decideInvitationManageVisible,
   decideMemberManageVisible,
   decideRoleAssignVisible,
-  isRoleNameCustomized,
   viewerVerdictAudience,
   type GrantBlockedReason,
   type GrantVerdict,

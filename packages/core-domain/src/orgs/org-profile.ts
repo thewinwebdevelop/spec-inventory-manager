@@ -21,7 +21,7 @@
 // `POST /orgs/{orgId}/tax-profile/reveal` (§3.16, T-002-17).
 import { hasCapability, CAPABILITY_MANAGE_ORG_SETTINGS } from "../auth/capabilities";
 import { maskTaxId } from "./tax-id-mask";
-import { isRoleNameCustomized } from "./viewer-verdicts";
+import { wireNameCustomized } from "../rbac/role-view";
 import {
   isSupportedTimezone,
   validateOrgName,
@@ -238,7 +238,7 @@ export function toOrgProfileView(input: {
       roleId: viewer.roleId,
       roleName: viewer.roleName,
       roleKey: viewer.roleKey,
-      roleNameCustomized: isRoleNameCustomized({
+      roleNameCustomized: wireNameCustomized({
         key: viewer.roleKey,
         nameCustomized: viewer.roleNameCustomized,
       }),
@@ -342,7 +342,7 @@ export function toMyOrganizationItem(source: MyOrganizationSource): MyOrganizati
       roleId: membership.roleId,
       roleName: membership.roleName,
       roleKey: membership.roleKey,
-      roleNameCustomized: isRoleNameCustomized({
+      roleNameCustomized: wireNameCustomized({
         key: membership.roleKey,
         nameCustomized: membership.roleNameCustomized,
       }),

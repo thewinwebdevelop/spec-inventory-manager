@@ -46,6 +46,8 @@ tags:
     description: F-002 — who is in a shop, and leaving one.
   - name: invitations
     description: F-002 — inviting people and redeeming links.
+  - name: roles
+    description: F-003 — designing roles and the capability catalog.
 
 paths:
   /health:
@@ -89,6 +91,13 @@ paths:
     $ref: "./paths/org-member.yaml"
   /orgs/{orgId}/roles:
     $ref: "./paths/org-roles.yaml"
+  # F-003 (T-003-B21) — the role-design reads; POST/PATCH/DELETE join with B23–B25.
+  /orgs/{orgId}/roles/{roleId}:
+    $ref: "./paths/org-role.yaml"
+  /orgs/{orgId}/role-details:
+    $ref: "./paths/org-role-details.yaml"
+  /orgs/{orgId}/capabilities:
+    $ref: "./paths/org-capabilities.yaml"
   /orgs/{orgId}/membership:
     $ref: "./paths/org-membership.yaml"
   /orgs/{orgId}/invitations:
