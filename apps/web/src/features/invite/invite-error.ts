@@ -60,7 +60,9 @@ const BY_CODE: Readonly<Record<string, InviteError>> = Object.freeze({
   },
   INVITATION_CANCELLED: {
     title: "คำเชิญนี้ถูกยกเลิกแล้ว",
-    body: "ติดต่อเจ้าของร้านถ้าคุณยังต้องการเข้าร่วม",
+    // R9 (D-035): ONE copy for a shop-cancelled and a re-check-cancelled
+    // invitation (B19 makes the bodies identical) - no reason, no inviter.
+    body: "ถ้าคุณยังต้องการเข้าร่วม ให้ขอลิงก์คำเชิญใหม่จากเจ้าของร้าน",
     next: HOME,
   },
   INVITATION_ALREADY_ACCEPTED: {
