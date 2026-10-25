@@ -4,6 +4,7 @@ owner: "@backend-api"
 signoff: approved     # user 2026-09-27 (+ รับ D-036/D-037)
 ---
 # [F-003] API design
+> **amendment 2026-10-25 (build · security review ของ T-003-B22 — M-1):** §3.1 `Invitation.viewerCanManage` = verdict ของสิทธิ์ (แกน grant ⊆) **ไม่ใช่สถานะ** — **ยกเลิก** ทำได้ทั้งแถว `pending` และหมดอายุ · **ออกลิงก์ใหม่** ต้อง `status === "pending"` ด้วย (แถวหมดอายุ route ตอบ `409 INVITATION_EXPIRED` ก่อนตรวจสิทธิ์ — UI ห้ามเสนอปุ่มนี้บนแถวหมดอายุ ให้เชิญใหม่แทน) · ถ้อยคำเดียวกันอยู่ใน description ของ OpenAPI (`components/orgs.yaml`)
 > สัญญาผ่าน OpenAPI (`packages/contracts/openapi/root.yaml` → bundle) — **seam กลาง FE↔BE** · ต่อจาก [architecture.md](architecture.md) + [data-model.md](data-model.md)
 > skill `contract-evolution`: `GET /roles`, route สมาชิก/คำเชิญ/accept/admin-reset **ship แล้วและมี client 2 ตัวกินอยู่ ⇒ additive เท่านั้น** (oasdiff ต้องผ่าน) · D-028 · D-030 · D-032 · **D-034 · D-035**
 > รอบ 3 (2026-09-27): แก้ตาม security-review (ตารางรวม architecture §15) · Q-P1 ปิดแล้ว (AC-9.6)
