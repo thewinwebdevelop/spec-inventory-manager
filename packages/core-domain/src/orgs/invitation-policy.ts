@@ -243,37 +243,59 @@ export interface InviterRecheckInput {
 }
 
 /**
+ * The verdict with the keys behind it — what the accept route needs for
+ * `org.invitation.accept_blocked_inviter.excessCapabilities` (T-003-B19).
+ * `excess` is `decideMemberAuthority`'s own `excess` for that leg (floor →
+ * `[manage_members]` · owner_only → `[full_access]` · grant ⊄ → what the role
+ * holds beyond the issuer), and `[]` when there is no active issuer at all.
+ */
+export type InviterRecheckVerdict =
+  | { readonly ok: true }
+  | {
+      readonly ok: false;
+      readonly reason: InviterRecheckReason;
+      readonly excess: readonly string[];
+    };
+
+/**
  * D-035 (+ Addendum P2/P3): may the person who issued this link still grant
- * it? Called ONLY after `canAcceptInvitation` answered `ok`, so no F-002 answer
- * changes. The rule itself is `decideMemberAuthority(op: invite_accept_recheck)`
- * — this fn only maps each failing leg to its own reason:
+ * it? Called ONLY after `canAcceptInvitation` answered `ok` (and after the
+ * email binding), so no F-002 answer changes. The rule itself is
+ * `decideMemberAuthority(op: invite_accept_recheck)` — this fn only maps each
+ * failing leg to its own reason:
  *   no active membership                         → `inviter_not_active`
  *   `forbidden` (floor `manage_members`, P2)     → `inviter_not_authorized`
  *   `owner_only` / `exceeds_actor` (grant ⊄)     → `inviter_exceeds`
  * Any other refusal cannot happen for a grant-only op; if it ever does, throw
  * (fail loud) rather than guess a reason or let the accept through.
  */
-export function decideInviterRecheck({
+export function judgeInviterRecheck({
   inviter,
   invitationRoleCapabilities,
-}: InviterRecheckInput): InviterRecheckDecision {
-  if (inviter === null) return "inviter_not_active";
+}: InviterRecheckInput): InviterRecheckVerdict {
+  if (inviter === null) return { ok: false, reason: "inviter_not_active", excess: [] };
   const verdict = decideMemberAuthority({
     op: "invite_accept_recheck",
     actorCapabilities: inviter.capabilities,
     actorIsTarget: false,
     grantCapabilities: invitationRoleCapabilities,
   });
-  if (verdict.ok) return "ok";
+  if (verdict.ok) return { ok: true };
   switch (verdict.reason) {
     case "forbidden":
-      return "inviter_not_authorized";
+      return { ok: false, reason: "inviter_not_authorized", excess: verdict.excess };
     case "owner_only":
     case "exceeds_actor":
-      return "inviter_exceeds";
+      return { ok: false, reason: "inviter_exceeds", excess: verdict.excess };
     default:
       throw new Error(
         `decideInviterRecheck: unexpected refusal ${JSON.stringify(verdict.reason)} for a grant-only op`,
       );
   }
+}
+
+/** `judgeInviterRecheck` projected onto its reason — the shape the lemma harness proves. */
+export function decideInviterRecheck(input: InviterRecheckInput): InviterRecheckDecision {
+  const verdict = judgeInviterRecheck(input);
+  return verdict.ok ? "ok" : verdict.reason;
 }

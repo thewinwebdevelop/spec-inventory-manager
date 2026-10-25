@@ -70,6 +70,7 @@ export {
   isElevatedRole,
   canAcceptInvitation,
   decideInviterRecheck,
+  judgeInviterRecheck,
   INVITATION_TTL_HOURS_ELEVATED,
   INVITATION_TTL_HOURS_STANDARD,
   type AcceptInvitationDecision,
@@ -80,6 +81,7 @@ export {
   type InviterRecheckDecision,
   type InviterRecheckInput,
   type InviterRecheckReason,
+  type InviterRecheckVerdict,
 } from "./invitation-policy";
 
 export { maskTaxId, TAX_ID_MASK_CHAR, TAX_ID_VISIBLE_SUFFIX_LENGTH } from "./tax-id-mask";

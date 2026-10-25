@@ -277,3 +277,276 @@ describe("B18 · invite create / reissue / cancel decide through decideMemberAut
     expect(sink.events).toEqual([]);
   });
 });
+
+// ── T-003-B19 ★ · U-API3-09 — the accept-time re-check of the issuer (D-035) ──
+
+const INVITEE = "usr_invitee";
+const INVITEE_EMAIL = "invitee@example.com";
+const ISSUER = "usr_issuer";
+const FIRST = "usr_first";
+const BLOCKED = "org.invitation.accept_blocked_inviter";
+
+/** The six F-002 refusals + the email binding — none may reach the re-check. */
+const PRIOR_REFUSALS = [
+  ["expired", "INVITATION_EXPIRED"],
+  ["cancelled", "INVITATION_CANCELLED"],
+  ["already_accepted", "INVITATION_ALREADY_ACCEPTED"],
+  ["email_mismatch", "INVITATION_EMAIL_MISMATCH"],
+  ["role_unavailable", "INVITATION_ROLE_UNAVAILABLE"],
+  ["already_member", "ALREADY_MEMBER"],
+  ["superseded", "INVITATION_SUPERSEDED"],
+] as const;
+type PriorRefusal = (typeof PRIOR_REFUSALS)[number][0];
+
+interface AcceptSetup {
+  readonly invitationRole?: RoleName;
+  readonly issuedByUserId?: string | null;
+  readonly invitedByUserId?: string | null;
+  /** CURRENT role of each user with an ACTIVE membership; absent = none. */
+  readonly active?: Readonly<Record<string, RoleName>>;
+  readonly refusal?: PriorRefusal;
+}
+
+function createAcceptService({
+  invitationRole = "orders",
+  issuedByUserId = ISSUER,
+  invitedByUserId = FIRST,
+  active = {},
+  refusal,
+}: AcceptSetup) {
+  const log: string[] = [];
+  const tokenIssuedAt = new Date("2026-10-01T09:00:00.000Z");
+  const row = {
+    id: "inv_acc",
+    email: INVITEE_EMAIL,
+    roleId: ROLES[invitationRole].id,
+    status:
+      refusal === "cancelled"
+        ? "cancelled"
+        : refusal === "already_accepted"
+          ? "accepted"
+          : "pending",
+    expiresAt: refusal === "expired" ? new Date(NOW.getTime() - 1) : LIVE_UNTIL,
+    tokenIssuedAt,
+    issuedByUserId,
+    invitedByUserId,
+  };
+  const tx = {
+    $executeRawUnsafe: vi.fn(async () => 0),
+    $queryRawUnsafe: vi.fn(async (_q: string, id: string) => [{ id }]),
+    invitation: {
+      findFirst: vi.fn(async () => ({ ...row })),
+      update: vi.fn(async (args: { where: { id: string } }) => ({ id: args.where.id })),
+    },
+    role: {
+      findFirst: vi.fn(async () =>
+        refusal === "role_unavailable" ? null : { ...ROLES[invitationRole], nameCustomized: false },
+      ),
+    },
+    membership: {
+      findFirst: vi.fn(async (args: { where: { userId: string; status?: string } }) => {
+        if (args.where.userId === INVITEE) {
+          if (refusal === "already_member")
+            return { id: "m_inv", status: "active", revokedAt: null, roleId: ROLES.orders.id };
+          if (refusal === "superseded")
+            return {
+              id: "m_inv",
+              status: "revoked",
+              revokedAt: new Date(tokenIssuedAt.getTime() + 1),
+              roleId: ROLES.orders.id,
+            };
+          return null;
+        }
+        const roleName = active[args.where.userId];
+        if (!roleName || args.where.status !== "active") return null;
+        return { role: { capabilities: ROLES[roleName].capabilities, deletedAt: null } };
+      }),
+      create: vi.fn(async () => ({ id: "m_new" })),
+      update: vi.fn(async () => ({ id: "m_inv" })),
+    },
+    organization: { findUnique: vi.fn(async () => ({ id: ORG_ID, name: "ร้าน" })) },
+  };
+  const prisma = {
+    $transaction: vi.fn(async (fn: (t: unknown) => Promise<unknown>) => {
+      log.push("tx:begin");
+      const out = await fn(tx);
+      log.push("tx:commit");
+      return out;
+    }),
+  };
+  const lookup = {
+    findByTokenHash: vi.fn(async () => ({ id: row.id, organizationId: ORG_ID })),
+    findAcceptor: vi.fn(async () => ({
+      id: INVITEE,
+      email: refusal === "email_mismatch" ? "someone.else@example.com" : INVITEE_EMAIL,
+      createdAt: new Date("2026-01-01T00:00:00.000Z"),
+    })),
+  };
+  const events = new SecurityEventsService();
+  const sink = collectSecurityEvents(events);
+  const emit = events.emit.bind(events);
+  vi.spyOn(events, "emit").mockImplementation((type, payload) => {
+    log.push(`emit:${type}`);
+    emit(type, payload);
+  });
+  const service = new InvitationsService(
+    prisma as never,
+    new OrgContextStore(),
+    events,
+    100,
+    "https://app.example.com",
+    lookup as unknown as InvitationLookupService,
+  );
+  const accept = () => service.accept({ userId: INVITEE, token: "raw-token", now: NOW });
+  /** Membership reads aimed at anyone but the invitee = the re-check ran. */
+  const issuerReads = () =>
+    tx.membership.findFirst.mock.calls.filter((c) => c[0].where.userId !== INVITEE);
+  return { accept, tx, sink, log, issuerReads };
+}
+
+describe("U-API3-09 ★ D-035 · accept re-checks the issuer of the current link (arch §6.1)", () => {
+  it.each(PRIOR_REFUSALS)(
+    "%s: the F-002 answer is unchanged and the re-check never runs (issuer would fail)",
+    async (refusal, code) => {
+      // No active issuer at all — the re-check would refuse if it were reached.
+      const { accept, tx, sink, issuerReads } = createAcceptService({ refusal, active: {} });
+      const refused = await codeOf(accept());
+      expect(refused.code).toBe(code);
+      expect(issuerReads()).toEqual([]);
+      expect(sink.ofType(BLOCKED)).toEqual([]);
+      expect(tx.membership.create).not.toHaveBeenCalled();
+      // only `already_member` writes (it closes the invitation, I-9) — and the
+      // email mismatch, above all, must NOT cancel someone else's invitation.
+      expect(tx.invitation.update).toHaveBeenCalledTimes(refusal === "already_member" ? 1 : 0);
+    },
+  );
+
+  it("refusal: cancelled IN the tx, no membership, 409 INVITATION_CANCELLED (no details), event AFTER commit", async () => {
+    const { accept, tx, sink, log } = createAcceptService({
+      invitationRole: "admin",
+      active: { [ISSUER]: "orders" }, // demoted: no manage_members any more
+    });
+    const refused = await codeOf(accept());
+    expect(refused).toEqual({ code: "INVITATION_CANCELLED", details: undefined });
+    expect(tx.invitation.update).toHaveBeenCalledTimes(1);
+    expect(tx.invitation.update.mock.calls[0]![0]).toMatchObject({
+      where: { id: "inv_acc" },
+      data: { status: "cancelled", cancelledAt: NOW },
+    });
+    expect(tx.membership.create).not.toHaveBeenCalled();
+    expect(tx.membership.update).not.toHaveBeenCalled();
+    expect(sink.types()).toEqual([BLOCKED]);
+    expect(sink.ofType(BLOCKED)[0]!.payload).toEqual({
+      actorUserId: INVITEE,
+      organizationId: ORG_ID,
+      invitationId: "inv_acc",
+      issuerUserId: ISSUER,
+      reason: "inviter_not_authorized",
+      excessCapabilities: ["manage_members"],
+    });
+    expect(log).toEqual(["tx:begin", "tx:commit", `emit:${BLOCKED}`]);
+  });
+
+  it("the issuer is read through an ACTIVE membership, in the tx", async () => {
+    const { accept, issuerReads } = createAcceptService({ active: { [ISSUER]: "admin" } });
+    await accept();
+    expect(issuerReads()).toHaveLength(1);
+    expect(issuerReads()[0]![0].where).toEqual({ userId: ISSUER, status: "active" });
+  });
+
+  it("COALESCE: issuedByUserId wins over invitedByUserId — first inviter Owner, current issuer exceeded ⇒ refused (MUT-05)", async () => {
+    const { accept, sink } = createAcceptService({
+      invitationRole: "admin",
+      issuedByUserId: ISSUER,
+      invitedByUserId: FIRST,
+      active: { [ISSUER]: "mm", [FIRST]: "owner" },
+    });
+    expect((await codeOf(accept())).code).toBe("INVITATION_CANCELLED");
+    expect(sink.ofType(BLOCKED)[0]!.payload).toMatchObject({
+      issuerUserId: ISSUER,
+      reason: "inviter_exceeds",
+    });
+  });
+
+  it("COALESCE: …and the other way round — first inviter demoted, current issuer Owner ⇒ accepted (MUT-05)", async () => {
+    const { accept, tx, sink } = createAcceptService({
+      invitationRole: "admin",
+      issuedByUserId: ISSUER,
+      invitedByUserId: FIRST,
+      active: { [ISSUER]: "owner", [FIRST]: "orders" },
+    });
+    await accept();
+    expect(tx.membership.create).toHaveBeenCalledTimes(1);
+    expect(sink.ofType(BLOCKED)).toEqual([]);
+  });
+
+  it("COALESCE: issuedByUserId null (legacy row) ⇒ falls back to invitedByUserId", async () => {
+    const { accept, issuerReads, tx } = createAcceptService({
+      issuedByUserId: null,
+      invitedByUserId: FIRST,
+      active: { [FIRST]: "admin" },
+    });
+    await accept();
+    expect(issuerReads()[0]![0].where).toEqual({ userId: FIRST, status: "active" });
+    expect(tx.membership.create).toHaveBeenCalledTimes(1);
+  });
+
+  it("both null ⇒ inviter_not_active (fail closed), no issuer read, issuerUserId null on the event", async () => {
+    const { accept, issuerReads, sink, tx } = createAcceptService({
+      issuedByUserId: null,
+      invitedByUserId: null,
+      active: { [FIRST]: "owner" },
+    });
+    expect((await codeOf(accept())).code).toBe("INVITATION_CANCELLED");
+    expect(issuerReads()).toEqual([]);
+    expect(tx.membership.create).not.toHaveBeenCalled();
+    expect(sink.ofType(BLOCKED)[0]!.payload).toMatchObject({
+      issuerUserId: null,
+      reason: "inviter_not_active",
+      excessCapabilities: [],
+    });
+  });
+
+  it("issuer with no active membership ⇒ inviter_not_active", async () => {
+    const { accept, sink } = createAcceptService({ active: {} });
+    expect((await codeOf(accept())).code).toBe("INVITATION_CANCELLED");
+    expect(sink.ofType(BLOCKED)[0]!.payload).toMatchObject({ reason: "inviter_not_active" });
+  });
+
+  it("grant ⊄ issuer ⇒ inviter_exceeds with the excess keys", async () => {
+    const { accept, sink } = createAcceptService({
+      invitationRole: "orders",
+      active: { [ISSUER]: "mm" },
+    });
+    expect((await codeOf(accept())).code).toBe("INVITATION_CANCELLED");
+    expect(sink.ofType(BLOCKED)[0]!.payload).toMatchObject({
+      reason: "inviter_exceeds",
+      excessCapabilities: ["manage_orders"],
+    });
+  });
+
+  it("control: an issuer who still may grant it ⇒ accepted, membership written, no blocked event", async () => {
+    const { accept, tx, sink } = createAcceptService({
+      invitationRole: "products",
+      active: { [ISSUER]: "mm" },
+    });
+    await accept();
+    expect(tx.membership.create).toHaveBeenCalledTimes(1);
+    expect(tx.invitation.update.mock.calls[0]![0].data).toMatchObject({ status: "accepted" });
+    expect(sink.types()).toEqual(["org.invitation.accepted"]);
+  });
+
+  it("a failing issuer read is NOT swallowed into ok — it propagates and nothing is written", async () => {
+    const { accept, tx } = createAcceptService({ active: { [ISSUER]: "admin" } });
+    const boom = new Error("issuer read failed");
+    tx.membership.findFirst.mockImplementation(
+      async (args: { where: { userId: string; status?: string } }) => {
+        if (args.where.userId === INVITEE) return null;
+        throw boom;
+      },
+    );
+    await expect(accept()).rejects.toBe(boom);
+    expect(tx.membership.create).not.toHaveBeenCalled();
+    expect(tx.invitation.update).not.toHaveBeenCalled();
+  });
+});
