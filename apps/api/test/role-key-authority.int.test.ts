@@ -448,9 +448,13 @@ d("I3-56 part 1 / I-45 — Role.key never decides a permission (DB)", () => {
       const o = `/orgs/${s.org.id}`;
       const R = s.org.roles;
       const a = s.p.adm.accessToken;
+      // R3-04 (F-003 AC-5.4b · D-034): Staff first, THEN Admin. F-002 promoted
+      // staffX to Admin and demoted them back; under D-034 the demote-back is
+      // `403 TARGET_NOT_BELOW_ACTOR` by design (staffX is then equal to the
+      // actor) — pinned in members.f003.e2e.int.test.ts, not a control here.
       const results = [
-        (await send("patch", `${o}/members/${s.p.staffX.id}`, a, { roleId: R.Admin.id })).status,
         (await send("patch", `${o}/members/${s.p.staffX.id}`, a, { roleId: R.Staff.id })).status,
+        (await send("patch", `${o}/members/${s.p.staffX.id}`, a, { roleId: R.Admin.id })).status,
         (await send("delete", `${o}/members/${s.p.staffY.id}`, a)).status,
         (await send("post", `${o}/invitations`, a, { email: inviteEmail(), roleId: R.Staff.id }))
           .status,

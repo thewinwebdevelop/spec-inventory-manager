@@ -2412,6 +2412,16 @@ export interface operations {
                     "application/json": components["schemas"]["ErrorResponse"];
                 };
             };
+            /** @description `RATE_LIMITED` — F-003 `memberWrite` (shared with PATCH on this path and `DELETE …/invitations/{invitationId}`). */
+            429: {
+                headers: {
+                    "Retry-After": components["headers"]["RetryAfter"];
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
         };
     };
     updateMemberRole: {
@@ -2494,6 +2504,16 @@ export interface operations {
             /** @description `ROLE_INVALID` — `roleId` is not a role of THIS shop (a foreign id and a non-existent id are indistinguishable by construction) · `VALIDATION_FAILED` — `roleId` missing · `ORG_CONTEXT_REQUIRED` / `ORG_MISMATCH`. */
             422: {
                 headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description `RATE_LIMITED` — F-003 `memberWrite`: 120 member writes per hour per caller per shop, shared with `DELETE …/members/{userId}` and `DELETE …/invitations/{invitationId}`. */
+            429: {
+                headers: {
+                    "Retry-After": components["headers"]["RetryAfter"];
                     [name: string]: unknown;
                 };
                 content: {

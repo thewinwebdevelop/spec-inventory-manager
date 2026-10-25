@@ -82,7 +82,9 @@ describe("★ paths match api-spec §2 exactly", () => {
       );
     }
     expect(routeKey({ method: "DELETE", path: membership })).toBe(
-      routeKey(ANY_ACTIVE_MEMBER_ROUTES.mutating.find((r) => r.path === "/orgs/{orgId}/membership")!),
+      routeKey(
+        ANY_ACTIVE_MEMBER_ROUTES.mutating.find((r) => r.path === "/orgs/{orgId}/membership")!,
+      ),
     );
   });
 });
@@ -241,13 +243,16 @@ describe("response headers (api-spec §1 · I-05)", () => {
 });
 
 describe("rate limit (architecture §8)", () => {
-  it("none of the membership routes declares one — abuse control is per-action", () => {
-    // §19 of api-spec lists quotas for shop creation, invitations, preview/accept
-    // and the TIN reveal. Membership changes are not on that list: they are
-    // already gated by `manage_members` and serialized by the org lock, and a
-    // quota here would mostly punish a shop cleaning up its team.
-    for (const handler of Object.values(handlers)) {
-      expect(declarationOf(handler).rateLimit).toBeUndefined();
-    }
+  it("R3-04 · F-003 arch §10: PATCH and DELETE /members/{userId} declare memberWrite; the read and leave do not", () => {
+    // F-002 shipped these routes with no quota (they were gated by
+    // `manage_members` and serialized by the org lock). F-003 gives them refusals
+    // that emit `escalation_denied`, so `memberWrite` (120/h per user+org,
+    // shared with DELETE invitation) bounds how fast a caller can spray them —
+    // together with the event dedupe (SR-12). Reading the directory and leaving
+    // the shop are not member WRITES on somebody else and stay unlimited.
+    expect(declarationOf(handlers.updateRole).rateLimit).toBe("memberWrite");
+    expect(declarationOf(handlers.revoke).rateLimit).toBe("memberWrite");
+    expect(declarationOf(handlers.list).rateLimit).toBeUndefined();
+    expect(declarationOf(handlers.leave).rateLimit).toBeUndefined();
   });
 });

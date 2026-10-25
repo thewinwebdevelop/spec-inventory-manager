@@ -42,7 +42,10 @@ const ROLE_ADMIN = {
   id: "rol_admin",
   name: "Admin",
   key: "admin",
-  capabilities: ["manage_members", "manage_org_settings"],
+  // F-003 (D-034 · R3-04): Staff ⊊ Admin, as in the shipped presets — under
+  // the target axis an Admin may only touch members strictly below them, and
+  // the F-002 fixture (`view_products` outside Admin) made Staff incomparable.
+  capabilities: ["manage_members", "manage_org_settings", "view_products"],
 };
 const ROLE_STAFF = {
   id: "rol_staff",
@@ -827,6 +830,147 @@ describe("MembersService.leave — api-spec §3.17 (D-029)", () => {
     });
     expect(await codeOf(ctx.run(() => ctx.service.leave()))).toBe("ORG_ACCESS_DENIED");
     expect(ctx.tx.membership.update).not.toHaveBeenCalled();
+  });
+});
+
+// ── F-003 · T-003-B17 — D-034 on the shipped routes ─────────────────────────
+
+describe("F-003 · decideMemberAuthority on PATCH/DELETE (D-034 · AC-5.4b)", () => {
+  const ADMIN_2 = "usr_admin2";
+
+  function twoAdmins() {
+    return createService({
+      memberships: [
+        member(OWNER, ROLE_OWNER.id),
+        member(ADMIN, ROLE_ADMIN.id),
+        member(ADMIN_2, ROLE_ADMIN.id),
+        member(STAFF, ROLE_STAFF.id),
+      ],
+      actor: ADMIN,
+    });
+  }
+
+  it.each([
+    [
+      "updateRole",
+      (s: MembersService) => s.updateRole({ targetUserId: ADMIN_2, roleId: ROLE_STAFF.id }),
+    ],
+    ["revoke", (s: MembersService) => s.revoke({ targetUserId: ADMIN_2 })],
+  ] as const)(
+    "★ AC-5.4b %s on an EQUAL Admin → TARGET_NOT_BELOW_ACTOR, nothing written, escalation_denied after the tx",
+    async (name, call) => {
+      const ctx = twoAdmins();
+      const order: string[] = [];
+      ctx.prisma.$transaction.mockImplementationOnce(async (fn, opts) => {
+        ctx.txOptions.push(opts);
+        const result = await fn(ctx.tx);
+        order.push("tx-returned");
+        return result;
+      });
+      const realEmit = ctx.service["events"].emitEscalationDenied.bind(ctx.service["events"]);
+      vi.spyOn(ctx.service["events"], "emitEscalationDenied").mockImplementation(async (p) => {
+        order.push("emit");
+        return realEmit(p);
+      });
+
+      expect(await codeOf(ctx.run<unknown>(() => call(ctx.service)))).toBe(
+        "TARGET_NOT_BELOW_ACTOR",
+      );
+      expect(ctx.tx.membership.update).not.toHaveBeenCalled();
+      expect(ctx.tx.invitation.updateMany).not.toHaveBeenCalled();
+      expect(order).toEqual(["tx-returned", "emit"]);
+      expect(ctx.sink.ofType("org.role.escalation_denied").map((e) => e.payload)).toEqual([
+        {
+          actorUserId: ADMIN,
+          organizationId: ORG_ID,
+          roleId: name === "updateRole" ? ROLE_STAFF.id : ROLE_ADMIN.id,
+          targetUserId: ADMIN_2,
+          operation: name === "updateRole" ? "change_member_role" : "remove_member",
+          reason: "target_not_below_actor",
+          excessCapabilities: [],
+          suppressedCount: 0,
+        },
+      ]);
+      expect(ctx.sink.ofType("org.member.role_changed")).toEqual([]);
+      expect(ctx.sink.ofType("org.member.revoked")).toEqual([]);
+      ctx.sink.stop();
+    },
+  );
+
+  it("★ grant ⊄ actor → ROLE_EXCEEDS_ACTOR with the excess keys in the event only", async () => {
+    const BIG = {
+      id: "rol_big",
+      name: "Big",
+      key: "big",
+      capabilities: ["manage_members", "manage_billing"],
+    };
+    const ctx = createService({
+      memberships: [
+        member(OWNER, ROLE_OWNER.id),
+        member(ADMIN, ROLE_ADMIN.id),
+        member(STAFF, ROLE_STAFF.id),
+      ],
+      roles: [...ROLES, BIG],
+      actor: ADMIN,
+    });
+    expect(
+      await codeOf(ctx.run(() => ctx.service.updateRole({ targetUserId: STAFF, roleId: BIG.id }))),
+    ).toBe("ROLE_EXCEEDS_ACTOR");
+    expect(ctx.tx.membership.update).not.toHaveBeenCalled();
+    expect(ctx.sink.ofType("org.role.escalation_denied")[0]!.payload).toMatchObject({
+      reason: "exceeds_actor",
+      operation: "change_member_role",
+      excessCapabilities: ["manage_billing"],
+    });
+    ctx.sink.stop();
+  });
+
+  it("★ actorIsTarget: an Admin may demote and remove THEMSELVES (target axis skipped; grant axis still applies)", async () => {
+    const ctx = twoAdmins();
+    const row = await ctx.run(() =>
+      ctx.service.updateRole({ targetUserId: ADMIN, roleId: ROLE_STAFF.id }),
+    );
+    expect(row.roleId).toBe(ROLE_STAFF.id);
+
+    const ctx2 = twoAdmins();
+    const res = await ctx2.run(() => ctx2.service.revoke({ targetUserId: ADMIN }));
+    expect(res.status).toBe("revoked");
+    expect(ctx2.sink.ofType("org.role.escalation_denied")).toEqual([]);
+    ctx.sink.stop();
+    ctx2.sink.stop();
+  });
+
+  it("★ floor in the tx: an actor whose role lost manage_members mid-flight → FORBIDDEN, no event", async () => {
+    // ALS says Admin (the guard let them in); the DATABASE now says Staff.
+    const ctx = createService({
+      memberships: [
+        member(OWNER, ROLE_OWNER.id),
+        member(ADMIN, ROLE_STAFF.id),
+        member(STAFF, ROLE_STAFF.id),
+      ],
+      actor: ADMIN,
+    });
+    const store = new OrgContextStore();
+    const code = await codeOf(
+      store.run(
+        { organizationId: ORG_ID, userId: ADMIN, capabilities: ROLE_ADMIN.capabilities },
+        () => ctx.service.revoke({ targetUserId: STAFF }),
+      ),
+    );
+    expect(code).toBe("FORBIDDEN");
+    expect(ctx.tx.membership.update).not.toHaveBeenCalled();
+    expect(ctx.sink.types()).toEqual([]);
+    ctx.sink.stop();
+  });
+
+  it("★ SR-19 / MUT-08: a no-op PATCH on a ⊊ target still writes and emits role_changed (from = to)", async () => {
+    const ctx = twoAdmins();
+    await ctx.run(() => ctx.service.updateRole({ targetUserId: STAFF, roleId: ROLE_STAFF.id }));
+    expect(ctx.tx.membership.update).toHaveBeenCalledTimes(1);
+    expect(ctx.sink.ofType("org.member.role_changed").map((e) => e.payload)).toEqual([
+      expect.objectContaining({ fromRoleId: ROLE_STAFF.id, toRoleId: ROLE_STAFF.id }),
+    ]);
+    ctx.sink.stop();
   });
 });
 
