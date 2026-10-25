@@ -336,7 +336,9 @@ function createAcceptService({
     $queryRawUnsafe: vi.fn(async (_q: string, id: string) => [{ id }]),
     invitation: {
       findFirst: vi.fn(async () => ({ ...row })),
-      update: vi.fn(async (args: { where: { id: string } }) => ({ id: args.where.id })),
+      update: vi.fn(async (args: { where: { id: string }; data: Record<string, unknown> }) => ({
+        id: args.where.id,
+      })),
     },
     role: {
       findFirst: vi.fn(async () =>
