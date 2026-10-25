@@ -114,6 +114,7 @@ class MembersApi {
   /// Parameters:
   /// * [orgId] - Organization id. On F-002 org-scoped routes this is one of the two accepted sources of org context (the other is the `X-Organization-Id` header, D-025); sending both with different values is `422 ORG_MISMATCH`. 
   /// * [status] - Default `all`. Any other value → `422`.
+  /// * [roleId] - F-003 — only members holding this role, ANDed with `status` (and with `total`). A role id of another shop (or one that never existed) answers `200` with an empty page, never an error. A deleted role still filters (its former holders). Longer than 64 characters, or repeated → `422 VALIDATION_FAILED` (`fieldErrors.roleId`). 
   /// * [cursor] - Opaque keyset cursor from the previous page's `nextCursor`. Base64url — clients MUST NOT decode or construct one. Unreadable value → `422 VALIDATION_FAILED` with `fieldErrors.cursor`. 
   /// * [limit] - Page size. Default 25, clamped to 100. Non-integer / < 1 → `422 VALIDATION_FAILED` with `fieldErrors.limit` (a bug is not silently corrected). 
   /// * [withTotal] - Opt in to the `total` count on this page. OPT-IN PER ENDPOINT: only the endpoints that declare this parameter compute a total — see the endpoint's own documentation. (`GET /me/organizations` and `GET /orgs/{orgId}/invitations` do NOT support it today; api-spec §1 states the convention generally, the server implements it on `GET /orgs/{orgId}/members` only.) 
@@ -130,6 +131,7 @@ class MembersApi {
   Future<Response<MemberListPage>> listMembers({ 
     required String orgId,
     String? status = 'all',
+    String? roleId,
     String? cursor,
     int? limit = 25,
     bool? withTotal = false,
@@ -163,6 +165,7 @@ class MembersApi {
 
     final _queryParameters = <String, dynamic>{
       if (status != null) r'status': encodeQueryParameter(_serializers, status, const FullType(String)),
+      if (roleId != null) r'roleId': encodeQueryParameter(_serializers, roleId, const FullType(String)),
       if (cursor != null) r'cursor': encodeQueryParameter(_serializers, cursor, const FullType(String)),
       if (limit != null) r'limit': encodeQueryParameter(_serializers, limit, const FullType(int)),
       if (withTotal != null) r'withTotal': encodeQueryParameter(_serializers, withTotal, const FullType(bool)),

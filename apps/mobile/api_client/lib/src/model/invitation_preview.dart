@@ -15,6 +15,7 @@ part 'invitation_preview.g.dart';
 /// * [organizationName] 
 /// * [roleName] 
 /// * [roleKey] 
+/// * [roleNameCustomized] - F-003 (AC-1.5) — the shop renamed this role (always `true` when `roleKey` is `null`): show `roleName` as-is instead of translating `roleKey`. 
 /// * [emailMasked] - `u***@example.com` — enough to pick the right account, not an address.
 /// * [expiresAt] 
 /// * [status] - Always `pending` on a `200`; the other states answer `409`.
@@ -28,6 +29,10 @@ abstract class InvitationPreview implements Built<InvitationPreview, InvitationP
 
   @BuiltValueField(wireName: r'roleKey')
   String? get roleKey;
+
+  /// F-003 (AC-1.5) — the shop renamed this role (always `true` when `roleKey` is `null`): show `roleName` as-is instead of translating `roleKey`. 
+  @BuiltValueField(wireName: r'roleNameCustomized')
+  bool? get roleNameCustomized;
 
   /// `u***@example.com` — enough to pick the right account, not an address.
   @BuiltValueField(wireName: r'emailMasked')
@@ -79,6 +84,13 @@ class _$InvitationPreviewSerializer implements PrimitiveSerializer<InvitationPre
       object.roleKey,
       specifiedType: const FullType.nullable(String),
     );
+    if (object.roleNameCustomized != null) {
+      yield r'roleNameCustomized';
+      yield serializers.serialize(
+        object.roleNameCustomized,
+        specifiedType: const FullType(bool),
+      );
+    }
     yield r'emailMasked';
     yield serializers.serialize(
       object.emailMasked,
@@ -138,6 +150,13 @@ class _$InvitationPreviewSerializer implements PrimitiveSerializer<InvitationPre
           ) as String?;
           if (valueDes == null) continue;
           result.roleKey = valueDes;
+          break;
+        case r'roleNameCustomized':
+          final valueDes = serializers.deserialize(
+            value,
+            specifiedType: const FullType(bool),
+          ) as bool;
+          result.roleNameCustomized = valueDes;
           break;
         case r'emailMasked':
           final valueDes = serializers.deserialize(

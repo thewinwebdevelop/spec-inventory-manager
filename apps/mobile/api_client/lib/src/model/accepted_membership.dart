@@ -15,6 +15,7 @@ part 'accepted_membership.g.dart';
 /// * [roleId] 
 /// * [roleName] 
 /// * [roleKey] 
+/// * [roleNameCustomized] - F-003 (AC-1.5) — the shop renamed this role (always `true` when `roleKey` is `null`): show `roleName` as-is instead of translating `roleKey`. 
 /// * [status] 
 @BuiltValue()
 abstract class AcceptedMembership implements Built<AcceptedMembership, AcceptedMembershipBuilder> {
@@ -26,6 +27,10 @@ abstract class AcceptedMembership implements Built<AcceptedMembership, AcceptedM
 
   @BuiltValueField(wireName: r'roleKey')
   String? get roleKey;
+
+  /// F-003 (AC-1.5) — the shop renamed this role (always `true` when `roleKey` is `null`): show `roleName` as-is instead of translating `roleKey`. 
+  @BuiltValueField(wireName: r'roleNameCustomized')
+  bool? get roleNameCustomized;
 
   @BuiltValueField(wireName: r'status')
   AcceptedMembershipStatusEnum get status;
@@ -69,6 +74,13 @@ class _$AcceptedMembershipSerializer implements PrimitiveSerializer<AcceptedMemb
       object.roleKey,
       specifiedType: const FullType.nullable(String),
     );
+    if (object.roleNameCustomized != null) {
+      yield r'roleNameCustomized';
+      yield serializers.serialize(
+        object.roleNameCustomized,
+        specifiedType: const FullType(bool),
+      );
+    }
     yield r'status';
     yield serializers.serialize(
       object.status,
@@ -118,6 +130,13 @@ class _$AcceptedMembershipSerializer implements PrimitiveSerializer<AcceptedMemb
           ) as String?;
           if (valueDes == null) continue;
           result.roleKey = valueDes;
+          break;
+        case r'roleNameCustomized':
+          final valueDes = serializers.deserialize(
+            value,
+            specifiedType: const FullType(bool),
+          ) as bool;
+          result.roleNameCustomized = valueDes;
           break;
         case r'status':
           final valueDes = serializers.deserialize(

@@ -95,7 +95,15 @@ function createService({ actorRole, invitationRole = "orders" }: Setup) {
         acceptedAt: null,
         acceptedByUserId: null,
         acceptedUserCreatedAt: null,
-        role: { name: "Orders", key: null },
+        // Shaped like INVITATION_SELECT.role (B22: + nameCustomized, capabilities for the verdict).
+        role: {
+          name: "Orders",
+          key: null,
+          nameCustomized: false,
+          capabilities: [
+            ...(Object.values(ROLES).find((r) => r.id === args.data.roleId)?.capabilities ?? []),
+          ],
+        },
       })),
       update: vi.fn(async (args: { where: { id: string }; data: Record<string, unknown> }) => ({
         id: args.where.id,

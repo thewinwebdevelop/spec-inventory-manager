@@ -45,6 +45,7 @@ import {
   type RevokeMemberResult,
 } from "./members.service";
 import { ORG_PROFILE_RESPONSE_HEADERS, applyResponseHeaders } from "./response-headers";
+import { resolveRoleIdFilter } from "./role-filter";
 
 /**
  * `?status=` — api-spec §3.7. `invited` is NOT an option: no production write
@@ -76,6 +77,7 @@ export class MembersController {
     @Query("cursor") cursor?: string,
     @Query("limit") limit?: string,
     @Query("withTotal") withTotal?: string,
+    @Query("roleId") roleId?: unknown,
   ): Promise<MemberListPage> {
     // §3.7 — `all` is the DEFAULT here (unlike `/me/organizations`, where the
     // default is `active`): this screen is the audit view of who is and who was
@@ -94,6 +96,8 @@ export class MembersController {
       // Opt-in only (api-spec §1): a `count` on every page is a second query
       // the switcher-style callers do not need.
       withTotal: withTotal === "true",
+      // F-003 (api-spec §4.2b) — ANDed with `status`.
+      roleId: resolveRoleIdFilter(roleId),
     });
   }
 

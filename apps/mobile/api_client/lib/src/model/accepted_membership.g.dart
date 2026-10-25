@@ -64,6 +64,8 @@ class _$AcceptedMembership extends AcceptedMembership {
   @override
   final String? roleKey;
   @override
+  final bool? roleNameCustomized;
+  @override
   final AcceptedMembershipStatusEnum status;
 
   factory _$AcceptedMembership(
@@ -74,6 +76,7 @@ class _$AcceptedMembership extends AcceptedMembership {
       {required this.roleId,
       required this.roleName,
       this.roleKey,
+      this.roleNameCustomized,
       required this.status})
       : super._();
   @override
@@ -92,6 +95,7 @@ class _$AcceptedMembership extends AcceptedMembership {
         roleId == other.roleId &&
         roleName == other.roleName &&
         roleKey == other.roleKey &&
+        roleNameCustomized == other.roleNameCustomized &&
         status == other.status;
   }
 
@@ -101,6 +105,7 @@ class _$AcceptedMembership extends AcceptedMembership {
     _$hash = $jc(_$hash, roleId.hashCode);
     _$hash = $jc(_$hash, roleName.hashCode);
     _$hash = $jc(_$hash, roleKey.hashCode);
+    _$hash = $jc(_$hash, roleNameCustomized.hashCode);
     _$hash = $jc(_$hash, status.hashCode);
     _$hash = $jf(_$hash);
     return _$hash;
@@ -112,6 +117,7 @@ class _$AcceptedMembership extends AcceptedMembership {
           ..add('roleId', roleId)
           ..add('roleName', roleName)
           ..add('roleKey', roleKey)
+          ..add('roleNameCustomized', roleNameCustomized)
           ..add('status', status))
         .toString();
   }
@@ -133,6 +139,11 @@ class AcceptedMembershipBuilder
   String? get roleKey => _$this._roleKey;
   set roleKey(String? roleKey) => _$this._roleKey = roleKey;
 
+  bool? _roleNameCustomized;
+  bool? get roleNameCustomized => _$this._roleNameCustomized;
+  set roleNameCustomized(bool? roleNameCustomized) =>
+      _$this._roleNameCustomized = roleNameCustomized;
+
   AcceptedMembershipStatusEnum? _status;
   AcceptedMembershipStatusEnum? get status => _$this._status;
   set status(AcceptedMembershipStatusEnum? status) => _$this._status = status;
@@ -147,6 +158,7 @@ class AcceptedMembershipBuilder
       _roleId = $v.roleId;
       _roleName = $v.roleName;
       _roleKey = $v.roleKey;
+      _roleNameCustomized = $v.roleNameCustomized;
       _status = $v.status;
       _$v = null;
     }
@@ -174,6 +186,7 @@ class AcceptedMembershipBuilder
           roleName: BuiltValueNullFieldError.checkNotNull(
               roleName, r'AcceptedMembership', 'roleName'),
           roleKey: roleKey,
+          roleNameCustomized: roleNameCustomized,
           status: BuiltValueNullFieldError.checkNotNull(
               status, r'AcceptedMembership', 'status'),
         );

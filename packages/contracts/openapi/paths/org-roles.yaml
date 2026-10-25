@@ -7,9 +7,15 @@ get:
   summary: List this shop's roles (the invite dropdown)
   description: >
     F-002 (api-spec §3.6). Any ACTIVE member may read it: the response carries
-    no personal data and nothing about anybody else — three role names the
-    caller can already see on their own membership. Requiring `manage_members`
-    would mean a Staff member could not be shown the name of their own role.
+    no personal data and nothing about anybody else — the shop's live role
+    names. Requiring `manage_members` would mean a Staff member could not be
+    shown the name of their own role. Deleted roles are not listed.
+
+
+    F-003: still NO `capabilities` (AC-6.4 — reading what a role allows needs
+    `manage_roles`, via the role-details read). Each row adds `nameCustomized`
+    (display rule) and `viewerCanAssign` / `assignBlockedReason`, which are
+    present only when the caller holds `manage_members`.
 
 
     It exists because AC US-3 makes choosing a role MANDATORY when inviting
@@ -17,7 +23,8 @@ get:
     acceptance criterion could not be met at all.
 
 
-    Read-only in F-002. F-003 adds create/update/delete.
+    This list is read-only; F-003's role create/update/delete are separate
+    routes gated by `manage_roles`.
   tags:
     - organizations
   security:

@@ -17,6 +17,12 @@ class _$RoleRow extends RoleRow {
   final bool? grantsOwnership;
   @override
   final bool isSystem;
+  @override
+  final bool? nameCustomized;
+  @override
+  final bool? viewerCanAssign;
+  @override
+  final String? assignBlockedReason;
 
   factory _$RoleRow([void Function(RoleRowBuilder)? updates]) =>
       (RoleRowBuilder()..update(updates))._build();
@@ -26,7 +32,10 @@ class _$RoleRow extends RoleRow {
       required this.name,
       this.key,
       this.grantsOwnership,
-      required this.isSystem})
+      required this.isSystem,
+      this.nameCustomized,
+      this.viewerCanAssign,
+      this.assignBlockedReason})
       : super._();
   @override
   RoleRow rebuild(void Function(RoleRowBuilder) updates) =>
@@ -43,7 +52,10 @@ class _$RoleRow extends RoleRow {
         name == other.name &&
         key == other.key &&
         grantsOwnership == other.grantsOwnership &&
-        isSystem == other.isSystem;
+        isSystem == other.isSystem &&
+        nameCustomized == other.nameCustomized &&
+        viewerCanAssign == other.viewerCanAssign &&
+        assignBlockedReason == other.assignBlockedReason;
   }
 
   @override
@@ -54,6 +66,9 @@ class _$RoleRow extends RoleRow {
     _$hash = $jc(_$hash, key.hashCode);
     _$hash = $jc(_$hash, grantsOwnership.hashCode);
     _$hash = $jc(_$hash, isSystem.hashCode);
+    _$hash = $jc(_$hash, nameCustomized.hashCode);
+    _$hash = $jc(_$hash, viewerCanAssign.hashCode);
+    _$hash = $jc(_$hash, assignBlockedReason.hashCode);
     _$hash = $jf(_$hash);
     return _$hash;
   }
@@ -65,7 +80,10 @@ class _$RoleRow extends RoleRow {
           ..add('name', name)
           ..add('key', key)
           ..add('grantsOwnership', grantsOwnership)
-          ..add('isSystem', isSystem))
+          ..add('isSystem', isSystem)
+          ..add('nameCustomized', nameCustomized)
+          ..add('viewerCanAssign', viewerCanAssign)
+          ..add('assignBlockedReason', assignBlockedReason))
         .toString();
   }
 }
@@ -94,6 +112,21 @@ class RoleRowBuilder implements Builder<RoleRow, RoleRowBuilder> {
   bool? get isSystem => _$this._isSystem;
   set isSystem(bool? isSystem) => _$this._isSystem = isSystem;
 
+  bool? _nameCustomized;
+  bool? get nameCustomized => _$this._nameCustomized;
+  set nameCustomized(bool? nameCustomized) =>
+      _$this._nameCustomized = nameCustomized;
+
+  bool? _viewerCanAssign;
+  bool? get viewerCanAssign => _$this._viewerCanAssign;
+  set viewerCanAssign(bool? viewerCanAssign) =>
+      _$this._viewerCanAssign = viewerCanAssign;
+
+  String? _assignBlockedReason;
+  String? get assignBlockedReason => _$this._assignBlockedReason;
+  set assignBlockedReason(String? assignBlockedReason) =>
+      _$this._assignBlockedReason = assignBlockedReason;
+
   RoleRowBuilder() {
     RoleRow._defaults(this);
   }
@@ -106,6 +139,9 @@ class RoleRowBuilder implements Builder<RoleRow, RoleRowBuilder> {
       _key = $v.key;
       _grantsOwnership = $v.grantsOwnership;
       _isSystem = $v.isSystem;
+      _nameCustomized = $v.nameCustomized;
+      _viewerCanAssign = $v.viewerCanAssign;
+      _assignBlockedReason = $v.assignBlockedReason;
       _$v = null;
     }
     return this;
@@ -133,6 +169,9 @@ class RoleRowBuilder implements Builder<RoleRow, RoleRowBuilder> {
           grantsOwnership: grantsOwnership,
           isSystem: BuiltValueNullFieldError.checkNotNull(
               isSystem, r'RoleRow', 'isSystem'),
+          nameCustomized: nameCustomized,
+          viewerCanAssign: viewerCanAssign,
+          assignBlockedReason: assignBlockedReason,
         );
     replace(_$result);
     return _$result;

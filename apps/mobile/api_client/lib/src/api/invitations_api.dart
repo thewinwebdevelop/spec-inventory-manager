@@ -326,6 +326,7 @@ class InvitationsApi {
   /// Parameters:
   /// * [orgId] - Organization id. On F-002 org-scoped routes this is one of the two accepted sources of org context (the other is the `X-Organization-Id` header, D-025); sending both with different values is `422 ORG_MISMATCH`. 
   /// * [status] - Default `pending` — the actionable view. Any other value → `422`.
+  /// * [roleId] - F-003 — only invitations for this role, ANDed with `status`. A role id of another shop (or one that never existed) answers `200` with an empty page, never an error. A deleted role still filters. Longer than 64 characters, or repeated → `422 VALIDATION_FAILED` (`fieldErrors.roleId`). The number `ROLE_IN_USE.details.pendingInvitations` counts is `pending` + `expired` for that role. 
   /// * [cursor] - Opaque keyset cursor from the previous page's `nextCursor`. Base64url — clients MUST NOT decode or construct one. Unreadable value → `422 VALIDATION_FAILED` with `fieldErrors.cursor`. 
   /// * [limit] - Page size. Default 25, clamped to 100. Non-integer / < 1 → `422 VALIDATION_FAILED` with `fieldErrors.limit` (a bug is not silently corrected). 
   /// * [xOrganizationId] - Org context (api-spec §1). Optional on routes that already carry `{orgId}` in the path; if both are sent they MUST match, otherwise `422 ORG_MISMATCH`. User-scoped and public routes ignore this header entirely (I-3). 
@@ -341,6 +342,7 @@ class InvitationsApi {
   Future<Response<InvitationListPage>> listInvitations({ 
     required String orgId,
     String? status = 'pending',
+    String? roleId,
     String? cursor,
     int? limit = 25,
     String? xOrganizationId,
@@ -373,6 +375,7 @@ class InvitationsApi {
 
     final _queryParameters = <String, dynamic>{
       if (status != null) r'status': encodeQueryParameter(_serializers, status, const FullType(String)),
+      if (roleId != null) r'roleId': encodeQueryParameter(_serializers, roleId, const FullType(String)),
       if (cursor != null) r'cursor': encodeQueryParameter(_serializers, cursor, const FullType(String)),
       if (limit != null) r'limit': encodeQueryParameter(_serializers, limit, const FullType(int)),
     };

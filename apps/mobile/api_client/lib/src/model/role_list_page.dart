@@ -14,13 +14,13 @@ part 'role_list_page.g.dart';
 ///
 /// Properties:
 /// * [items] 
-/// * [nextCursor] - Always `null` in F-002 — a shop has exactly its three system roles until F-003. The field is present so a client written today does not need rewriting the day a fourth role exists. 
+/// * [nextCursor] - Always `null`: every live role fits in one page while the per-shop role ceiling (30) is below the page maximum (100). Present so a client written today survives the day that stops being true. 
 @BuiltValue()
 abstract class RoleListPage implements Built<RoleListPage, RoleListPageBuilder> {
   @BuiltValueField(wireName: r'items')
   BuiltList<RoleRow> get items;
 
-  /// Always `null` in F-002 — a shop has exactly its three system roles until F-003. The field is present so a client written today does not need rewriting the day a fourth role exists. 
+  /// Always `null`: every live role fits in one page while the per-shop role ceiling (30) is below the page maximum (100). Present so a client written today survives the day that stops being true. 
   @BuiltValueField(wireName: r'nextCursor')
   String? get nextCursor;
 

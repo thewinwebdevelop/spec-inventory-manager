@@ -15,6 +15,7 @@
 //      the M-10 lesson, which this file's subject already carries a warning
 //      about.
 import { describe, it, expect } from "vitest";
+import { OrgContextStore } from "../tenancy";
 import { RolesService } from "./roles.service";
 
 interface FakeRole {
@@ -23,20 +24,34 @@ interface FakeRole {
   key: string | null;
   isSystem: boolean;
   capabilities: string[];
+  nameCustomized?: boolean;
   deletedAt?: Date | null;
 }
 
-function serviceOver(roles: FakeRole[]): RolesService {
+/** A viewer with no `manage_members` (Staff) unless a test says otherwise. */
+const STAFF_VIEWER: readonly string[] = ["view_products"];
+
+function serviceOver(roles: FakeRole[], viewerCapabilities: readonly string[] = STAFF_VIEWER) {
   const prisma = {
     role: {
       // Honours `deletedAt: null` like Postgres (F-003 · LIVE_ROLE_WHERE).
       findMany: async (args: { where?: { deletedAt?: null } } = {}) =>
-        args.where && "deletedAt" in args.where && args.where.deletedAt === null
+        (args.where && "deletedAt" in args.where && args.where.deletedAt === null
           ? roles.filter((r) => !r.deletedAt)
-          : roles,
+          : roles
+        ).map((r) => ({ nameCustomized: false, ...r })),
     },
   };
-  return new RolesService(prisma as never);
+  const store = new OrgContextStore();
+  const service = new RolesService(prisma as never, store);
+  // The verdict reads the caller from the request's org context (ALS).
+  return {
+    list: () =>
+      store.run(
+        { organizationId: "org_1", userId: "usr_v", capabilities: viewerCapabilities },
+        () => service.list(),
+      ),
+  };
 }
 
 const OWNER: FakeRole = {
@@ -108,6 +123,7 @@ describe("RolesService.list — grantsOwnership", () => {
       "isSystem",
       "key",
       "name",
+      "nameCustomized",
     ]);
     expect(JSON.stringify(items[0])).not.toContain("full_access");
   });
@@ -115,6 +131,61 @@ describe("RolesService.list — grantsOwnership", () => {
   it("keeps the F-002 pagination shape", async () => {
     const { nextCursor } = await serviceOver([OWNER]).list();
     expect(nextCursor).toBeNull();
+  });
+});
+
+// F-003 · T-003-B22 ★ — `nameCustomized` + `viewerCanAssign` (api-spec §4.1 · AC-2.2).
+describe("RolesService.list — F-003 RoleRow fields", () => {
+  const STAFF_ROLE: FakeRole = {
+    id: "rol_staff",
+    name: "แพ็คของ",
+    key: "staff",
+    isSystem: false,
+    capabilities: ["manage_products"],
+    nameCustomized: true,
+  };
+  const CUSTOM: FakeRole = {
+    id: "rol_c",
+    name: "บัญชี",
+    key: null,
+    isSystem: false,
+    capabilities: ["manage_billing"],
+  };
+
+  it("nameCustomized = key null || the column", async () => {
+    const { items } = await serviceOver([OWNER, STAFF_ROLE, CUSTOM]).list();
+    expect(items.map((r) => [r.id, r.nameCustomized])).toEqual([
+      ["rol_owner", false],
+      ["rol_staff", true],
+      ["rol_c", true],
+    ]);
+  });
+
+  it("★ viewerCanAssign / assignBlockedReason ABSENT for a viewer without manage_members", async () => {
+    const { items } = await serviceOver([OWNER, ADMIN], ["manage_roles", "manage_orders"]).list();
+    for (const row of items) {
+      expect(Object.keys(row)).not.toContain("viewerCanAssign");
+      expect(Object.keys(row)).not.toContain("assignBlockedReason");
+    }
+  });
+
+  it("★ Admin viewer: Owner = owner_only · equal Admin = allowed · wider role = exceeds", async () => {
+    const wider: FakeRole = { ...CUSTOM, capabilities: ["manage_members", "manage_billing"] };
+    const { items } = await serviceOver([OWNER, ADMIN, wider], ADMIN.capabilities).list();
+    expect(items.map((r) => [r.id, r.viewerCanAssign, r.assignBlockedReason])).toEqual([
+      ["rol_owner", false, "owner_only"],
+      ["rol_admin", true, null],
+      ["rol_c", false, "exceeds_your_permissions"],
+    ]);
+    // The reason never names the missing capability (AC-6.4).
+    expect(JSON.stringify(items)).not.toContain("manage_billing");
+  });
+
+  it("Owner viewer may assign every role", async () => {
+    const { items } = await serviceOver([OWNER, ADMIN, CUSTOM], OWNER.capabilities).list();
+    expect(items.every((r) => r.viewerCanAssign === true && r.assignBlockedReason === null)).toBe(
+      true,
+    );
   });
 });
 

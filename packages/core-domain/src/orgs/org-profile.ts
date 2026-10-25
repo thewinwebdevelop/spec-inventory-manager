@@ -21,6 +21,7 @@
 // `POST /orgs/{orgId}/tax-profile/reveal` (§3.16, T-002-17).
 import { hasCapability, CAPABILITY_MANAGE_ORG_SETTINGS } from "../auth/capabilities";
 import { maskTaxId } from "./tax-id-mask";
+import { wireNameCustomized } from "../rbac/role-view";
 import {
   isSupportedTimezone,
   validateOrgName,
@@ -106,6 +107,8 @@ export interface OrgProfileViewer {
   readonly roleName: string;
   /** Stable slug for on-screen translation — `null` for an F-003 custom role. */
   readonly roleKey: string | null;
+  /** The `Role.nameCustomized` column; the wire bit is derived (AC-1.5). */
+  readonly roleNameCustomized: boolean;
   readonly capabilities: readonly string[];
   readonly status: string;
 }
@@ -146,6 +149,9 @@ export interface OrgProfileView {
     readonly roleId: string;
     readonly roleName: string;
     readonly roleKey: string | null;
+    /** AC-1.5 — `roleKey === null || Role.nameCustomized`. */
+    readonly roleNameCustomized: boolean;
+    /** The STORED canonical set — not expanded (api-spec §3.1(1)). */
     readonly capabilities: readonly string[];
     readonly status: string;
   };
@@ -232,6 +238,10 @@ export function toOrgProfileView(input: {
       roleId: viewer.roleId,
       roleName: viewer.roleName,
       roleKey: viewer.roleKey,
+      roleNameCustomized: wireNameCustomized({
+        key: viewer.roleKey,
+        nameCustomized: viewer.roleNameCustomized,
+      }),
       // What the client uses to hide buttons it should not offer. It is NOT
       // enforcement — the server refuses the call regardless (architecture §3.1).
       capabilities: viewer.capabilities,
@@ -247,12 +257,18 @@ export function toOrgProfileView(input: {
 
 /** One row of `GET /me/organizations`, before the shape rule is applied. */
 export interface MyOrganizationSource {
-  readonly organization: { readonly id: string; readonly name: string; readonly logo: string | null };
+  readonly organization: {
+    readonly id: string;
+    readonly name: string;
+    readonly logo: string | null;
+  };
   readonly membership: {
     readonly status: string;
     readonly roleId: string;
     readonly roleName: string;
     readonly roleKey: string | null;
+    /** The `Role.nameCustomized` column; the wire bit is derived (AC-1.5). */
+    readonly roleNameCustomized: boolean;
     readonly revokedAt: Date | null;
   };
   readonly entitlement: OrgEntitlementView | null;
@@ -265,6 +281,8 @@ export interface MyOrganizationFullItem {
     readonly roleId: string;
     readonly roleName: string;
     readonly roleKey: string | null;
+    /** AC-1.5 — full shape only (the short shape names no role at all). */
+    readonly roleNameCustomized: boolean;
     readonly status: string;
   };
   readonly entitlement: OrgEntitlementView | null;
@@ -324,6 +342,10 @@ export function toMyOrganizationItem(source: MyOrganizationSource): MyOrganizati
       roleId: membership.roleId,
       roleName: membership.roleName,
       roleKey: membership.roleKey,
+      roleNameCustomized: wireNameCustomized({
+        key: membership.roleKey,
+        nameCustomized: membership.roleNameCustomized,
+      }),
       status: membership.status,
     },
     entitlement,

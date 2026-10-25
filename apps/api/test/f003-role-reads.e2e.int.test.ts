@@ -22,6 +22,7 @@ import {
   CAPABILITY_REGISTRY,
   decideAdminResetVisible,
   decideMemberAuthority,
+  decideRoleAssignVisible,
   decideRoleWrite,
   hasCapability,
 } from "@omnistock/core-domain";
@@ -47,6 +48,10 @@ vi.mock("@omnistock/core-domain", async (importOriginal) => {
     decideRoleWrite: vi.fn(real.decideRoleWrite),
     decideMemberAuthority: vi.fn(real.decideMemberAuthority),
     decideAdminResetVisible: vi.fn(real.decideAdminResetVisible),
+    // B22: GET /roles calls this one directly (the member / invitation verdicts
+    // are computed inside core-domain mappers, out of a module spy's reach —
+    // those routes are detected by the `viewerCan*` keys in the body instead).
+    decideRoleAssignVisible: vi.fn(real.decideRoleAssignVisible),
   };
 });
 
@@ -366,9 +371,12 @@ d("T-003-B21 role READ routes (E2E, DB+Redis)", () => {
 
   // ── I3-57 ────────────────────────────────────────────────────────────────
   describe("I3-57 ★ GET routes that compute viewer.* emit nothing", () => {
-    const spies = [decideRoleWrite, decideMemberAuthority, decideAdminResetVisible].map((f) =>
-      vi.mocked(f),
-    );
+    const spies = [
+      decideRoleWrite,
+      decideMemberAuthority,
+      decideAdminResetVisible,
+      decideRoleAssignVisible,
+    ].map((f) => vi.mocked(f as (...args: never[]) => unknown));
     const decisions = () => spies.reduce((n, s) => n + s.mock.calls.length, 0);
 
     const fill = (path: string): string =>
@@ -410,9 +418,10 @@ d("T-003-B21 role READ routes (E2E, DB+Redis)", () => {
           const res = await get(on, fill(route.path), user(p));
           expect(res.status, `${p} GET ${route.path}`).toBe(200);
           calls += 1;
-          if (decisions() > before) {
+          const body = JSON.stringify(res.body);
+          if (decisions() > before || /"viewerCan\w+":/.test(body)) {
             verdictRoutes.add(route.path);
-            refusedVerdicts += (JSON.stringify(res.body).match(/"allowed":false/g) ?? []).length;
+            refusedVerdicts += (body.match(/"allowed":false|"viewerCan\w+":false/g) ?? []).length;
           }
         }
       }
@@ -420,10 +429,17 @@ d("T-003-B21 role READ routes (E2E, DB+Redis)", () => {
       expect(calls).toBeGreaterThan(0);
       // Today: the three B21 routes. B22 adds `viewer*` on /roles, /members,
       // /invitations — those join this set automatically (no list to update).
-      for (const path of ["/orgs/{orgId}/role-details", "/orgs/{orgId}/roles/{roleId}"]) {
+      for (const path of [
+        "/orgs/{orgId}/role-details",
+        "/orgs/{orgId}/roles/{roleId}",
+        "/orgs/{orgId}/roles",
+        "/orgs/{orgId}/members",
+        "/orgs/{orgId}/invitations",
+      ]) {
         expect([...verdictRoutes]).toContain(path);
       }
-      expect(verdictRoutes.size).toBeGreaterThanOrEqual(2);
+      // B22 adds /roles, /members, /invitations (and the B21 three) — floor raised from 2.
+      expect(verdictRoutes.size).toBeGreaterThanOrEqual(5);
       expect(refusedVerdicts).toBeGreaterThan(0);
       expect(sink.types()).toEqual([]);
       expect((await redis.keys(`${ESCALATION_DEDUPE_PREFIX}*`)).length).toBe(dedupeBefore);

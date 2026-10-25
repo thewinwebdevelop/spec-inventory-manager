@@ -89,6 +89,16 @@ class _$MemberRow extends MemberRow {
   final bool isMe;
   @override
   final bool isOwner;
+  @override
+  final bool? roleNameCustomized;
+  @override
+  final bool? viewerCanManage;
+  @override
+  final String? manageBlockedReason;
+  @override
+  final bool? viewerCanResetPassword;
+  @override
+  final String? resetBlockedReason;
 
   factory _$MemberRow([void Function(MemberRowBuilder)? updates]) =>
       (MemberRowBuilder()..update(updates))._build();
@@ -104,7 +114,12 @@ class _$MemberRow extends MemberRow {
       this.revokedAt,
       required this.createdAt,
       required this.isMe,
-      required this.isOwner})
+      required this.isOwner,
+      this.roleNameCustomized,
+      this.viewerCanManage,
+      this.manageBlockedReason,
+      this.viewerCanResetPassword,
+      this.resetBlockedReason})
       : super._();
   @override
   MemberRow rebuild(void Function(MemberRowBuilder) updates) =>
@@ -127,7 +142,12 @@ class _$MemberRow extends MemberRow {
         revokedAt == other.revokedAt &&
         createdAt == other.createdAt &&
         isMe == other.isMe &&
-        isOwner == other.isOwner;
+        isOwner == other.isOwner &&
+        roleNameCustomized == other.roleNameCustomized &&
+        viewerCanManage == other.viewerCanManage &&
+        manageBlockedReason == other.manageBlockedReason &&
+        viewerCanResetPassword == other.viewerCanResetPassword &&
+        resetBlockedReason == other.resetBlockedReason;
   }
 
   @override
@@ -144,6 +164,11 @@ class _$MemberRow extends MemberRow {
     _$hash = $jc(_$hash, createdAt.hashCode);
     _$hash = $jc(_$hash, isMe.hashCode);
     _$hash = $jc(_$hash, isOwner.hashCode);
+    _$hash = $jc(_$hash, roleNameCustomized.hashCode);
+    _$hash = $jc(_$hash, viewerCanManage.hashCode);
+    _$hash = $jc(_$hash, manageBlockedReason.hashCode);
+    _$hash = $jc(_$hash, viewerCanResetPassword.hashCode);
+    _$hash = $jc(_$hash, resetBlockedReason.hashCode);
     _$hash = $jf(_$hash);
     return _$hash;
   }
@@ -161,7 +186,12 @@ class _$MemberRow extends MemberRow {
           ..add('revokedAt', revokedAt)
           ..add('createdAt', createdAt)
           ..add('isMe', isMe)
-          ..add('isOwner', isOwner))
+          ..add('isOwner', isOwner)
+          ..add('roleNameCustomized', roleNameCustomized)
+          ..add('viewerCanManage', viewerCanManage)
+          ..add('manageBlockedReason', manageBlockedReason)
+          ..add('viewerCanResetPassword', viewerCanResetPassword)
+          ..add('resetBlockedReason', resetBlockedReason))
         .toString();
   }
 }
@@ -213,6 +243,31 @@ class MemberRowBuilder implements Builder<MemberRow, MemberRowBuilder> {
   bool? get isOwner => _$this._isOwner;
   set isOwner(bool? isOwner) => _$this._isOwner = isOwner;
 
+  bool? _roleNameCustomized;
+  bool? get roleNameCustomized => _$this._roleNameCustomized;
+  set roleNameCustomized(bool? roleNameCustomized) =>
+      _$this._roleNameCustomized = roleNameCustomized;
+
+  bool? _viewerCanManage;
+  bool? get viewerCanManage => _$this._viewerCanManage;
+  set viewerCanManage(bool? viewerCanManage) =>
+      _$this._viewerCanManage = viewerCanManage;
+
+  String? _manageBlockedReason;
+  String? get manageBlockedReason => _$this._manageBlockedReason;
+  set manageBlockedReason(String? manageBlockedReason) =>
+      _$this._manageBlockedReason = manageBlockedReason;
+
+  bool? _viewerCanResetPassword;
+  bool? get viewerCanResetPassword => _$this._viewerCanResetPassword;
+  set viewerCanResetPassword(bool? viewerCanResetPassword) =>
+      _$this._viewerCanResetPassword = viewerCanResetPassword;
+
+  String? _resetBlockedReason;
+  String? get resetBlockedReason => _$this._resetBlockedReason;
+  set resetBlockedReason(String? resetBlockedReason) =>
+      _$this._resetBlockedReason = resetBlockedReason;
+
   MemberRowBuilder() {
     MemberRow._defaults(this);
   }
@@ -231,6 +286,11 @@ class MemberRowBuilder implements Builder<MemberRow, MemberRowBuilder> {
       _createdAt = $v.createdAt;
       _isMe = $v.isMe;
       _isOwner = $v.isOwner;
+      _roleNameCustomized = $v.roleNameCustomized;
+      _viewerCanManage = $v.viewerCanManage;
+      _manageBlockedReason = $v.manageBlockedReason;
+      _viewerCanResetPassword = $v.viewerCanResetPassword;
+      _resetBlockedReason = $v.resetBlockedReason;
       _$v = null;
     }
     return this;
@@ -271,6 +331,11 @@ class MemberRowBuilder implements Builder<MemberRow, MemberRowBuilder> {
               BuiltValueNullFieldError.checkNotNull(isMe, r'MemberRow', 'isMe'),
           isOwner: BuiltValueNullFieldError.checkNotNull(
               isOwner, r'MemberRow', 'isOwner'),
+          roleNameCustomized: roleNameCustomized,
+          viewerCanManage: viewerCanManage,
+          manageBlockedReason: manageBlockedReason,
+          viewerCanResetPassword: viewerCanResetPassword,
+          resetBlockedReason: resetBlockedReason,
         );
     replace(_$result);
     return _$result;

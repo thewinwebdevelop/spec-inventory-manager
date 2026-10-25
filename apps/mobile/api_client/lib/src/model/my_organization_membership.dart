@@ -16,6 +16,7 @@ part 'my_organization_membership.g.dart';
 /// * [roleId] - Present only on the `active` (full) shape.
 /// * [roleName] - Present only on the `active` (full) shape.
 /// * [roleKey] - Present only on the `active` (full) shape.
+/// * [roleNameCustomized] - F-003 (AC-1.5) — present only on the `active` (full) shape. The shop renamed this role (always `true` when `roleKey` is `null`): show `roleName` as-is instead of translating `roleKey`. 
 /// * [revokedAt] - Present only on the revoked (short) shape.
 @BuiltValue()
 abstract class MyOrganizationMembership implements Built<MyOrganizationMembership, MyOrganizationMembershipBuilder> {
@@ -34,6 +35,10 @@ abstract class MyOrganizationMembership implements Built<MyOrganizationMembershi
   /// Present only on the `active` (full) shape.
   @BuiltValueField(wireName: r'roleKey')
   String? get roleKey;
+
+  /// F-003 (AC-1.5) — present only on the `active` (full) shape. The shop renamed this role (always `true` when `roleKey` is `null`): show `roleName` as-is instead of translating `roleKey`. 
+  @BuiltValueField(wireName: r'roleNameCustomized')
+  bool? get roleNameCustomized;
 
   /// Present only on the revoked (short) shape.
   @BuiltValueField(wireName: r'revokedAt')
@@ -86,6 +91,13 @@ class _$MyOrganizationMembershipSerializer implements PrimitiveSerializer<MyOrga
       yield serializers.serialize(
         object.roleKey,
         specifiedType: const FullType.nullable(String),
+      );
+    }
+    if (object.roleNameCustomized != null) {
+      yield r'roleNameCustomized';
+      yield serializers.serialize(
+        object.roleNameCustomized,
+        specifiedType: const FullType(bool),
       );
     }
     if (object.revokedAt != null) {
@@ -146,6 +158,13 @@ class _$MyOrganizationMembershipSerializer implements PrimitiveSerializer<MyOrga
           ) as String?;
           if (valueDes == null) continue;
           result.roleKey = valueDes;
+          break;
+        case r'roleNameCustomized':
+          final valueDes = serializers.deserialize(
+            value,
+            specifiedType: const FullType(bool),
+          ) as bool;
+          result.roleNameCustomized = valueDes;
           break;
         case r'revokedAt':
           final valueDes = serializers.deserialize(
