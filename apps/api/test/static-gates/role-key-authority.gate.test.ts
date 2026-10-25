@@ -98,7 +98,7 @@ const PRESENTATION_ALLOWLIST: readonly PresentationAllowance[] = Object.freeze([
       "only description sentence (T-003-M04 — ux-wireframe §0.1 dropped admin/staff descriptions " +
       "as no longer honest once a shop can edit a role), and which TTL warning sentence to show " +
       "(`_isElevated`). The server decides the role and the expiry; none of these gate a request. " +
-      "T-003-M09 rewrites this screen (server-driven roles) and must re-pin. QA03 finding F1: " +
+      "The TTL `key == 'admin'` check stays pinned until the TTL decision lands (QA03 F1, waiting on a user decision). QA03 finding F1: " +
       "`_isElevated` drifts from the server's isElevatedRole once custom roles exist (display " +
       "defect, not authority).",
     lines: [

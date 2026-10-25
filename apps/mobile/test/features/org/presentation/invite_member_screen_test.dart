@@ -145,8 +145,13 @@ void main() {
     await _pump(tester, FakeOrgScoped(roles: roles), asOwner: false);
 
     expect(tileFor(tester, 'บัญชีภายนอก').enabled, isFalse);
-    expect(find.text('บทบาทนี้มีสิทธิ์ที่คุณไม่มี จึงมอบให้คนอื่นไม่ได้'), findsOneWidget);
-    expect(find.text('เฉพาะเจ้าของร้านเท่านั้นที่ตั้งเจ้าของร้านคนใหม่ได้'), findsOneWidget);
+    Finder inTile(String label, String text) => find.descendant(
+        of: find.ancestor(of: find.text(label), matching: find.byType(RadioListTile<String>)),
+        matching: find.text(text));
+    expect(inTile('บัญชีภายนอก', 'บทบาทนี้มีสิทธิ์ที่คุณไม่มี จึงมอบให้คนอื่นไม่ได้'),
+        findsOneWidget);
+    expect(inTile('เจ้าของร้าน', 'เฉพาะเจ้าของร้านเท่านั้นที่ตั้งเจ้าของร้านคนใหม่ได้'),
+        findsOneWidget);
     expect(tileFor(tester, 'พนักงานแพ็คของ').enabled, isTrue);
   });
 
@@ -202,6 +207,22 @@ void main() {
     // not submit it.
     expect(find.byType(InviteLinkScreen), findsOneWidget);
     expect(scoped.invitedRoleIds, ['rol_a']);
+  });
+
+  testWidgets('R8 · every role disabled: nothing is pre-selected and submit is disabled',
+      (tester) async {
+    final roles = [
+      const RoleRow(
+          id: 'rol_a', name: 'A', key: null, viewerCanAssign: false,
+          assignBlockedReason: 'exceeds_your_permissions'),
+      const RoleRow(
+          id: 'rol_staff', name: 'Staff', key: 'staff', viewerCanAssign: false,
+          assignBlockedReason: 'exceeds_your_permissions'),
+    ];
+    await _pump(tester, FakeOrgScoped(roles: roles), asOwner: false);
+
+    final button = tester.widget<ElevatedButton>(find.byType(ElevatedButton));
+    expect(button.onPressed, isNull);
   });
 
   testWidgets('the nudge opens this screen with Owner already chosen', (tester) async {

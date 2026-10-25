@@ -67,7 +67,9 @@ class _InviteMemberScreenState extends ConsumerState<InviteMemberScreen> {
     final assignable = roles.where((r) => !_isDisabled(r)).toList();
     final fallback = [match, staff, roles.last].whereType<RoleRow>();
     final pick = fallback.where((r) => !_isDisabled(r)).firstOrNull ?? assignable.lastOrNull;
-    _roleId = (pick ?? match ?? staff ?? roles.last).id;
+    // Nothing assignable -> select nothing (submit stays disabled); never
+    // pre-select a role the server already said it will refuse (403).
+    _roleId = pick?.id;
   }
 
   /// R8 — enabled/disabled comes from the server's `viewerCanAssign`. Only

@@ -276,7 +276,6 @@
   "inviteEmailPlaceholder": "เช่น malee@shop.com",
   "inviteRoleLabel": "บทบาทในร้านนี้",
   "inviteRoleOwnerDesc": "ทำได้ทุกอย่าง รวมถึงตั้ง/ถอดเจ้าของร้านคนอื่น",
-  "inviteOwnerDisabledHelper": "เฉพาะเจ้าของร้านเท่านั้นที่ตั้งเจ้าของร้านคนใหม่ได้",
   "inviteShortTtlNote": "บทบาทนี้มีสิทธิ์สูง ลิงก์คำเชิญจึงมีอายุสั้นกว่าปกติเพื่อความปลอดภัย",
   "inviteNoEmailNote": "ระบบยังไม่ส่งอีเมลให้อัตโนมัติ — คุณจะได้ลิงก์ไว้ส่งเองทางแชต (เช่น LINE)",
   "inviteSubmit": "สร้างลิงก์คำเชิญ",
