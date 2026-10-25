@@ -120,6 +120,16 @@ const PRESENTATION_ALLOWLIST: readonly PresentationAllowance[] = Object.freeze([
     ],
   },
   {
+    file: "apps/web/src/features/org/roles/RolesScreen.tsx",
+    reason:
+      "`toLastEdited()` (T-003-W05): adapts the wire `RoleLastEdited.by` to W03's `lastEditedLine` " +
+      "and passes the editor's roleKey straight into `displayRoleName()` for the label. Display only.",
+    lines: [
+      "const { kind, roleName, roleKey, roleNameCustomized } = le.by;",
+      "? displayRoleName({ name: roleName, roleKey, nameCustomized: roleNameCustomized })",
+    ],
+  },
+  {
     file: "packages/core-domain/src/rbac/role-view.ts",
     reason:
       "`wireNameCustomized()` (data-model AC-1.5 row, T-003-B21): the wire flag that tells a client " +
