@@ -34,6 +34,7 @@ import type { Response } from "express";
 import { CAPABILITY_MANAGE_MEMBERS, type MemberRow } from "@omnistock/core-domain";
 import { domainError } from "../common";
 import { RequireCapability } from "../common/authz";
+import { OrgRateLimit } from "../common/org-rate-limit.decorator";
 import { requireCursor, resolveLimit } from "../common/cursor";
 import { JsonOnlyGuard } from "../auth";
 import { UpdateMemberRoleDto } from "./dto";
@@ -105,11 +106,16 @@ export class MembersController {
    * client never has to refetch the list to render the new state.
    *
    * Errors: `403 FORBIDDEN` (missing capability, or the Owner-only rule) ·
+   * F-003 (D-034): `403 TARGET_NOT_BELOW_ACTOR` (the target's role is not
+   * strictly below yours — unless the target is you) · `403 ROLE_EXCEEDS_ACTOR`
+   * (the new role holds something you do not) ·
    * `404 NOT_FOUND` (not an active member of this shop) · `409 LAST_OWNER` ·
    * `409 CONFLICT` + `details.reason="busy"` (lock contention) ·
-   * `422 ROLE_INVALID` / `422 VALIDATION_FAILED` · `415`.
+   * `422 ROLE_INVALID` / `422 VALIDATION_FAILED` · `415` · `429 RATE_LIMITED`
+   * (`memberWrite`, shared with DELETE — architecture §10).
    */
   @RequireCapability(CAPABILITY_MANAGE_MEMBERS)
+  @OrgRateLimit("memberWrite")
   @Patch(":userId")
   @UseGuards(JsonOnlyGuard)
   async updateRole(
@@ -135,8 +141,13 @@ export class MembersController {
    * Removing YOURSELF through this route is allowed, but only for someone who
    * already holds `manage_members`; everybody else uses `DELETE …/membership`
    * (§3.17). This route grants nobody a softer path (D-029).
+   *
+   * F-003 (D-034): removing someone whose role is not strictly below yours is
+   * `403 TARGET_NOT_BELOW_ACTOR` (yourself excepted) · `429 RATE_LIMITED`
+   * (`memberWrite`).
    */
   @RequireCapability(CAPABILITY_MANAGE_MEMBERS)
+  @OrgRateLimit("memberWrite")
   @Delete(":userId")
   async revoke(
     @Param("userId") userId: string,

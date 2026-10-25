@@ -459,7 +459,7 @@ export interface paths {
          * List this shop's roles (the invite dropdown)
          * @description F-002 (api-spec §3.6). Any ACTIVE member may read it: the response carries no personal data and nothing about anybody else — the shop's live role names. Requiring `manage_members` would mean a Staff member could not be shown the name of their own role. Deleted roles are not listed.
          *
-         *     F-003: still NO `capabilities` (AC-6.4 — reading what a role allows needs `manage_roles`, via the role-details read). Each row adds `nameCustomized` (display rule) and, for a caller holding `manage_members` only, `viewerCanAssign` / `assignBlockedReason`.
+         *     F-003: still NO `capabilities` (AC-6.4 — reading what a role allows needs `manage_roles`, via the role-details read). Each row adds `nameCustomized` (display rule) and `viewerCanAssign` / `assignBlockedReason`, which are present only when the caller holds `manage_members`.
          *
          *     It exists because AC US-3 makes choosing a role MANDATORY when inviting somebody: without this endpoint no client can populate that dropdown, so the acceptance criterion could not be met at all.
          *
@@ -1380,9 +1380,9 @@ export interface components {
             /** @description F-003 (AC-1.5) — the shop renamed this role (always `true` when `roleKey` is `null`): show `roleName` as-is instead of translating `roleKey`. */
             roleNameCustomized?: boolean;
             /**
-             * @description F-003 (api-spec §3.1) — may the CALLER cancel this invitation or issue a new link? `false` when the invitation's role grants ownership and the caller is not an Owner, or when the role has a permission the caller lacks. Says exactly what `RoleRow.viewerCanAssign` says for the same role. A UX input, never enforcement.
+             * @description F-003 (api-spec §3.1) — the AUTHORITY answer for both actions on this invitation (cancel, issue a new link): `false` when the invitation's role grants ownership and the caller is not an Owner, or when the role has a permission the caller lacks. Says exactly what `RoleRow.viewerCanAssign` says for the same role. A UX input, never enforcement.
              *
-             *     Present only when the caller holds `manage_members` and the stored status is pending — `status` `pending` OR `expired` (an expired link can still be cancelled or reissued). Absent on accepted / cancelled rows.
+             *     Present only when the caller holds `manage_members` and the stored status is pending — `status` `pending` OR `expired`. Absent on accepted / cancelled rows. What each action additionally needs: CANCEL works on both `pending` and `expired` rows. ISSUE A NEW LINK also needs `status === "pending"`: on an `expired` row it answers `409 INVITATION_EXPIRED` whatever this verdict says — do not offer it there (invite again instead).
              */
             viewerCanManage?: boolean;
             /** @description Present with `viewerCanManage`; `null` when it is `true`. OPEN SET: `owner_only` → `exceeds_your_permissions`. Any other value → generic copy. */
@@ -2550,6 +2550,16 @@ export interface operations {
                     "application/json": components["schemas"]["ErrorResponse"];
                 };
             };
+            /** @description `RATE_LIMITED` — F-003 `memberWrite` (shared with PATCH on this path and `DELETE …/invitations/{invitationId}`). */
+            429: {
+                headers: {
+                    "Retry-After": components["headers"]["RetryAfter"];
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
         };
     };
     updateMemberRole: {
@@ -2632,6 +2642,16 @@ export interface operations {
             /** @description `ROLE_INVALID` — `roleId` is not a role of THIS shop (a foreign id and a non-existent id are indistinguishable by construction) · `VALIDATION_FAILED` — `roleId` missing · `ORG_CONTEXT_REQUIRED` / `ORG_MISMATCH`. */
             422: {
                 headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description `RATE_LIMITED` — F-003 `memberWrite`: 120 member writes per hour per caller per shop, shared with `DELETE …/members/{userId}` and `DELETE …/invitations/{invitationId}`. */
+            429: {
+                headers: {
+                    "Retry-After": components["headers"]["RetryAfter"];
                     [name: string]: unknown;
                 };
                 content: {
@@ -3150,6 +3170,16 @@ export interface operations {
             /** @description `ORG_CONTEXT_REQUIRED` / `ORG_MISMATCH` */
             422: {
                 headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description `RATE_LIMITED` — F-003 `memberWrite` (shared with PATCH/DELETE `…/members/{userId}`). */
+            429: {
+                headers: {
+                    "Retry-After": components["headers"]["RetryAfter"];
                     [name: string]: unknown;
                 };
                 content: {

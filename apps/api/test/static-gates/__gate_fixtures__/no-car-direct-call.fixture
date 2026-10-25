@@ -1,0 +1,10 @@
+// no-canAssignRole red fixture: a member route still deciding with the F-002 wrapper.
+import { canAssignRole, isOwnerRole } from "@omnistock/core-domain";
+
+export function mayPatch(actor: readonly string[], target: readonly string[], next: readonly string[]) {
+  return canAssignRole({
+    actorCapabilities: actor,
+    targetIsOwner: isOwnerRole(target),
+    newRoleIsOwner: isOwnerRole(next),
+  });
+}

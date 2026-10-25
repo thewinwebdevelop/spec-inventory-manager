@@ -9,10 +9,10 @@
 //          `pending` only. The normalised responses are recorded as the golden
 //          fixture for the clients (G3-14 compares against it).
 //   I3-23  verdict ⇔ write: every `false` in the seed → the real write refuses
-//          with the matching code; every `true` → the write succeeds. Rows whose
-//          WRITE rule lands in a parallel task are held in `AWAITING_WRITE_RULE`
-//          and pinned to today's F-002 answer — the entry turns red the day the
-//          rule lands, so it cannot be forgotten (no silent skip).
+//          with the matching code (member PATCH/DELETE → `FORBIDDEN` /
+//          `TARGET_NOT_BELOW_ACTOR`, invite → `ROLE_EXCEEDS_ACTOR`); every `true` →
+//          the write succeeds. The equal-Admin target rows are counted on both
+//          member writes, so the D-034 refusal is always exercised.
 //   I3-54  AC-1.5 on the wire: after renaming Staff, `roleNameCustomized` agrees
 //          on all six schemas + `RoleRow.nameCustomized`; a control read first.
 //   ?roleId on `/members` and `/invitations` (api-spec §4.2b).
@@ -39,20 +39,6 @@ if (!INT_LANE_ENABLED) {
       "set. Who-sees-what (AC-6.4), verdict ⇔ write and roleNameCustomized are NOT verified.",
   );
 }
-
-/**
- * Verdict ⇔ write rows whose write rule is built by a PARALLEL task. Until it
- * merges, the write still answers the F-002 way and this suite pins that. When
- * the write starts refusing, the assertion below goes red: delete the entry.
- */
-const AWAITING_WRITE_RULE: Readonly<Record<string, string>> = Object.freeze({
-  // remove when T-003-B17 merges
-  "PATCH member · target axis (equal/exceeds → TARGET_NOT_BELOW_ACTOR)": "T-003-B17",
-  // remove when T-003-B17 merges
-  "DELETE member · target axis (equal/exceeds → TARGET_NOT_BELOW_ACTOR)": "T-003-B17",
-});
-const MEMBER_TARGET = "PATCH member · target axis (equal/exceeds → TARGET_NOT_BELOW_ACTOR)";
-const MEMBER_REMOVE = "DELETE member · target axis (equal/exceeds → TARGET_NOT_BELOW_ACTOR)";
 
 const NEW_PW = "b22-reset-passphrase-7Qz!";
 const ISO = /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d{3}Z$/;
@@ -255,37 +241,27 @@ d("T-003-B22 viewer verdicts on shipped routes (E2E, DB+Redis)", () => {
   // ── I3-23 ────────────────────────────────────────────────────────────────
 
   describe("I3-23 ★ verdict ⇔ write", () => {
-    const awaited = new Set<string>();
-
-    /** A `false` verdict: the write must refuse with `code` — or, while awaited, still answer F-002's way. */
-    const expectRefused = (
-      res: request.Response,
-      code: string,
-      rule: string | null,
-      what: string,
-    ) => {
-      if (rule && AWAITING_WRITE_RULE[rule]) {
-        expect(
-          res.status,
-          `${what}: "${rule}" now refuses — ${AWAITING_WRITE_RULE[rule]} landed; delete it from AWAITING_WRITE_RULE`,
-        ).toBeLessThan(300);
-        awaited.add(rule);
-        return;
-      }
+    /** A `false` verdict: the real write refuses with exactly `code`. */
+    const expectRefused = (res: request.Response, code: string, what: string) => {
       expect(res.status, `${what}: ${JSON.stringify(res.body)}`).toBe(403);
       expect(res.body.error.code, what).toBe(code);
     };
+    /** `equal_permissions` / `exceeds_your_permissions` on a MemberRow → the target axis (D-034). */
+    const memberCode = (reason: unknown) =>
+      reason === "owner_only" ? "FORBIDDEN" : "TARGET_NOT_BELOW_ACTOR";
 
     const clearThrottle = (userId: string) =>
       redis.del(`${THROTTLE_ACCT_PREFIX}${userId}:reset-password`);
 
     it("MemberRow (viewer ADM_A): every verdict vs PATCH-to-same-role and reset-password", async () => {
-      const { shops } = await personas();
+      const scen = await personas();
+      const { shops } = scen;
       const A = shops.A;
       const auth = as(A, "ADM_A");
       const rows = items(await get(`/orgs/${A.org.id}/members?status=active`, auth));
       let refusals = 0;
       let passes = 0;
+      let targetAxisPatch = 0;
       for (const row of rows) {
         const what = `ADM_A → ${row.userId}`;
         const patch = await send("patch", `/orgs/${A.org.id}/members/${row.userId}`, auth, {
@@ -293,9 +269,8 @@ d("T-003-B22 viewer verdicts on shipped routes (E2E, DB+Redis)", () => {
         });
         if (row.viewerCanManage === false) {
           refusals++;
-          if (row.manageBlockedReason === "owner_only")
-            expectRefused(patch, "FORBIDDEN", null, what);
-          else expectRefused(patch, "TARGET_NOT_BELOW_ACTOR", MEMBER_TARGET, what);
+          expectRefused(patch, memberCode(row.manageBlockedReason), what);
+          if (row.manageBlockedReason !== "owner_only") targetAxisPatch++;
         } else {
           passes++;
           expect(patch.status, `${what}: ${JSON.stringify(patch.body)}`).toBe(200);
@@ -321,18 +296,33 @@ d("T-003-B22 viewer verdicts on shipped routes (E2E, DB+Redis)", () => {
       // DELETE leg (the same verdict covers "remove"). Last, because it revokes.
       // The caller's own row is skipped: removing yourself ends this session.
       let removed = 0;
+      let targetAxisDelete = 0;
       for (const row of rows.filter((r) => r.userId !== A.users.ADM_A.id)) {
         const what = `ADM_A removes ${row.userId}`;
         const res = await send("delete", `/orgs/${A.org.id}/members/${row.userId}`, auth);
         if (row.viewerCanManage === false) {
-          if (row.manageBlockedReason === "owner_only") expectRefused(res, "FORBIDDEN", null, what);
-          else expectRefused(res, "TARGET_NOT_BELOW_ACTOR", MEMBER_REMOVE, what);
+          expectRefused(res, memberCode(row.manageBlockedReason), what);
+          if (row.manageBlockedReason !== "owner_only") targetAxisDelete++;
         } else {
           expect(res.status, `${what}: ${JSON.stringify(res.body)}`).toBe(200);
           removed++;
         }
       }
       expect(removed).toBeGreaterThanOrEqual(4);
+
+      // Non-vacuity for the two rows that used to wait on B17 (security L-1):
+      // the equal-Admin targets (ADM_B, activeInBoth) really reach the target
+      // axis on BOTH writes, and stayed members.
+      expect(targetAxisPatch).toBeGreaterThanOrEqual(2);
+      expect(targetAxisDelete).toBeGreaterThanOrEqual(2);
+      const still = await prisma.membership.findMany({
+        where: {
+          organizationId: A.org.id,
+          userId: { in: [A.users.ADM_B.id, scen.activeInBoth.user.id] },
+        },
+        select: { status: true, roleId: true },
+      });
+      expect(still.map((m) => m.status)).toEqual(["active", "active"]);
     });
 
     it("RoleRow.viewerCanAssign (viewers ADM_A, MM) vs POST /invitations with that role", async () => {
@@ -348,9 +338,8 @@ d("T-003-B22 viewer verdicts on shipped routes (E2E, DB+Redis)", () => {
           });
           const what = `${p} invites as ${role.name}`;
           if (role.viewerCanAssign === false) {
-            if (role.assignBlockedReason === "owner_only")
-              expectRefused(res, "FORBIDDEN", null, what);
-            else expectRefused(res, "ROLE_EXCEEDS_ACTOR", null, what);
+            if (role.assignBlockedReason === "owner_only") expectRefused(res, "FORBIDDEN", what);
+            else expectRefused(res, "ROLE_EXCEEDS_ACTOR", what);
           } else {
             expect(res.status, `${what}: ${JSON.stringify(res.body)}`).toBe(201);
             expect(res.body.invitation.viewerCanManage, what).toBe(true);
@@ -370,7 +359,6 @@ d("T-003-B22 viewer verdicts on shipped routes (E2E, DB+Redis)", () => {
         expectRefused(
           res,
           row.manageBlockedReason === "owner_only" ? "FORBIDDEN" : "ROLE_EXCEEDS_ACTOR",
-          null,
           `MM cancels ${row.id}`,
         );
       }
@@ -381,16 +369,6 @@ d("T-003-B22 viewer verdicts on shipped routes (E2E, DB+Redis)", () => {
       for (const row of trues) {
         const res = await send("delete", `/orgs/${B.org.id}/invitations/${row.id}`, as(B, "ADM_A"));
         expect(res.status, JSON.stringify(res.body)).toBe(200);
-      }
-    });
-
-    afterAll(() => {
-      if (awaited.size > 0) {
-        console.warn(
-          `[T-003-B22 I3-23] verdict ⇔ write still awaiting the write rule of: ${[...awaited]
-            .map((r) => `${r} (${AWAITING_WRITE_RULE[r]})`)
-            .join(" · ")}`,
-        );
       }
     });
   });

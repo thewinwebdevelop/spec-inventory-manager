@@ -14,8 +14,8 @@ get:
 
     F-003: still NO `capabilities` (AC-6.4 — reading what a role allows needs
     `manage_roles`, via the role-details read). Each row adds `nameCustomized`
-    (display rule) and, for a caller holding `manage_members` only,
-    `viewerCanAssign` / `assignBlockedReason`.
+    (display rule) and `viewerCanAssign` / `assignBlockedReason`, which are
+    present only when the caller holds `manage_members`.
 
 
     It exists because AC US-3 makes choosing a role MANDATORY when inviting

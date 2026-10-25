@@ -14,7 +14,9 @@
 //   2. `member-authority.ts` does not export it (module-private).
 //   3. The F-002 wrappers `orgs/member-authz.ts` and `orgs/admin-reset-authz.ts`
 //      hold no ⊆/⊊ logic of their own (no expansion, no set comparison, no
-//      per-key loop) and DO call `decideMemberAuthority`.
+//      per-key loop). `admin-reset-authz.ts` DOES call `decideMemberAuthority`;
+//      `member-authz.ts` no longer has to — T-003-B17 deleted its wrapper
+//      (`canAssignRole`), leaving only `isOwnerRole`.
 //
 // ⚠️ Heuristic, not a proof: a hand-rolled comparison under another name in
 // some third file is not caught by rule 1 — the behavioural guard for that is
@@ -37,6 +39,8 @@ const WRAPPERS = [
   "packages/core-domain/src/orgs/member-authz.ts",
   "packages/core-domain/src/orgs/admin-reset-authz.ts",
 ] as const;
+/** Wrappers that must still delegate (member-authz.ts lost its wrapper in T-003-B17). */
+const DELEGATING: readonly string[] = ["packages/core-domain/src/orgs/admin-reset-authz.ts"];
 
 const REFERENCE = /\bisProperSubset\b/g;
 const CALL = /(?<!function\s+)\bisProperSubset\s*\(/g;
@@ -66,7 +70,8 @@ function g305(file: string, code: string): Violation[] {
   }
   if ((WRAPPERS as readonly string[]).includes(file)) {
     for (const m of code.matchAll(OWN_SET_LOGIC)) hit("wrapper-own-set-logic", m.index!, m[0]);
-    if ([...code.matchAll(DELEGATES)].length === 0) hit("wrapper-does-not-delegate", 0, file);
+    if (DELEGATING.includes(file) && [...code.matchAll(DELEGATES)].length === 0)
+      hit("wrapper-does-not-delegate", 0, file);
   }
   return out;
 }
@@ -106,7 +111,7 @@ describe("G3-05 · one copy of the ⊊ rule (isProperSubset lives in member-auth
       calls.length,
       "member-authority.ts no longer calls isProperSubset — the gate guards nothing",
     ).toBeGreaterThanOrEqual(1);
-    for (const w of WRAPPERS) {
+    for (const w of DELEGATING) {
       expect(
         [...readCode(w).matchAll(DELEGATES)].length,
         `${w} does not call decideMemberAuthority`,

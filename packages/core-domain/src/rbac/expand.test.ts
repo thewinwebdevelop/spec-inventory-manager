@@ -4,7 +4,21 @@ import { describe, it, expect } from "vitest";
 import { expandCapabilities, hasCapability } from "./expand";
 import { CAPABILITY_REGISTRY, type RegistryLike } from "./registry";
 import { hasCapability as legacyHasCapability } from "../auth/capabilities";
-import { canAssignRole } from "../orgs/member-authz";
+import { decideMemberAuthority } from "./member-authority";
+
+/** Owner-marker form of the F-002 rule (the wrapper `canAssignRole` was deleted in T-003-B17). */
+const f002Rule = (i: {
+  actorCapabilities: readonly string[];
+  targetIsOwner: boolean;
+  newRoleIsOwner: boolean;
+}): boolean =>
+  decideMemberAuthority({
+    op: "change_role",
+    actorCapabilities: i.actorCapabilities,
+    actorIsTarget: false,
+    targetCurrentCapabilities: i.targetIsOwner ? ["full_access"] : [],
+    grantCapabilities: i.newRoleIsOwner ? ["full_access"] : [],
+  }).ok;
 
 /** F-003 ships no implies edge (data-model §1) — the mechanism is proven on a fixture. */
 const FIXTURE: RegistryLike = [
@@ -123,23 +137,23 @@ describe("U-RB-04 · hasCapability runs through expandCapabilities", () => {
     expect(hasCapability([], "manage_members")).toBe(false);
   });
 
-  it("F-001/F-002 call sites keep their answers (canAssignRole matrix)", () => {
+  it("F-001/F-002 call sites keep their answers (F-002 Owner-only matrix)", () => {
     const owner = ["full_access"];
     const admin = ["manage_members", "manage_org_settings"];
+    expect(f002Rule({ actorCapabilities: owner, targetIsOwner: true, newRoleIsOwner: false })).toBe(
+      true,
+    );
+    expect(f002Rule({ actorCapabilities: admin, targetIsOwner: true, newRoleIsOwner: false })).toBe(
+      false,
+    );
+    expect(f002Rule({ actorCapabilities: admin, targetIsOwner: false, newRoleIsOwner: true })).toBe(
+      false,
+    );
     expect(
-      canAssignRole({ actorCapabilities: owner, targetIsOwner: true, newRoleIsOwner: false }),
+      f002Rule({ actorCapabilities: admin, targetIsOwner: false, newRoleIsOwner: false }),
     ).toBe(true);
-    expect(
-      canAssignRole({ actorCapabilities: admin, targetIsOwner: true, newRoleIsOwner: false }),
-    ).toBe(false);
-    expect(
-      canAssignRole({ actorCapabilities: admin, targetIsOwner: false, newRoleIsOwner: true }),
-    ).toBe(false);
-    expect(
-      canAssignRole({ actorCapabilities: admin, targetIsOwner: false, newRoleIsOwner: false }),
-    ).toBe(true);
-    expect(
-      canAssignRole({ actorCapabilities: [], targetIsOwner: false, newRoleIsOwner: false }),
-    ).toBe(false);
+    expect(f002Rule({ actorCapabilities: [], targetIsOwner: false, newRoleIsOwner: false })).toBe(
+      false,
+    );
   });
 });

@@ -780,16 +780,21 @@ Invitation:
     viewerCanManage:
       type: boolean
       description: >
-        F-003 (api-spec §3.1) — may the CALLER cancel this invitation or issue
-        a new link? `false` when the invitation's role grants ownership and the
-        caller is not an Owner, or when the role has a permission the caller
-        lacks. Says exactly what `RoleRow.viewerCanAssign` says for the same
-        role. A UX input, never enforcement.
+        F-003 (api-spec §3.1) — the AUTHORITY answer for both actions on this
+        invitation (cancel, issue a new link): `false` when the invitation's
+        role grants ownership and the caller is not an Owner, or when the role
+        has a permission the caller lacks. Says exactly what
+        `RoleRow.viewerCanAssign` says for the same role. A UX input, never
+        enforcement.
 
 
         Present only when the caller holds `manage_members` and the stored
-        status is pending — `status` `pending` OR `expired` (an expired link can
-        still be cancelled or reissued). Absent on accepted / cancelled rows.
+        status is pending — `status` `pending` OR `expired`. Absent on accepted /
+        cancelled rows. What each action additionally needs:
+        CANCEL works on both `pending` and `expired` rows.
+        ISSUE A NEW LINK also needs `status === "pending"`: on an `expired` row
+        it answers `409 INVITATION_EXPIRED` whatever this verdict says — do not
+        offer it there (invite again instead).
     manageBlockedReason:
       type:
         - string
