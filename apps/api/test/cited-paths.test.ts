@@ -81,10 +81,6 @@ const NOT_YET_BUILT: ReadonlyMap<string, string> = new Map([
     "F-003 Gate 2 design — T-003-QA08 (docs/features/F-003/tasks.md)",
   ],
   [
-    "packages/core-domain/src/rbac/authority-lemma.test.ts",
-    "F-003 Gate 2 design — T-003-QA07 (docs/features/F-003/tasks.md)",
-  ],
-  [
     "packages/db/test/migration-harness.int.test.ts",
     "F-003 Gate 2 design — T-003-QA05 / DV03 (docs/features/F-003/tasks.md)",
   ],
