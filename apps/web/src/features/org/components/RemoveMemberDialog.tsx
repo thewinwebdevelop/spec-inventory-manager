@@ -16,6 +16,10 @@
  */
 import { useEffect, useRef, useState } from "react";
 import { useRemoveMember } from "../api/use-member-mutations";
+import { useQueryClient } from "@tanstack/react-query";
+import { memberActionErrorMessage, memberRateLimitedMessage } from "../role-copy";
+import { orgKey } from "../../../lib/org/org-keys";
+import { useActiveOrg } from "../../../lib/org/org-context";
 import { toApiFailure } from "../../../lib/api/error";
 import { useToast } from "../../../components/providers/ToastProvider";
 import { Button } from "../../../components/ui/Button";
@@ -58,6 +62,8 @@ export function RemoveMemberDialog({
   onClose: () => void;
 }) {
   const toast = useToast();
+  const org = useActiveOrg();
+  const queryClient = useQueryClient();
   const remove = useRemoveMember();
   const [banner, setBanner] = useState<string | null>(null);
   const cancelRef = useRef<HTMLButtonElement>(null);
@@ -91,6 +97,18 @@ export function RemoveMemberDialog({
           setBanner(REMOVE_MEMBER_COPY.error.lastOwner);
           return;
         }
+        // T-003-W10 · §E — the F-002 fallback offered this, the server said the
+        // target is not below you. Say so (not the Owner sentence), and refetch so
+        // the row picks up the server's verdict instead of offering it again.
+        if (failure.kind === "forbidden" && failure.code === "TARGET_NOT_BELOW_ACTOR") {
+          setBanner(memberActionErrorMessage(failure.code, "changeRole"));
+          void queryClient.invalidateQueries({ queryKey: orgKey(org.orgId, "members") });
+          return;
+        }
+        if (failure.kind === "throttled") {
+          setBanner(memberRateLimitedMessage(failure.retryAfterSeconds ?? 60));
+          return;
+        }
         if (failure.kind === "forbidden" || failure.kind === "org-access-denied") {
           setBanner(REMOVE_MEMBER_COPY.error.forbidden);
           return;
@@ -101,33 +119,36 @@ export function RemoveMemberDialog({
   };
 
   return (
-    <DialogShell label={REMOVE_MEMBER_COPY.title(member.email)} onClose={onClose} role="alertdialog">
-        <h3 className="text-heading-sm">{REMOVE_MEMBER_COPY.title(member.email)}</h3>
-        {banner && <ErrorBanner message={banner} />}
+    <DialogShell
+      label={REMOVE_MEMBER_COPY.title(member.email)}
+      onClose={onClose}
+      role="alertdialog"
+    >
+      <h3 className="text-heading-sm">{REMOVE_MEMBER_COPY.title(member.email)}</h3>
+      {banner && <ErrorBanner message={banner} />}
 
-        <ul>
-          {REMOVE_MEMBER_COPY.consequences.map((line) => (
-            <li key={line} className="text-body-sm">
-              {line}
-            </li>
-          ))}
-        </ul>
+      <ul>
+        {REMOVE_MEMBER_COPY.consequences.map((line) => (
+          <li key={line} className="text-body-sm">
+            {line}
+          </li>
+        ))}
+      </ul>
 
-        {/* `.dialog .acts` — one right-aligned row, `space.3` between. */}
-        <div className="flex flex-wrap justify-end gap-3 pt-2">
-          <Button ref={cancelRef} variant="secondary" onClick={onClose} disabled={remove.isPending}>
-            {REMOVE_MEMBER_COPY.cancel}
-          </Button>
-          <Button
-            variant="destructive"
-            onClick={submit}
-            disabled={remove.isPending}
-            loading={remove.isPending}
-          >
-            {REMOVE_MEMBER_COPY.confirm}
-          </Button>
-        </div>
-    
+      {/* `.dialog .acts` — one right-aligned row, `space.3` between. */}
+      <div className="flex flex-wrap justify-end gap-3 pt-2">
+        <Button ref={cancelRef} variant="secondary" onClick={onClose} disabled={remove.isPending}>
+          {REMOVE_MEMBER_COPY.cancel}
+        </Button>
+        <Button
+          variant="destructive"
+          onClick={submit}
+          disabled={remove.isPending}
+          loading={remove.isPending}
+        >
+          {REMOVE_MEMBER_COPY.confirm}
+        </Button>
+      </div>
     </DialogShell>
   );
 }

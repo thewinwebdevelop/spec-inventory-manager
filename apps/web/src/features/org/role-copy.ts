@@ -325,6 +325,17 @@ export function roleFormErrorMessage(
   }
 }
 
+/**
+ * §E — `429 RATE_LIMITED` (`memberWrite`) บน route สมาชิก/คำเชิญ (UX01 · T-003-W10).
+ * `remainingSeconds` มาจาก `Retry-After` (ปัดขึ้น · ไม่ติดลบ) → mm:ss.
+ */
+export function memberRateLimitedMessage(remainingSeconds: number): string {
+  const s = Math.max(0, Math.ceil(remainingSeconds));
+  const mm = String(Math.floor(s / 60)).padStart(2, "0");
+  const ss = String(s % 60).padStart(2, "0");
+  return `ทำรายการกับสมาชิกถี่เกินไป กรุณารอ ${mm}:${ss} แล้วลองใหม่`;
+}
+
 /** R7/R8/R9 — เปลี่ยนบทบาท / เชิญ / ออกลิงก์ใหม่ / ยกเลิกคำเชิญ (ErrorBanner ใน dialog เดิม) */
 export function memberActionErrorMessage(
   code: string,

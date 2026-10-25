@@ -72,6 +72,7 @@ describe("memberActionsFor — §7's table", () => {
         removeFromOrg: false,
         leaveOrg: false,
         ownerOnlyNotice: false,
+        serverBlock: null,
       });
     }
   });

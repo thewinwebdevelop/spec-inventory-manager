@@ -45,6 +45,18 @@ export interface MemberActionInput {
   readonly isSelf: boolean;
   /** `active` rows only get actions (§7: a removed row has none). */
   readonly targetStatus: string;
+  /**
+   * ★ T-003-W10 · R7 — `MemberRow.viewerCanManage` / `manageBlockedReason`.
+   * When `viewerCanManage` is a boolean it is the WHOLE answer, in both
+   * directions: the local capability picture is not consulted (B17 L-5 — the
+   * F-002 rules offered Admin→Admin, which the server now refuses). Absent
+   * (viewer without `manage_roles`, or an older server) ⇒ the F-002 table below
+   * (api-spec §3.1 · ux R7 · test-plan CW3-03).
+   */
+  readonly verdict?: {
+    readonly viewerCanManage?: boolean;
+    readonly manageBlockedReason?: string | null;
+  };
 }
 
 export interface MemberActions {
@@ -58,6 +70,12 @@ export interface MemberActions {
    * instead of wondering.
    */
   readonly ownerOnlyNotice: boolean;
+  /**
+   * R7 — the server said no: no menu, and the reason line (§0.3 ข). `reason`
+   * is an OPEN set and is passed through untouched; the screen maps it to
+   * copy, with a generic sentence for values this build does not know.
+   */
+  readonly serverBlock: { readonly reason: string | null } | null;
 }
 
 const NONE: MemberActions = Object.freeze({
@@ -65,6 +83,7 @@ const NONE: MemberActions = Object.freeze({
   removeFromOrg: false,
   leaveOrg: false,
   ownerOnlyNotice: false,
+  serverBlock: null,
 });
 
 export function isOwner(capabilities: Iterable<string>): boolean {
@@ -77,6 +96,17 @@ export function memberActionsFor(input: MemberActionInput): MemberActions {
   // on (§7: revoked rows are dimmed and carry no menu).
   if (input.targetStatus !== "active") return NONE;
 
+  const verdict = input.verdict?.viewerCanManage;
+  if (typeof verdict === "boolean") {
+    const serverBlock = verdict ? null : { reason: input.verdict?.manageBlockedReason ?? null };
+    if (input.isSelf) {
+      // Leaving is D-029's, open to every member — not a "manage" verdict.
+      return { ...NONE, changeRole: verdict, leaveOrg: true, serverBlock };
+    }
+    return { ...NONE, changeRole: verdict, removeFromOrg: verdict, serverBlock };
+  }
+
+  // ── F-002 fallback: the field is absent ──────────────────────────────────
   const iAmOwner = isOwner(input.myCapabilities);
   const targetIsOwner = input.targetIsOwner;
 
@@ -89,6 +119,7 @@ export function memberActionsFor(input: MemberActionInput): MemberActions {
       removeFromOrg: false,
       leaveOrg: true,
       ownerOnlyNotice: false,
+      serverBlock: null,
     };
   }
 
@@ -107,7 +138,62 @@ export function memberActionsFor(input: MemberActionInput): MemberActions {
     removeFromOrg: true,
     leaveOrg: false,
     ownerOnlyNotice: false,
+    serverBlock: null,
   };
+}
+
+export interface InvitationActions {
+  readonly reissue: boolean;
+  readonly cancel: boolean;
+  /** §7 "เชิญใหม่อีกครั้ง" — expired/cancelled rows; not governed by the verdict. */
+  readonly inviteAgain: boolean;
+  readonly serverBlock: { readonly reason: string | null } | null;
+}
+
+/**
+ * ★ T-003-W10 · R7 — what an invitation row offers.
+ *
+ * `viewerCanManage` is a PERMISSION verdict, not a status (api-spec amendment
+ * 2026-10-25): cancel works on `pending` and `expired`; issuing a new link
+ * additionally needs `pending` (the route answers `409 INVITATION_EXPIRED`
+ * first), so an expired row offers "invite again" instead. Absent ⇒ F-002:
+ * pending offers both, expired offers invite-again only.
+ */
+export function invitationActionsFor(input: {
+  readonly status: string;
+  readonly viewerCanManage?: boolean;
+  readonly manageBlockedReason?: string | null;
+}): InvitationActions {
+  const none = { reissue: false, cancel: false, inviteAgain: false, serverBlock: null };
+  const verdict = input.viewerCanManage;
+  const serverBlock = verdict === false ? { reason: input.manageBlockedReason ?? null } : null;
+  switch (input.status) {
+    case "pending": {
+      const may = verdict !== false;
+      return { ...none, reissue: may, cancel: may, serverBlock };
+    }
+    case "expired":
+      return { ...none, cancel: verdict === true, inviteAgain: true, serverBlock };
+    case "cancelled":
+      return { ...none, inviteAgain: true };
+    default:
+      return none;
+  }
+}
+
+/**
+ * R7 — which role "เชิญใหม่อีกครั้ง" pre-fills. `RoleRow.viewerCanAssign` decides
+ * when present (both directions); absent ⇒ the F-002 rule the caller passes in.
+ * ⛔ Never pre-fill a choice that cannot be submitted.
+ */
+export function reinviteRoleIdFor(
+  roleId: string,
+  roles: readonly { readonly id: string; readonly viewerCanAssign?: boolean }[],
+  fallbackMayAssign: () => boolean,
+): string | undefined {
+  const verdict = roles.find((r) => r.id === roleId)?.viewerCanAssign;
+  if (typeof verdict === "boolean") return verdict ? roleId : undefined;
+  return fallbackMayAssign() ? roleId : undefined;
 }
 
 /**
@@ -115,8 +201,10 @@ export function memberActionsFor(input: MemberActionInput): MemberActions {
  *
  * `memberActionsFor` answers "may I touch this person"; this answers "may I
  * hand out this role". Granting `full_access` is granting ownership, so only
- * an Owner may offer it. Same rule as the server's `canAssignRole`, and the
- * same reason it is a separate question: an Admin editing a Staff member is
+ * an Owner may offer it. (The server's rule lives in core-domain's
+ * `decideMemberAuthority`; the old wrapper was deleted in T-003-B17, and
+ * `RoleRow.viewerCanAssign` supersedes this filter in R8.) It is a separate
+ * question for the same reason as before: an Admin editing a Staff member is
  * allowed, right up until the role they pick is Owner.
  */
 export function assignableRoles<T extends { readonly id: string; readonly key: string | null }>(

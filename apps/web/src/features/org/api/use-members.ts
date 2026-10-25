@@ -36,43 +36,47 @@ export type MemberRow = components["schemas"]["MemberRow"];
 export type InvitationRow = components["schemas"]["Invitation"];
 
 /** `active` by default; `all` adds revoked rows (§7's "แสดงสมาชิกที่ถูกถอดออกแล้ว"). */
-export function useMembers(status: "active" | "all"): UseQueryResult<
-  { items: MemberRow[]; nextCursor: string | null },
-  unknown
-> {
+/**
+ * `roleId` — T-003-W10 · R6: only holders of that role (api-spec §4.2b, ANDed
+ * with `status`). Part of the key: a filtered page is different data.
+ */
+export function useMembers(
+  status: "active" | "all",
+  roleId?: string,
+): UseQueryResult<{ items: MemberRow[]; nextCursor: string | null }, unknown> {
   const client = useOrgApiClient();
   const { orgId } = useActiveOrg();
   return useQuery({
     // `status` is part of the key: the two answers are different data, and
     // sharing a key would show the active list while `all` was in flight.
-    queryKey: orgKey(orgId, "members", status),
+    queryKey: orgKey(orgId, "members", status, roleId ?? null),
     // See the header: this list reports what somebody else did, so it is never
     // fresh just because we fetched it recently.
     staleTime: 0,
     queryFn: () =>
       unwrap(
         client.GET("/orgs/{orgId}/members", {
-          params: { path: { orgId }, query: { status } },
+          params: { path: { orgId }, query: roleId ? { status, roleId } : { status } },
         }),
       ) as Promise<{ items: MemberRow[]; nextCursor: string | null }>,
   });
 }
 
-export function useInvitations(status: "pending" | "all"): UseQueryResult<
-  { items: InvitationRow[]; nextCursor: string | null },
-  unknown
-> {
+export function useInvitations(
+  status: "pending" | "all",
+  roleId?: string,
+): UseQueryResult<{ items: InvitationRow[]; nextCursor: string | null }, unknown> {
   const client = useOrgApiClient();
   const { orgId } = useActiveOrg();
   return useQuery({
-    queryKey: orgKey(orgId, "invitations", status),
+    queryKey: orgKey(orgId, "invitations", status, roleId ?? null),
     // See the header: this list reports what somebody else did, so it is never
     // fresh just because we fetched it recently.
     staleTime: 0,
     queryFn: () =>
       unwrap(
         client.GET("/orgs/{orgId}/invitations", {
-          params: { path: { orgId }, query: { status } },
+          params: { path: { orgId }, query: roleId ? { status, roleId } : { status } },
         }),
       ) as Promise<{ items: InvitationRow[]; nextCursor: string | null }>,
   });

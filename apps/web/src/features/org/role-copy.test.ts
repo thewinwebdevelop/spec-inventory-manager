@@ -17,6 +17,7 @@ import {
   lastEditedLine,
   memberActionErrorMessage,
   memberManageBlockedReasonCopy,
+  memberRateLimitedMessage,
   roleBadgeLabel,
   roleFormErrorMessage,
   roleNameFieldErrorMessage,
@@ -298,5 +299,18 @@ describe("§E — memberActionErrorMessage", () => {
 
   it("★ unmapped code never throws or returns empty", () => {
     expect(memberActionErrorMessage("SOME_5XX", "changeRole")).not.toBe("");
+  });
+});
+
+describe("§E member route — 429 RATE_LIMITED (memberWrite) · UX01", () => {
+  it("formats the wait as mm:ss, verbatim from ux §E", () => {
+    expect(memberRateLimitedMessage(90)).toBe(
+      "ทำรายการกับสมาชิกถี่เกินไป กรุณารอ 01:30 แล้วลองใหม่",
+    );
+  });
+
+  it("rounds a fractional Retry-After up and never goes negative", () => {
+    expect(memberRateLimitedMessage(4.2)).toContain("รอ 00:05 ");
+    expect(memberRateLimitedMessage(-3)).toContain("รอ 00:00 ");
   });
 });

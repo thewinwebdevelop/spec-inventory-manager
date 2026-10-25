@@ -434,3 +434,19 @@ export const invitationConfirmTh = {
     doneToast: "ยกเลิกคำเชิญแล้ว",
   },
 } as const;
+
+/**
+ * T-003-W10 · R6 — `/settings/members?roleId=<id>` (ux-wireframe F-003 R6).
+ * Verbatim from ux; request changes from `ux`.
+ */
+export const roleFilterTh = {
+  banner: (roleName: string) => `กำลังแสดงเฉพาะคนที่ใช้บทบาท "${roleName}"`,
+  bannerUnknownRole: "กำลังแสดงเฉพาะคนที่ใช้บทบาทที่เลือก",
+  showAll: "แสดงทั้งหมด",
+  backToRole: (roleName: string) => `กลับไปที่บทบาท "${roleName}"`,
+  invitationsSection: (m: number) => `คำเชิญที่ใช้บทบาทนี้ (${m})`,
+  membersSection: (n: number) => `สมาชิกที่ใช้บทบาทนี้ (${n})`,
+  emptyInvitations: "ไม่มีคำเชิญที่ใช้บทบาทนี้แล้ว",
+  emptyMembers: "ไม่มีสมาชิกที่ใช้บทบาทนี้แล้ว",
+  nobodyLeft: "ไม่มีใครใช้บทบาทนี้แล้ว — กลับไปลบบทบาทได้เลย",
+} as const;
