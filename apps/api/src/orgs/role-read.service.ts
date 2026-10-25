@@ -201,7 +201,13 @@ export class RoleReadService {
             writesEnabled: this.writesEnabled,
             actorCapabilities: viewer.capabilities,
             role: { isSystem: role.isSystem, capabilities: role.capabilities },
-            otherActiveHolders: usage.activeMembers - (viewer.roleId === role.id ? 1 : 0),
+            // Clamped: viewer and usage are separate reads, so a role change between them
+            // could make this -1 (→ 500 from the decider's count check). Display-only verdict;
+            // the write route re-decides on locked rows (B21 security review, Low).
+            otherActiveHolders: Math.max(
+              0,
+              usage.activeMembers - (viewer.roleId === role.id ? 1 : 0),
+            ),
             usage,
             liveRoleCount,
             maxRoles: this.limits.maxRolesPerOrg,
