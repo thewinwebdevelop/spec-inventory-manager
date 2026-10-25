@@ -61,7 +61,7 @@ Name | Type | Description  | Notes
 [[Back to top]](#) [[Back to API list]](../README.md#documentation-for-api-endpoints) [[Back to Model list]](../README.md#documentation-for-models) [[Back to README]](../README.md)
 
 # **listMembers**
-> MemberListPage listMembers(orgId, status, cursor, limit, withTotal, xOrganizationId)
+> MemberListPage listMembers(orgId, status, roleId, cursor, limit, withTotal, xOrganizationId)
 
 List the shop's members
 
@@ -74,13 +74,14 @@ import 'package:omnistock_api_client/api.dart';
 final api = OmnistockApiClient().getMembersApi();
 final String orgId = orgId_example; // String | Organization id. On F-002 org-scoped routes this is one of the two accepted sources of org context (the other is the `X-Organization-Id` header, D-025); sending both with different values is `422 ORG_MISMATCH`. 
 final String status = status_example; // String | Default `all`. Any other value → `422`.
+final String roleId = roleId_example; // String | F-003 — only members holding this role, ANDed with `status` (and with `total`). A role id of another shop (or one that never existed) answers `200` with an empty page, never an error. A deleted role still filters (its former holders). Longer than 64 characters, or repeated → `422 VALIDATION_FAILED` (`fieldErrors.roleId`). 
 final String cursor = cursor_example; // String | Opaque keyset cursor from the previous page's `nextCursor`. Base64url — clients MUST NOT decode or construct one. Unreadable value → `422 VALIDATION_FAILED` with `fieldErrors.cursor`. 
 final int limit = 56; // int | Page size. Default 25, clamped to 100. Non-integer / < 1 → `422 VALIDATION_FAILED` with `fieldErrors.limit` (a bug is not silently corrected). 
 final bool withTotal = true; // bool | Opt in to the `total` count on this page. OPT-IN PER ENDPOINT: only the endpoints that declare this parameter compute a total — see the endpoint's own documentation. (`GET /me/organizations` and `GET /orgs/{orgId}/invitations` do NOT support it today; api-spec §1 states the convention generally, the server implements it on `GET /orgs/{orgId}/members` only.) 
 final String xOrganizationId = xOrganizationId_example; // String | Org context (api-spec §1). Optional on routes that already carry `{orgId}` in the path; if both are sent they MUST match, otherwise `422 ORG_MISMATCH`. User-scoped and public routes ignore this header entirely (I-3). 
 
 try {
-    final response = api.listMembers(orgId, status, cursor, limit, withTotal, xOrganizationId);
+    final response = api.listMembers(orgId, status, roleId, cursor, limit, withTotal, xOrganizationId);
     print(response);
 } on DioException catch (e) {
     print('Exception when calling MembersApi->listMembers: $e\n');
@@ -93,6 +94,7 @@ Name | Type | Description  | Notes
 ------------- | ------------- | ------------- | -------------
  **orgId** | **String**| Organization id. On F-002 org-scoped routes this is one of the two accepted sources of org context (the other is the `X-Organization-Id` header, D-025); sending both with different values is `422 ORG_MISMATCH`.  | 
  **status** | **String**| Default `all`. Any other value → `422`. | [optional] [default to 'all']
+ **roleId** | **String**| F-003 — only members holding this role, ANDed with `status` (and with `total`). A role id of another shop (or one that never existed) answers `200` with an empty page, never an error. A deleted role still filters (its former holders). Longer than 64 characters, or repeated → `422 VALIDATION_FAILED` (`fieldErrors.roleId`).  | [optional] 
  **cursor** | **String**| Opaque keyset cursor from the previous page's `nextCursor`. Base64url — clients MUST NOT decode or construct one. Unreadable value → `422 VALIDATION_FAILED` with `fieldErrors.cursor`.  | [optional] 
  **limit** | **int**| Page size. Default 25, clamped to 100. Non-integer / < 1 → `422 VALIDATION_FAILED` with `fieldErrors.limit` (a bug is not silently corrected).  | [optional] [default to 25]
  **withTotal** | **bool**| Opt in to the `total` count on this page. OPT-IN PER ENDPOINT: only the endpoints that declare this parameter compute a total — see the endpoint's own documentation. (`GET /me/organizations` and `GET /orgs/{orgId}/invitations` do NOT support it today; api-spec §1 states the convention generally, the server implements it on `GET /orgs/{orgId}/members` only.)  | [optional] [default to false]

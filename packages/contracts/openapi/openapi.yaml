@@ -837,6 +837,14 @@ paths:
               - revoked
               - all
             default: all
+        - name: roleId
+          in: query
+          required: false
+          description: |
+            F-003 — only members holding this role, ANDed with `status` (and with `total`). A role id of another shop (or one that never existed) answers `200` with an empty page, never an error. A deleted role still filters (its former holders). Longer than 64 characters, or repeated → `422 VALIDATION_FAILED` (`fieldErrors.roleId`).
+          schema:
+            type: string
+            maxLength: 64
         - $ref: '#/components/parameters/CursorParam'
         - $ref: '#/components/parameters/LimitParam'
         - $ref: '#/components/parameters/WithTotalParam'
@@ -866,7 +874,7 @@ paths:
                 $ref: '#/components/schemas/ErrorResponse'
         '422':
           description: |
-            `VALIDATION_FAILED` (`status` / `cursor` / `limit`) or `ORG_CONTEXT_REQUIRED` / `ORG_MISMATCH`.
+            `VALIDATION_FAILED` (`status` / `roleId` / `cursor` / `limit`) or `ORG_CONTEXT_REQUIRED` / `ORG_MISMATCH`.
           content:
             application/json:
               schema:
@@ -1032,11 +1040,13 @@ paths:
       operationId: listOrgRoles
       summary: List this shop's roles (the invite dropdown)
       description: |
-        F-002 (api-spec §3.6). Any ACTIVE member may read it: the response carries no personal data and nothing about anybody else — three role names the caller can already see on their own membership. Requiring `manage_members` would mean a Staff member could not be shown the name of their own role.
+        F-002 (api-spec §3.6). Any ACTIVE member may read it: the response carries no personal data and nothing about anybody else — the shop's live role names. Requiring `manage_members` would mean a Staff member could not be shown the name of their own role. Deleted roles are not listed.
+
+        F-003: still NO `capabilities` (AC-6.4 — reading what a role allows needs `manage_roles`, via the role-details read). Each row adds `nameCustomized` (display rule) and, for a caller holding `manage_members` only, `viewerCanAssign` / `assignBlockedReason`.
 
         It exists because AC US-3 makes choosing a role MANDATORY when inviting somebody: without this endpoint no client can populate that dropdown, so the acceptance criterion could not be met at all.
 
-        Read-only in F-002. F-003 adds create/update/delete.
+        This list is read-only; F-003's role create/update/delete are separate routes gated by `manage_roles`.
       tags:
         - organizations
       security:
@@ -1178,6 +1188,14 @@ paths:
               - expired
               - all
             default: pending
+        - name: roleId
+          in: query
+          required: false
+          description: |
+            F-003 — only invitations for this role, ANDed with `status`. A role id of another shop (or one that never existed) answers `200` with an empty page, never an error. A deleted role still filters. Longer than 64 characters, or repeated → `422 VALIDATION_FAILED` (`fieldErrors.roleId`). The number `ROLE_IN_USE.details.pendingInvitations` counts is `pending` + `expired` for that role.
+          schema:
+            type: string
+            maxLength: 64
         - $ref: '#/components/parameters/CursorParam'
         - $ref: '#/components/parameters/LimitParam'
       responses:
@@ -1206,7 +1224,7 @@ paths:
                 $ref: '#/components/schemas/ErrorResponse'
         '422':
           description: |
-            `VALIDATION_FAILED` (`status` / `cursor` / `limit`) or `ORG_CONTEXT_REQUIRED` / `ORG_MISMATCH`.
+            `VALIDATION_FAILED` (`status` / `roleId` / `cursor` / `limit`) or `ORG_CONTEXT_REQUIRED` / `ORG_MISMATCH`.
           content:
             application/json:
               schema:
@@ -2084,6 +2102,10 @@ components:
             - string
             - 'null'
           description: Present only on the `active` (full) shape.
+        roleNameCustomized:
+          type: boolean
+          description: |
+            F-003 (AC-1.5) — present only on the `active` (full) shape. The shop renamed this role (always `true` when `roleKey` is `null`): show `roleName` as-is instead of translating `roleKey`.
         revokedAt:
           type:
             - string
@@ -2166,12 +2188,18 @@ components:
             - 'null'
           description: |
             `owner|admin|staff` for a system role, `null` for an F-003 custom one. Open set — an unknown value MUST fall back to showing `roleName`. ⛔ Never use it to decide permissions; use `capabilities`.
+        roleNameCustomized:
+          type: boolean
+          description: |
+            F-003 (AC-1.5) — the shop renamed this role (always `true` for a role with `roleKey: null`). Display `roleNameCustomized ? roleName : (translate roleKey ?? roleName)`. Absent (older server) = `false`.
         capabilities:
           type: array
           items:
             type: string
           description: |
             What the client may OFFER. Not enforcement — the server refuses the call regardless (architecture §3.1).
+
+            F-003: the STORED canonical set of the caller's role — NOT expanded, so a key implied by another key in the set is not repeated (api-spec §3.1(1)). To tell the user what a role edit would take away from them (AC-3.10), compare expanded sets — use core-domain `lostCapabilities` (or its golden vectors), never a plain set difference of this array.
         status:
           type: string
           description: Always `active` here — a non-member cannot reach this endpoint.
@@ -2358,6 +2386,32 @@ components:
           type: boolean
           description: |
             This row's role holds `full_access`. Computed from CAPABILITIES, never from the role's name or key. Use it to hide buttons; the server enforces.
+        roleNameCustomized:
+          type: boolean
+          description: |
+            F-003 (AC-1.5) — the shop renamed this role (always `true` when `roleKey` is `null`). Display `roleNameCustomized ? roleName : (translate roleKey ?? roleName)`.
+        viewerCanManage:
+          type: boolean
+          description: |
+            F-003 (api-spec §3.1) — may the CALLER change this member's role or remove them? The same rule the write applies (the target must hold strictly less than the caller; your own row is `true`). A UX input, never enforcement: the write re-reads permissions and may still refuse.
+
+            ⚠️ PRESENT ONLY when the caller holds BOTH `manage_members` and `manage_roles`, and only on `active` rows (architecture §1.2 — anyone else would learn "this role equals mine exactly"). Absent ⇒ keep the F-002 behaviour (show the buttons on active, non-Owner, non-self rows) and show generic copy if the write answers `403 TARGET_NOT_BELOW_ACTOR`. `LAST_OWNER` is shop state, not part of this verdict.
+        manageBlockedReason:
+          type:
+            - string
+            - 'null'
+          description: |
+            Present with `viewerCanManage`; `null` when it is `true`. OPEN SET, in this fixed order: `owner_only` → `equal_permissions` (same permissions as you — ask the Owner) → `exceeds_your_permissions`. Any other value → generic copy.
+        viewerCanResetPassword:
+          type: boolean
+          description: |
+            F-003 — may the CALLER reset this member's password? Same audience as `viewerCanManage`. `true` means "no rule you can see blocks it": the reset may still answer its uniform `404` for a reason that is not yours to see (e.g. the member also belongs to another shop).
+        resetBlockedReason:
+          type:
+            - string
+            - 'null'
+          description: |
+            Present with `viewerCanResetPassword`; `null` when it is `true`. OPEN SET, in this fixed order: `self` → `owner_only` → `equal_permissions` → `exceeds_your_permissions`. Any other value → generic copy.
     MemberListPage:
       type: object
       required:
@@ -2426,7 +2480,7 @@ components:
         name:
           type: string
           description: |
-            Display name. F-003 lets people rename roles, so do NOT map this to Thai copy — use `key`, and fall back to this string.
+            Display name. Display rule (AC-1.5): `nameCustomized ? name : (translate key ?? name)` — a role the shop renamed shows THIS string, otherwise translate `key` and fall back to it. (A client that ignores `nameCustomized` shows the translation instead of the shop's own name — cosmetic, never a permission issue.)
         key:
           type:
             - string
@@ -2446,7 +2500,23 @@ components:
         isSystem:
           type: boolean
           description: |
-            True for roles the system provisions with the shop. F-003 will refuse to delete these.
+            `true` only for the shop's locked Owner role (F-003): it can be neither edited, renamed nor deleted. Admin and Staff are presets the shop may edit, so they read `false`. Labelling only — use `grantsOwnership` for "is this ownership?".
+        nameCustomized:
+          type: boolean
+          description: |
+            F-003 (AC-1.5) — the shop renamed this role (always `true` for a role with `key: null`). When `true`, show `name` as-is instead of translating `key`. Absent (older server) = `false`.
+        viewerCanAssign:
+          type: boolean
+          description: |
+            F-003 (AC-2.2) — may the CALLER hand out this role (invite with it, or change a member to it)? The same rule the write applies: the role must not grant ownership unless you are an Owner, and must not hold a permission you lack. Show a `false` option DISABLED with the reason — never hide it. A UX input, never enforcement.
+
+            Present only when the caller holds `manage_members`.
+        assignBlockedReason:
+          type:
+            - string
+            - 'null'
+          description: |
+            Present with `viewerCanAssign`; `null` when it is `true`. OPEN SET: `owner_only` · `exceeds_your_permissions`. Never names the missing permission (`capabilities` stays unpublished here). Any other value → generic copy.
     RoleListPage:
       type: object
       required:
@@ -2462,7 +2532,7 @@ components:
             - string
             - 'null'
           description: |
-            Always `null` in F-002 — a shop has exactly its three system roles until F-003. The field is present so a client written today does not need rewriting the day a fourth role exists.
+            Always `null`: every live role fits in one page while the per-shop role ceiling (30) is below the page maximum (100). Present so a client written today survives the day that stops being true.
     LeaveOrgResult:
       type: object
       description: '`200` of `DELETE /orgs/{orgId}/membership` (api-spec §3.17, D-029).'
@@ -2555,6 +2625,22 @@ components:
             - 'null'
           description: |
             Was the accepting ACCOUNT created after `createdAt`? `null` until somebody accepts — "we do not know yet" is not "no". Phase 0 cannot verify email addresses, so this is the only signal that a link may have been redeemed by whoever found it. Render it as a soft flag, not an accusation.
+        roleNameCustomized:
+          type: boolean
+          description: |
+            F-003 (AC-1.5) — the shop renamed this role (always `true` when `roleKey` is `null`): show `roleName` as-is instead of translating `roleKey`.
+        viewerCanManage:
+          type: boolean
+          description: |
+            F-003 (api-spec §3.1) — may the CALLER cancel this invitation or issue a new link? `false` when the invitation's role grants ownership and the caller is not an Owner, or when the role has a permission the caller lacks. Says exactly what `RoleRow.viewerCanAssign` says for the same role. A UX input, never enforcement.
+
+            Present only when the caller holds `manage_members` and the stored status is pending — `status` `pending` OR `expired` (an expired link can still be cancelled or reissued). Absent on accepted / cancelled rows.
+        manageBlockedReason:
+          type:
+            - string
+            - 'null'
+          description: |
+            Present with `viewerCanManage`; `null` when it is `true`. OPEN SET: `owner_only` → `exceeds_your_permissions`. Any other value → generic copy.
     InvitationListPage:
       type: object
       required:
@@ -2667,6 +2753,10 @@ components:
           type:
             - string
             - 'null'
+        roleNameCustomized:
+          type: boolean
+          description: |
+            F-003 (AC-1.5) — the shop renamed this role (always `true` when `roleKey` is `null`): show `roleName` as-is instead of translating `roleKey`.
         emailMasked:
           type: string
           description: '`u***@example.com` — enough to pick the right account, not an address.'
@@ -2698,6 +2788,10 @@ components:
           type:
             - string
             - 'null'
+        roleNameCustomized:
+          type: boolean
+          description: |
+            F-003 (AC-1.5) — the shop renamed this role (always `true` when `roleKey` is `null`): show `roleName` as-is instead of translating `roleKey`.
         status:
           type: string
           enum:

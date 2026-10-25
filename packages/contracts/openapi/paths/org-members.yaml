@@ -43,6 +43,18 @@ get:
           - revoked
           - all
         default: all
+    - name: roleId
+      in: query
+      required: false
+      description: >
+        F-003 — only members holding this role, ANDed with `status` (and with
+        `total`). A role id of another shop (or one that never existed) answers
+        `200` with an empty page, never an error. A deleted role still filters
+        (its former holders). Longer than 64 characters, or repeated →
+        `422 VALIDATION_FAILED` (`fieldErrors.roleId`).
+      schema:
+        type: string
+        maxLength: 64
     - $ref: "../components/parameters.yaml#/CursorParam"
     - $ref: "../components/parameters.yaml#/LimitParam"
     - $ref: "../components/parameters.yaml#/WithTotalParam"
@@ -72,7 +84,7 @@ get:
             $ref: "../components/common.yaml#/ErrorResponse"
     "422":
       description: >
-        `VALIDATION_FAILED` (`status` / `cursor` / `limit`) or
+        `VALIDATION_FAILED` (`status` / `roleId` / `cursor` / `limit`) or
         `ORG_CONTEXT_REQUIRED` / `ORG_MISMATCH`.
       content:
         application/json:

@@ -25,6 +25,9 @@ part 'invitation.g.dart';
 /// * [acceptedAt] 
 /// * [acceptedByUserId] 
 /// * [acceptedUserCreatedAfterInvite] - Was the accepting ACCOUNT created after `createdAt`? `null` until somebody accepts — \"we do not know yet\" is not \"no\". Phase 0 cannot verify email addresses, so this is the only signal that a link may have been redeemed by whoever found it. Render it as a soft flag, not an accusation. 
+/// * [roleNameCustomized] - F-003 (AC-1.5) — the shop renamed this role (always `true` when `roleKey` is `null`): show `roleName` as-is instead of translating `roleKey`. 
+/// * [viewerCanManage] - F-003 (api-spec §3.1) — may the CALLER cancel this invitation or issue a new link? `false` when the invitation's role grants ownership and the caller is not an Owner, or when the role has a permission the caller lacks. Says exactly what `RoleRow.viewerCanAssign` says for the same role. A UX input, never enforcement.  Present only when the caller holds `manage_members` and the stored status is pending — `status` `pending` OR `expired` (an expired link can still be cancelled or reissued). Absent on accepted / cancelled rows. 
+/// * [manageBlockedReason] - Present with `viewerCanManage`; `null` when it is `true`. OPEN SET: `owner_only` → `exceeds_your_permissions`. Any other value → generic copy. 
 @BuiltValue()
 abstract class Invitation implements Built<Invitation, InvitationBuilder> {
   @BuiltValueField(wireName: r'id')
@@ -72,6 +75,18 @@ abstract class Invitation implements Built<Invitation, InvitationBuilder> {
   /// Was the accepting ACCOUNT created after `createdAt`? `null` until somebody accepts — \"we do not know yet\" is not \"no\". Phase 0 cannot verify email addresses, so this is the only signal that a link may have been redeemed by whoever found it. Render it as a soft flag, not an accusation. 
   @BuiltValueField(wireName: r'acceptedUserCreatedAfterInvite')
   bool? get acceptedUserCreatedAfterInvite;
+
+  /// F-003 (AC-1.5) — the shop renamed this role (always `true` when `roleKey` is `null`): show `roleName` as-is instead of translating `roleKey`. 
+  @BuiltValueField(wireName: r'roleNameCustomized')
+  bool? get roleNameCustomized;
+
+  /// F-003 (api-spec §3.1) — may the CALLER cancel this invitation or issue a new link? `false` when the invitation's role grants ownership and the caller is not an Owner, or when the role has a permission the caller lacks. Says exactly what `RoleRow.viewerCanAssign` says for the same role. A UX input, never enforcement.  Present only when the caller holds `manage_members` and the stored status is pending — `status` `pending` OR `expired` (an expired link can still be cancelled or reissued). Absent on accepted / cancelled rows. 
+  @BuiltValueField(wireName: r'viewerCanManage')
+  bool? get viewerCanManage;
+
+  /// Present with `viewerCanManage`; `null` when it is `true`. OPEN SET: `owner_only` → `exceeds_your_permissions`. Any other value → generic copy. 
+  @BuiltValueField(wireName: r'manageBlockedReason')
+  String? get manageBlockedReason;
 
   Invitation._();
 
@@ -161,6 +176,27 @@ class _$InvitationSerializer implements PrimitiveSerializer<Invitation> {
       object.acceptedUserCreatedAfterInvite,
       specifiedType: const FullType.nullable(bool),
     );
+    if (object.roleNameCustomized != null) {
+      yield r'roleNameCustomized';
+      yield serializers.serialize(
+        object.roleNameCustomized,
+        specifiedType: const FullType(bool),
+      );
+    }
+    if (object.viewerCanManage != null) {
+      yield r'viewerCanManage';
+      yield serializers.serialize(
+        object.viewerCanManage,
+        specifiedType: const FullType(bool),
+      );
+    }
+    if (object.manageBlockedReason != null) {
+      yield r'manageBlockedReason';
+      yield serializers.serialize(
+        object.manageBlockedReason,
+        specifiedType: const FullType.nullable(String),
+      );
+    }
   }
 
   @override
@@ -278,6 +314,28 @@ class _$InvitationSerializer implements PrimitiveSerializer<Invitation> {
           ) as bool?;
           if (valueDes == null) continue;
           result.acceptedUserCreatedAfterInvite = valueDes;
+          break;
+        case r'roleNameCustomized':
+          final valueDes = serializers.deserialize(
+            value,
+            specifiedType: const FullType(bool),
+          ) as bool;
+          result.roleNameCustomized = valueDes;
+          break;
+        case r'viewerCanManage':
+          final valueDes = serializers.deserialize(
+            value,
+            specifiedType: const FullType(bool),
+          ) as bool;
+          result.viewerCanManage = valueDes;
+          break;
+        case r'manageBlockedReason':
+          final valueDes = serializers.deserialize(
+            value,
+            specifiedType: const FullType.nullable(String),
+          ) as String?;
+          if (valueDes == null) continue;
+          result.manageBlockedReason = valueDes;
           break;
         default:
           unhandled.add(key);
