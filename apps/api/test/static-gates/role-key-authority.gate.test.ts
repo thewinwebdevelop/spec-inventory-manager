@@ -106,7 +106,6 @@ const PRESENTATION_ALLOWLIST: readonly PresentationAllowance[] = Object.freeze([
       "final staff = roles.where((r) => r.key == 'staff').firstOrNull;",
       "return selected.grantsOwnership || selected.key == 'admin';",
       "final description = role.key == 'owner' ? t.inviteRoleOwnerDesc : null;",
-      "title: Text(roleLabel(t, role.key, role.name)),",
     ],
   },
   {

@@ -160,10 +160,24 @@ class RoleRow {
     required this.name,
     required this.key,
     this.grantsOwnership = false,
+    this.nameCustomized,
+    this.viewerCanAssign,
+    this.assignBlockedReason,
   });
 
   final String id;
   final String name;
+
+  /// AC-1.5 — the shop renamed this role; show [name] verbatim. Absent = false.
+  final bool? nameCustomized;
+
+  /// AC-2.2 — may the caller hand this role out? `null` = the server did not
+  /// say (caller lacks `manage_members`, or an older server). A UX input only.
+  final bool? viewerCanAssign;
+
+  /// Open set (`owner_only` / `exceeds_your_permissions` / anything else →
+  /// generic copy). Present with [viewerCanAssign].
+  final String? assignBlockedReason;
 
   /// ⛔ Display slug ONLY (ux Q4). Never a permission input — see
   /// [grantsOwnership].
