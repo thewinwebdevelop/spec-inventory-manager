@@ -104,7 +104,11 @@ export function MembersScreen() {
   // R6: the filtered view is a fixed question (active members + every
   // invitation, narrowed below to the still-open ones), not the F-002 toggles.
   const members = useMembers(roleFilter ? "active" : memberStatus, roleFilter);
-  const invitations = useInvitations(roleFilter ? "all" : invitationStatus, roleFilter);
+  const invitations = useInvitations(roleFilter ? "open" : invitationStatus, roleFilter);
+  // ★ fix r1 (security review M-1) — R6's empty claims need the WHOLE list:
+  // loaded, and no page left unread.
+  const membersComplete = members.isSuccess && members.data.nextCursor === null;
+  const invitationsComplete = invitations.isSuccess && invitations.data.nextCursor === null;
   const roles = useRoles();
   const reissue = useReissueInvitationLink();
   const cancel = useCancelInvitation();
@@ -162,8 +166,8 @@ export function MembersScreen() {
     ) : null;
   const nobodyLeft =
     roleFilter !== undefined &&
-    members.isSuccess &&
-    invitations.isSuccess &&
+    membersComplete &&
+    invitationsComplete &&
     memberRows.length === 0 &&
     pending.length === 0;
 
@@ -249,7 +253,7 @@ export function MembersScreen() {
               />
             </div>
           )}
-          {roleFilter && invitations.isSuccess && pending.length === 0 && (
+          {roleFilter && invitationsComplete && pending.length === 0 && (
             <p className="m-0 px-4 pb-4 text-body-sm text-text-muted">
               {roleFilterTh.emptyInvitations}
             </p>
@@ -426,7 +430,7 @@ export function MembersScreen() {
           </div>
         )}
 
-        {roleFilter && members.isSuccess && memberRows.length === 0 && (
+        {roleFilter && membersComplete && memberRows.length === 0 && (
           <p className="m-0 px-4 pb-4 text-body-sm text-text-muted">{roleFilterTh.emptyMembers}</p>
         )}
 

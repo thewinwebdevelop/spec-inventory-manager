@@ -131,10 +131,10 @@ beforeEach(() => {
 });
 
 describe("R6 · members/invitations filtered by ?roleId=", () => {
-  it("★ asks the server for this role only: active members + every invitation status", () => {
+  it("★ asks the server for this role only: active members + open (pending+expired) invitations", () => {
     renderScreen();
     expect(useMembersSpy).toHaveBeenCalledWith("active", "rol_staff");
-    expect(useInvitationsSpy).toHaveBeenCalledWith("all", "rol_staff");
+    expect(useInvitationsSpy).toHaveBeenCalledWith("open", "rol_staff");
   });
 
   it("★ shows pending + expired invitations only (AC-3.9), with the R6 headings", () => {
