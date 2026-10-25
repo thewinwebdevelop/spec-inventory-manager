@@ -27,15 +27,8 @@ const ON_WRAPPED_EMAIL = new RegExp(
  * only shrink. Each one is a defect routed to its owner, not a permission.
  */
 const KNOWN_OFFENDERS: readonly { file: string; snippet: string; owner: string; why: string }[] = [
-  {
-    file: "apps/api/src/orgs/invitations.controller.ts",
-    snippet: "email.trim(", // `dto.email.trim()` in create()
-    owner: "backend-api",
-    why:
-      "F-002 controller trims for the 'required' check and forwards the trimmed value; " +
-      "the service re-normalises (normalizeEmail) so behaviour is correct today, but the " +
-      "controller holds a partial second copy of the rule. Fix: normalizeEmail(dto.email).",
-  },
+  // (empty) T-003-B18 removed the last row: `invitations.controller.ts` create()
+  // now calls `normalizeEmail(dto.email)` instead of `dto.email.trim()`.
 ];
 
 function g11(file: string, code: string): Violation[] {
@@ -68,6 +61,7 @@ describe("G-11 · email is normalised only by normalizeEmail", () => {
       "apps/api/src/auth/auth.service.ts",
       "apps/api/src/auth/auth.controller.ts",
       "apps/api/src/orgs/invitations.service.ts",
+      "apps/api/src/orgs/invitations.controller.ts", // B18 — was the last KNOWN_OFFENDER
     ]) {
       expect(readCode(f), `${f} no longer calls normalizeEmail`).toMatch(/\bnormalizeEmail\s*\(/);
     }
