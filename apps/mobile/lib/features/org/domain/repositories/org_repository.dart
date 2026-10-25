@@ -1,4 +1,5 @@
 import '../entities/org_entities.dart';
+import '../entities/role_entities.dart';
 
 /// T-002-M3 — the org feature's ports.
 ///
@@ -45,6 +46,15 @@ abstract interface class OrgScoped {
 
   /// `GET /orgs/{orgId}/roles`.
   Future<List<RoleRow>> listRoles();
+
+  /// `GET /orgs/{orgId}/role-details` (F-003 R1/R2) — every live role in full,
+  /// with the caller's per-role verdicts and the create verdict + ceiling.
+  /// Requires `manage_roles`; a refusal arrives as an `ApiFailure`.
+  Future<RoleDetailsPage> listRoleDetails();
+
+  /// `GET /orgs/{orgId}/capabilities` (F-003) — the capability catalog whose
+  /// labels R2 prints (D-037). Requires `manage_roles`.
+  Future<CapabilityCatalogView> getCapabilityCatalog();
 
   /// `GET /orgs/{orgId}` — the shop's profile, for the tax card (§3.4).
   Future<OrgProfileView> getOrganization();

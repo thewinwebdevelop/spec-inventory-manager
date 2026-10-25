@@ -5,6 +5,7 @@ import '../../../../core/error/api_failure.dart';
 import '../../../../core/l10n/l10n.dart';
 import '../../../../core/security/screenshot_guard.dart';
 import '../../../../core/security/sensitive_clipboard.dart';
+import '../../../../core/session/capability_gate.dart';
 import '../../../../core/theme/app_theme.dart';
 import '../../../../core/ui/error_banner.dart';
 import '../../../../core/ui/skeleton.dart';
@@ -13,6 +14,7 @@ import '../../application/tax_reveal_session.dart';
 import '../../domain/entities/org_entities.dart';
 import '../../domain/tax_reveal.dart';
 import '../widgets/org_switcher.dart';
+import 'roles_screen.dart';
 
 /// ★ M-07 — S4 on mobile, for the sake of one card: the shop's tax identity.
 ///
@@ -140,6 +142,16 @@ class _OrgProfileScreenState extends ConsumerState<OrgProfileScreen>
               Text(data.name, style: AppTypography.headingMd),
               const SizedBox(height: AppSpacing.s6),
               _TaxCard(profile: data, reveal: reveal, onPress: _reveal.press),
+              // F-003 R1 entry (ux R1 "ทางเข้า (mobile)"): shown on the SERVER's
+              // answer for this member. A holder of only `manage_roles` has no
+              // members tab, so this is their only way in.
+              CapabilityGate(
+                capability: manageRolesCapability,
+                child: Padding(
+                  padding: const EdgeInsets.only(top: AppSpacing.s4),
+                  child: _RolesEntryRow(onTap: () => openRolesScreen(context)),
+                ),
+              ),
             ],
           ),
         ),
@@ -358,6 +370,58 @@ class _Row extends StatelessWidget {
           else
             Text(value, style: AppTypography.bodyMd),
         ],
+      ),
+    );
+  }
+}
+
+/// `ListRow` "บทบาทและสิทธิ์" (`icon.roles`) → R1. ≥ 56px (ui.md §6).
+class _RolesEntryRow extends StatelessWidget {
+  const _RolesEntryRow({required this.onTap});
+
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    final t = AppLocalizations.of(context);
+    final colors = context.appColors;
+    return Material(
+      color: colors.surface,
+      shape: RoundedRectangleBorder(
+        borderRadius: BorderRadius.circular(AppRadius.card),
+        side: BorderSide(color: colors.borderDefault),
+      ),
+      child: InkWell(
+        key: const ValueKey('roles-entry-row'),
+        borderRadius: BorderRadius.circular(AppRadius.card),
+        onTap: onTap,
+        child: ConstrainedBox(
+          constraints: const BoxConstraints(minHeight: AppSizes.listRowMinH),
+          child: Padding(
+            padding: const EdgeInsets.symmetric(horizontal: AppSpacing.s4, vertical: AppSpacing.s3),
+            child: Row(
+              children: [
+                // icon.roles = shield-check (Phosphor on the design system; the
+                // Material twin here, as for every other icon in this app).
+                Icon(Icons.verified_user_outlined, size: AppSizes.iconMd, color: colors.text),
+                const SizedBox(width: AppSpacing.s3),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(t.rolesListTitle, style: AppTypography.bodyMd),
+                      Text(
+                        t.rolesEntryRowSub,
+                        style: AppTypography.bodySm.copyWith(color: colors.textMuted),
+                      ),
+                    ],
+                  ),
+                ),
+                Icon(Icons.chevron_right, size: AppSizes.iconMd, color: colors.textMuted),
+              ],
+            ),
+          ),
+        ),
       ),
     );
   }
