@@ -102,6 +102,8 @@ Future<FakeOrgScoped> _pump(
         const OrgProfileView(
           id: 'org_1', name: 'ร้านหอมกรุ่นเบเกอรี่', taxProfileComplete: true,
           myRoleId: 'rol_owner',
+          // What the server still reports after a 403-triggered relearn.
+          capabilities: {'manage_roles'},
         ),
     delay: delay,
   );
@@ -280,6 +282,191 @@ void main() {
 
       expect(find.text('ใช้ไป 1 จาก 30 บทบาท'), findsNothing);
       expect(find.text('open'), findsOneWidget);
+    });
+  });
+
+  group('R1 forbidden (403 — ux §0 ForbiddenPanel)', () {
+    const title = 'หน้านี้สำหรับคนที่จัดการบทบาทได้';
+    const body = 'ถ้าต้องการใช้ ให้เจ้าของร้านเปิดสิทธิ์ "จัดการบทบาทและสิทธิ์" ให้คุณ';
+
+    Future<FakeOrgScoped> openForbidden(WidgetTester tester, {required Set<String> relearned}) async {
+      final scoped = FakeOrgScoped(
+        roleDetailsFailure: const ForbiddenFailure(),
+        catalog: _catalog,
+        profile: OrgProfileView(
+          id: 'org_1', name: 'x', taxProfileComplete: true, capabilities: relearned,
+        ),
+      );
+      await pumpScreen(
+        tester,
+        Builder(
+          builder: (context) => ElevatedButton(
+            onPressed: () => openRolesScreen(context),
+            child: const Text('open'),
+          ),
+        ),
+        overrides: [orgScopedRepositoryProvider.overrideWithValue(scoped)],
+        activeOrg: rolesOrg,
+      );
+      await tester.tap(find.text('open'));
+      await tester.pumpAndSettle();
+      return scoped;
+    }
+
+    testWidgets('403 → the ForbiddenPanel (title, body, back) — NOT the generic load-error + retry',
+        (tester) async {
+      await _pump(tester, detailsFailure: const ForbiddenFailure());
+      await tester.pumpAndSettle();
+
+      expect(find.text(title), findsOneWidget);
+      expect(find.text(body), findsOneWidget);
+      expect(find.text('กลับไปหน้าข้อมูลร้าน'), findsOneWidget);
+      expect(find.text('โหลดรายการบทบาทไม่สำเร็จ'), findsNothing);
+      expect(find.text('ลองใหม่'), findsNothing);
+      expect(_createButton(), findsNothing);
+    });
+
+    testWidgets('403 on the catalog alone is also forbidden', (tester) async {
+      await _pump(tester, catalogFailure: const ForbiddenFailure());
+      await tester.pumpAndSettle();
+
+      expect(find.text(title), findsOneWidget);
+    });
+
+    testWidgets('★ capabilities are re-learned exactly ONCE on 403, and no retry loop follows',
+        (tester) async {
+      // The profile read is R1's own (myRoleId) + the one relearn = 2 in total.
+      final scoped = await _pump(tester, detailsFailure: const ForbiddenFailure());
+      await tester.pumpAndSettle();
+      expect(scoped.profileCalls, 2);
+
+      await tester.pump(const Duration(seconds: 1));
+      await tester.pumpAndSettle();
+      expect(scoped.profileCalls, 2);
+      expect(scoped.roleDetailsCalls, 1);
+    });
+
+    testWidgets('relearn reveals manage_roles is gone → the screen leaves (menu entry vanishes)',
+        (tester) async {
+      await openForbidden(tester, relearned: {'manage_members'});
+
+      expect(find.text(title), findsNothing);
+      expect(find.text('open'), findsOneWidget);
+    });
+
+    testWidgets('"กลับไปหน้าข้อมูลร้าน" leaves R1 (capability still held after relearn)', (tester) async {
+      await openForbidden(tester, relearned: {'manage_roles'});
+      expect(find.text(title), findsOneWidget);
+
+      await tester.tap(find.text('กลับไปหน้าข้อมูลร้าน'));
+      await tester.pumpAndSettle();
+      expect(find.text(title), findsNothing);
+      expect(find.text('open'), findsOneWidget);
+    });
+
+    testWidgets('a non-403 failure keeps the generic error + retry (control)', (tester) async {
+      await _pump(tester, detailsFailure: const ServerFailure());
+      await tester.pumpAndSettle();
+
+      expect(find.text(title), findsNothing);
+      expect(find.text('ลองใหม่'), findsOneWidget);
+    });
+  });
+
+  group('seams (M06 hands callbacks to openRolesScreen)', () {
+    Future<void> openWith(
+      WidgetTester tester, {
+      ValueChanged<RoleDetailView>? onOpenRole,
+      ValueChanged<String?>? onCreateNext,
+    }) async {
+      final scoped = FakeOrgScoped(roleDetails: _page([_owner, _admin, _staff]), catalog: _catalog);
+      await pumpScreen(
+        tester,
+        Builder(
+          builder: (context) => ElevatedButton(
+            onPressed: () => openRolesScreen(context, onOpenRole: onOpenRole, onCreateNext: onCreateNext),
+            child: const Text('open'),
+          ),
+        ),
+        overrides: [orgScopedRepositoryProvider.overrideWithValue(scoped)],
+        activeOrg: rolesOrg,
+      );
+      await tester.tap(find.text('open'));
+      await tester.pumpAndSettle();
+    }
+
+    testWidgets('openRolesScreen(onOpenRole): a row tap calls it with THAT role', (tester) async {
+      final opened = <String>[];
+      await openWith(tester, onOpenRole: (r) => opened.add(r.id));
+
+      await tester.tap(find.byKey(const ValueKey('role-row-rol_staff')));
+      await tester.tap(find.byKey(const ValueKey('role-row-rol_admin')));
+      expect(opened, ['rol_staff', 'rol_admin']);
+    });
+
+    testWidgets('openRolesScreen(onCreateNext): R2 "ถัดไป" calls it with the chosen template / null for blank',
+        (tester) async {
+      final nexts = <String?>[];
+      await openWith(tester, onCreateNext: nexts.add);
+
+      await tester.tap(_createButton());
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('ถัดไป'));
+      expect(nexts, ['rol_staff']); // fewest-capabilities default
+
+      await tester.tap(find.byKey(const ValueKey('template-rol_admin')));
+      await tester.pump();
+      await tester.tap(find.text('ถัดไป'));
+      await tester.tap(find.byKey(const ValueKey('template-blank')));
+      await tester.pump();
+      await tester.tap(find.text('ถัดไป'));
+      expect(nexts, ['rol_staff', 'rol_admin', null]);
+    });
+
+    testWidgets('null callbacks: a row tap does nothing, ถัดไป is disabled and does nothing', (tester) async {
+      await openWith(tester);
+
+      await tester.tap(find.byKey(const ValueKey('role-row-rol_staff')));
+      await tester.pumpAndSettle();
+      expect(find.text('ใช้ไป 3 จาก 30 บทบาท'), findsOneWidget);
+      expect(find.descendant(of: find.byKey(const ValueKey('role-row-rol_staff')), matching: find.byType(InkWell)), findsNothing);
+
+      await tester.tap(_createButton());
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('ถัดไป'));
+      await tester.pumpAndSettle();
+      expect(find.text('เริ่มจากบทบาทที่ใกล้เคียงที่สุด แล้วค่อยปรับสิทธิ์'), findsOneWidget);
+    });
+  });
+
+  group('(รวมคุณ) is display-only', () {
+    testWidgets('myRoleId absent → no suffix anywhere, nothing breaks', (tester) async {
+      await _pump(
+        tester,
+        profile: const OrgProfileView(id: 'org_1', name: 'x', taxProfileComplete: true),
+      );
+      await tester.pumpAndSettle();
+
+      expect(find.text('สมาชิก 1 คน'), findsOneWidget);
+      expect(find.textContaining('รวมคุณ'), findsNothing);
+    });
+
+    testWidgets('profile read failing → rows still render, no suffix', (tester) async {
+      final scoped = FakeOrgScoped(
+        roleDetails: _page([_owner]),
+        catalog: _catalog,
+        profileFailure: const ServerFailure(),
+      );
+      await pumpScreen(
+        tester,
+        const RolesScreen(),
+        overrides: [orgScopedRepositoryProvider.overrideWithValue(scoped)],
+        activeOrg: rolesOrg,
+      );
+      await tester.pumpAndSettle();
+
+      expect(find.text('สมาชิก 1 คน'), findsOneWidget);
+      expect(find.textContaining('รวมคุณ'), findsNothing);
     });
   });
 

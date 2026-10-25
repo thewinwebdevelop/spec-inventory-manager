@@ -15,6 +15,20 @@ import '../copy/role_list_copy.dart';
 import '../copy/role_viewer_reason_copy.dart';
 import 'role_template_screen.dart';
 
+/// Push R1 — the one way every entry point (ข้อมูลร้าน row, สมาชิก button)
+/// opens it, so they cannot drift apart. T-003-M06 passes [onOpenRole] /
+/// [onCreateNext] here (see [RolesScreen]); until then both are `null`.
+Future<void> openRolesScreen(
+  BuildContext context, {
+  ValueChanged<RoleDetailView>? onOpenRole,
+  ValueChanged<String?>? onCreateNext,
+}) =>
+    Navigator.of(context).push(
+      MaterialPageRoute<void>(
+        builder: (_) => RolesScreen(onOpenRole: onOpenRole, onCreateNext: onCreateNext),
+      ),
+    );
+
 /// R1 — รายการบทบาท (ux-wireframe R1), pushed from "ข้อมูลร้าน" or from the
 /// members screen's "จัดการบทบาท".
 ///
@@ -36,11 +50,6 @@ import 'role_template_screen.dart';
 ///  - [onOpenRole] — R3/R4. While `null` the rows are NOT tappable and carry no
 ///    "›": an affordance that opens onto nothing is worse than none.
 ///  - [onCreateNext] — R3's create mode, forwarded to R2's "ถัดไป".
-/// Push R1 — the one way every entry point (ข้อมูลร้าน row, สมาชิก button)
-/// opens it, so they cannot drift apart.
-Future<void> openRolesScreen(BuildContext context) =>
-    Navigator.of(context).push(MaterialPageRoute<void>(builder: (_) => const RolesScreen()));
-
 class RolesScreen extends ConsumerWidget {
   const RolesScreen({super.key, this.onOpenRole, this.onCreateNext});
 
@@ -111,6 +120,13 @@ class _RolesBodyState extends ConsumerState<_RolesBody> {
 
     final failure = details.error ?? catalog.error;
     _relearnOnForbidden(failure);
+
+    if (failure is ForbiddenFailure) {
+      return Scaffold(
+        appBar: AppBar(title: Text(t.rolesListTitle)),
+        body: SafeArea(child: const _ForbiddenPanel()),
+      );
+    }
 
     final page = details.valueOrNull;
     final catalogData = catalog.valueOrNull;
@@ -365,6 +381,44 @@ class _ErrorPanel extends StatelessWidget {
             ),
             const SizedBox(height: AppSpacing.s3),
             OutlinedButton(onPressed: onRetry, child: Text(t.commonRetry)),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+/// ux §0 ForbiddenPanel. "Back" leaves R1 for the shop root (the shell, whose
+/// first tab is "ข้อมูลร้าน"); R1 may have been pushed from สมาชิก too, so it
+/// pops to the root rather than one step.
+class _ForbiddenPanel extends StatelessWidget {
+  const _ForbiddenPanel();
+
+  @override
+  Widget build(BuildContext context) {
+    final t = AppLocalizations.of(context);
+    final colors = context.appColors;
+    return Padding(
+      padding: const EdgeInsets.all(AppSpacing.screenPadding),
+      child: Semantics(
+        liveRegion: true,
+        child: Column(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            Icon(Icons.lock_outline, size: 32, color: colors.textMuted),
+            const SizedBox(height: AppSpacing.s3),
+            Text(t.rolesForbiddenTitle, style: AppTypography.headingSm, textAlign: TextAlign.center),
+            const SizedBox(height: AppSpacing.s2),
+            Text(
+              t.rolesForbiddenBody,
+              style: AppTypography.bodySm.copyWith(color: colors.textMuted),
+              textAlign: TextAlign.center,
+            ),
+            const SizedBox(height: AppSpacing.s4),
+            OutlinedButton(
+              onPressed: () => Navigator.of(context).popUntil((r) => r.isFirst),
+              child: Text(t.rolesForbiddenBack),
+            ),
           ],
         ),
       ),
