@@ -20,6 +20,9 @@
  */
 import { useState } from "react";
 import { useChangeMemberRole } from "../api/use-member-mutations";
+import { useQueryClient } from "@tanstack/react-query";
+import { memberActionErrorMessage, memberRateLimitedMessage } from "../role-copy";
+import { orgKey } from "../../../lib/org/org-keys";
 import { useRoles } from "../api/use-members";
 import { useActiveOrg } from "../../../lib/org/org-context";
 import { isOwner } from "../member-actions";
@@ -69,6 +72,7 @@ export function ChangeRoleDialog({
 }) {
   const org = useActiveOrg();
   const toast = useToast();
+  const queryClient = useQueryClient();
   const roles = useRoles();
   const change = useChangeMemberRole();
   const [roleId, setRoleId] = useState(member.roleId);
@@ -114,6 +118,18 @@ export function ChangeRoleDialog({
           }
           if (failure.kind === "conflict" && failure.code === "LAST_OWNER") {
             setBanner(CHANGE_ROLE_COPY.error.lastOwner);
+            return;
+          }
+          // T-003-W10 · §E — the F-002 fallback offered this, the server said the
+          // target is not below you. Say so (not the Owner sentence), and refetch so
+          // the row picks up the server's verdict instead of offering it again.
+          if (failure.kind === "forbidden" && failure.code === "TARGET_NOT_BELOW_ACTOR") {
+            setBanner(memberActionErrorMessage(failure.code, "changeRole"));
+            void queryClient.invalidateQueries({ queryKey: orgKey(org.orgId, "members") });
+            return;
+          }
+          if (failure.kind === "throttled") {
+            setBanner(memberRateLimitedMessage(failure.retryAfterSeconds ?? 60));
             return;
           }
           if (failure.kind === "forbidden" || failure.kind === "org-access-denied") {
