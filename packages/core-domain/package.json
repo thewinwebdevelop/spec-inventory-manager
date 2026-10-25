@@ -6,9 +6,10 @@
   "types": "dist/index.d.ts",
   "scripts": {
     "build": "tsc -p tsconfig.json",
-    "lint": "eslint \"src/**/*.{ts,tsx}\" --ignore-pattern \"src/__purity_fixtures__/**\"",
+    "lint": "eslint \"src/**/*.{ts,tsx}\" \"test/**/*.ts\" --ignore-pattern \"src/__purity_fixtures__/**\"",
     "typecheck": "tsc -p tsconfig.json --noEmit",
     "test": "vitest run",
+    "test:full": "vitest run -c vitest.full.config.ts",
     "gen:fixture": "node scripts/gen-breached-fixture.mjs",
     "verify:fixture": "node scripts/verify-breached-fixture.mjs",
     "depcruise": "omnistock-purity-gate"

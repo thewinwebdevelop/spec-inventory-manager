@@ -99,6 +99,24 @@ jobs:
             --require "test/static-gates/g11-email-normalize.test.ts=7" \
             --require "test/static-gates/role-key-authority.gate.test.ts=44" \
             --min-passed 69
+      # F-003 T-003-QA07 (test-plan §2.4/§7 full tier) — U-RB-20 authority-lemma BFS.
+      # `*.full.test.ts` is EXCLUDED from the default `vitest run` (packages/core-domain/
+      # vitest.config.ts) so every unit run stays fast; this is where it runs, on every
+      # PR. Measured locally ~27s for the 10 cases. Pure (no DB) — no extra build needed.
+      - name: core-domain full tier — U-RB-20 authority-lemma BFS (JSON report for the guard)
+        run: |
+          pnpm --filter @omnistock/core-domain test:full \
+            --reporter=default --reporter=json --outputFile.json=/tmp/core-domain-full.json
+      - name: core-domain full-tier guard — a skipped/renamed/emptied full test is RED, not green
+        # 10 = the exact case count of authority-lemma.full.test.ts today (allowedOps≡ ·
+        # plain BFS · pending-invitation BFS · c1–c5 · o1/o2). Raising is free; lowering
+        # is a reviewable diff (I-37).
+        run: |
+          node tool/ci/assert-tests-ran.mjs \
+            --report /tmp/core-domain-full.json \
+            --lane "node-ci · core-domain full tier (U-RB-20 authority-lemma BFS)" \
+            --require "packages/core-domain/src/rbac/authority-lemma.full.test.ts=10" \
+            --min-passed 10
 
   # AC4/AC5/AC6/AC7/AC8 — one ephemeral Postgres, empty → migrated → introspected → trigger-armed (§3).
   db-migrate:
