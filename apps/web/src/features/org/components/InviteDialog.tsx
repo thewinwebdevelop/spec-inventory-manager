@@ -33,6 +33,7 @@ import { Button } from "../../../components/ui/Button";
 import { DialogShell } from "../../../components/ui/DialogShell";
 import { TextField } from "../../../components/ui/TextField";
 import { RadioCardGroup } from "../../../components/ui/RadioCardGroup";
+import { RoleCapabilitiesLink } from "./RoleCapabilitiesLink";
 import { ErrorBanner } from "../../../components/ui/ErrorBanner";
 
 export function InviteDialog({
@@ -152,6 +153,7 @@ export function InviteDialog({
           };
         })}
       />
+      <RoleCapabilitiesLink />
       {blockedOriginalRoleName && !roleId && (
         <p className="m-0 text-body-sm text-text-muted">
           {reinviteRoleBlockedHelper(blockedOriginalRoleName)}

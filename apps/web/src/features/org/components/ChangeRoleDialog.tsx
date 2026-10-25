@@ -31,6 +31,7 @@ import { useToast } from "../../../components/providers/ToastProvider";
 import { Button } from "../../../components/ui/Button";
 import { DialogShell } from "../../../components/ui/DialogShell";
 import { ErrorBanner } from "../../../components/ui/ErrorBanner";
+import { RoleCapabilitiesLink } from "./RoleCapabilitiesLink";
 import { RadioCardGroup } from "../../../components/ui/RadioCardGroup";
 
 /**
@@ -178,6 +179,8 @@ export function ChangeRoleDialog({
           };
         })}
       />
+
+      <RoleCapabilitiesLink />
 
       {/* Before the press, never as an error afterwards (§10.1). */}
       {demotingAnOwner && <p className="text-body-sm">{CHANGE_ROLE_COPY.lastOwnerWarning}</p>}

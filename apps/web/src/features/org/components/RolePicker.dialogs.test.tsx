@@ -90,11 +90,17 @@ const ROLES = [
   },
 ];
 
+let currentOrg: ActiveOrg = ORG;
+const WITH_ROLES: ActiveOrg = {
+  ...ORG,
+  capabilities: new Set(["manage_members", "manage_roles"]),
+} as ActiveOrg;
+
 function wrap(ui: React.ReactNode) {
   const qc = new QueryClient({ defaultOptions: { queries: { retry: false } } });
   return render(
     <QueryClientProvider client={qc}>
-      <ActiveOrgProvider value={ORG}>
+      <ActiveOrgProvider value={currentOrg}>
         <ToastProvider>{ui}</ToastProvider>
       </ActiveOrgProvider>
     </QueryClientProvider>,
@@ -116,6 +122,7 @@ const renderers = {
 
 beforeEach(() => {
   roleItems = ROLES;
+  currentOrg = ORG;
   createMutate.mockClear();
   changeMutate.mockClear();
 });
@@ -130,7 +137,8 @@ describe.each(Object.entries(renderers))("%s · R8 role picker", (_name, mount) 
     expect(names[2]).toContain("พนักงานแพ็คของ");
     // renamed system role shows the shop's name, not the key translation
     expect(names[5]).toContain("แคชเชียร์");
-    expect(names[5]).not.toContain("พนักงาน ");
+    // exact label text: the key translation ("พนักงาน") must not leak in
+    expect(names[5]).toBe("แคชเชียร์");
   });
 
   it("★ viewerCanAssign=false -> disabled WITH the reason, still in the DOM (not hidden)", () => {
@@ -251,3 +259,24 @@ describe("ChangeRoleDialog · R8 current role", () => {
     );
   });
 });
+
+describe.each(Object.entries(renderers))(
+  "%s · R8 'ดูว่าแต่ละบทบาททำอะไรได้บ้าง' link",
+  (_name, mount) => {
+    const LINK = "ดูว่าแต่ละบทบาททำอะไรได้บ้าง";
+
+    it("★ manage_roles holder -> link to the roles list, new tab", () => {
+      currentOrg = WITH_ROLES;
+      mount();
+      const link = screen.getByRole("link", { name: new RegExp(LINK) });
+      expect(link).toHaveAttribute("href", "/o/org_1/settings/roles");
+      expect(link).toHaveAttribute("target", "_blank");
+      expect(link).toHaveAttribute("rel", expect.stringContaining("noopener"));
+    });
+
+    it("★ without manage_roles -> no link at all (AC-6.4)", () => {
+      mount();
+      expect(screen.queryByText(new RegExp(LINK))).toBeNull();
+    });
+  },
+);
