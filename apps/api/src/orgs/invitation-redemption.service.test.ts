@@ -47,6 +47,7 @@ const ORG_NAME = "ร้านของจริง";
 const USER_ID = "usr_invitee";
 const USER_EMAIL = "napa@example.com";
 const RAW_TOKEN = "raw-invitation-token-value";
+const ISSUER_ID = "usr_issuer_owner";
 
 const ROLE_STAFF = {
   id: "rol_staff",
@@ -72,6 +73,9 @@ interface FakeInvitation {
   acceptedUserCreatedAt: Date | null;
   cancelledAt: Date | null;
   tokenHash: string;
+  /** F-003 D-035: who issued the current link — an active Owner by default. */
+  issuedByUserId: string | null;
+  invitedByUserId: string | null;
 }
 
 interface FakeMembership {
@@ -98,6 +102,8 @@ function invitation(over: Partial<FakeInvitation> = {}): FakeInvitation {
     acceptedUserCreatedAt: null,
     cancelledAt: null,
     tokenHash: hashInvitationToken(RAW_TOKEN),
+    issuedByUserId: ISSUER_ID,
+    invitedByUserId: ISSUER_ID,
     ...over,
   };
 }
@@ -167,7 +173,14 @@ function createService(options: Options = {}) {
       }),
     },
     membership: {
-      findFirst: vi.fn(async (args: { where: { userId: string } }) => {
+      findFirst: vi.fn(async (args: { where: { userId: string; status?: string } }) => {
+        if (args.where.userId === ISSUER_ID) {
+          // F-003 D-035 re-check (T-003-B19): the link's issuer, an active Owner.
+          calls.push("tx:issuer.findFirst");
+          return args.where.status === "active"
+            ? { role: { capabilities: ["full_access"], deletedAt: null } }
+            : null;
+        }
         calls.push("tx:membership.findFirst");
         const found = memberships.find((m) => m.userId === args.where.userId);
         return found ? { ...found } : null;
@@ -403,6 +416,9 @@ describe("InvitationsService.accept — the transaction (architecture §5.1)", (
       "tx:invitation.findFirst",
       "tx:role.findFirst",
       "tx:membership.findFirst",
+      // F-003 D-035: the issuer re-check — inside the tx, after every F-002
+      // decision fact, before any write.
+      "tx:issuer.findFirst",
       "tx:membership.create",
       "tx:invitation.update",
       "tx:organization.findUnique",

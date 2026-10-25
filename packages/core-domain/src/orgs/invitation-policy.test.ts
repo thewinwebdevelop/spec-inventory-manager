@@ -4,6 +4,7 @@ import {
   isElevatedRole,
   canAcceptInvitation,
   decideInviterRecheck,
+  judgeInviterRecheck,
   INVITATION_TTL_HOURS_ELEVATED,
   INVITATION_TTL_HOURS_STANDARD,
   type AcceptableInvitation,
@@ -449,5 +450,64 @@ describe("D-035 + Addendum · decideInviterRecheck maps each failing leg to its 
         invitationRoleCapabilities: ["manage_products", "some_future_capability"],
       }),
     ).toBe("inviter_exceeds");
+  });
+});
+
+describe("T-003-B19 · judgeInviterRecheck carries the excess the accept_blocked_inviter event reports", () => {
+  const ADMIN = { capabilities: ADMIN_CAPS };
+
+  it("not active ⇒ excess [] (there is no issuer to compare against)", () => {
+    expect(judgeInviterRecheck({ inviter: null, invitationRoleCapabilities: STAFF_CAPS })).toEqual({
+      ok: false,
+      reason: "inviter_not_active",
+      excess: [],
+    });
+  });
+
+  it("floor (P2) ⇒ inviter_not_authorized with excess = the missing floor key", () => {
+    expect(
+      judgeInviterRecheck({
+        inviter: { capabilities: [...STAFF_CAPS, "view_financials"] },
+        invitationRoleCapabilities: STAFF_CAPS,
+      }),
+    ).toEqual({ ok: false, reason: "inviter_not_authorized", excess: ["manage_members"] });
+  });
+
+  it("grant ⊄ ⇒ inviter_exceeds with excess = what the role holds beyond the issuer", () => {
+    expect(
+      judgeInviterRecheck({
+        inviter: { capabilities: ["manage_members", "manage_products"] },
+        invitationRoleCapabilities: ["manage_orders", "manage_products"],
+      }),
+    ).toEqual({ ok: false, reason: "inviter_exceeds", excess: ["manage_orders"] });
+  });
+
+  it("owner_only ⇒ inviter_exceeds with excess [full_access]", () => {
+    expect(judgeInviterRecheck({ inviter: ADMIN, invitationRoleCapabilities: OWNER_CAPS })).toEqual(
+      {
+        ok: false,
+        reason: "inviter_exceeds",
+        excess: ["full_access"],
+      },
+    );
+  });
+
+  it("ok ⇒ { ok: true } — and decideInviterRecheck is exactly its reason projection", () => {
+    expect(judgeInviterRecheck({ inviter: ADMIN, invitationRoleCapabilities: STAFF_CAPS })).toEqual(
+      {
+        ok: true,
+      },
+    );
+    const inputs = [
+      { inviter: null, invitationRoleCapabilities: STAFF_CAPS },
+      { inviter: ADMIN, invitationRoleCapabilities: OWNER_CAPS },
+      { inviter: ADMIN, invitationRoleCapabilities: ADMIN_CAPS },
+      { inviter: { capabilities: STAFF_CAPS }, invitationRoleCapabilities: STAFF_CAPS },
+      { inviter: { capabilities: ["manage_members"] }, invitationRoleCapabilities: ADMIN_CAPS },
+    ];
+    for (const i of inputs) {
+      const v = judgeInviterRecheck(i);
+      expect(decideInviterRecheck(i)).toBe(v.ok ? "ok" : v.reason);
+    }
   });
 });

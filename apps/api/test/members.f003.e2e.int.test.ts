@@ -220,8 +220,9 @@ d("T-003-B17 member routes — D-034 target ⊊ / grant ⊆ (E2E, DB+Redis)", ()
   // ── I3-27 ──────────────────────────────────────────────────────────────
 
   it("I3-27 ★ AC-5.4b: lower → reset → raise dies at step 1 (B in no other shop, so C-2 does not help)", async () => {
-    const { org, people } = await shop({ owner: "Owner", a: "Admin", b: "Admin" });
+    const { org, people } = await shop({ owner: "Owner", a: "Admin", b: "Admin", s: "Staff" });
     expect(await prisma.membership.count({ where: { userId: people.b.id } })).toBe(1);
+    expect(await prisma.membership.count({ where: { userId: people.s.id } })).toBe(1);
     const refresh = await app.app
       .get(RefreshTokenService, { strict: false })
       .issueOnLogin(people.b.id, null);
@@ -242,6 +243,14 @@ d("T-003-B17 member routes — D-034 target ⊊ / grant ⊆ (E2E, DB+Redis)", ()
     const res = await reset(org.id, people.a.id, people.b.id);
     expect(res.status).toBe(404);
     expect(await hashOf(people.b.id)).toBe(hashBefore);
+    // (2) positive control (B19, routed from the B17 review): the SAME caller,
+    // same shop, same route, a target that IS ⊊ (Staff, also in no other shop)
+    // gets 200 and the hash really changes — so the 404 above comes from the ⊊
+    // rule, not from the route / the caller / C-2 refusing everything.
+    const staffHashBefore = await hashOf(people.s.id);
+    const control = await reset(org.id, people.a.id, people.s.id);
+    expect(control.status, control.text).toBe(200);
+    expect(await hashOf(people.s.id)).not.toBe(staffHashBefore);
 
     // (3) nothing to raise back: B never moved, and B's session was never touched.
     expect((await membershipOf(org.id, people.b.id)).roleId).toBe(org.roles.Admin.id);

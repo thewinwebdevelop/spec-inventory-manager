@@ -33,6 +33,7 @@ import {
   invitationTtlHours,
   invitationExpiryFrom,
   isValidEmailShape,
+  judgeInviterRecheck,
   maskEmail,
   normalizeEmail,
   resolveInvitationStatus,
@@ -44,6 +45,7 @@ import {
   type InvitationPreview,
   type InvitationAcceptResult,
   type InvitationRow,
+  type InviterRecheckReason,
   type MembershipStatus,
   type StoredInvitationStatus,
 } from "@omnistock/core-domain";
@@ -243,6 +245,21 @@ interface AcceptInvitationRow {
   readonly status: string;
   readonly expiresAt: Date;
   readonly tokenIssuedAt: Date;
+  /** Who issued the CURRENT link (create or last reissue — D-035 Addendum P3). */
+  readonly issuedByUserId: string | null;
+  /** Who first invited — the re-check falls back to it only on a legacy row. */
+  readonly invitedByUserId: string | null;
+}
+
+/**
+ * D-035 refusal evidence — carried out of the transaction so the
+ * `org.invitation.accept_blocked_inviter` event is emitted post-commit (H-3).
+ * Never reaches the wire: the invitee gets the plain `INVITATION_CANCELLED`.
+ */
+interface BlockedInviter {
+  readonly issuerUserId: string | null;
+  readonly reason: InviterRecheckReason;
+  readonly excess: readonly string[];
 }
 
 /** The caller's membership in the invitation's org, as it is inside the lock. */
@@ -274,7 +291,13 @@ type AcceptOutcome =
       /** `revokedAt` of the membership this accept woke up, or `null`. */
       readonly reactivatedFrom: Date | null;
     }
-  | { readonly kind: "refused"; readonly decision: AcceptRefusal; readonly emailMasked?: string };
+  | {
+      readonly kind: "refused";
+      readonly decision: AcceptRefusal;
+      readonly emailMasked?: string;
+      /** Set only when the D-035 re-check cancelled the invitation in this tx. */
+      readonly blockedInviter?: BlockedInviter & { readonly invitationId: string };
+    };
 
 const REFUSED_INVALID: AcceptOutcome = Object.freeze({ kind: "refused", decision: "invalid" });
 
@@ -834,6 +857,8 @@ export class InvitationsService {
               status: true,
               expiresAt: true,
               tokenIssuedAt: true,
+              issuedByUserId: true,
+              invitedByUserId: true,
             },
           })) as AcceptInvitationRow | null;
           if (!invitation) return REFUSED_INVALID;
@@ -927,8 +952,34 @@ export class InvitationsService {
             id: string;
             name: string;
             key: string | null;
+            capabilities: string[];
             nameCustomized: boolean;
           };
+
+          // 4) D-035 (+ Addendum) — may the issuer of the CURRENT link still
+          //    hand this role out? Only here: after `ok` AND after the email
+          //    binding (arch §6.1 "ตำแหน่ง"), so no F-002 answer changes and a
+          //    holder whose email does not match cannot cancel the invitation.
+          //    Issuer = COALESCE(issuedByUserId, invitedByUserId) (P3), read
+          //    through an ACTIVE membership in this tx, under the org lock.
+          //    `judgeInviterRecheck` throwing is NOT caught: it rolls the tx
+          //    back as a 500 rather than letting the accept through.
+          const blocked = await this.recheckIssuer(tx, invitation, grantedRole.capabilities);
+          if (blocked) {
+            // Same pattern as `already_member`: the refusal COMMITS — the
+            // invitation is cancelled for good (arch §6.1), so preview and the
+            // next accept agree and nothing revives when the issuer regains power.
+            await tx.invitation.update({
+              where: { id: invitation.id },
+              data: { status: "cancelled", cancelledAt: input.now },
+              select: { id: true },
+            });
+            return {
+              kind: "refused",
+              decision: "cancelled",
+              blockedInviter: { ...blocked, invitationId: invitation.id },
+            };
+          }
           const reactivatedFrom = membership?.status === "revoked" ? membership.revokedAt : null;
 
           if (membership) {
@@ -995,6 +1046,18 @@ export class InvitationsService {
     );
 
     if (outcome.kind === "refused") {
+      if (outcome.blockedInviter) {
+        // POST-COMMIT (H-3). The internal reason lives here only; the invitee
+        // gets the same bytes as an invitation the shop cancelled itself.
+        this.events.emit("org.invitation.accept_blocked_inviter", {
+          actorUserId: input.userId,
+          organizationId,
+          invitationId: outcome.blockedInviter.invitationId,
+          issuerUserId: outcome.blockedInviter.issuerUserId,
+          reason: outcome.blockedInviter.reason,
+          excessCapabilities: [...outcome.blockedInviter.excess],
+        });
+      }
       throw domainError(ACCEPT_REFUSAL_ERRORS[outcome.decision], {
         ...(outcome.emailMasked ? { details: { emailMasked: outcome.emailMasked } } : {}),
       });
@@ -1065,6 +1128,42 @@ export class InvitationsService {
       excessCapabilities: refusal.excess,
     });
     throw domainError("ROLE_EXCEEDS_ACTOR");
+  }
+
+  /**
+   * D-035 (+ Addendum P2/P3) — arch §6.1. `null` = the issuer may still hand
+   * this role out; otherwise why not. The issuer is whoever issued the CURRENT
+   * link (`issuedByUserId`, written with every token); `invitedByUserId` is
+   * the fallback for a row issued before F-003 only. Both null ⇒ no issuer ⇒
+   * fail closed (`inviter_not_active`).
+   *
+   * The membership read is `ORG_PRISMA` through `tx` (org-scoped, under the
+   * org lock) and requires `status: active`: removed, left and deleted
+   * accounts all read as "no issuer". An active membership whose role is
+   * soft-deleted cannot exist (trigger) — if it ever does, it fails closed too.
+   */
+  private async recheckIssuer(
+    tx: OrgLockTx,
+    invitation: AcceptInvitationRow,
+    invitationRoleCapabilities: readonly string[],
+  ): Promise<BlockedInviter | null> {
+    const issuerUserId = invitation.issuedByUserId ?? invitation.invitedByUserId;
+    const issuer =
+      issuerUserId === null
+        ? null
+        : ((await tx.membership.findFirst({
+            where: { userId: issuerUserId, status: "active" },
+            select: { role: { select: { capabilities: true, deletedAt: true } } },
+          })) as { role: { capabilities: string[]; deletedAt: Date | null } } | null);
+    const verdict = judgeInviterRecheck({
+      inviter:
+        issuer && issuer.role.deletedAt === null
+          ? { capabilities: issuer.role.capabilities }
+          : null,
+      invitationRoleCapabilities,
+    });
+    if (verdict.ok) return null;
+    return { issuerUserId, reason: verdict.reason, excess: verdict.excess };
   }
 
   private async readRole(tx: OrgLockTx, roleId: string) {
