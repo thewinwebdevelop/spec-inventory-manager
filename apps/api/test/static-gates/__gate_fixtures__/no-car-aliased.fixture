@@ -1,0 +1,5 @@
+// no-canAssignRole red fixture: the wrapper renamed on import, then called under the alias.
+import { canAssignRole as mayAssign } from "@omnistock/core-domain";
+
+export const allowed = (actor: readonly string[]) =>
+  mayAssign({ actorCapabilities: actor, targetIsOwner: false, newRoleIsOwner: false });

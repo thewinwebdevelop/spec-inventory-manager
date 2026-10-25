@@ -119,6 +119,18 @@ patch:
         application/json:
           schema:
             $ref: "../components/common.yaml#/ErrorResponse"
+    "429":
+      description: >
+        `RATE_LIMITED` — F-003 `memberWrite`: 120 member writes per hour per
+        caller per shop, shared with `DELETE …/members/{userId}` and
+        `DELETE …/invitations/{invitationId}`.
+      headers:
+        Retry-After:
+          $ref: "../components/headers.yaml#/RetryAfter"
+      content:
+        application/json:
+          schema:
+            $ref: "../components/common.yaml#/ErrorResponse"
 
 delete:
   operationId: revokeMember
@@ -207,6 +219,17 @@ delete:
             $ref: "../components/common.yaml#/ErrorResponse"
     "422":
       description: "`ORG_CONTEXT_REQUIRED` / `ORG_MISMATCH`"
+      content:
+        application/json:
+          schema:
+            $ref: "../components/common.yaml#/ErrorResponse"
+    "429":
+      description: >
+        `RATE_LIMITED` — F-003 `memberWrite` (shared with PATCH on this path
+        and `DELETE …/invitations/{invitationId}`).
+      headers:
+        Retry-After:
+          $ref: "../components/headers.yaml#/RetryAfter"
       content:
         application/json:
           schema:

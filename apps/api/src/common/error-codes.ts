@@ -282,7 +282,7 @@ export const ERROR_CODES = {
   ROLE_EXCEEDS_ACTOR: {
     code: "ROLE_EXCEEDS_ACTOR",
     status: HttpStatus.FORBIDDEN,
-    message: "บทบาทนี้มีสิทธิ์ที่คุณไม่มี ให้เจ้าของร้านดำเนินการแทน",
+    message: "บทบาทนี้มีสิทธิ์ที่คุณไม่มี — ให้เจ้าของร้านทำแทน",
   },
   // Target axis (⊊): the TARGET's current role is not strictly below the actor
   // (equal, above, or incomparable) — change-role / remove a member (D-034), and
@@ -291,7 +291,7 @@ export const ERROR_CODES = {
   TARGET_NOT_BELOW_ACTOR: {
     code: "TARGET_NOT_BELOW_ACTOR",
     status: HttpStatus.FORBIDDEN,
-    message: "คุณจัดการรายการนี้ไม่ได้ ให้เจ้าของร้านดำเนินการแทน",
+    message: "คุณจัดการรายการนี้ไม่ได้ — ให้เจ้าของร้านช่วย",
   },
   // F-002 · I-5 — deliberately SEPARATE from FORBIDDEN. "You are not an active
   // member of this org" (incl. the org not existing, or you having been removed)

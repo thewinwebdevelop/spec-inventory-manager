@@ -118,7 +118,7 @@ function createService({ actorRole, invitationRole = "orders" }: Setup) {
   );
   const inOrg = <T>(fn: () => Promise<T>) =>
     store.run({ organizationId: ORG_ID, userId: ACTOR }, fn);
-  return { service, tx, sink, inOrg };
+  return { service, tx, sink, inOrg, store };
 }
 
 async function codeOf(p: Promise<unknown>): Promise<{ code: string; details: unknown }> {
@@ -250,5 +250,22 @@ describe("B18 · invite create / reissue / cancel decide through decideMemberAut
     const refused = await codeOf(inOrg(() => service.cancel({ invitationId: "inv_1", now: NOW })));
     expect(refused.code).toBe("ORG_ACCESS_DENIED");
     expect(tx.invitation.update).not.toHaveBeenCalled();
+  });
+
+  it("★ B18 Low (T-003-B17): cancel by an actor who lost manage_members between the guard and the tx re-read → FORBIDDEN, nothing written, no event", async () => {
+    // The guard saw an Admin (ALS); the locked re-read sees a role with no
+    // manage_members. The floor (decideMemberAuthority step 1) must follow the DB.
+    const { service, tx, sink, store } = createService({
+      actorRole: "orders",
+      invitationRole: "orders",
+    });
+    const refused = await codeOf(
+      store.run({ organizationId: ORG_ID, userId: ACTOR, capabilities: ADMIN_CAPS }, () =>
+        service.cancel({ invitationId: "inv_1", now: NOW }),
+      ),
+    );
+    expect(refused.code).toBe("FORBIDDEN");
+    expect(tx.invitation.update).not.toHaveBeenCalled();
+    expect(sink.events).toEqual([]);
   });
 });
