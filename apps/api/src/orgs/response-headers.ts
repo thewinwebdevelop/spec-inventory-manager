@@ -87,7 +87,12 @@ function policyRow(
   headers: Readonly<Record<string, string>>,
   carries: readonly ResponseSensitivity[],
 ): ResponseHeaderPolicyRow {
-  return Object.freeze({ method: method.toUpperCase(), path, headers, carries: Object.freeze(carries) });
+  return Object.freeze({
+    method: method.toUpperCase(),
+    path,
+    headers,
+    carries: Object.freeze(carries),
+  });
 }
 
 /**
@@ -124,21 +129,18 @@ export const RESPONSE_HEADER_POLICY: readonly ResponseHeaderPolicyRow[] = Object
   // for the same reason §3.17 is: "when was this person removed from which
   // shop" is still a fact about a person.
   policyRow("PATCH", "/orgs/{orgId}/members/{userId}", ORG_PROFILE_RESPONSE_HEADERS, ["email"]),
-  policyRow("DELETE", "/orgs/{orgId}/members/{userId}", ORG_PROFILE_RESPONSE_HEADERS, ["membership"]),
+  policyRow("DELETE", "/orgs/{orgId}/members/{userId}", ORG_PROFILE_RESPONSE_HEADERS, [
+    "membership",
+  ]),
   policyRow("GET", "/orgs/{orgId}/invitations", INVITATION_RESPONSE_HEADERS, ["email"]),
   policyRow("POST", "/orgs/{orgId}/invitations", INVITATION_RESPONSE_HEADERS, ["token", "email"]),
-  policyRow(
-    "POST",
-    "/orgs/{orgId}/invitations/{invitationId}/link",
-    INVITATION_RESPONSE_HEADERS,
-    ["token", "email"],
-  ),
-  policyRow(
-    "DELETE",
-    "/orgs/{orgId}/invitations/{invitationId}",
-    INVITATION_RESPONSE_HEADERS,
-    ["email"],
-  ),
+  policyRow("POST", "/orgs/{orgId}/invitations/{invitationId}/link", INVITATION_RESPONSE_HEADERS, [
+    "token",
+    "email",
+  ]),
+  policyRow("DELETE", "/orgs/{orgId}/invitations/{invitationId}", INVITATION_RESPONSE_HEADERS, [
+    "email",
+  ]),
   // §3.14 / §3.15 — the public preview echoes a masked email, and both consume
   // a token that must not reach a `Referer` header (I-6).
   policyRow("POST", "/invitations/preview", INVITATION_RESPONSE_HEADERS, ["email"]),
@@ -156,15 +158,18 @@ export const RESPONSE_HEADER_POLICY: readonly ResponseHeaderPolicyRow[] = Object
   policyRow("GET", "/me/organizations", ORG_PROFILE_RESPONSE_HEADERS, ["membership"]),
   policyRow("POST", "/organizations", ORG_PROFILE_RESPONSE_HEADERS, ["membership"]),
   policyRow("GET", "/orgs/{orgId}/roles", ORG_PROFILE_RESPONSE_HEADERS, ["membership"]),
+  // F-003 · T-003-B21 — `RoleDetail` says how many hold each role and which
+  // role the last editor holds now (membership). The catalog is this shop's
+  // entitlement view (AC-7.4 — per shop, like "on what plan").
+  policyRow("GET", "/orgs/{orgId}/role-details", ORG_PROFILE_RESPONSE_HEADERS, ["membership"]),
+  policyRow("GET", "/orgs/{orgId}/roles/{roleId}", ORG_PROFILE_RESPONSE_HEADERS, ["membership"]),
+  policyRow("GET", "/orgs/{orgId}/capabilities", ORG_PROFILE_RESPONSE_HEADERS, ["membership"]),
   // F-001's admin reset. The body is `{ ok: true }`, but the REQUEST is an act
   // performed on a named person in a named shop, and the response confirms it
   // happened — a shared cache holding that is a disclosure of its own.
-  policyRow(
-    "POST",
-    "/orgs/{orgId}/members/{userId}/reset-password",
-    ORG_PROFILE_RESPONSE_HEADERS,
-    ["membership"],
-  ),
+  policyRow("POST", "/orgs/{orgId}/members/{userId}/reset-password", ORG_PROFILE_RESPONSE_HEADERS, [
+    "membership",
+  ]),
   // §3.17 — no email, no token, no TIN; listed because api-spec §1 puts
   // §3.10–§3.17 under `no-store` and because "when did this person leave which
   // shop" is still a fact about a person that must not sit in a shared cache.

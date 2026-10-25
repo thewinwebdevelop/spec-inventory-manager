@@ -57,6 +57,7 @@ doc/RoleListPage.md
 doc/RoleRow.md
 doc/RoleUsage.md
 doc/RoleWriteVerdict.md
+doc/RolesApi.md
 doc/Session.md
 doc/SessionsResponse.md
 doc/SignupRequest.md
@@ -76,6 +77,7 @@ lib/src/api/auth_api.dart
 lib/src/api/invitations_api.dart
 lib/src/api/members_api.dart
 lib/src/api/organizations_api.dart
+lib/src/api/roles_api.dart
 lib/src/api/system_api.dart
 lib/src/api_util.dart
 lib/src/auth/api_key_auth.dart

@@ -14,6 +14,7 @@ export 'package:omnistock_api_client/src/api/auth_api.dart';
 export 'package:omnistock_api_client/src/api/invitations_api.dart';
 export 'package:omnistock_api_client/src/api/members_api.dart';
 export 'package:omnistock_api_client/src/api/organizations_api.dart';
+export 'package:omnistock_api_client/src/api/roles_api.dart';
 export 'package:omnistock_api_client/src/api/system_api.dart';
 
 export 'package:omnistock_api_client/src/model/accepted_membership.dart';

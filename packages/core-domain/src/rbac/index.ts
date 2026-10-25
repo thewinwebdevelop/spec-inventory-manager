@@ -54,3 +54,18 @@ export {
   type RoleWriteResult,
   type RoleWriteTarget,
 } from "./role-write";
+// T-003-B21 — what the role READ routes publish (viewer verdicts, catalog, lastEdited.by).
+export {
+  capabilityCatalog,
+  lastEditedBy,
+  roleDetailViewer,
+  roleListViewer,
+  wireNameCustomized,
+  type CapabilityCatalogEntry,
+  type CapabilityCatalogView,
+  type LastEditedBy,
+  type RoleDetailViewer,
+  type RoleDetailViewerInput,
+  type RoleWriteDecider,
+  type RoleWriteVerdict,
+} from "./role-view";

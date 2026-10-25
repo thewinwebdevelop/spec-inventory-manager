@@ -1,7 +1,7 @@
 # F-003 — custom roles and the capability catalog (api-spec §2, §3).
 #
-# ⚠️ T-003-B01 PUBLISHES THESE SHAPES AHEAD OF THEIR ROUTES. No path references
-# them yet: each route lands with the task that serves it (B21 capabilities +
+# ⚠️ T-003-B01 PUBLISHED THESE SHAPES AHEAD OF THEIR ROUTES. B21 now serves the
+# three GETs; the request/delete shapes still wait: each route lands with the task that serves it (B21 capabilities +
 # role-details + role detail · B23 POST · B24 PATCH · B25 DELETE), because the
 # router↔spec parity gate refuses a path the server does not answer (Q-T1).
 # They are pulled into the bundle through `components.schemas` in root.yaml so
