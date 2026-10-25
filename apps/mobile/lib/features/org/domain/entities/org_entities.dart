@@ -233,6 +233,7 @@ class OrgProfileView {
     required this.name,
     required this.taxProfileComplete,
     this.capabilities = const {},
+    this.myRoleId,
     this.entityType,
     this.taxIdMasked,
     this.vatRegistered,
@@ -252,6 +253,10 @@ class OrgProfileView {
   /// means a role change is reflected on the next load rather than at the next
   /// sign-in.
   final Set<String> capabilities;
+
+  /// `myMembership.roleId` — only so R1 can append "(รวมคุณ)" to the viewer's
+  /// own role. Display, never a permission input.
+  final String? myRoleId;
   final String? entityType;
 
   /// e.g. `•••••••••3454`. The server sends this only to a member who may see

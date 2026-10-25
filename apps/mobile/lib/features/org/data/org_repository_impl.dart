@@ -8,6 +8,7 @@ import 'package:omnistock_api_client/omnistock_api_client.dart' as wire;
 
 import '../../../core/error/api_failure.dart';
 import '../domain/entities/org_entities.dart';
+import '../domain/entities/role_entities.dart';
 import '../domain/repositories/org_repository.dart';
 
 /// T-002-M3 — the only place the generated client is touched for F-002
@@ -94,15 +95,18 @@ class OrgScopedImpl implements OrgScoped {
     required wire.MembersApi members,
     required wire.OrganizationsApi organizations,
     required wire.InvitationsApi invitations,
+    required wire.RolesApi roles,
     required String orgId,
   })  : _members = members,
         _organizations = organizations,
         _invitations = invitations,
+        _roles = roles,
         _orgId = orgId;
 
   final wire.MembersApi _members;
   final wire.OrganizationsApi _organizations;
   final wire.InvitationsApi _invitations;
+  final wire.RolesApi _roles;
 
   /// Still required in the PATH by the contract, even though the header
   /// carries it too — api-spec §1 accepts either and refuses a mismatch with
@@ -218,6 +222,68 @@ class OrgScopedImpl implements OrgScoped {
   }
 
   @override
+  Future<RoleDetailsPage> listRoleDetails() async {
+    try {
+      final res = await _roles.listOrgRoleDetails(orgId: _orgId);
+      final body = res.data;
+      if (body == null) throw const ServerFailure();
+      RoleVerdict verdict(wire.RoleWriteVerdict v) =>
+          RoleVerdict(allowed: v.allowed, reason: v.reason);
+      return RoleDetailsPage(
+        items: body.items
+            .map(
+              (r) => RoleDetailView(
+                id: r.id,
+                name: r.name,
+                roleKey: r.key,
+                nameCustomized: r.nameCustomized,
+                isSystem: r.isSystem,
+                capabilities: r.capabilities.toList(growable: false),
+                usage: RoleUsage(
+                  activeMembers: r.usage.activeMembers,
+                  pendingInvitations: r.usage.pendingInvitations,
+                ),
+                lastEdited: r.lastEdited == null
+                    ? null
+                    : RoleLastEditedInfo(
+                        at: r.lastEdited!.at,
+                        kind: r.lastEdited!.by.kind,
+                        byRoleName: r.lastEdited!.by.roleName,
+                        byRoleKey: r.lastEdited!.by.roleKey,
+                        byRoleNameCustomized: r.lastEdited!.by.roleNameCustomized,
+                      ),
+                // Carried verbatim — the screen never recomputes a verdict.
+                canEdit: verdict(r.viewer.canEdit),
+                canDelete: verdict(r.viewer.canDelete),
+                canClone: verdict(r.viewer.canClone),
+              ),
+            )
+            .toList(growable: false),
+        canCreate: verdict(body.viewer.canCreate),
+        limit: body.viewer.limit,
+      );
+    } on DioException catch (e) {
+      throw _asFailure(e);
+    }
+  }
+
+  @override
+  Future<CapabilityCatalogView> getCapabilityCatalog() async {
+    try {
+      final res = await _roles.getOrgCapabilityCatalog(orgId: _orgId);
+      final body = res.data;
+      if (body == null) throw const ServerFailure();
+      return CapabilityCatalogView(
+        items: body.items
+            .map((e) => CapabilityCatalogEntry(key: e.key, labelTh: e.labelTh, selectable: e.selectable))
+            .toList(growable: false),
+      );
+    } on DioException catch (e) {
+      throw _asFailure(e);
+    }
+  }
+
+  @override
   Future<OrgProfileView> getOrganization() async {
     try {
       final res = await _organizations.getOrganization(orgId: _orgId);
@@ -231,6 +297,7 @@ class OrgScopedImpl implements OrgScoped {
         // The member's own capabilities, which this response carries and the
         // previous mapping dropped.
         capabilities: body.myMembership.capabilities.toSet(),
+        myRoleId: body.myMembership.roleId,
         entityType: tax?.entityType?.name,
         taxIdMasked: tax?.taxIdMasked,
         vatRegistered: tax?.vatRegistered,

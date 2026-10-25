@@ -460,7 +460,6 @@
   "rolesListTitle": "บทบาทและสิทธิ์",
   "rolesListDesc1": "บทบาทคือชุดสิทธิ์ที่มอบให้สมาชิก เช่น พนักงานแพ็คของทำอะไรได้บ้าง",
   "rolesListDesc2": "มอบบทบาทให้แต่ละคนได้ที่หน้าสมาชิก",
-  "rolesListGoToMembers": "ไปหน้าสมาชิก",
   "rolesListUsageCount": "ใช้ไป {used} จาก {limit} บทบาท",
   "@rolesListUsageCount": {
     "description": "ux R1 — items.length / viewer.limit.",
@@ -471,6 +470,12 @@
   "rolesListBadgeReadOnly": "ดูได้อย่างเดียว",
   "rolesListLoadError": "โหลดรายการบทบาทไม่สำเร็จ",
   "rolesListLoadErrorHint": "ตรวจการเชื่อมต่อแล้วลองใหม่",
+  "rolesForbiddenTitle": "หน้านี้สำหรับคนที่จัดการบทบาทได้",
+  "rolesForbiddenBody": "ถ้าต้องการใช้ ให้เจ้าของร้านเปิดสิทธิ์ \"จัดการบทบาทและสิทธิ์\" ให้คุณ",
+  "rolesForbiddenBack": "กลับไปหน้าข้อมูลร้าน",
+  "@rolesForbiddenBack": {
+    "description": "ux §0 ForbiddenPanel (R1–R4: no manage_roles, or a 403 mid-way). Shown instead of the generic load-error."
+  },
   "rolesEntryRowSub": "กำหนดว่าแต่ละบทบาททำอะไรได้",
   "@rolesEntryRowSub": {
     "description": "ux R1 — the 'ข้อมูลร้าน' screen's entry ListRow subtitle, under rolesListTitle as its label."
@@ -487,6 +492,21 @@
   "roleTemplateOwnerNote": "บทบาทเจ้าของร้านใช้เป็นต้นแบบไม่ได้ เพราะสิทธิ์ทำได้ทุกอย่างมีได้เฉพาะเจ้าของร้าน",
   "roleTemplateNext": "ถัดไป",
   "roleTemplateCancel": "ยกเลิก",
+  "roleTemplateDescription": "{n} สิทธิ์: {labels}",
+  "@roleTemplateDescription": {
+    "description": "ux R2 — '{n} สิทธิ์: {ป้ายสิทธิ์ 3 ตัวแรก}{…}'. [labels] is already joined with ', ' and carries the trailing '…' when there are more than 3 (labels come from GET /capabilities).",
+    "placeholders": { "n": { "type": "int" }, "labels": { "type": "String" } }
+  },
+  "roleTemplateDescriptionNoLabels": "{n} สิทธิ์",
+  "@roleTemplateDescriptionNoLabels": {
+    "description": "ux R2 — fallback when none of the role's capabilities has a catalog label (never print a raw key).",
+    "placeholders": { "n": { "type": "int" } }
+  },
+  "roleTemplateCloneExceeds": "บทบาทนี้มีสิทธิ์ที่คุณไม่มี จึงใช้เป็นต้นแบบไม่ได้",
+  "roleTemplateCloneUnknown": "ใช้บทบาทนี้เป็นต้นแบบไม่ได้",
+  "@roleTemplateCloneUnknown": {
+    "description": "ux R2 — canClone.allowed=false with any reason other than exceeds_your_permissions."
+  },
 
   "roleFormCreateTitle": "สร้างบทบาทใหม่",
   "roleFormCloneIntro": "เริ่มจากสำเนาของ \"{templateName}\"",

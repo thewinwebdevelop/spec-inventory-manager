@@ -5,6 +5,7 @@
 // and cannot accidentally hand an org-scoped fake to the user-scoped provider.
 import 'package:mobile/core/error/api_failure.dart';
 import 'package:mobile/features/org/domain/entities/org_entities.dart';
+import 'package:mobile/features/org/domain/entities/role_entities.dart';
 import 'package:mobile/features/org/domain/repositories/org_repository.dart';
 
 class FakeOrgDirectory implements OrgDirectory {
@@ -59,6 +60,10 @@ class FakeOrgScoped implements OrgScoped {
     this.profileFailure,
     this.revealFailure,
     this.revealThrows,
+    this.roleDetails,
+    this.roleDetailsFailure,
+    this.catalog,
+    this.catalogFailure,
   });
 
   /// One entry per call — so a test can make page 2 fail after page 1 worked.
@@ -87,6 +92,14 @@ class FakeOrgScoped implements OrgScoped {
   /// family and left the screen stuck in `loading` forever.
   final Object? revealThrows;
   int revealCalls = 0;
+
+  // F-003 R1/R2 — `null` page/catalog = an empty-but-valid answer.
+  final RoleDetailsPage? roleDetails;
+  final ApiFailure? roleDetailsFailure;
+  final CapabilityCatalogView? catalog;
+  final ApiFailure? catalogFailure;
+  int roleDetailsCalls = 0;
+  int catalogCalls = 0;
   int profileCalls = 0;
 
   int memberCalls = 0;
@@ -133,6 +146,23 @@ class FakeOrgScoped implements OrgScoped {
     await Future<void>.delayed(delay);
     if (rolesFailure != null) throw rolesFailure!;
     return roles;
+  }
+
+  @override
+  Future<RoleDetailsPage> listRoleDetails() async {
+    roleDetailsCalls++;
+    await Future<void>.delayed(delay);
+    if (roleDetailsFailure != null) throw roleDetailsFailure!;
+    return roleDetails ??
+        const RoleDetailsPage(items: [], canCreate: RoleVerdict(allowed: true), limit: 30);
+  }
+
+  @override
+  Future<CapabilityCatalogView> getCapabilityCatalog() async {
+    catalogCalls++;
+    await Future<void>.delayed(delay);
+    if (catalogFailure != null) throw catalogFailure!;
+    return catalog ?? const CapabilityCatalogView(items: []);
   }
 
   @override

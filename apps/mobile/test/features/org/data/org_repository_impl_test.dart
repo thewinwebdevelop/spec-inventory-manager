@@ -105,6 +105,7 @@ void main() {
         members: MembersApi(_dio(adapter), standardSerializers),
         organizations: OrganizationsApi(_dio(adapter), standardSerializers),
         invitations: InvitationsApi(_dio(adapter), standardSerializers),
+        roles: RolesApi(_dio(adapter), standardSerializers),
         orgId: 'org_1',
       );
 
@@ -127,6 +128,7 @@ void main() {
         members: MembersApi(_dio(adapter), standardSerializers),
         organizations: OrganizationsApi(_dio(adapter), standardSerializers),
         invitations: InvitationsApi(_dio(adapter), standardSerializers),
+        roles: RolesApi(_dio(adapter), standardSerializers),
         orgId: 'org_2n4xk9',
       );
 
@@ -162,6 +164,7 @@ void main() {
         members: MembersApi(_dio(adapter), standardSerializers),
         organizations: OrganizationsApi(_dio(adapter), standardSerializers),
         invitations: InvitationsApi(_dio(adapter), standardSerializers),
+        roles: RolesApi(_dio(adapter), standardSerializers),
         orgId: 'org_1',
       );
 
@@ -203,6 +206,7 @@ void main() {
         members: MembersApi(_dio(adapter), standardSerializers),
         organizations: OrganizationsApi(_dio(adapter), standardSerializers),
         invitations: InvitationsApi(_dio(adapter), standardSerializers),
+        roles: RolesApi(_dio(adapter), standardSerializers),
         orgId: 'org_1',
       );
 
@@ -231,6 +235,7 @@ void main() {
         members: MembersApi(_dio(adapter), standardSerializers),
         organizations: OrganizationsApi(_dio(adapter), standardSerializers),
         invitations: InvitationsApi(_dio(adapter), standardSerializers),
+        roles: RolesApi(_dio(adapter), standardSerializers),
         orgId: 'org_1',
       );
 
@@ -246,6 +251,7 @@ void main() {
           members: MembersApi(_dio(adapter), standardSerializers),
           organizations: OrganizationsApi(_dio(adapter), standardSerializers),
           invitations: InvitationsApi(_dio(adapter), standardSerializers),
+          roles: RolesApi(_dio(adapter), standardSerializers),
           orgId: 'org_1',
         );
 
@@ -302,6 +308,99 @@ void main() {
       // Absent stays absent — never defaulted to true or false.
       expect(rows[3].viewerCanManage, isNull);
       expect(rows[3].manageBlockedReason, isNull);
+    });
+    test('★ T-003-M05: role-details carries every server verdict verbatim, open-set reasons included',
+        () async {
+      Map<String, Object?> role(String id, Map<String, Object?> viewer, {Object? lastEdited}) => {
+            'id': id,
+            'name': 'Name $id',
+            'key': id == 'rol_c' ? null : 'staff',
+            'nameCustomized': false,
+            'isSystem': id == 'rol_a',
+            'grantsOwnership': false,
+            'capabilities': ['manage_products', 'manage_stock'],
+            'version': 1,
+            'usage': {'activeMembers': 2, 'pendingInvitations': 1},
+            'lastEdited': lastEdited,
+            'viewer': viewer,
+            'createdAt': '2026-08-01T00:00:00.000Z',
+          };
+      Map<String, Object?> v(bool allowed, [String? reason]) => {'allowed': allowed, 'reason': reason};
+      final adapter = _FakeAdapter(200, {
+        'items': [
+          role('rol_a', {'canEdit': v(false, 'role_locked'), 'canDelete': v(false, 'role_locked'), 'canClone': v(false, 'owner_role')}),
+          role('rol_b', {'canEdit': v(true), 'canDelete': v(false, 'in_use'), 'canClone': v(true)},
+              lastEdited: {
+                'at': '2026-09-02T09:10:00.000Z',
+                'by': {'kind': 'brand_new_kind', 'roleName': 'Admin', 'roleKey': 'admin'},
+              }),
+          role('rol_c', {'canEdit': v(false, 'brand_new'), 'canDelete': v(false, 'brand_new'), 'canClone': v(false, 'brand_new')}),
+        ],
+        'nextCursor': null,
+        'viewer': {'canCreate': v(false, 'role_limit_reached'), 'limit': 30},
+      });
+
+      final page = await repoOn(adapter).listRoleDetails();
+
+      expect(adapter.seen.single.path, '/orgs/org_1/role-details');
+      expect(page.limit, 30);
+      expect(page.canCreate.allowed, isFalse);
+      expect(page.canCreate.reason, 'role_limit_reached');
+      expect(page.items.map((r) => r.id), ['rol_a', 'rol_b', 'rol_c']);
+      expect(page.items[0].canClone.reason, 'owner_role');
+      expect(page.items[0].isSystem, isTrue);
+      expect(page.items[1].canEdit.allowed, isTrue);
+      expect(page.items[1].canEdit.reason, isNull);
+      expect(page.items[1].canDelete.reason, 'in_use');
+      expect(page.items[1].usage.activeMembers, 2);
+      expect(page.items[1].usage.pendingInvitations, 1);
+      expect(page.items[1].lastEdited!.kind, 'brand_new_kind');
+      expect(page.items[1].lastEdited!.byRoleName, 'Admin');
+      expect(page.items[0].lastEdited, isNull);
+      expect(page.items[2].roleKey, isNull);
+      expect(page.items[2].canEdit.reason, 'brand_new');
+    });
+
+    test('★ T-003-M05: capability catalog keeps order, labels and selectable', () async {
+      final adapter = _FakeAdapter(200, {
+        'groups': [
+          {'key': 'g', 'labelTh': 'กลุ่ม'},
+        ],
+        'items': [
+          {
+            'key': 'manage_products',
+            'labelTh': 'จัดการสินค้า',
+            'descriptionTh': 'd',
+            'group': 'g',
+            'status': 'active',
+            'implies': <String>[],
+            'selectable': true,
+          },
+          {
+            'key': 'full_access',
+            'labelTh': 'ทำได้ทุกอย่าง',
+            'descriptionTh': 'd',
+            'group': null,
+            'status': 'active',
+            'implies': <String>[],
+            'selectable': false,
+          },
+        ],
+      });
+
+      final catalog = await repoOn(adapter).getCapabilityCatalog();
+
+      expect(adapter.seen.single.path, '/orgs/org_1/capabilities');
+      expect(catalog.items.map((e) => e.key), ['manage_products', 'full_access']);
+      expect(catalog.items.first.labelTh, 'จัดการสินค้า');
+      expect(catalog.items.last.selectable, isFalse);
+    });
+
+    test('★ T-003-M05: a refusal on role-details surfaces as an ApiFailure (never an empty page)',
+        () async {
+      final adapter = _FakeAdapter(500, {'error': {'code': 'INTERNAL', 'message': 'x'}});
+      expect(repoOn(adapter).listRoleDetails(), throwsA(isA<ApiFailure>()));
+      expect(repoOn(adapter).getCapabilityCatalog(), throwsA(isA<ApiFailure>()));
     });
   });
 }

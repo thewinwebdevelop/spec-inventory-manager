@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../../../core/l10n/l10n.dart';
+import '../../../../core/session/capability_gate.dart';
 import '../../../../core/session/session_controller.dart';
 import '../../../../core/theme/app_theme.dart';
 import '../../../../core/ui/skeleton.dart';
@@ -15,6 +16,7 @@ import '../copy/role_action_blocked_copy.dart';
 import '../widgets/expiry_text.dart';
 import '../widgets/role_label.dart';
 import 'invite_member_screen.dart';
+import 'roles_screen.dart';
 
 /// S6 — สมาชิก, mobile (ux-wireframe §7 + §13).
 ///
@@ -79,6 +81,20 @@ class _MembersScreenState extends ConsumerState<MembersScreen> {
       body: ListView(
         padding: const EdgeInsets.all(AppSpacing.s4),
         children: [
+          // F-003 R1 entry (ux R1): tertiary button under the heading, on the
+          // SERVER's answer for this member.
+          CapabilityGate(
+            capability: manageRolesCapability,
+            child: Align(
+              alignment: AlignmentDirectional.centerStart,
+              child: TextButton(
+                key: const ValueKey('manage-roles-button'),
+                style: TextButton.styleFrom(minimumSize: const Size(0, AppSizes.tapTargetMin)),
+                onPressed: () => openRolesScreen(context),
+                child: Text(t.rolesManageTertiaryCta),
+              ),
+            ),
+          ),
           _BackupOwnerNudge(
             members: members,
             onInviteOwner: () => _openInvite(presetRoleKey: 'owner'),
