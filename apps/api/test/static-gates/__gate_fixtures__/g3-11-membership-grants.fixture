@@ -1,0 +1,25 @@
+// G3-11 red: five ways to grant a role from an unlisted method.
+class RolesService {
+  async reassignHolders(tx, from, to) {
+    await tx.membership.updateMany({ where: { roleId: from }, data: { roleId: to } });
+  }
+
+  async reactivate(tx, id) {
+    await tx.$executeRaw`UPDATE "Membership" SET status = 'active' WHERE id = ${id}`;
+  }
+
+  async copy(tx, data) {
+    await tx.membership.create({ data });
+  }
+
+  async connect(tx, id, roleId) {
+    await tx.membership.update({ where: { id }, data: { role: { connect: { id: roleId } } } });
+  }
+
+  async nested(tx, orgId, userId, roleId) {
+    await tx.organization.update({
+      where: { id: orgId },
+      data: { memberships: { create: { userId, roleId, status: ACTIVE } } },
+    });
+  }
+}

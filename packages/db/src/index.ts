@@ -99,3 +99,25 @@ export {
   hashInvitationToken,
   INVITATION_TOKEN_BYTES,
 } from "./invitation-token";
+
+// F-003 · T-003-B11 — `backfill:f003`: executes the committed
+// `*_f003_backfill_manage_roles` migration (the ONE SQL source, G3-10) in one
+// transaction + the rollback-safety and "capabilities ⊆ registry" checks. The
+// CLI is apps/api/scripts/backfill-f003.ts (it supplies the registry keys).
+export {
+  BACKFILL_F003_SLUG,
+  ROLLBACK_SAFETY_SQL,
+  backfillF003MigrationPath,
+  backfillF003Report,
+  readBackfillF003Sql,
+  rolesOutsideRegistry,
+  rollbackSafetyCount,
+  runBackfillF003,
+} from "./backfill-f003";
+export type {
+  BackfillF003Report,
+  BackfillF003Result,
+  RawSqlClient,
+  RoleOutsideRegistry,
+  TransactionalRawSqlClient,
+} from "./backfill-f003";

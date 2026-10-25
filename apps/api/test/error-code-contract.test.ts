@@ -160,6 +160,85 @@ export function statusDrift(
   return drifted;
 }
 
+/**
+ * The codes named in the `status` response description of ONE operation,
+ * found by `operationId`. Pure over a parsed document (self-checked below).
+ */
+export function codesDocumentedOn(doc: unknown, operationId: string, status: string): string[] {
+  const paths = (doc as { paths?: Record<string, Record<string, unknown>> } | null)?.paths;
+  if (!paths || typeof paths !== "object") return [];
+  for (const item of Object.values(paths)) {
+    if (!item || typeof item !== "object") continue;
+    for (const [verb, operation] of Object.entries(item)) {
+      if (!OPENAPI_METHODS.includes(verb.toLowerCase())) continue;
+      const op = operation as { operationId?: unknown; responses?: Record<string, unknown> } | null;
+      if (op?.operationId !== operationId) continue;
+      const description = (op.responses?.[status] as { description?: unknown } | undefined)
+        ?.description;
+      if (typeof description !== "string") return [];
+      return [...description.matchAll(CODE_IN_DESCRIPTION)].map((m) => m[1]);
+    }
+  }
+  return [];
+}
+
+/**
+ * F-003 · T-003-B02 · R3-07 (api-spec §4.3) — the SHIPPED operations that gain
+ * a new 403 code. "Documented somewhere" (the audit below) is not enough here:
+ * a client handles `TARGET_NOT_BELOW_ACTOR` on the change-role dialog only if
+ * the change-role operation says it can come back.
+ */
+export const F003_SHIPPED_ROUTE_CODES: readonly {
+  operationId: string;
+  status: string;
+  codes: readonly string[];
+}[] = Object.freeze([
+  {
+    operationId: "updateMemberRole",
+    status: "403",
+    codes: ["TARGET_NOT_BELOW_ACTOR", "ROLE_EXCEEDS_ACTOR"],
+  },
+  { operationId: "revokeMember", status: "403", codes: ["TARGET_NOT_BELOW_ACTOR"] },
+  { operationId: "createInvitation", status: "403", codes: ["ROLE_EXCEEDS_ACTOR"] },
+  { operationId: "reissueInvitationLink", status: "403", codes: ["ROLE_EXCEEDS_ACTOR"] },
+  { operationId: "cancelInvitation", status: "403", codes: ["ROLE_EXCEEDS_ACTOR"] },
+]);
+
+describe("R3-07 · F-003 codes are published on the shipped operations that answer them", () => {
+  const doc = parseYaml(readFileSync(resolveBundledSpecPath(), "utf8")) as unknown;
+
+  it("SELF-CHECK: reads one operation's response, not its neighbours or its prose", () => {
+    const fake = {
+      paths: {
+        "/a": {
+          patch: {
+            operationId: "opA",
+            description: "`ROLE_EXCEEDS_ACTOR` in operation prose does not count",
+            responses: { "403": { description: "`FORBIDDEN` · `TARGET_NOT_BELOW_ACTOR`" } },
+          },
+          delete: {
+            operationId: "opB",
+            responses: { "403": { description: "`ROLE_EXCEEDS_ACTOR`" } },
+          },
+        },
+      },
+    };
+    expect(codesDocumentedOn(fake, "opA", "403")).toEqual(["FORBIDDEN", "TARGET_NOT_BELOW_ACTOR"]);
+    expect(codesDocumentedOn(fake, "opA", "409")).toEqual([]);
+    expect(codesDocumentedOn(fake, "nope", "403")).toEqual([]);
+  });
+
+  it.each(F003_SHIPPED_ROUTE_CODES.map((r) => [r.operationId, r.status, r.codes] as const))(
+    "%s %s names %j",
+    (operationId, status, codes) => {
+      const named = codesDocumentedOn(doc, operationId, status);
+      // Non-vacuity: the operation exists and its response already names FORBIDDEN.
+      expect(named, `${operationId} ${status} not found or empty`).toContain("FORBIDDEN");
+      for (const code of codes) expect(named).toContain(code);
+    },
+  );
+});
+
 describe("★ every error code the server can answer is published by the contract", () => {
   const specPath = resolveBundledSpecPath();
   const raw = readFileSync(specPath, "utf8");
@@ -205,9 +284,9 @@ describe("★ every error code the server can answer is published by the contrac
     expect(statusDrift(tiny, placement).map((d) => d.code)).toEqual(["RATE_LIMITED"]);
 
     // And a code the registry exempts is never reported as undocumented.
-    expect(
-      undocumentedCodes({ INTERNAL: { code: "INTERNAL", status: 500 } }, placement),
-    ).toEqual([]);
+    expect(undocumentedCodes({ INTERNAL: { code: "INTERNAL", status: 500 } }, placement)).toEqual(
+      [],
+    );
   });
 
   it("★ no registry code is missing from the contract", () => {
@@ -223,7 +302,8 @@ describe("★ every error code the server can answer is published by the contrac
 
   it("★ no code is documented under a status the server would not answer with", () => {
     const drift = statusDrift(registry, documented).map(
-      (d) => `${d.code}: registry says ${d.registryStatus}, contract says ${d.documentedUnder.join("/")}`,
+      (d) =>
+        `${d.code}: registry says ${d.registryStatus}, contract says ${d.documentedUnder.join("/")}`,
     );
     expect(
       drift,

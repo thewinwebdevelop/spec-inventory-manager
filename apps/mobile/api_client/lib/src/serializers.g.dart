@@ -12,10 +12,15 @@ Serializers _$serializers = (Serializers().toBuilder()
       ..add(AdminResetRequest.serializer)
       ..add(CancelledInvitation.serializer)
       ..add(CancelledInvitationStatusEnum.serializer)
+      ..add(CapabilityCatalog.serializer)
+      ..add(CapabilityEntry.serializer)
+      ..add(CapabilityGroup.serializer)
       ..add(ChangePasswordRequest.serializer)
       ..add(CreateInvitationRequest.serializer)
       ..add(CreateOrganizationRequest.serializer)
+      ..add(CreateRoleRequest.serializer)
       ..add(CreatedOrganization.serializer)
+      ..add(DeletedRole.serializer)
       ..add(EntitlementSummary.serializer)
       ..add(ErrorResponse.serializer)
       ..add(ErrorResponseError.serializer)
@@ -56,8 +61,16 @@ Serializers _$serializers = (Serializers().toBuilder()
       ..add(ReissuedLink.serializer)
       ..add(RevokeMemberResult.serializer)
       ..add(RevokeMemberResultStatusEnum.serializer)
+      ..add(RoleDetail.serializer)
+      ..add(RoleDetailListPage.serializer)
+      ..add(RoleDetailListViewer.serializer)
+      ..add(RoleDetailViewer.serializer)
+      ..add(RoleLastEdited.serializer)
+      ..add(RoleLastEditedBy.serializer)
       ..add(RoleListPage.serializer)
       ..add(RoleRow.serializer)
+      ..add(RoleUsage.serializer)
+      ..add(RoleWriteVerdict.serializer)
       ..add(Session.serializer)
       ..add(SessionsResponse.serializer)
       ..add(SignupRequest.serializer)
@@ -72,7 +85,14 @@ Serializers _$serializers = (Serializers().toBuilder()
       ..add(TokenResponseTokenTypeEnum.serializer)
       ..add(UpdateMemberRoleRequest.serializer)
       ..add(UpdateOrganizationRequest.serializer)
+      ..add(UpdateRoleRequest.serializer)
       ..add(WarehouseSummary.serializer)
+      ..addBuilderFactory(
+          const FullType(BuiltList, const [const FullType(CapabilityGroup)]),
+          () => ListBuilder<CapabilityGroup>())
+      ..addBuilderFactory(
+          const FullType(BuiltList, const [const FullType(CapabilityEntry)]),
+          () => ListBuilder<CapabilityEntry>())
       ..addBuilderFactory(
           const FullType(BuiltList, const [const FullType(Invitation)]),
           () => ListBuilder<Invitation>())
@@ -83,11 +103,26 @@ Serializers _$serializers = (Serializers().toBuilder()
           const FullType(BuiltList, const [const FullType(MyOrganizationItem)]),
           () => ListBuilder<MyOrganizationItem>())
       ..addBuilderFactory(
+          const FullType(BuiltList, const [const FullType(RoleDetail)]),
+          () => ListBuilder<RoleDetail>())
+      ..addBuilderFactory(
           const FullType(BuiltList, const [const FullType(RoleRow)]),
           () => ListBuilder<RoleRow>())
       ..addBuilderFactory(
           const FullType(BuiltList, const [const FullType(Session)]),
           () => ListBuilder<Session>())
+      ..addBuilderFactory(
+          const FullType(BuiltList, const [const FullType(String)]),
+          () => ListBuilder<String>())
+      ..addBuilderFactory(
+          const FullType(BuiltList, const [const FullType(String)]),
+          () => ListBuilder<String>())
+      ..addBuilderFactory(
+          const FullType(BuiltList, const [const FullType(String)]),
+          () => ListBuilder<String>())
+      ..addBuilderFactory(
+          const FullType(BuiltList, const [const FullType(String)]),
+          () => ListBuilder<String>())
       ..addBuilderFactory(
           const FullType(BuiltList, const [const FullType(String)]),
           () => ListBuilder<String>())

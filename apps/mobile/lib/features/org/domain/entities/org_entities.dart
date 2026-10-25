@@ -60,6 +60,8 @@ class MemberRow {
     required this.status,
     required this.isMe,
     required this.isOwner,
+    this.viewerCanManage,
+    this.manageBlockedReason,
   });
 
   final String userId;
@@ -82,6 +84,17 @@ class MemberRow {
   /// recompute "is this an Owner" is the client-side authorization the server
   /// avoids by answering the question itself.
   final bool isOwner;
+
+  /// F-003 (api-spec §3.1) — the SERVER's answer to "may the viewer change
+  /// this member's role?". Present only when the viewer holds
+  /// `manage_members` ∧ `manage_roles` and the row is active; `null` means
+  /// absent, which is NOT a "no" and NOT a "yes" — see
+  /// `domain/member_row_affordance.dart`.
+  final bool? viewerCanManage;
+
+  /// With `viewerCanManage == false`. An OPEN set — carried verbatim, mapped
+  /// to copy (unknown → generic) only in presentation.
+  final String? manageBlockedReason;
 
   bool get isActive => status == 'active';
 }
@@ -147,10 +160,24 @@ class RoleRow {
     required this.name,
     required this.key,
     this.grantsOwnership = false,
+    this.nameCustomized,
+    this.viewerCanAssign,
+    this.assignBlockedReason,
   });
 
   final String id;
   final String name;
+
+  /// AC-1.5 — the shop renamed this role; show [name] verbatim. Absent = false.
+  final bool? nameCustomized;
+
+  /// AC-2.2 — may the caller hand this role out? `null` = the server did not
+  /// say (caller lacks `manage_members`, or an older server). A UX input only.
+  final bool? viewerCanAssign;
+
+  /// Open set (`owner_only` / `exceeds_your_permissions` / anything else →
+  /// generic copy). Present with [viewerCanAssign].
+  final String? assignBlockedReason;
 
   /// ⛔ Display slug ONLY (ux Q4). Never a permission input — see
   /// [grantsOwnership].
@@ -206,6 +233,7 @@ class OrgProfileView {
     required this.name,
     required this.taxProfileComplete,
     this.capabilities = const {},
+    this.myRoleId,
     this.entityType,
     this.taxIdMasked,
     this.vatRegistered,
@@ -225,6 +253,10 @@ class OrgProfileView {
   /// means a role change is reflected on the next load rather than at the next
   /// sign-in.
   final Set<String> capabilities;
+
+  /// `myMembership.roleId` — only so R1 can append "(รวมคุณ)" to the viewer's
+  /// own role. Display, never a permission input.
+  final String? myRoleId;
   final String? entityType;
 
   /// e.g. `•••••••••3454`. The server sends this only to a member who may see

@@ -24,20 +24,23 @@
 import { useState } from "react";
 import { useCreateInvitation } from "../api/use-member-mutations";
 import { useRoles } from "../api/use-members";
-import { assignableRoles } from "../member-actions";
+import { roleOptionState } from "../role-picker";
+import { displayRoleName, reinviteRoleBlockedHelper } from "../role-copy";
 import { useActiveOrg } from "../../../lib/org/org-context";
 import { toApiFailure } from "../../../lib/api/error";
-import { inviteFormTh, roleLabel } from "../i18n";
+import { inviteFormTh } from "../i18n";
 import { Button } from "../../../components/ui/Button";
 import { DialogShell } from "../../../components/ui/DialogShell";
 import { TextField } from "../../../components/ui/TextField";
 import { RadioCardGroup } from "../../../components/ui/RadioCardGroup";
+import { RoleCapabilitiesLink } from "./RoleCapabilitiesLink";
 import { ErrorBanner } from "../../../components/ui/ErrorBanner";
 
 export function InviteDialog({
   ownerRoleIds,
   defaultRoleId,
   defaultEmail,
+  blockedOriginalRoleName,
   onIssued,
   onClose,
 }: {
@@ -51,6 +54,12 @@ export function InviteDialog({
    * a fixed value: the field stays a normal `TextField`.
    */
   defaultEmail?: string;
+  /**
+   * R7/R8 - "เชิญใหม่อีกครั้ง" on a row whose original role the viewer can no
+   * longer hand out: the role is NOT pre-selected and this name goes into the
+   * helper line so the reader knows why the choice is empty.
+   */
+  blockedOriginalRoleName?: string;
   onIssued: (issued: { inviteUrl: string; email: string; expiresAt: string }) => void;
   onClose: () => void;
 }) {
@@ -63,9 +72,6 @@ export function InviteDialog({
   const [banner, setBanner] = useState<string | null>(null);
 
   const all = roles.data?.items ?? [];
-  // The same rule as before, read as "may I hand this out?" per row instead of
-  // as a filter — so the row can be rendered and closed rather than removed.
-  const assignable = new Set(assignableRoles(all, org.capabilities, ownerRoleIds).map((r) => r.id));
 
   const submit = () => {
     setFieldError({});
@@ -112,57 +118,67 @@ export function InviteDialog({
 
   return (
     <DialogShell label={inviteFormTh.title} onClose={onClose}>
-        <h3 className="text-heading-sm">{inviteFormTh.title}</h3>
-        {banner && <ErrorBanner message={banner} />}
+      <h3 className="text-heading-sm">{inviteFormTh.title}</h3>
+      {banner && <ErrorBanner message={banner} />}
 
-        <TextField
-          label={inviteFormTh.emailLabel}
-          value={email}
-          onChange={setEmail}
-          type="email"
-          placeholder={inviteFormTh.emailPlaceholder}
-          disabled={create.isPending}
-          errorText={fieldError.email}
-        />
+      <TextField
+        label={inviteFormTh.emailLabel}
+        value={email}
+        onChange={setEmail}
+        type="email"
+        placeholder={inviteFormTh.emailPlaceholder}
+        disabled={create.isPending}
+        errorText={fieldError.email}
+      />
 
-        {/* B-9: the Owner row is SHOWN and disabled with the reason, never
+      {/* B-9: the Owner row is SHOWN and disabled with the reason, never
             filtered away — `RadioCardGroup` has a slot for exactly that. */}
-        <RadioCardGroup
-          name="roleId"
-          legend={inviteFormTh.roleLabel}
-          value={roleId}
-          onChange={setRoleId}
-          options={all.map((role) => {
-            const closed = !assignable.has(role.id);
-            return {
-              value: role.id,
-              label: roleLabel(role.key, role.name),
-              disabled: create.isPending || closed,
-              disabledReason: closed ? inviteFormTh.ownerOnlyHelper : undefined,
-            };
-          })}
-        />
-        {fieldError.role && (
-          <p role="alert" className="m-0 text-body-sm text-danger-text">
-            {fieldError.role}
-          </p>
-        )}
+      <RadioCardGroup
+        name="roleId"
+        legend={inviteFormTh.roleLabel}
+        value={roleId}
+        onChange={setRoleId}
+        options={all.map((role) => {
+          // R8: the server's verdict (`viewerCanAssign`) decides; this only renders it.
+          const state = roleOptionState(role, org.capabilities, ownerRoleIds);
+          return {
+            value: role.id,
+            label: displayRoleName({
+              name: role.name,
+              roleKey: role.key,
+              nameCustomized: role.nameCustomized,
+            }),
+            disabled: create.isPending || state.closed,
+            disabledReason: state.reason,
+          };
+        })}
+      />
+      <RoleCapabilitiesLink />
+      {blockedOriginalRoleName && !roleId && (
+        <p className="m-0 text-body-sm text-text-muted">
+          {reinviteRoleBlockedHelper(blockedOriginalRoleName)}
+        </p>
+      )}
+      {fieldError.role && (
+        <p role="alert" className="m-0 text-body-sm text-danger-text">
+          {fieldError.role}
+        </p>
+      )}
 
-        {/* `.dialog .acts` — one right-aligned row, `space.3` between. */}
-        <div className="flex flex-wrap justify-end gap-3 pt-2">
-          <Button
-            onClick={submit}
-            disabled={create.isPending}
-            loading={create.isPending}
-            loadingLabel={inviteFormTh.submitLoading}
-          >
-            {inviteFormTh.submit}
-          </Button>
-          <Button variant="secondary" onClick={onClose} disabled={create.isPending}>
-            {inviteFormTh.cancel}
-          </Button>
-        </div>
-    
+      {/* `.dialog .acts` — one right-aligned row, `space.3` between. */}
+      <div className="flex flex-wrap justify-end gap-3 pt-2">
+        <Button
+          onClick={submit}
+          disabled={create.isPending}
+          loading={create.isPending}
+          loadingLabel={inviteFormTh.submitLoading}
+        >
+          {inviteFormTh.submit}
+        </Button>
+        <Button variant="secondary" onClick={onClose} disabled={create.isPending}>
+          {inviteFormTh.cancel}
+        </Button>
+      </div>
     </DialogShell>
   );
 }

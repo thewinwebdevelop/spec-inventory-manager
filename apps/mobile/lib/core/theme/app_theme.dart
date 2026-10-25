@@ -299,6 +299,8 @@ class AppRadius {
   static const button = 8.0;
   static const card = 12.0;
   static const badge = 9999.0; // pill
+  static const checkbox = 4.0; // F-003 ui.md §4 — smaller than `button` so a
+  // 20px box doesn't read as a circle (would collide with radio visuals).
 }
 
 /// `size.*` (design-system.md §1.3).
@@ -306,6 +308,12 @@ class AppSizes {
   AppSizes._();
 
   static const tapTargetMin = 44.0;
+  static const listRowMinH = 56.0; // size.list-row.min-h
+  static const checkbox = 20.0; // F-003 ui.md §4 — box only, NOT the tap
+  // target; `CheckboxRow`/`Disclosure` rows below carry `listRowMinH`.
+  static const checkboxBorderWidth = 2.0; // checkbox.border.w (F-003 ui.md §4)
+  static const iconSm = 16.0; // size.icon.sm — inline with text
+  static const iconMd = 20.0; // size.icon.md — default (banner/button/row)
 }
 
 /// `type.*` (design-system.md §1.2). Font: Sarabun (Thai glyph coverage +

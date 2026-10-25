@@ -1,0 +1,2 @@
+// G-06 red fixture: the same write, going around Prisma.
+await tx.$executeRaw`UPDATE "Membership" SET "status" = 'invited' WHERE "id" = ${id}`;

@@ -1,0 +1,21 @@
+// G3-04: the B20 admin-reset shape — a raw FOR SHARE Role read held in a const.
+// role-read: history — current holder's row, fail-loud on a missing one (B20)
+const LOCK_ROLES_SQL =
+  'SELECT id, capabilities, "deletedAt" ' +
+  'FROM "Role" WHERE id = ANY($1::text[]) ' +
+  'ORDER BY id ASC FOR SHARE';
+
+class AuthService {
+  async reset(tx, ids) {
+    // role-read: history — same shape inside a method body
+    const LOCAL_SQL =
+      'SELECT id ' +
+      'FROM "Role" WHERE id = ANY($1::text[]) FOR SHARE';
+    return tx.$queryRawUnsafe(LOCAL_SQL, ids);
+  }
+}
+
+// red twin: the label sits INSIDE the initializer, not above the statement
+const BAD_SQL =
+  // role-read: history — misplaced
+  'SELECT id FROM "Role" FOR SHARE';

@@ -30,6 +30,7 @@ import { PrismaClient } from "@omnistock/db";
 import { ORG_RATE_LIMIT_DEFAULTS } from "@omnistock/config";
 import { AccessTokenService } from "../src/auth/access-token.service";
 import { collectSecurityEvents } from "../src/auth";
+import type { SecurityEventCollector } from "../src/auth/security-events.service";
 import { ORG_RATE_LIMIT_PREFIX } from "../src/common/org-rate-limit.guard";
 import { INVITATION_RESPONSE_HEADERS } from "../src/orgs";
 import {
@@ -40,7 +41,14 @@ import {
   assertResponseHeaders,
 } from "./assertions.kit";
 import { INT_LANE_ENABLED, applyTestEnv, createTestApp, type TestApp } from "./app.kit";
-import { createSeedKit, type SeedKit } from "./f002-seed.kit";
+import {
+  createSeedKit,
+  type SeedKit,
+  type SeededOrg,
+  type SeededRole,
+  type SeededUser,
+} from "./f002-seed.kit";
+import { createF003SeedKit, type F003SeedKit } from "./f003-seed.kit";
 
 const d = INT_LANE_ENABLED ? describe : describe.skip;
 
@@ -192,6 +200,7 @@ d("F-002 redeeming an invitation (E2E, DB)", () => {
       organizationName: "ร้านรับคำเชิญ",
       roleName: "Staff",
       roleKey: "staff",
+      roleNameCustomized: false, // F-003 (AC-1.5)
       emailMasked: `${invitee.email[0]}***@seed.test`,
       expiresAt: expect.any(String),
       status: "pending",
@@ -379,7 +388,13 @@ d("F-002 redeeming an invitation (E2E, DB)", () => {
 
     expect(res.body).toEqual({
       organization: { id: orgId, name: "ร้านรับคำเชิญ" },
-      membership: { roleId: staff.id, roleName: "Staff", roleKey: "staff", status: "active" },
+      membership: {
+        roleId: staff.id,
+        roleName: "Staff",
+        roleKey: "staff",
+        roleNameCustomized: false, // F-003 (AC-1.5)
+        status: "active",
+      },
     });
     assertResponseHeaders(res, INVITATION_RESPONSE_HEADERS);
     assertNoSecretFields(res.body);
@@ -511,7 +526,7 @@ d("F-002 redeeming an invitation (E2E, DB)", () => {
   it("★ a link issued AFTER the removal works, and says so with its own event", async () => {
     // I-1's other half: rotating/re-inviting after a removal is a conscious
     // decision by somebody holding `manage_members`, and it must be usable.
-    const { orgId } = await newOrg();
+    const { owner, orgId } = await newOrg();
     const staff = await roleNamed(orgId, "Staff");
     const returning = await newUser();
     const revokedAt = new Date(Date.now() - 3_600_000);
@@ -528,6 +543,10 @@ d("F-002 redeeming an invitation (E2E, DB)", () => {
       email: returning.email,
       roleId: staff.id,
       tokenIssuedAt: new Date(revokedAt.getTime() + 60_000),
+      // F-003 D-035: the link is re-checked against whoever issued it — here
+      // the Owner who re-invited. A row with NO issuer fails closed (I3-38 h).
+      issuedByUserId: owner.id,
+      invitedByUserId: owner.id,
     });
 
     const events = collectSecurityEvents(app.events);
@@ -553,7 +572,11 @@ d("F-002 redeeming an invitation (E2E, DB)", () => {
       where: { organizationId: orgId, userId: returning.id },
     });
     expect(memberships).toHaveLength(1); // woken up, never duplicated
-    expect(memberships[0]).toMatchObject({ status: "active", revokedAt: null, revokedByUserId: null });
+    expect(memberships[0]).toMatchObject({
+      status: "active",
+      revokedAt: null,
+      revokedByUserId: null,
+    });
   });
 
   it("★ B-1 · a cross-org invitation can no longer EXIST — the state M-6 guarded against is unrepresentable", async () => {
@@ -668,5 +691,338 @@ d("F-002 redeeming an invitation (E2E, DB)", () => {
     // …and the invitation is not left `pending` either way.
     const row = await prisma.invitation.findUniqueOrThrow({ where: { id: invited.invitationId } });
     expect(row.status).toBe("accepted");
+  });
+
+  // ── F-003 · T-003-B19 ★ D-035 (+ Addendum) — the issuer is re-checked ────
+  // arch §6.1 / §13.7 · test-plan I3-38 (a)–(k), I3-40, I3-43. Every refusal
+  // reads the row, the memberships and the event back; every block has an
+  // allowed control, so a route that refuses everything cannot pass.
+  describe("D-035 · accept re-checks whoever issued the CURRENT link (I3-38 · I3-40 · I3-43)", () => {
+    const BLOCKED = "org.invitation.accept_blocked_inviter";
+    let f3: F003SeedKit;
+    let sink: SecurityEventCollector;
+
+    beforeAll(() => {
+      f3 = createF003SeedKit(prisma, { label: "b19" });
+      sink = collectSecurityEvents(app.events);
+    });
+    afterAll(async () => {
+      sink?.stop();
+      if (f3) await f3.cleanup();
+    });
+
+    const bearer = (u: SeededUser) => `Bearer ${token(u.id)}`;
+    const blockedFor = (invitationId: string) =>
+      sink.ofType(BLOCKED).filter((e) => e.payload.invitationId === invitationId);
+
+    async function member(org: SeededOrg, role: SeededRole): Promise<SeededUser> {
+      const user = await f3.createUser();
+      await f3.addMember({ organizationId: org.id, userId: user.id, roleId: role.id });
+      return user;
+    }
+    async function shop() {
+      const org = await f3.createOrg();
+      const owner = await member(org, org.roles.Owner);
+      const adminA = await member(org, org.roles.Admin);
+      return { org, owner, adminA };
+    }
+    /** An invitation for a fresh invitee; `issuedBy` is required — null is a decision. */
+    async function inviteFrom(
+      org: SeededOrg,
+      role: SeededRole,
+      issuedBy: SeededUser | null,
+      extra: { invitedBy?: SeededUser | null; tokenIssuedAt?: Date; expiresAt?: Date } = {},
+    ) {
+      const invitee = await f3.createUser();
+      const inv = await f3.createInvitation({
+        organizationId: org.id,
+        email: invitee.email,
+        roleId: role.id,
+        issuedByUserId: issuedBy?.id ?? null,
+        ...(extra.invitedBy !== undefined ? { invitedByUserId: extra.invitedBy?.id ?? null } : {}),
+        ...(extra.tokenIssuedAt ? { tokenIssuedAt: extra.tokenIssuedAt } : {}),
+        ...(extra.expiresAt ? { expiresAt: extra.expiresAt } : {}),
+      });
+      return { invitee, inv };
+    }
+    const acceptAs = (u: SeededUser, rawToken: string) =>
+      acceptReq({ token: rawToken }, token(u.id));
+    const patchMember = (org: SeededOrg, actor: SeededUser, target: SeededUser, roleId: string) =>
+      request(app.server())
+        .patch(`/orgs/${org.id}/members/${target.id}`)
+        .set("Authorization", bearer(actor))
+        .set("Content-Type", "application/json")
+        .send({ roleId });
+    const removeMember = (org: SeededOrg, actor: SeededUser, target: SeededUser) =>
+      request(app.server())
+        .delete(`/orgs/${org.id}/members/${target.id}`)
+        .set("Authorization", bearer(actor));
+    const reissue = (org: SeededOrg, actor: SeededUser, invitationId: string) =>
+      request(app.server())
+        .post(`/orgs/${org.id}/invitations/${invitationId}/link`)
+        .set("Authorization", bearer(actor));
+    const cancelInvitation = (org: SeededOrg, actor: SeededUser, invitationId: string) =>
+      request(app.server())
+        .delete(`/orgs/${org.id}/invitations/${invitationId}`)
+        .set("Authorization", bearer(actor));
+    async function demote(org: SeededOrg, owner: SeededUser, who: SeededUser, roleId: string) {
+      const res = await patchMember(org, owner, who, roleId);
+      expect(res.status, res.text).toBe(200);
+    }
+
+    /** The DATABASE's answer, never a status code's. */
+    const rowOf = (id: string) =>
+      prisma.invitation.findUniqueOrThrow({
+        where: { id },
+        select: { status: true, cancelledAt: true, issuedByUserId: true, invitedByUserId: true },
+      });
+    const activeIn = (orgId: string, userId: string) =>
+      prisma.membership.count({ where: { organizationId: orgId, userId, status: "active" } });
+
+    async function expectBlocked(
+      org: SeededOrg,
+      invitee: SeededUser,
+      inv: { id: string; rawToken: string },
+      reason: "inviter_not_active" | "inviter_not_authorized" | "inviter_exceeds",
+      issuerUserId: string | null,
+    ) {
+      const res = await acceptAs(invitee, inv.rawToken);
+      assertErrorEnvelope(res, { status: 409, code: "INVITATION_CANCELLED" });
+      const row = await rowOf(inv.id);
+      expect(row.status).toBe("cancelled");
+      expect(row.cancelledAt).not.toBeNull();
+      expect(await activeIn(org.id, invitee.id)).toBe(0);
+      const events = blockedFor(inv.id);
+      expect(events).toHaveLength(1);
+      expect(events[0]!.payload).toMatchObject({
+        actorUserId: invitee.id,
+        organizationId: org.id,
+        invitationId: inv.id,
+        issuerUserId,
+        reason,
+      });
+      return res;
+    }
+    async function expectAccepted(
+      org: SeededOrg,
+      invitee: SeededUser,
+      inv: { id: string; rawToken: string },
+    ) {
+      const res = await acceptAs(invitee, inv.rawToken);
+      expect(res.status, res.text).toBe(200);
+      expect((await rowOf(inv.id)).status).toBe("accepted");
+      expect(await activeIn(org.id, invitee.id)).toBe(1);
+      expect(blockedFor(inv.id)).toEqual([]);
+    }
+
+    it("I3-38(a) ★ D-035: issuer demoted to Staff → 409 INVITATION_CANCELLED byte-identical to an Owner-cancelled invitation · row cancelled · no membership · one event", async () => {
+      const { org, owner, adminA } = await shop();
+      const { invitee, inv } = await inviteFrom(org, org.roles.Admin, adminA);
+      await demote(org, owner, adminA, org.roles.Staff.id);
+      // Staff has no manage_members, and the floor is checked first (Addendum P2).
+      const blocked = await expectBlocked(org, invitee, inv, "inviter_not_authorized", adminA.id);
+
+      // The baseline: the SAME answer for an invitation the shop cancelled itself.
+      const other = await inviteFrom(org, org.roles.Admin, owner);
+      expect((await cancelInvitation(org, owner, other.inv.id)).status).toBe(200);
+      const plain = await acceptAs(other.invitee, other.inv.rawToken);
+      assertIdenticalErrorBodies(blocked, plain);
+      expect(blocked.headers["content-length"]).toBe(plain.headers["content-length"]);
+      expect(blocked.headers["content-type"]).toBe(plain.headers["content-type"]);
+      expect(blockedFor(other.inv.id)).toEqual([]);
+    });
+
+    it("I3-38(a′) D-035: issuer moved to a role that keeps manage_members but ⊉ the invitation's role → inviter_exceeds + excess keys", async () => {
+      const { org, owner, adminA } = await shop();
+      const mm = await f3.createCustomRole({
+        organizationId: org.id,
+        name: "b19-mm",
+        capabilities: ["manage_members", "manage_products"],
+      });
+      const { invitee, inv } = await inviteFrom(org, org.roles.Admin, adminA);
+      await demote(org, owner, adminA, mm.id);
+      await expectBlocked(org, invitee, inv, "inviter_exceeds", adminA.id);
+      expect(blockedFor(inv.id)[0]!.payload.excessCapabilities).toContain("manage_orders");
+    });
+
+    it("I3-38(b) D-035: issuer removed by the Owner, or left on their own → inviter_not_active", async () => {
+      const { org, owner, adminA } = await shop();
+      const adminB = await member(org, org.roles.Admin);
+      const byA = await inviteFrom(org, org.roles.Staff, adminA);
+      const byB = await inviteFrom(org, org.roles.Staff, adminB);
+      expect((await removeMember(org, owner, adminA)).status).toBe(200); // removed
+      expect((await removeMember(org, adminB, adminB)).status).toBe(200); // left
+      await expectBlocked(org, byA.invitee, byA.inv, "inviter_not_active", adminA.id);
+      await expectBlocked(org, byB.invitee, byB.inv, "inviter_not_active", adminB.id);
+    });
+
+    it("I3-38(c) D-035: the issuer's ROLE loses a cap (membership untouched) → refused", async () => {
+      const { org, adminA } = await shop();
+      const adminCopy = await f3.createCustomRole({
+        organizationId: org.id,
+        name: "b19-admin-copy",
+        capabilities: org.roles.Admin.capabilities,
+      });
+      await f3.setMembershipRole(org.id, adminA.id, adminCopy.id);
+      const { invitee, inv } = await inviteFrom(org, org.roles.Admin, adminA);
+      const membershipBefore = await prisma.membership.findUniqueOrThrow({
+        where: { organizationId_userId: { organizationId: org.id, userId: adminA.id } },
+      });
+      await prisma.role.update({
+        where: { id: adminCopy.id },
+        data: { capabilities: adminCopy.capabilities.filter((c) => c !== "manage_orders") },
+      });
+      await expectBlocked(org, invitee, inv, "inviter_exceeds", adminA.id);
+      expect(
+        await prisma.membership.findUniqueOrThrow({
+          where: { organizationId_userId: { organizationId: org.id, userId: adminA.id } },
+        }),
+      ).toEqual(membershipBefore);
+    });
+
+    it("I3-38(d) D-035: an Owner-issued link always passes (Owner and Admin invitations)", async () => {
+      const { org, owner } = await shop();
+      const ownerInv = await inviteFrom(org, org.roles.Owner, owner);
+      const adminInv = await inviteFrom(org, org.roles.Admin, owner);
+      await expectAccepted(org, ownerInv.invitee, ownerInv.inv);
+      await expectAccepted(org, adminInv.invitee, adminInv.inv);
+    });
+
+    it("I3-38(e) ★ D-035 (MUT-05): A creates → A demoted → OWNER reissues → accept passes (issuedByUserId = Owner)", async () => {
+      const { org, owner, adminA } = await shop();
+      const { invitee, inv } = await inviteFrom(org, org.roles.Admin, adminA);
+      await demote(org, owner, adminA, org.roles.Staff.id);
+      const re = await reissue(org, owner, inv.id);
+      expect(re.status, re.text).toBe(200);
+      expect(await rowOf(inv.id)).toMatchObject({
+        issuedByUserId: owner.id,
+        invitedByUserId: adminA.id,
+      });
+      await expectAccepted(org, invitee, { id: inv.id, rawToken: re.body.token as string });
+    });
+
+    it("I3-38(f) D-035: wrong email + demoted issuer → INVITATION_EMAIL_MISMATCH and the invitation stays PENDING (a link holder cannot cancel it)", async () => {
+      const { org, owner, adminA } = await shop();
+      const { inv } = await inviteFrom(org, org.roles.Admin, adminA);
+      await demote(org, owner, adminA, org.roles.Staff.id);
+      const stranger = await f3.createUser();
+      const res = await acceptAs(stranger, inv.rawToken);
+      assertErrorEnvelope(res, { status: 403, code: "INVITATION_EMAIL_MISMATCH" });
+      expect((await rowOf(inv.id)).status).toBe("pending");
+      expect(blockedFor(inv.id)).toEqual([]);
+    });
+
+    it("I3-38(g) D-035: already a member + demoted issuer → the F-002 ALREADY_MEMBER answer, role untouched, no blocked event", async () => {
+      const { org, owner, adminA } = await shop();
+      const staff = await member(org, org.roles.Staff);
+      const inv = await f3.createInvitation({
+        organizationId: org.id,
+        email: staff.email,
+        roleId: org.roles.Admin.id,
+        issuedByUserId: adminA.id,
+      });
+      await demote(org, owner, adminA, org.roles.Staff.id);
+      const res = await acceptAs(staff, inv.rawToken);
+      assertErrorEnvelope(res, { status: 409, code: "ALREADY_MEMBER" });
+      expect(
+        (
+          await prisma.membership.findUniqueOrThrow({
+            where: { organizationId_userId: { organizationId: org.id, userId: staff.id } },
+          })
+        ).roleId,
+      ).toBe(org.roles.Staff.id);
+      expect(blockedFor(inv.id)).toEqual([]);
+    });
+
+    it("I3-38(h) D-035: issuedByUserId AND invitedByUserId both null → refused (fail closed), issuerUserId null", async () => {
+      const { org } = await shop();
+      const { invitee, inv } = await inviteFrom(org, org.roles.Staff, null, { invitedBy: null });
+      expect(await rowOf(inv.id)).toMatchObject({ issuedByUserId: null, invitedByUserId: null });
+      await expectBlocked(org, invitee, inv, "inviter_not_active", null);
+    });
+
+    it("I3-38(i) ★ D-035 Addendum P2: issuer ⊇ the role but lost manage_members → inviter_not_authorized · control: keeps manage_members → passes", async () => {
+      const { org, owner, adminA } = await shop();
+      const adminB = await member(org, org.roles.Admin);
+      const noMembers = await f3.createCustomRole({
+        organizationId: org.id,
+        name: "b19-staff-plus",
+        capabilities: [...org.roles.Staff.capabilities, "view_financials"],
+      });
+      const withMembers = await f3.createCustomRole({
+        organizationId: org.id,
+        name: "b19-staff-mm",
+        capabilities: [...org.roles.Staff.capabilities, "manage_members"],
+      });
+      const refused = await inviteFrom(org, org.roles.Staff, adminA);
+      const allowed = await inviteFrom(org, org.roles.Staff, adminB);
+      await demote(org, owner, adminA, noMembers.id);
+      await demote(org, owner, adminB, withMembers.id);
+      await expectBlocked(org, refused.invitee, refused.inv, "inviter_not_authorized", adminA.id);
+      await expectAccepted(org, allowed.invitee, allowed.inv);
+    });
+
+    it("I3-38(j) ★ D-035 (MUT-05): Owner creates → A reissues → A demoted → accept REFUSED (the latest issuer is judged)", async () => {
+      const { org, owner, adminA } = await shop();
+      const { invitee, inv } = await inviteFrom(org, org.roles.Admin, owner);
+      const re = await reissue(org, adminA, inv.id);
+      expect(re.status, re.text).toBe(200);
+      expect(await rowOf(inv.id)).toMatchObject({
+        issuedByUserId: adminA.id,
+        invitedByUserId: owner.id,
+      });
+      await demote(org, owner, adminA, org.roles.Staff.id);
+      await expectBlocked(
+        org,
+        invitee,
+        { id: inv.id, rawToken: re.body.token as string },
+        "inviter_not_authorized",
+        adminA.id,
+      );
+    });
+
+    it("I3-38(k) D-035 control: an issuer who still may grant the role → accepted", async () => {
+      const { org, adminA } = await shop();
+      const admin = await inviteFrom(org, org.roles.Admin, adminA);
+      const staff = await inviteFrom(org, org.roles.Staff, adminA);
+      await expectAccepted(org, admin.invitee, admin.inv);
+      await expectAccepted(org, staff.invitee, staff.inv);
+    });
+
+    it("I3-40 D-035: preview does not re-check — pending, then accept = INVITATION_CANCELLED (same copy), then preview agrees", async () => {
+      const { org, owner, adminA } = await shop();
+      const { invitee, inv } = await inviteFrom(org, org.roles.Admin, adminA);
+      await demote(org, owner, adminA, org.roles.Staff.id);
+      const before = await previewReq({ token: inv.rawToken });
+      expect(before.status, before.text).toBe(200);
+      expect(before.body.status).toBe("pending");
+      const blocked = await expectBlocked(org, invitee, inv, "inviter_not_authorized", adminA.id);
+
+      const other = await inviteFrom(org, org.roles.Staff, owner);
+      expect((await cancelInvitation(org, owner, other.inv.id)).status).toBe(200);
+      assertIdenticalErrorBodies(blocked, await acceptAs(other.invitee, other.inv.rawToken));
+
+      const after = await previewReq({ token: inv.rawToken });
+      assertErrorEnvelope(after, { status: 409, code: "INVITATION_CANCELLED" });
+      assertIdenticalErrorBodies(after, await previewReq({ token: other.inv.rawToken }));
+    });
+
+    it("I3-43 layer 2: stored expiry past the clamp + elevated role + token older than 24h → INVITATION_EXPIRED (still pending) · control: Staff with the same clock → 200", async () => {
+      const { org, owner } = await shop();
+      const issuedAt = new Date(Date.now() - 25 * 3_600_000);
+      const farFuture = new Date(Date.now() + 5 * 24 * 3_600_000);
+      const admin = await inviteFrom(org, org.roles.Admin, owner, { tokenIssuedAt: issuedAt });
+      const staff = await inviteFrom(org, org.roles.Staff, owner, { tokenIssuedAt: issuedAt });
+      await f3.setInvitationExpiry(org.id, admin.inv.id, farFuture);
+      await f3.setInvitationExpiry(org.id, staff.inv.id, farFuture);
+
+      const res = await acceptAs(admin.invitee, admin.inv.rawToken);
+      assertErrorEnvelope(res, { status: 409, code: "INVITATION_EXPIRED" });
+      expect((await rowOf(admin.inv.id)).status).toBe("pending");
+      expect(await activeIn(org.id, admin.invitee.id)).toBe(0);
+      expect(blockedFor(admin.inv.id)).toEqual([]);
+
+      await expectAccepted(org, staff.invitee, staff.inv);
+    });
   });
 });

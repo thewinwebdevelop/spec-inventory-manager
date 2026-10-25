@@ -26,6 +26,8 @@ const SOURCE_FILES = [
   "tax-profile.ts",
   // T-002-18 — the membership row mapper (isOwner from `full_access`).
   "member-view.ts",
+  // T-003-B22 — viewer verdicts on shipped routes.
+  "viewer-verdicts.ts",
   "index.ts",
 ] as const;
 

@@ -1,7 +1,14 @@
 // F-002 · T-002-16b — the role list behind the invite dropdown (api-spec §3.6).
 import { Inject, Injectable } from "@nestjs/common";
-import { isOwnerRole } from "@omnistock/core-domain";
-import { ORG_PRISMA, type OrgScopedPrismaClient } from "../tenancy";
+import {
+  decideRoleAssignVisible,
+  isOwnerRole,
+  wireNameCustomized,
+  viewerVerdictAudience,
+  type GrantBlockedReason,
+} from "@omnistock/core-domain";
+import { LIVE_ROLE_WHERE, domainError } from "../common";
+import { ORG_PRISMA, OrgContextStore, type OrgScopedPrismaClient } from "../tenancy";
 
 /**
  * One role as §3.6 publishes it.
@@ -45,6 +52,15 @@ export interface RoleRow {
    */
   readonly grantsOwnership: boolean;
   readonly isSystem: boolean;
+  /** F-003 (api-spec §4.1, AC-1.5) — `key === null || Role.nameCustomized`. */
+  readonly nameCustomized: boolean;
+  /**
+   * F-003 (AC-2.2) — present ONLY when the caller holds `manage_members`:
+   * `decideRoleAssignVisible` = the grant axis the invite / PATCH member write
+   * applies. Says nothing about which capability is missing (AC-6.4).
+   */
+  readonly viewerCanAssign?: boolean;
+  readonly assignBlockedReason?: GrantBlockedReason | null;
 }
 
 export interface RoleListPage {
@@ -55,17 +71,36 @@ export interface RoleListPage {
 
 @Injectable()
 export class RolesService {
-  constructor(@Inject(ORG_PRISMA) private readonly prisma: OrgScopedPrismaClient) {}
+  constructor(
+    @Inject(ORG_PRISMA) private readonly prisma: OrgScopedPrismaClient,
+    @Inject(OrgContextStore) private readonly store: OrgContextStore,
+  ) {}
 
   async list(): Promise<RoleListPage> {
+    // The caller's capabilities from the request's org context (read-only
+    // verdict — api-spec §3 "viewer.*"). Missing = mis-wired chain: fail loud.
+    const viewerCapabilities = this.store.get()?.capabilities;
+    if (!viewerCapabilities) throw domainError("INTERNAL");
+    const assign = viewerVerdictAudience(viewerCapabilities).assign;
+
     // No `where` on organizationId: `ORG_PRISMA` applies the tenant filter, and
     // adding a second one here would suggest the client is trustworthy without
     // it. No lock — this decides nothing.
+    // role-read: live — GET /roles is the dropdown of roles that can be handed out.
     const rows = (await this.prisma.role.findMany({
+      // LIVE (data-model §2.2): a deleted role is not a choice in the dropdown.
+      where: { ...LIVE_ROLE_WHERE },
       // `capabilities` is selected and NEVER published — it is read here only
-      // to derive `grantsOwnership` below. The projection at the end is what
-      // keeps it off the wire.
-      select: { id: true, name: true, key: true, isSystem: true, capabilities: true },
+      // to derive `grantsOwnership` and `viewerCanAssign` below. The projection
+      // at the end is what keeps it off the wire.
+      select: {
+        id: true,
+        name: true,
+        key: true,
+        isSystem: true,
+        capabilities: true,
+        nameCustomized: true,
+      },
       orderBy: [{ createdAt: "asc" }, { id: "asc" }],
     })) as {
       id: string;
@@ -73,21 +108,31 @@ export class RolesService {
       key: string | null;
       isSystem: boolean;
       capabilities: string[];
+      nameCustomized: boolean;
     }[];
 
     return {
       // Projected field by field. The row also carries `capabilities`, and a
       // spread would publish it — structural typing strips nothing at runtime
       // (the `toMyOrganizationItem` lesson, M-10).
-      items: rows.map((row) => ({
-        id: row.id,
-        name: row.name,
-        key: row.key,
-        // Derived, then the array is dropped. `capabilities` must not appear in
-        // this object literal — the field-by-field projection is the control.
-        grantsOwnership: isOwnerRole(row.capabilities),
-        isSystem: row.isSystem,
-      })),
+      items: rows.map((row) => {
+        const verdict = assign
+          ? decideRoleAssignVisible(viewerCapabilities, row.capabilities)
+          : null;
+        return {
+          id: row.id,
+          name: row.name,
+          key: row.key,
+          // Derived, then the array is dropped. `capabilities` must not appear in
+          // this object literal — the field-by-field projection is the control.
+          grantsOwnership: isOwnerRole(row.capabilities),
+          isSystem: row.isSystem,
+          nameCustomized: wireNameCustomized(row),
+          ...(verdict
+            ? { viewerCanAssign: verdict.allowed, assignBlockedReason: verdict.reason }
+            : {}),
+        };
+      }),
       nextCursor: null,
     };
   }

@@ -30,6 +30,7 @@
 import { describe, it, expect } from "vitest";
 import { existsSync, readFileSync } from "node:fs";
 import { join } from "node:path";
+import * as ts from "typescript";
 import { ORG_LOCK_REQUIRED_OPERATIONS } from "@omnistock/db";
 
 const SRC = join(process.cwd(), "src");
@@ -38,25 +39,60 @@ const SRC = join(process.cwd(), "src");
 const SERVICE_FILES: Readonly<Record<string, string>> = Object.freeze({
   MembersService: "orgs/members.service.ts",
   InvitationsService: "orgs/invitations.service.ts",
+  RolesService: "orgs/roles.service.ts",
 });
+
+/**
+ * `Class.method` DECLARATIONS in `source`, from the TypeScript AST (review B15
+ * M-1): a regex `\bupdate\s*\(` also matched the CALL `tx.role.update(`, so a
+ * row named after a Prisma verb "existed" without any method. The method-scoped
+ * lock/key checks live in test/static-gates/g3-11-membership-write-under-lock.test.ts
+ * (`src/` tests cannot import the shared scanner — tsconfig rootDir).
+ */
+function declaredMethods(source: string): Set<string> {
+  const sf = ts.createSourceFile("s.ts", source, ts.ScriptTarget.Latest, true, ts.ScriptKind.TS);
+  const out = new Set<string>();
+  const visit = (node: ts.Node): void => {
+    if (ts.isMethodDeclaration(node) && ts.isClassDeclaration(node.parent) && node.parent.name)
+      out.add(`${node.parent.name.text}.${node.name.getText(sf)}`);
+    ts.forEachChild(node, visit);
+  };
+  visit(sf);
+  return out;
+}
 
 describe("every org-lock operation names a real, anchored call site (B-5)", () => {
   it("the list is not empty (a list that is empty pins nothing)", () => {
-    expect(ORG_LOCK_REQUIRED_OPERATIONS.length).toBeGreaterThanOrEqual(7);
+    expect(ORG_LOCK_REQUIRED_OPERATIONS.length).toBeGreaterThanOrEqual(10);
+  });
+
+  it("★ pending rows are honest: the task is named, and the method is not DECLARED yet", () => {
+    for (const op of ORG_LOCK_REQUIRED_OPERATIONS.filter((o) => o.pendingTask)) {
+      expect(op.pendingTask).toMatch(/^T-\d{3}-[A-Z0-9]+$/);
+      const [service] = op.serviceMethod.split(".");
+      const source = readFileSync(join(SRC, SERVICE_FILES[service]!), "utf8");
+      expect(
+        declaredMethods(source).has(op.serviceMethod),
+        `${op.serviceMethod} exists now — delete its pendingTask (${op.pendingTask}) so the method-scoped checks apply`,
+      ).toBe(false);
+    }
   });
 
   it("★ every `serviceMethod` exists, in a file this test knows how to find", () => {
     for (const op of ORG_LOCK_REQUIRED_OPERATIONS) {
-      const [service, method] = op.serviceMethod.split(".");
+      if (op.pendingTask) continue;
+      const [service] = op.serviceMethod.split(".");
       const file = SERVICE_FILES[service];
-      expect(file, `no file mapped for ${service} — add it here rather than dropping the check`).toBeDefined();
+      expect(
+        file,
+        `no file mapped for ${service} — add it here rather than dropping the check`,
+      ).toBeDefined();
       const path = join(SRC, file);
       expect(existsSync(path), `${file} does not exist`).toBe(true);
       const source = readFileSync(path, "utf8");
-      // `async updateRole(` / `private async accept(` — the declaration, not a
-      // mention in a comment.
+      // The DECLARATION (AST), not a call or a mention in a comment.
       expect(
-        new RegExp(`\\b(async\\s+)?${method}\\s*\\(`).test(source),
+        declaredMethods(source).has(op.serviceMethod),
         `${op.serviceMethod} is listed as taking the org lock, but ${file} defines no such method`,
       ).toBe(true);
     }
@@ -65,8 +101,14 @@ describe("every org-lock operation names a real, anchored call site (B-5)", () =
   it("★ every listed service opens its transactions through runInOrgLockTransaction", () => {
     // The anchor helper is what issues `SET LOCAL lock_timeout` and takes the
     // row lock. A service that reached for a bare `$transaction` instead would
-    // be doing the write with no lock at all.
-    for (const file of new Set(Object.values(SERVICE_FILES))) {
+    // be doing the write with no lock at all. (A service whose every row is
+    // still PENDING has no transaction to open yet.)
+    const built = new Set(
+      ORG_LOCK_REQUIRED_OPERATIONS.filter((op) => !op.pendingTask).map(
+        (op) => SERVICE_FILES[op.serviceMethod.split(".")[0]!]!,
+      ),
+    );
+    for (const file of built) {
       const source = readFileSync(join(SRC, file), "utf8");
       expect(source, `${file} never calls runInOrgLockTransaction`).toContain(
         "runInOrgLockTransaction",
@@ -96,10 +138,16 @@ describe("every org-lock operation names a real, anchored call site (B-5)", () =
     ).toEqual([]);
   });
 
-  it("SELF-CHECK: the method matcher would notice a missing definition", () => {
-    const method = "definitelyNotAMethodName";
+  it("SELF-CHECK: the declaration matcher sees methods, not calls", () => {
     const source = readFileSync(join(SRC, "orgs/members.service.ts"), "utf8");
-    expect(new RegExp(`\\b(async\\s+)?${method}\\s*\\(`).test(source)).toBe(false);
-    expect(new RegExp(`\\b(async\\s+)?revoke\\s*\\(`).test(source)).toBe(true);
+    expect(declaredMethods(source).has("MembersService.revoke")).toBe(true);
+    expect(declaredMethods(source).has("MembersService.definitelyNotAMethodName")).toBe(false);
+    const calls = "class RolesService {\n  async list(tx) {\n    await tx.role.update({});\n  }\n}";
+    expect([...declaredMethods(calls)]).toEqual(["RolesService.list"]);
   });
 });
+
+// G3-11 (every membership write that grants a role sits in a method of this
+// list) lives in test/static-gates/g3-11-membership-write-under-lock.test.ts:
+// it needs the shared static-gate scanner, which `src/` tests cannot import
+// (tsconfig rootDir).

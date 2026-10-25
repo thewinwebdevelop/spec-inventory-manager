@@ -30,12 +30,14 @@ import { OrgProfileService } from "./org-profile.service";
 import { OrganizationsController } from "./organizations.controller";
 import { MembersController } from "./members.controller";
 import { InvitationsController } from "./invitations.controller";
-import { RolesController } from "./roles.controller";
+import { RoleDesignController, RolesController } from "./roles.controller";
+import { RoleReadService } from "./role-read.service";
 import { RolesService } from "./roles.service";
 import { InvitationRedemptionController } from "./invitation-redemption.controller";
 import { InvitationsService } from "./invitations.service";
 import { MembershipController } from "./membership.controller";
 import { MembersService } from "./members.service";
+import { OrgOwnershipGuard } from "./org-ownership.guard";
 import { TaxProfileController } from "./tax-profile.controller";
 import { TaxProfileService } from "./tax-profile.service";
 import { InvitationLookupService } from "./system/invitation-lookup.service";
@@ -64,6 +66,8 @@ import { PlanProvisioningService } from "./system/plan-provisioning.service";
     MembersController,
     InvitationsController,
     RolesController,
+    // T-003-B21 — `GET /capabilities` + `GET /role-details` (manage_roles).
+    RoleDesignController,
     // T-002-20 — the redemption side, in its OWN controller. `InvitationsController`
     // is org-scoped and `manage_members` on every handler; these two routes are
     // `@Public()` and `@UserScoped()`. Two tiers one handler apart in the same
@@ -82,8 +86,13 @@ import { PlanProvisioningService } from "./system/plan-provisioning.service";
     // T-002-18 — serves both membership controllers: one service, one
     // transaction shape, one place the Owner ≥ 1 invariant is evaluated.
     MembersService,
+    // F-003 (architecture §2) — the Owner ≥ 1 read, shared by MembersService
+    // and (B24/B25) RolesService; one query, no copies.
+    OrgOwnershipGuard,
     InvitationsService,
     RolesService,
+    // T-003-B21 — the role READ routes (ORG_PRISMA only — architecture §9).
+    RoleReadService,
     // `system/` providers are registered here, not exported: nothing outside
     // this module may reach an unfiltered read.
     OrgProvisioningService,

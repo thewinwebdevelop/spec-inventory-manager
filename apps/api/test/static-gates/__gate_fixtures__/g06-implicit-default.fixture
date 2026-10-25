@@ -1,0 +1,2 @@
+// G-06 red fixture: no status at all, so the column DEFAULT ('invited') writes it.
+await tx.membership.create({ data: { userId, roleId } });

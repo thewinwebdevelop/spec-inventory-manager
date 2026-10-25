@@ -2,17 +2,21 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../../../core/l10n/l10n.dart';
+import '../../../../core/session/capability_gate.dart';
 import '../../../../core/session/session_controller.dart';
 import '../../../../core/theme/app_theme.dart';
 import '../../../../core/ui/skeleton.dart';
 import '../../application/org_providers.dart';
 import '../../application/paged_controllers.dart';
 import '../../domain/backup_owner_nudge.dart';
+import '../../domain/member_row_affordance.dart';
 import '../../domain/entities/org_entities.dart';
 import '../../domain/expiry.dart';
+import '../copy/role_action_blocked_copy.dart';
 import '../widgets/expiry_text.dart';
 import '../widgets/role_label.dart';
 import 'invite_member_screen.dart';
+import 'roles_screen.dart';
 
 /// S6 — สมาชิก, mobile (ux-wireframe §7 + §13).
 ///
@@ -22,12 +26,17 @@ import 'invite_member_screen.dart';
 /// fails must not take the invitations with it, because the two are separate
 /// jobs and only one of them is broken.
 ///
-/// This round is READ + INVITE. Row actions (เปลี่ยนสิทธิ์ · ถอดออกจากร้าน ·
-/// ออกจากร้านนี้ · ออกลิงก์ใหม่ · ยกเลิกคำเชิญ) are not built yet, so the rows
-/// are deliberately NOT tappable: an action sheet that opens onto nothing is
-/// worse than no affordance at all.
+/// F-003 R7 (T-003-M10): a member row follows the SERVER's verdict
+/// ([memberRowAffordance]) — locked rows explain why; allowed rows open the
+/// change-role flow through [onChangeRole]. Nothing else (remove member,
+/// invitation actions, reset password) exists on mobile — F-002b.
+///
+/// [onChangeRole] is R10's seam (T-003-M11). While it is `null` no row is
+/// tappable: an action that opens onto nothing is worse than no affordance.
 class MembersScreen extends ConsumerStatefulWidget {
-  const MembersScreen({super.key});
+  const MembersScreen({super.key, this.onChangeRole});
+
+  final ValueChanged<MemberRow>? onChangeRole;
 
   @override
   ConsumerState<MembersScreen> createState() => _MembersScreenState();
@@ -72,6 +81,20 @@ class _MembersScreenState extends ConsumerState<MembersScreen> {
       body: ListView(
         padding: const EdgeInsets.all(AppSpacing.s4),
         children: [
+          // F-003 R1 entry (ux R1): tertiary button under the heading, on the
+          // SERVER's answer for this member.
+          CapabilityGate(
+            capability: manageRolesCapability,
+            child: Align(
+              alignment: AlignmentDirectional.centerStart,
+              child: TextButton(
+                key: const ValueKey('manage-roles-button'),
+                style: TextButton.styleFrom(minimumSize: const Size(0, AppSizes.tapTargetMin)),
+                onPressed: () => openRolesScreen(context),
+                child: Text(t.rolesManageTertiaryCta),
+              ),
+            ),
+          ),
           _BackupOwnerNudge(
             members: members,
             onInviteOwner: () => _openInvite(presetRoleKey: 'owner'),
@@ -93,6 +116,7 @@ class _MembersScreenState extends ConsumerState<MembersScreen> {
             onRetry: () => ref.read(membersControllerProvider(_memberStatus).notifier).refresh(),
             onLoadMore: () => ref.read(membersControllerProvider(_memberStatus).notifier).loadMore(),
             onInvite: () => _openInvite(),
+            onChangeRole: widget.onChangeRole,
           ),
         ],
       ),
@@ -291,6 +315,7 @@ class _MembersSection extends StatelessWidget {
     required this.onRetry,
     required this.onLoadMore,
     required this.onInvite,
+    required this.onChangeRole,
   });
 
   final PagedState<MemberRow> state;
@@ -299,6 +324,7 @@ class _MembersSection extends StatelessWidget {
   final VoidCallback onRetry;
   final VoidCallback onLoadMore;
   final VoidCallback onInvite;
+  final ValueChanged<MemberRow>? onChangeRole;
 
   @override
   Widget build(BuildContext context) {
@@ -315,7 +341,7 @@ class _MembersSection extends StatelessWidget {
       children: [
         Text(t.membersSection(active.length), style: Theme.of(context).textTheme.titleMedium),
         const SizedBox(height: AppSpacing.s2),
-        for (final member in state.items) _MemberTile(member: member),
+        for (final member in state.items) _MemberTile(member: member, onChangeRole: onChangeRole),
         if (active.length == 1 && active.single.isMe)
           Padding(
             padding: const EdgeInsets.symmetric(vertical: AppSpacing.s4),
@@ -339,15 +365,23 @@ class _MembersSection extends StatelessWidget {
 }
 
 class _MemberTile extends StatelessWidget {
-  const _MemberTile({required this.member});
+  const _MemberTile({required this.member, required this.onChangeRole});
 
   final MemberRow member;
+  final ValueChanged<MemberRow>? onChangeRole;
 
   @override
   Widget build(BuildContext context) {
     final t = AppLocalizations.of(context);
     final revoked = !member.isActive;
     final colors = context.appColors;
+    final affordance = memberRowAffordance(member);
+    final handler = onChangeRole;
+    final tappable = affordance is MemberRowManageable && handler != null;
+    final lockedReason = switch (affordance) {
+      MemberRowLocked(:final reason) => memberManageBlockedCopy(t, reason ?? ''),
+      _ => null,
+    };
 
     return Opacity(
       // Revoked rows are dimmed AND labelled — the dimming is the hint, the
@@ -370,10 +404,35 @@ class _MemberTile extends StatelessWidget {
             ],
           ],
         ),
-        subtitle: Text(
-          '${roleLabel(t, member.roleKey, member.roleName)} · '
-          '${revoked ? t.membersStatusRevoked : t.membersStatusActive}',
+        subtitle: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text(
+              '${roleLabel(t, member.roleKey, member.roleName)} · '
+              '${revoked ? t.membersStatusRevoked : t.membersStatusActive}',
+            ),
+            if (lockedReason != null) ...[
+              const SizedBox(height: AppSpacing.s1),
+              // ux R7/R10 (ก): a sentence instead of an empty menu — still
+              // read by a screen reader as part of the row.
+              Row(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Icon(Icons.lock_outline, size: AppSizes.iconSm, color: colors.textMuted),
+                  const SizedBox(width: AppSpacing.s1),
+                  Expanded(
+                    child: Text(
+                      lockedReason,
+                      style: AppTypography.bodySm.copyWith(color: colors.textMuted),
+                    ),
+                  ),
+                ],
+              ),
+            ],
+          ],
         ),
+        trailing: tappable ? const Icon(Icons.chevron_right) : null,
+        onTap: tappable ? () => handler(member) : null,
       ),
     );
   }
@@ -395,6 +454,172 @@ class _SectionError extends StatelessWidget {
         children: [
           Text(message),
           TextButton(onPressed: onRetry, child: Text(t.actionRetry)),
+        ],
+      ),
+    );
+  }
+}
+
+/// T-003-M10 — ux R6 on mobile: "คนที่ใช้บทบาท "{ชื่อ}"", pushed from the role
+/// screen (R5's "ดูสมาชิก/คำเชิญที่ใช้บทบาทนี้"). Same row widgets as the
+/// members tab, so R7's verdicts apply unchanged.
+///
+/// [roleName] is the display name the caller already resolved (ux §0.2) —
+/// the caller is a role screen that has it in hand, so this screen does not
+/// re-fetch `GET /roles` just to title itself.
+///
+/// Invitation rows have no action on mobile (F-002b), hence no reason line;
+/// the footer says where those actions live.
+class RoleMembersScreen extends ConsumerWidget {
+  const RoleMembersScreen({
+    super.key,
+    required this.roleId,
+    required this.roleName,
+    this.onChangeRole,
+  });
+
+  final String roleId;
+  final String roleName;
+
+  /// R10's seam (T-003-M11) — see [MembersScreen.onChangeRole].
+  final ValueChanged<MemberRow>? onChangeRole;
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final t = AppLocalizations.of(context);
+    final members = ref.watch(roleMembersControllerProvider(roleId));
+    final invitations = ref.watch(roleInvitationsControllerProvider(roleId));
+
+    bool settledEmpty(PagedState<Object?> s) =>
+        !s.loading && s.failure == null && s.items.isEmpty && !s.hasMore;
+    final nobody = settledEmpty(members) && settledEmpty(invitations);
+    final anyRows = members.items.isNotEmpty || invitations.items.isNotEmpty;
+
+    return Scaffold(
+      appBar: AppBar(title: Text(t.roleFilteredMobileTitle(roleName))),
+      body: ListView(
+        padding: const EdgeInsets.all(AppSpacing.s4),
+        children: nobody
+            ? [_NobodyLeft(roleName: roleName)]
+            : [
+                _RoleSection<InvitationRow>(
+                  state: invitations,
+                  header: t.roleFilteredInvitationsHeader(invitations.items.length),
+                  empty: t.roleFilteredInvitationsEmpty,
+                  error: t.invitationsLoadError,
+                  skeletonRows: 1,
+                  onRetry: () =>
+                      ref.read(roleInvitationsControllerProvider(roleId).notifier).refresh(),
+                  onLoadMore: () =>
+                      ref.read(roleInvitationsControllerProvider(roleId).notifier).loadMore(),
+                  row: (i) => _InvitationTile(invitation: i),
+                ),
+                const SizedBox(height: AppSpacing.s4),
+                _RoleSection<MemberRow>(
+                  state: members,
+                  header: t.roleFilteredMembersHeader(members.items.length),
+                  empty: t.roleFilteredMembersEmpty,
+                  error: t.membersLoadError,
+                  skeletonRows: 3,
+                  onRetry: () =>
+                      ref.read(roleMembersControllerProvider(roleId).notifier).refresh(),
+                  onLoadMore: () =>
+                      ref.read(roleMembersControllerProvider(roleId).notifier).loadMore(),
+                  row: (m) => _MemberTile(member: m, onChangeRole: onChangeRole),
+                ),
+                if (anyRows)
+                  Padding(
+                    padding: const EdgeInsets.only(top: AppSpacing.s4),
+                    child: Text(
+                      t.roleFilteredMobileFooterNote,
+                      style: AppTypography.bodySm.copyWith(color: context.appColors.textMuted),
+                    ),
+                  ),
+              ],
+      ),
+    );
+  }
+}
+
+class _RoleSection<T> extends StatelessWidget {
+  const _RoleSection({
+    required this.state,
+    required this.header,
+    required this.empty,
+    required this.error,
+    required this.skeletonRows,
+    required this.onRetry,
+    required this.onLoadMore,
+    required this.row,
+  });
+
+  final PagedState<T> state;
+  final String header;
+  final String empty;
+  final String error;
+  final int skeletonRows;
+  final VoidCallback onRetry;
+  final VoidCallback onLoadMore;
+  final Widget Function(T) row;
+
+  @override
+  Widget build(BuildContext context) {
+    final t = AppLocalizations.of(context);
+    if (state.loading) return SessionListSkeleton(rowCount: skeletonRows);
+    if (state.failure != null) return _SectionError(message: error, onRetry: onRetry);
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Text(header, style: Theme.of(context).textTheme.titleMedium),
+        const SizedBox(height: AppSpacing.s2),
+        if (state.items.isEmpty)
+          Text(empty, style: AppTypography.bodySm.copyWith(color: context.appColors.textMuted)),
+        for (final item in state.items) row(item),
+        if (state.hasMore) TextButton(onPressed: onLoadMore, child: Text(t.membersLoadMore)),
+      ],
+    );
+  }
+}
+
+/// ux R6: both sections empty → Banner success + the way back to the role,
+/// where deleting it is now possible.
+class _NobodyLeft extends StatelessWidget {
+  const _NobodyLeft({required this.roleName});
+
+  final String roleName;
+
+  @override
+  Widget build(BuildContext context) {
+    final t = AppLocalizations.of(context);
+    final colors = context.appColors;
+    return Container(
+      padding: const EdgeInsets.all(AppSpacing.s4),
+      decoration: BoxDecoration(
+        color: colors.successBg,
+        borderRadius: BorderRadius.circular(AppRadius.card),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Icon(Icons.check_circle_outline, size: AppSizes.iconMd, color: colors.successText),
+              const SizedBox(width: AppSpacing.s2),
+              Expanded(
+                child: Text(
+                  t.roleFilteredAllEmptyBanner,
+                  style: AppTypography.bodySm.copyWith(color: colors.successText),
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: AppSpacing.s3),
+          TextButton(
+            // Pushed from the role screen: back IS "กลับไปที่บทบาท".
+            onPressed: () => Navigator.of(context).maybePop(),
+            child: Text(t.roleFilteredBackToRole(roleName)),
+          ),
         ],
       ),
     );

@@ -29,6 +29,7 @@ import {
 } from "../auth/security-events.service";
 import { OrgContextStore } from "../tenancy";
 import { MembersService } from "./members.service";
+import { OrgOwnershipGuard } from "./org-ownership.guard";
 
 const ORG_ID = "org_ctx";
 const OWNER = "usr_owner";
@@ -41,9 +42,17 @@ const ROLE_ADMIN = {
   id: "rol_admin",
   name: "Admin",
   key: "admin",
-  capabilities: ["manage_members", "manage_org_settings"],
+  // F-003 (D-034 · R3-04): Staff ⊊ Admin, as in the shipped presets — under
+  // the target axis an Admin may only touch members strictly below them, and
+  // the F-002 fixture (`view_products` outside Admin) made Staff incomparable.
+  capabilities: ["manage_members", "manage_org_settings", "view_products"],
 };
-const ROLE_STAFF = { id: "rol_staff", name: "Staff", key: "staff", capabilities: ["view_products"] };
+const ROLE_STAFF = {
+  id: "rol_staff",
+  name: "Staff",
+  key: "staff",
+  capabilities: ["view_products"],
+};
 
 interface FakeMembership {
   id: string;
@@ -94,11 +103,20 @@ function createService(options: {
   readonly memberships: readonly FakeMembership[];
   readonly invitations?: readonly FakeInvitation[];
   readonly actor?: string;
-  readonly roles?: readonly { id: string; name: string; key: string; capabilities: string[] }[];
+  readonly roles?: readonly {
+    id: string;
+    name: string;
+    key: string;
+    capabilities: string[];
+    deletedAt?: Date | null;
+  }[];
 }) {
   const memberships = options.memberships.map((m) => ({ ...m }));
   const invitations = (options.invitations ?? []).map((i) => ({ ...i }));
-  const roles = (options.roles ?? ROLES).map((r) => ({ ...r }));
+  const roles = (options.roles ?? ROLES).map((r) => ({
+    deletedAt: null as Date | null | undefined,
+    ...r,
+  }));
   const calls: string[] = [];
   const txOptions: unknown[] = [];
 
@@ -143,9 +161,7 @@ function createService(options: {
         data: Record<string, unknown>;
       }) => {
         calls.push(`${channel}:membership.update`);
-        const found = memberships.find(
-          (m) => m.userId === args.where.organizationId_userId.userId,
-        );
+        const found = memberships.find((m) => m.userId === args.where.organizationId_userId.userId);
         if (!found) throw new Error("membership.update: no such row");
         Object.assign(found, args.data);
         return project(found);
@@ -165,9 +181,12 @@ function createService(options: {
     }),
     membership: membershipDelegate("tx"),
     role: {
-      findFirst: vi.fn(async (args: { where: { id: string } }) => {
+      // Honours `deletedAt: null` like Postgres does — a fake that ignored the
+      // filter would let a live-read bug through (F-003 · LIVE_ROLE_WHERE).
+      findFirst: vi.fn(async (args: { where: { id: string; deletedAt?: null } }) => {
         calls.push("tx:role.findFirst");
-        return roles.find((r) => r.id === args.where.id) ?? null;
+        const liveOnly = "deletedAt" in args.where && args.where.deletedAt === null;
+        return roles.find((r) => r.id === args.where.id && !(liveOnly && r.deletedAt)) ?? null;
       }),
     },
     invitation: {
@@ -201,7 +220,7 @@ function createService(options: {
   const sink: SecurityEventCollector = collectSecurityEvents(events);
   const store = new OrgContextStore();
   const actorUserId = options.actor ?? OWNER;
-  const service = new MembersService(prisma as never, store, events);
+  const service = new MembersService(prisma as never, store, events, new OrgOwnershipGuard(store));
 
   return {
     service,
@@ -284,7 +303,10 @@ describe("MembersService.list — api-spec §3.7", () => {
 
   it("a status filter is passed straight through", async () => {
     const ctx = createService({
-      memberships: [member(OWNER, ROLE_OWNER.id), member(STAFF, ROLE_STAFF.id, { status: "revoked" })],
+      memberships: [
+        member(OWNER, ROLE_OWNER.id),
+        member(STAFF, ROLE_STAFF.id, { status: "revoked" }),
+      ],
     });
     const page = await ctx.run(() =>
       ctx.service.list({ status: "revoked", limit: 25, withTotal: false }),
@@ -373,7 +395,12 @@ describe("MembersService.updateRole — api-spec §3.8", () => {
       where: { organizationId_userId: { organizationId: ORG_ID, userId: STAFF } },
       data: { roleId: ROLE_ADMIN.id },
     });
-    expect(row).toMatchObject({ userId: STAFF, roleName: "Admin", roleKey: "admin", isOwner: false });
+    expect(row).toMatchObject({
+      userId: STAFF,
+      roleName: "Admin",
+      roleKey: "admin",
+      isOwner: false,
+    });
   });
 
   it("★ emits role_changed POST-COMMIT with grantsFullAccess — the escalation flag", async () => {
@@ -542,6 +569,27 @@ describe("MembersService.updateRole — api-spec §3.8", () => {
         ctx.run(() => ctx.service.updateRole({ targetUserId: STAFF, roleId: "rol_other_org" })),
       ),
     ).toBe("ROLE_INVALID");
+    expect(ctx.tx.membership.update).not.toHaveBeenCalled();
+  });
+});
+
+describe("MembersService.updateRole — live roles only (F-003 · data-model §2.2)", () => {
+  it("★ 422 ROLE_INVALID for a soft-deleted role — the same answer as an unknown id (I3-10)", async () => {
+    const deleted = {
+      ...ROLE_ADMIN,
+      id: "rol_deleted",
+      deletedAt: new Date("2026-10-01T00:00:00Z"),
+    };
+    const ctx = createService({
+      memberships: [member(OWNER, ROLE_OWNER.id), member(STAFF, ROLE_STAFF.id)],
+      roles: [...ROLES, deleted],
+    });
+    expect(
+      await codeOf(
+        ctx.run(() => ctx.service.updateRole({ targetUserId: STAFF, roleId: deleted.id })),
+      ),
+    ).toBe("ROLE_INVALID");
+    expect(ctx.tx.role.findFirst.mock.calls[0]![0].where).toMatchObject({ deletedAt: null });
     expect(ctx.tx.membership.update).not.toHaveBeenCalled();
   });
 });
@@ -782,6 +830,179 @@ describe("MembersService.leave — api-spec §3.17 (D-029)", () => {
     });
     expect(await codeOf(ctx.run(() => ctx.service.leave()))).toBe("ORG_ACCESS_DENIED");
     expect(ctx.tx.membership.update).not.toHaveBeenCalled();
+  });
+});
+
+// ── F-003 · T-003-B17 — D-034 on the shipped routes ─────────────────────────
+
+describe("F-003 · decideMemberAuthority on PATCH/DELETE (D-034 · AC-5.4b)", () => {
+  const ADMIN_2 = "usr_admin2";
+
+  function twoAdmins() {
+    return createService({
+      memberships: [
+        member(OWNER, ROLE_OWNER.id),
+        member(ADMIN, ROLE_ADMIN.id),
+        member(ADMIN_2, ROLE_ADMIN.id),
+        member(STAFF, ROLE_STAFF.id),
+      ],
+      actor: ADMIN,
+    });
+  }
+
+  it.each([
+    [
+      "updateRole",
+      (s: MembersService) => s.updateRole({ targetUserId: ADMIN_2, roleId: ROLE_STAFF.id }),
+    ],
+    ["revoke", (s: MembersService) => s.revoke({ targetUserId: ADMIN_2 })],
+  ] as const)(
+    "★ AC-5.4b %s on an EQUAL Admin → TARGET_NOT_BELOW_ACTOR, nothing written, escalation_denied after the tx",
+    async (name, call) => {
+      const ctx = twoAdmins();
+      const order: string[] = [];
+      ctx.prisma.$transaction.mockImplementationOnce(async (fn, opts) => {
+        ctx.txOptions.push(opts);
+        const result = await fn(ctx.tx);
+        order.push("tx-returned");
+        return result;
+      });
+      const realEmit = ctx.service["events"].emitEscalationDenied.bind(ctx.service["events"]);
+      vi.spyOn(ctx.service["events"], "emitEscalationDenied").mockImplementation(async (p) => {
+        order.push("emit");
+        return realEmit(p);
+      });
+
+      expect(await codeOf(ctx.run<unknown>(() => call(ctx.service)))).toBe(
+        "TARGET_NOT_BELOW_ACTOR",
+      );
+      expect(ctx.tx.membership.update).not.toHaveBeenCalled();
+      expect(ctx.tx.invitation.updateMany).not.toHaveBeenCalled();
+      expect(order).toEqual(["tx-returned", "emit"]);
+      expect(ctx.sink.ofType("org.role.escalation_denied").map((e) => e.payload)).toEqual([
+        {
+          actorUserId: ADMIN,
+          organizationId: ORG_ID,
+          roleId: name === "updateRole" ? ROLE_STAFF.id : ROLE_ADMIN.id,
+          targetUserId: ADMIN_2,
+          operation: name === "updateRole" ? "change_member_role" : "remove_member",
+          reason: "target_not_below_actor",
+          excessCapabilities: [],
+          suppressedCount: 0,
+        },
+      ]);
+      expect(ctx.sink.ofType("org.member.role_changed")).toEqual([]);
+      expect(ctx.sink.ofType("org.member.revoked")).toEqual([]);
+      ctx.sink.stop();
+    },
+  );
+
+  it("★ grant ⊄ actor → ROLE_EXCEEDS_ACTOR with the excess keys in the event only", async () => {
+    const BIG = {
+      id: "rol_big",
+      name: "Big",
+      key: "big",
+      capabilities: ["manage_members", "manage_billing"],
+    };
+    const ctx = createService({
+      memberships: [
+        member(OWNER, ROLE_OWNER.id),
+        member(ADMIN, ROLE_ADMIN.id),
+        member(STAFF, ROLE_STAFF.id),
+      ],
+      roles: [...ROLES, BIG],
+      actor: ADMIN,
+    });
+    expect(
+      await codeOf(ctx.run(() => ctx.service.updateRole({ targetUserId: STAFF, roleId: BIG.id }))),
+    ).toBe("ROLE_EXCEEDS_ACTOR");
+    expect(ctx.tx.membership.update).not.toHaveBeenCalled();
+    expect(ctx.sink.ofType("org.role.escalation_denied")[0]!.payload).toMatchObject({
+      reason: "exceeds_actor",
+      operation: "change_member_role",
+      excessCapabilities: ["manage_billing"],
+    });
+    ctx.sink.stop();
+  });
+
+  it("★ actorIsTarget: an Admin may demote and remove THEMSELVES (target axis skipped; grant axis still applies)", async () => {
+    const ctx = twoAdmins();
+    const row = await ctx.run(() =>
+      ctx.service.updateRole({ targetUserId: ADMIN, roleId: ROLE_STAFF.id }),
+    );
+    expect(row.roleId).toBe(ROLE_STAFF.id);
+
+    const ctx2 = twoAdmins();
+    const res = await ctx2.run(() => ctx2.service.revoke({ targetUserId: ADMIN }));
+    expect(res.status).toBe("revoked");
+    expect(ctx2.sink.ofType("org.role.escalation_denied")).toEqual([]);
+    ctx.sink.stop();
+    ctx2.sink.stop();
+  });
+
+  it.each([
+    [
+      "updateRole",
+      (s: MembersService) => s.updateRole({ targetUserId: STAFF, roleId: ROLE_STAFF.id }),
+    ],
+    ["revoke", (s: MembersService) => s.revoke({ targetUserId: STAFF })],
+  ] as const)(
+    "★ B18 Low: %s by an actor who lost manage_members between the guard and the tx re-read → FORBIDDEN, nothing written, no event",
+    async (_name, call) => {
+      const ctx = createService({
+        memberships: [
+          member(OWNER, ROLE_OWNER.id),
+          member(ADMIN, ROLE_STAFF.id),
+          member(STAFF, ROLE_STAFF.id),
+        ],
+        actor: ADMIN,
+      });
+      const store = new OrgContextStore();
+      const code = await codeOf(
+        store.run<Promise<unknown>>(
+          { organizationId: ORG_ID, userId: ADMIN, capabilities: ROLE_ADMIN.capabilities },
+          () => call(ctx.service),
+        ),
+      );
+      expect(code).toBe("FORBIDDEN");
+      expect(ctx.tx.membership.update).not.toHaveBeenCalled();
+      expect(ctx.tx.invitation.updateMany).not.toHaveBeenCalled();
+      expect(ctx.sink.types()).toEqual([]);
+      ctx.sink.stop();
+    },
+  );
+
+  it("★ floor in the tx: an actor whose role lost manage_members mid-flight → FORBIDDEN, no event", async () => {
+    // ALS says Admin (the guard let them in); the DATABASE now says Staff.
+    const ctx = createService({
+      memberships: [
+        member(OWNER, ROLE_OWNER.id),
+        member(ADMIN, ROLE_STAFF.id),
+        member(STAFF, ROLE_STAFF.id),
+      ],
+      actor: ADMIN,
+    });
+    const store = new OrgContextStore();
+    const code = await codeOf(
+      store.run(
+        { organizationId: ORG_ID, userId: ADMIN, capabilities: ROLE_ADMIN.capabilities },
+        () => ctx.service.revoke({ targetUserId: STAFF }),
+      ),
+    );
+    expect(code).toBe("FORBIDDEN");
+    expect(ctx.tx.membership.update).not.toHaveBeenCalled();
+    expect(ctx.sink.types()).toEqual([]);
+    ctx.sink.stop();
+  });
+
+  it("★ SR-19 / MUT-08: a no-op PATCH on a ⊊ target still writes and emits role_changed (from = to)", async () => {
+    const ctx = twoAdmins();
+    await ctx.run(() => ctx.service.updateRole({ targetUserId: STAFF, roleId: ROLE_STAFF.id }));
+    expect(ctx.tx.membership.update).toHaveBeenCalledTimes(1);
+    expect(ctx.sink.ofType("org.member.role_changed").map((e) => e.payload)).toEqual([
+      expect.objectContaining({ fromRoleId: ROLE_STAFF.id, toRoleId: ROLE_STAFF.id }),
+    ]);
+    ctx.sink.stop();
   });
 });
 

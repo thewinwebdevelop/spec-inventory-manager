@@ -68,6 +68,22 @@ const CITED = /`((?:apps|packages|docs|\.github)\/[A-Za-z0-9_./-]+\.[A-Za-z0-9]{
  */
 const NOT_YET_BUILT: ReadonlyMap<string, string> = new Map([
   ["packages/db/src/ledger-write.ts", "the ledger write primitive — F-011, backend.md §3.1"],
+  [
+    "apps/api/test/f003-concurrency.int.test.ts",
+    "F-003 Gate 2 design — T-003-B26b (docs/features/F-003/tasks.md)",
+  ],
+  [
+    "apps/api/test/f003-role-writes.int.test.ts",
+    "F-003 Gate 2 design — T-003-B26a (docs/features/F-003/tasks.md)",
+  ],
+  [
+    "apps/api/test/f003-sweeps.int.test.ts",
+    "F-003 Gate 2 design — T-003-QA08 (docs/features/F-003/tasks.md)",
+  ],
+  [
+    "packages/db/test/migration-harness.int.test.ts",
+    "F-003 Gate 2 design — T-003-QA05 / DV03 (docs/features/F-003/tasks.md)",
+  ],
 ]);
 
 /**

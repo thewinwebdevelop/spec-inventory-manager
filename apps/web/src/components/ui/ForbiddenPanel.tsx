@@ -8,25 +8,44 @@
  * do. That is the whole difference from §12.1, where the answer is to leave
  * the org entirely — and it is why the two 403s are separate `ApiFailure`
  * kinds rather than one kind carrying a code.
+ *
+ * T-003-W01: one panel, per-route words. F-003 ux §0 gives the roles screens
+ * their own title/body/back target; the look and structure stay this
+ * component's. The defaults are F-002's members copy, unchanged.
  */
 import Link from "next/link";
 import { Button } from "./Button";
 import { Icon } from "./Icon";
 
-export const FORBIDDEN_PANEL_COPY = {
+export interface ForbiddenPanelCopy {
+  readonly title: string;
+  readonly body: string;
+  readonly back: string;
+}
+
+export const FORBIDDEN_PANEL_COPY: ForbiddenPanelCopy = {
   title: "หน้านี้เปิดให้เฉพาะผู้ที่ดูแลทีมงาน",
   body: "ถ้าคุณต้องใช้หน้านี้ ให้เจ้าของร้านเปิดสิทธิ์ให้คุณ",
   back: "กลับหน้าแรกของร้าน",
-} as const;
+};
 
-export function ForbiddenPanel({ orgId }: { orgId: string }) {
+export function ForbiddenPanel({
+  orgId,
+  copy = FORBIDDEN_PANEL_COPY,
+  backHref,
+}: {
+  orgId: string;
+  copy?: ForbiddenPanelCopy;
+  /** Defaults to the shop's home, `/o/{orgId}`. */
+  backHref?: string;
+}) {
   return (
     <section role="alert" className="p-6 text-center">
       <Icon role="lock" size="xl" className="mx-auto text-text-muted" />
-      <h2 className="text-heading-sm">{FORBIDDEN_PANEL_COPY.title}</h2>
-      <p className="text-body-sm">{FORBIDDEN_PANEL_COPY.body}</p>
-      <Link href={`/o/${orgId}`}>
-        <Button variant="secondary">{FORBIDDEN_PANEL_COPY.back}</Button>
+      <h2 className="text-heading-sm">{copy.title}</h2>
+      <p className="text-body-sm">{copy.body}</p>
+      <Link href={backHref ?? `/o/${orgId}`}>
+        <Button variant="secondary">{copy.back}</Button>
       </Link>
     </section>
   );

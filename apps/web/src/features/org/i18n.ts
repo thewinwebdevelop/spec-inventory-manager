@@ -9,6 +9,8 @@
  * lives inside a string (the "+" on "สร้างร้านใหม่" comes from the component),
  * and a count is interpolated rather than baked in.
  */
+import { assignBlockedReasonCopy } from "./role-copy";
+
 export const orgTh = {
   /** S1 — เลือกร้าน */
   selectOrg: {
@@ -34,7 +36,7 @@ export const orgTh = {
       helper: "ตั้งชื่อที่คุณเรียกร้านตัวเอง เปลี่ยนทีหลังได้",
     },
     explainer:
-      "เมื่อสร้างเสร็จ คุณจะเป็นเจ้าของร้านนี้ และระบบจะเตรียม \"คลังหลัก\" ให้ 1 คลัง · ใช้สกุลเงินบาท (฿) และเวลาประเทศไทย",
+      'เมื่อสร้างเสร็จ คุณจะเป็นเจ้าของร้านนี้ และระบบจะเตรียม "คลังหลัก" ให้ 1 คลัง · ใช้สกุลเงินบาท (฿) และเวลาประเทศไทย',
     submit: "สร้างร้าน",
     submitLoading: "กำลังสร้างร้าน...",
     successToast: (name: string) => `สร้างร้าน "${name}" เรียบร้อย`,
@@ -83,6 +85,8 @@ export const orgTh = {
       menuLabel: "เมนูของร้าน",
       orgProfile: "ข้อมูลร้าน",
       members: "สมาชิก",
+      /** T-003-W05 — ux-wireframe R1 / ui.md §5: below "สมาชิก", gate `manage_roles`. */
+      roles: "บทบาทและสิทธิ์",
       security: "ความปลอดภัย",
       logout: "ออกจากระบบ",
       /**
@@ -114,7 +118,10 @@ export const orgTh = {
   },
 } as const;
 
-export function roleLabel(roleKey: string | null | undefined, roleName: string | undefined): string {
+export function roleLabel(
+  roleKey: string | null | undefined,
+  roleName: string | undefined,
+): string {
   switch (roleKey) {
     case "owner":
       return orgTh.role.owner;
@@ -303,7 +310,9 @@ export const membersTh = {
    * copy in `inviteFormTh.error.alreadyMember` / `.pending`.
    */
   inviteAgain: "เชิญใหม่อีกครั้ง",
-  changeRole: "เปลี่ยนสิทธิ์",
+  /** ux-wireframe F-003 §0.1 — was "เปลี่ยนสิทธิ์" (F-002); "สิทธิ์" there meant
+   *  ROLE, which now collides with F-003's own "สิทธิ์" = capability. */
+  changeRole: "เปลี่ยนบทบาท",
   removeFromOrg: "ถอดออกจากร้าน",
   leaveOrg: "ออกจากร้านนี้",
   /**
@@ -325,11 +334,11 @@ export const membersTh = {
    *   - already on it            → plain sentence `leaveLastOwnerHere`, no link
    */
   leaveLastOwnerCta: "ไปตั้งเจ้าของร้านคนใหม่",
-  leaveLastOwnerHere:
-    "เลือกคนที่คุณไว้ใจในรายชื่อด้านล่าง แล้วกด \"เปลี่ยนสิทธิ์\" เป็นเจ้าของร้าน",
+  /** F-003 §0.1 — "เปลี่ยนสิทธิ์" → "เปลี่ยนบทบาท", to match the renamed `changeRole` button above. */
+  leaveLastOwnerHere: 'เลือกคนที่คุณไว้ใจในรายชื่อด้านล่าง แล้วกด "เปลี่ยนบทบาท" เป็นเจ้าของร้าน',
   linkValidUntil: (when: string) => `ลิงก์ใช้ได้ถึง ${when}`,
-  /** §7 — C-1 explained rather than a disabled item. */
-  ownerOnlyNotice: "เฉพาะเจ้าของร้านเท่านั้นที่แก้สิทธิ์ของเจ้าของร้านคนอื่นได้",
+  /** §7 — C-1 explained rather than a disabled item. F-003 §0.1 — moved wording. */
+  ownerOnlyNotice: "เฉพาะเจ้าของร้านเท่านั้นที่เปลี่ยนบทบาทหรือถอดเจ้าของร้านคนอื่นได้",
   /**
    * §7 (D-028/I-7) — a soft flag, never an accusation.
    *
@@ -354,20 +363,23 @@ export const inviteFormTh = {
   title: "เชิญสมาชิก",
   emailLabel: "อีเมลของคนที่จะเชิญ",
   emailPlaceholder: "เช่น malee@shop.com",
-  roleLabel: "สิทธิ์ในร้านนี้",
+  /** F-003 §0.1 — "สิทธิ์ในร้านนี้" (F-002) meant ROLE; renamed to avoid the collision. */
+  roleLabel: "บทบาทในร้านนี้",
   /**
    * ★ B-9 — verbatim from mobile's `inviteOwnerDisabledHelper` (§8), not a new
    * sentence. The two platforms are answering the same question and had no
    * business answering it in different words; web could not ask it at all
    * before the server published `grantsOwnership`.
    */
-  ownerOnlyHelper: "เฉพาะเจ้าของร้านเท่านั้นที่ตั้งเจ้าของร้านคนใหม่ได้",
+  // One copy: the R8 owner_only sentence lives in role-copy.ts.
+  ownerOnlyHelper: assignBlockedReasonCopy("owner_only"),
   submit: "สร้างลิงก์คำเชิญ",
   submitLoading: "กำลังสร้างลิงก์...",
   cancel: "ยกเลิก",
   error: {
     email: "รูปแบบอีเมลไม่ถูกต้อง",
-    role: "เลือกสิทธิ์ที่จะให้",
+    /** F-003 §0.1 — "เลือกสิทธิ์ที่จะให้" (F-002) meant ROLE. */
+    role: "เลือกบทบาทที่จะให้",
     alreadyMember: "คนนี้เป็นสมาชิกของร้านอยู่แล้ว",
     /** D-027 — the error that must offer a next step, not a dead end. */
     pending: "มีคำเชิญของอีเมลนี้ค้างอยู่แล้ว — ออกลิงก์ใหม่หรือยกเลิกคำเชิญเดิมก่อน",
@@ -386,7 +398,7 @@ export const copyLinkTh = {
   copiedToast: "คัดลอกลิงก์แล้ว",
   /** §9.1 — the ONE guard rail, in warning tone, above the close button. */
   onceOnly:
-    "ลิงก์นี้แสดงครั้งเดียว — ปิดหน้านี้แล้วเปิดดูซ้ำไม่ได้ ถ้าทำลิงก์หาย กด \"ออกลิงก์ใหม่\" ที่รายการคำเชิญ",
+    'ลิงก์นี้แสดงครั้งเดียว — ปิดหน้านี้แล้วเปิดดูซ้ำไม่ได้ ถ้าทำลิงก์หาย กด "ออกลิงก์ใหม่" ที่รายการคำเชิญ',
   close: "เสร็จแล้ว",
   copyFailed: "คัดลอกอัตโนมัติไม่สำเร็จ — กดค้างที่ลิงก์เพื่อคัดลอกเอง",
 } as const;
@@ -409,7 +421,8 @@ export const invitationConfirmTh = {
       `ลิงก์เดิมที่ส่งไปแล้วจะใช้ไม่ได้ทันที ถ้าคุณส่งลิงก์เดิมให้ใครไว้ ต้องส่งลิงก์ใหม่ให้เขาแทน
 
 ` +
-      `อีเมลและสิทธิ์ของคำเชิญไม่เปลี่ยน (${email} · ${roleName})`,
+      // F-003 §0.1 — "สิทธิ์" (F-002) meant ROLE here; renamed to "บทบาท".
+      `อีเมลและบทบาทของคำเชิญไม่เปลี่ยน (${email} · ${roleName})`,
     cancel: "ยกเลิก",
     confirm: "ออกลิงก์ใหม่",
     /** §9.2 — said again after the fact, because it has already happened. */
@@ -425,4 +438,20 @@ export const invitationConfirmTh = {
     confirm: "ยกเลิกคำเชิญ",
     doneToast: "ยกเลิกคำเชิญแล้ว",
   },
+} as const;
+
+/**
+ * T-003-W10 · R6 — `/settings/members?roleId=<id>` (ux-wireframe F-003 R6).
+ * Verbatim from ux; request changes from `ux`.
+ */
+export const roleFilterTh = {
+  banner: (roleName: string) => `กำลังแสดงเฉพาะคนที่ใช้บทบาท "${roleName}"`,
+  bannerUnknownRole: "กำลังแสดงเฉพาะคนที่ใช้บทบาทที่เลือก",
+  showAll: "แสดงทั้งหมด",
+  backToRole: (roleName: string) => `กลับไปที่บทบาท "${roleName}"`,
+  invitationsSection: (m: number) => `คำเชิญที่ใช้บทบาทนี้ (${m})`,
+  membersSection: (n: number) => `สมาชิกที่ใช้บทบาทนี้ (${n})`,
+  emptyInvitations: "ไม่มีคำเชิญที่ใช้บทบาทนี้แล้ว",
+  emptyMembers: "ไม่มีสมาชิกที่ใช้บทบาทนี้แล้ว",
+  nobodyLeft: "ไม่มีใครใช้บทบาทนี้แล้ว — กลับไปลบบทบาทได้เลย",
 } as const;

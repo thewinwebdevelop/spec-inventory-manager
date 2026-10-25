@@ -282,8 +282,10 @@ d("F-002 concurrency matrix (test-plan §8)", () => {
   /** §8 rule 3, for a round with a single winner. */
   function expectOneEvent(type: SecurityEventType, where: string): void {
     const emitted = events.ofType(type);
-    expect(emitted, `${where}: expected exactly one ${type}, got ${events.types().join(",")}`)
-      .toHaveLength(1);
+    expect(
+      emitted,
+      `${where}: expected exactly one ${type}, got ${events.types().join(",")}`,
+    ).toHaveLength(1);
   }
 
   /** §8 rule 3, for a round that changed nothing. */
@@ -310,7 +312,10 @@ d("F-002 concurrency matrix (test-plan §8)", () => {
 
         // THE INVARIANT — after the race, from the database.
         expect(await activeOwnerCount(org.id), where).toBe(1);
-        expect(statusesOf(demote, remove).filter((s) => s === 200), where).toHaveLength(1);
+        expect(
+          statusesOf(demote, remove).filter((s) => s === 200),
+          where,
+        ).toHaveLength(1);
 
         // Both orderings are legitimate and they refuse differently — pinning
         // one would make this a coin flip. What is NOT negotiable is that the
@@ -337,12 +342,15 @@ d("F-002 concurrency matrix (test-plan §8)", () => {
       await round(async () => {
         // The Owner is seeded because a shop without one is not a shop the
         // production code would ever see.
-        const { org } = await shop({ owner: "Owner" });
+        const { org, people } = await shop({ owner: "Owner" });
         const guest = await person();
         const invitation = await kit.createInvitation({
           organizationId: org.id,
           email: guest.email,
           roleId: org.roles.Staff.id,
+          // F-003 D-035: accept re-checks the issuer; a row with none fails closed.
+          issuedByUserId: people.owner.id,
+          invitedByUserId: people.owner.id,
         });
 
         const [a, b] = await Promise.all([
@@ -360,17 +368,19 @@ d("F-002 concurrency matrix (test-plan §8)", () => {
         });
         expect(rows, where).toBe(1);
 
-        expect(statusesOf(a, b).filter((s) => s === 200), where).toHaveLength(1);
+        expect(
+          statusesOf(a, b).filter((s) => s === 200),
+          where,
+        ).toHaveLength(1);
         const loser = codesOf(a, b).find(Boolean);
         // `INVITATION_ALREADY_ACCEPTED` is the SHIPPED code (api-spec §4,
         // `ERROR_CODES`). test-plan §8 writes it as "ALREADY_ACCEPTED", which is
         // shorthand for a code that does not exist — this assertion was red on
         // its first real run for exactly that reason. The contract wins over the
         // plan's abbreviation.
-        expect(
-          ["INVITATION_ALREADY_ACCEPTED", "ALREADY_MEMBER", "CONFLICT"],
-          where,
-        ).toContain(loser);
+        expect(["INVITATION_ALREADY_ACCEPTED", "ALREADY_MEMBER", "CONFLICT"], where).toContain(
+          loser,
+        );
 
         // And the invitation is not left `pending` — a used token that still
         // reads as usable is a token somebody will try to use.
@@ -398,7 +408,10 @@ d("F-002 concurrency matrix (test-plan §8)", () => {
 
         const where = `round ${r}: statuses ${statusesOf(a, b)} codes ${codesOf(a, b)}`;
 
-        expect(statusesOf(a, b).filter((s) => s === 201), where).toHaveLength(1);
+        expect(
+          statusesOf(a, b).filter((s) => s === 201),
+          where,
+        ).toHaveLength(1);
         // A raw unique-constraint violation would surface as a 500 — which
         // rule 1 already forbids — so what this pins is that the refusal is
         // the one the client was promised, and can act on.
@@ -427,6 +440,9 @@ d("F-002 concurrency matrix (test-plan §8)", () => {
           email: people.target.email,
           roleId: org.roles.Admin.id,
           tokenIssuedAt: new Date(Date.now() - 60_000),
+          // F-003 D-035: accept re-checks the issuer; a row with none fails closed.
+          issuedByUserId: people.owner.id,
+          invitedByUserId: people.owner.id,
         });
 
         const [revoke, accept] = await Promise.all([
@@ -488,6 +504,9 @@ d("F-002 concurrency matrix (test-plan §8)", () => {
           organizationId: org.id,
           email: guest.email,
           roleId: org.roles.Staff.id,
+          // F-003 D-035: accept re-checks the issuer; a row with none fails closed.
+          issuedByUserId: people.owner.id,
+          invitedByUserId: people.owner.id,
         });
 
         const [reissue, accept] = await Promise.all([
@@ -540,14 +559,13 @@ d("F-002 concurrency matrix (test-plan §8)", () => {
           organizationId: org.id,
           email: guest.email,
           roleId: org.roles.Staff.id,
+          // F-003 D-035: accept re-checks the issuer; a row with none fails closed.
+          issuedByUserId: people.owner.id,
+          invitedByUserId: people.owner.id,
         });
 
         const [cancel, accept] = await Promise.all([
-          del(
-            "I-C-06",
-            `/orgs/${org.id}/invitations/${invitation.id}`,
-            people.owner.accessToken,
-          ),
+          del("I-C-06", `/orgs/${org.id}/invitations/${invitation.id}`, people.owner.accessToken),
           post("I-C-06", "/invitations/accept", guest.accessToken, { token: invitation.rawToken }),
         ]);
 
@@ -647,7 +665,10 @@ d("F-002 concurrency matrix (test-plan §8)", () => {
 
         const where = `round ${r}: statuses ${statusesOf(a, b)} codes ${codesOf(a, b)}`;
 
-        expect(statusesOf(a, b).filter((s) => s === 200), where).toHaveLength(1);
+        expect(
+          statusesOf(a, b).filter((s) => s === 200),
+          where,
+        ).toHaveLength(1);
         const loser = statusesOf(a, b).find((s) => s !== 200)!;
         expect([404, 409], where).toContain(loser);
 
@@ -677,7 +698,10 @@ d("F-002 concurrency matrix (test-plan §8)", () => {
 
         const where = `round ${r}: statuses ${statusesOf(leave, remove)} codes ${codesOf(leave, remove)}`;
 
-        expect(statusesOf(leave, remove).filter((s) => s === 200), where).toHaveLength(1);
+        expect(
+          statusesOf(leave, remove).filter((s) => s === 200),
+          where,
+        ).toHaveLength(1);
         const loser = statusesOf(leave, remove).find((s) => s !== 200)!;
         expect([403, 404, 409], where).toContain(loser);
 
@@ -728,7 +752,10 @@ d("F-002 concurrency matrix (test-plan §8)", () => {
         // anchor as `DELETE …/members/{userId}` or this is how a shop ends up
         // with nobody who can administer it.
         expect(await activeOwnerCount(org.id), `${where}: the shop was left ownerless`).toBe(1);
-        expect(statusesOf(x, y).filter((s) => s === 200), where).toHaveLength(1);
+        expect(
+          statusesOf(x, y).filter((s) => s === 200),
+          where,
+        ).toHaveLength(1);
         expect(codesOf(x, y).find(Boolean), where).toBe("LAST_OWNER");
         expectOneEvent("org.member.left", where);
       });
@@ -783,9 +810,10 @@ d("F-002 concurrency matrix (test-plan §8)", () => {
         // equality: two requests may both read a count below the cap before
         // either commits, and §6.3 accepts exactly that one-shop overshoot
         // rather than serialising every creation in the system.
-        expect(owned, `${where}: created ${owned} shops against a cap of ${cap}`).toBeLessThanOrEqual(
-          cap + 1,
-        );
+        expect(
+          owned,
+          `${where}: created ${owned} shops against a cap of ${cap}`,
+        ).toBeLessThanOrEqual(cap + 1);
         expect(owned, where).toBeGreaterThanOrEqual(cap);
 
         for (const res of [b, c]) {
@@ -800,11 +828,15 @@ d("F-002 concurrency matrix (test-plan §8)", () => {
           where: { createdByUserId: creator.id },
           select: { id: true },
         });
-        await prisma.warehouse.deleteMany({ where: { organizationId: { in: ids.map((o) => o.id) } } });
+        await prisma.warehouse.deleteMany({
+          where: { organizationId: { in: ids.map((o) => o.id) } },
+        });
         await prisma.orgEntitlement.deleteMany({
           where: { organizationId: { in: ids.map((o) => o.id) } },
         });
-        await prisma.membership.deleteMany({ where: { organizationId: { in: ids.map((o) => o.id) } } });
+        await prisma.membership.deleteMany({
+          where: { organizationId: { in: ids.map((o) => o.id) } },
+        });
         await prisma.role.deleteMany({ where: { organizationId: { in: ids.map((o) => o.id) } } });
         await prisma.organization.deleteMany({ where: { id: { in: ids.map((o) => o.id) } } });
       }

@@ -31,7 +31,11 @@ import {
   UseGuards,
 } from "@nestjs/common";
 import type { Response } from "express";
-import { CAPABILITY_MANAGE_MEMBERS, type InvitationRow } from "@omnistock/core-domain";
+import {
+  CAPABILITY_MANAGE_MEMBERS,
+  normalizeEmail,
+  type InvitationRow,
+} from "@omnistock/core-domain";
 import { domainError } from "../common";
 import { RequireCapability } from "../common/authz";
 import { OrgRateLimit } from "../common/org-rate-limit.decorator";
@@ -43,10 +47,8 @@ import {
   type IssuedInvitation,
   type ReissuedLink,
 } from "./invitations.service";
-import {
-  INVITATION_RESPONSE_HEADERS,
-  applyResponseHeaders,
-} from "./response-headers";
+import { INVITATION_RESPONSE_HEADERS, applyResponseHeaders } from "./response-headers";
+import { resolveRoleIdFilter } from "./role-filter";
 
 /** `?status=` — api-spec §3.10. Default `pending`: the actionable view. */
 const STATUS_FILTERS = ["pending", "accepted", "cancelled", "expired", "all"] as const;
@@ -66,6 +68,7 @@ export class InvitationsController {
     @Query("status") status?: string,
     @Query("cursor") cursor?: string,
     @Query("limit") limit?: string,
+    @Query("roleId") roleId?: unknown,
   ): Promise<{ items: readonly InvitationRow[]; nextCursor: string | null }> {
     const filter = status ?? "pending";
     if (!STATUS_FILTERS.includes(filter as (typeof STATUS_FILTERS)[number])) {
@@ -83,6 +86,8 @@ export class InvitationsController {
       status: filter,
       limit: resolveLimit(limit),
       cursor: requireCursor(cursor),
+      // F-003 (api-spec §4.2b) — ANDed with `status`.
+      roleId: resolveRoleIdFilter(roleId),
     });
   }
 
@@ -105,7 +110,9 @@ export class InvitationsController {
     @Body() dto: CreateInvitationDto,
     @Res({ passthrough: true }) res: Response,
   ): Promise<IssuedInvitation> {
-    const email = typeof dto.email === "string" ? dto.email.trim() : "";
+    // The ONE email rule (G-11): a hand-rolled `.trim()` here was a partial
+    // second copy of `normalizeEmail` (QA02 → T-003-B18).
+    const email = typeof dto.email === "string" ? normalizeEmail(dto.email) : "";
     const roleId = typeof dto.roleId === "string" ? dto.roleId.trim() : "";
     const fieldErrors: Record<string, string> = {};
     if (email === "") fieldErrors.email = EMAIL_REQUIRED_MESSAGE;
@@ -144,8 +151,13 @@ export class InvitationsController {
     return this.invitations.reissueLink({ invitationId, now: new Date() });
   }
 
-  /** api-spec §3.13 — cancel. Any link already sent stops working at once. */
+  /**
+   * api-spec §3.13 — cancel. Any link already sent stops working at once.
+   * F-003 arch §10: joins `memberWrite` (shared with PATCH/DELETE member) →
+   * `429 RATE_LIMITED`.
+   */
   @RequireCapability(CAPABILITY_MANAGE_MEMBERS)
+  @OrgRateLimit("memberWrite")
   @Delete(":invitationId")
   async cancel(
     @Param("invitationId") invitationId: string,

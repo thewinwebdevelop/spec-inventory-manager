@@ -5,6 +5,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../../core/session/session_controller.dart';
 import '../../../core/session/session_state.dart';
 import '../domain/entities/org_entities.dart';
+import '../domain/entities/role_entities.dart';
 import '../domain/repositories/org_repository.dart';
 
 /// T-002-M3 — DI for the org feature (D-023 style: manual providers, every
@@ -57,6 +58,20 @@ final orgProfileProvider = FutureProvider.autoDispose<OrgProfileView>((ref) asyn
 
 final rolesProvider = FutureProvider.autoDispose<List<RoleRow>>((ref) async {
   return ref.watch(orgScopedRepositoryProvider).listRoles();
+});
+
+/// F-003 R1 — `GET /role-details`. autoDispose + no cache: the verdicts and the
+/// usage counts are decided against the CURRENT state of the shop, and other
+/// people change it (web: `staleTime: 0`).
+final roleDetailsProvider = FutureProvider.autoDispose<RoleDetailsPage>((ref) async {
+  return ref.watch(orgScopedRepositoryProvider).listRoleDetails();
+});
+
+/// F-003 R2 — the capability catalog (labels). Per shop: a tier-gated entry is
+/// hidden entirely, so the answer differs between shops (AC-7.4) — it is
+/// autoDispose and rebuilt per screen visit, never kept across a shop switch.
+final capabilityCatalogProvider = FutureProvider.autoDispose<CapabilityCatalogView>((ref) async {
+  return ref.watch(orgScopedRepositoryProvider).getCapabilityCatalog();
 });
 
 /// Shops whose backup-owner nudge (D-030) has been dismissed with "ไว้ทีหลัง".

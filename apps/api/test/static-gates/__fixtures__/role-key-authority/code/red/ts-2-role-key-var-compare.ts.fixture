@@ -1,0 +1,6 @@
+// G-12 red fixture TS-2 — a `roleKey` value compared (either side).
+export function isOwner(roleKey: string | null, actorRoleKey: string) {
+  if (roleKey === "owner") return true; // ← hit
+  if (actorRoleKey !== ownerKey) return false; // ← hit
+  return OWNER_KEY == roleKey; // ← hit
+}

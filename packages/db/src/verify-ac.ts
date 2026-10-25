@@ -67,7 +67,7 @@ const REQUIRED_UNIQUES: Array<[string, string[]]> = [
   ["BundleComponent", ["sellableSkuId", "inventoryItemId"]],
   ["ChannelListing", ["channelAccountId", "externalSkuId"]],
   ["Membership", ["organizationId", "userId"]],
-  ["Role", ["organizationId", "name"]],
+  // Role name uniqueness moved to an expression/partial index in F-003 (B10) — see REQUIRED_INDEX_DEFS.
   ["Product", ["organizationId", "code"]],
   ["SellableSku", ["organizationId", "code"]],
   ["InventoryItem", ["organizationId", "sku"]],
@@ -79,6 +79,22 @@ const REQUIRED_UNIQUES: Array<[string, string[]]> = [
   ["Invitation", ["tokenHash"]],
   ["Role", ["organizationId", "key"]], // F-002 — display slug, unique per org
   ["PlanDefinition", ["key"]],
+];
+// Expression / partial unique indexes that the column-set query above cannot see
+// (pg_index.indkey holds 0 for an expression). Matched on pg_get_indexdef text.
+const REQUIRED_INDEX_DEFS: Array<[string, string, RegExp]> = [
+  // F-003 AC-3.4: name unique per org, case-insensitive, live rows only
+  [
+    "Role",
+    "Role_org_name_ci_live_key",
+    /^CREATE UNIQUE INDEX "Role_org_name_ci_live_key" ON public\."Role" USING btree \("organizationId", lower\(name\)\) WHERE \("deletedAt" IS NULL\)$/,
+  ],
+  // F-003 SR-07: at most one system role per org
+  [
+    "Role",
+    "Role_one_system_per_org",
+    /^CREATE UNIQUE INDEX "Role_one_system_per_org" ON public\."Role" USING btree \("organizationId"\) WHERE "isSystem"$/,
+  ],
 ];
 const MONEY_COLS: Array<[string, string]> = [
   ["SellableSku", "basePrice"],
@@ -129,6 +145,14 @@ async function ac5() {
   for (const [tbl, cols] of REQUIRED_UNIQUES) {
     const key = [...cols].sort().join(",");
     check("AC5", byTable.get(tbl)?.has(key) ?? false, `${tbl} unique(${cols.join(", ")})`);
+  }
+  const defs = await prisma.$queryRawUnsafe<{ indexname: string; def: string }[]>(
+    `SELECT indexname, indexdef AS def FROM pg_indexes WHERE schemaname='public'`,
+  );
+  const defByName = new Map(defs.map((d) => [d.indexname, d.def]));
+  for (const [tbl, name, shape] of REQUIRED_INDEX_DEFS) {
+    const def = defByName.get(name);
+    check("AC5", def !== undefined && shape.test(def), `${tbl} index ${name} (${def ?? "missing"})`);
   }
 }
 

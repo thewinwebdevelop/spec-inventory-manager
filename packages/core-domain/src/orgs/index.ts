@@ -16,7 +16,7 @@ export {
   type OwnerInvariantInput,
 } from "./owner-invariant";
 
-export { canAssignRole, isOwnerRole, type CanAssignRoleInput } from "./member-authz";
+export { isOwnerRole } from "./member-authz";
 
 // T-002-18 ★ — the membership row of api-spec §3.7/§3.8. `isOwner` is computed
 // from `full_access` here so the UI's "may I show the remove button?" and the
@@ -28,7 +28,21 @@ export {
   type MemberRowMembership,
   type MemberRowRole,
   type MemberRowUser,
+  type MemberManageBlockedReason,
+  type MemberResetBlockedReason,
 } from "./member-view";
+
+// T-003-B22 ★ — viewer verdicts on shipped routes (api-spec §3.1 · architecture §1.2).
+export {
+  decideInvitationManageVisible,
+  decideMemberManageVisible,
+  decideRoleAssignVisible,
+  viewerVerdictAudience,
+  type GrantBlockedReason,
+  type GrantVerdict,
+  type MemberManageVisibleVerdict,
+  type ViewerVerdictAudience,
+} from "./viewer-verdicts";
 
 export {
   isValidThaiTaxId,
@@ -55,12 +69,19 @@ export {
   invitationTtlHours,
   isElevatedRole,
   canAcceptInvitation,
+  decideInviterRecheck,
+  judgeInviterRecheck,
   INVITATION_TTL_HOURS_ELEVATED,
   INVITATION_TTL_HOURS_STANDARD,
   type AcceptInvitationDecision,
   type AcceptableInvitation,
+  type AcceptableInvitationRole,
   type AcceptorMembership,
   type CanAcceptInvitationInput,
+  type InviterRecheckDecision,
+  type InviterRecheckInput,
+  type InviterRecheckReason,
+  type InviterRecheckVerdict,
 } from "./invitation-policy";
 
 export { maskTaxId, TAX_ID_MASK_CHAR, TAX_ID_VISIBLE_SUFFIX_LENGTH } from "./tax-id-mask";
@@ -135,7 +156,11 @@ export {
 // NEW-1/D-030). Same `canAssignRole` rule as the membership routes, no copy.
 export {
   decideAdminReset,
+  decideAdminResetVisible,
   isAdminResetCallerAuthorized,
+  type AdminResetVisibleViewer,
+  type AdminResetVisibleRow,
+  type AdminResetVisibleVerdict,
   type AdminResetDecision,
   type AdminResetInput,
   type AdminResetMembershipFacts,

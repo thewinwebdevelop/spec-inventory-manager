@@ -1,0 +1,156 @@
+{
+  "$comment": "F-003 golden vectors for lostCapabilities(before, after) = expand(before) \\ expand(after), sorted by key (code-unit order). expand(S) = S plus implies[k] for every k in S; full_access expands to every key of the registry; unknown keys are kept. Read by core-domain (U-RB-09), web (CW3-01, import) and mobile (CM3-01, read this file - never copy the values). registries.live is checked against CAPABILITY_REGISTRY by U-RB-09: edit this file together with the registry.",
+  "registries": {
+    "live": [
+      { "key": "full_access", "implies": [] },
+      { "key": "manage_members", "implies": [] },
+      { "key": "manage_roles", "implies": [] },
+      { "key": "manage_org_settings", "implies": [] },
+      { "key": "manage_billing", "implies": [] },
+      { "key": "manage_products", "implies": [] },
+      { "key": "manage_stock", "implies": [] },
+      { "key": "manage_channels", "implies": [] },
+      { "key": "manage_orders", "implies": [] },
+      { "key": "view_financials", "implies": [] },
+      { "key": "access_accounting", "implies": [] }
+    ],
+    "implies_fixture": [
+      { "key": "full_access", "implies": [] },
+      { "key": "manage_members", "implies": [] },
+      { "key": "manage_widgets", "implies": ["view_widgets"] },
+      { "key": "view_widgets", "implies": [] }
+    ]
+  },
+  "vectors": [
+    {
+      "name": "nothing changes",
+      "registry": "live",
+      "before": ["manage_members", "manage_roles"],
+      "after": ["manage_members", "manage_roles"],
+      "lost": []
+    },
+    {
+      "name": "same set in another order",
+      "registry": "live",
+      "before": ["manage_orders", "manage_stock"],
+      "after": ["manage_stock", "manage_orders"],
+      "lost": []
+    },
+    {
+      "name": "gains only",
+      "registry": "live",
+      "before": ["manage_members"],
+      "after": ["manage_members", "manage_roles"],
+      "lost": []
+    },
+    {
+      "name": "drops one",
+      "registry": "live",
+      "before": ["manage_members", "manage_roles"],
+      "after": ["manage_members"],
+      "lost": ["manage_roles"]
+    },
+    {
+      "name": "swaps one for another",
+      "registry": "live",
+      "before": ["manage_members"],
+      "after": ["manage_roles"],
+      "lost": ["manage_members"]
+    },
+    {
+      "name": "duplicates in before count once",
+      "registry": "live",
+      "before": ["manage_stock", "manage_stock", "manage_orders"],
+      "after": ["manage_orders"],
+      "lost": ["manage_stock"]
+    },
+    {
+      "name": "empty before loses nothing",
+      "registry": "live",
+      "before": [],
+      "after": ["manage_members"],
+      "lost": []
+    },
+    {
+      "name": "full_access expands to every registry key",
+      "registry": "live",
+      "before": ["full_access"],
+      "after": ["manage_members"],
+      "lost": [
+        "access_accounting",
+        "full_access",
+        "manage_billing",
+        "manage_channels",
+        "manage_orders",
+        "manage_org_settings",
+        "manage_products",
+        "manage_roles",
+        "manage_stock",
+        "view_financials"
+      ]
+    },
+    {
+      "name": "unknown key is kept and can be lost",
+      "registry": "live",
+      "before": ["manage_members", "legacy_key"],
+      "after": ["manage_members"],
+      "lost": ["legacy_key"]
+    },
+    {
+      "name": "implies: manage_X to view_X keeps the view",
+      "registry": "implies_fixture",
+      "before": ["manage_widgets"],
+      "after": ["view_widgets"],
+      "lost": ["manage_widgets"]
+    },
+    {
+      "name": "implies: dropping manage_X loses both",
+      "registry": "implies_fixture",
+      "before": ["manage_widgets"],
+      "after": ["manage_members"],
+      "lost": ["manage_widgets", "view_widgets"]
+    },
+    {
+      "name": "implies: canonical form (implied key removed) loses nothing",
+      "registry": "implies_fixture",
+      "before": ["manage_widgets", "view_widgets"],
+      "after": ["manage_widgets"],
+      "lost": []
+    },
+    {
+      "name": "implies: upgrading view_X to manage_X loses nothing",
+      "registry": "implies_fixture",
+      "before": ["view_widgets"],
+      "after": ["manage_widgets"],
+      "lost": []
+    },
+    {
+      "name": "implies: full_access to manage_X keeps view_X (only full_access and the other keys are lost)",
+      "registry": "implies_fixture",
+      "before": ["full_access"],
+      "after": ["manage_widgets"],
+      "lost": ["full_access", "manage_members"]
+    },
+    {
+      "name": "after holds only an unknown key: every known key is lost",
+      "registry": "live",
+      "before": ["manage_members", "manage_stock"],
+      "after": ["legacy_key"],
+      "lost": ["manage_members", "manage_stock"]
+    },
+    {
+      "name": "after is full_access: nothing registered is lost",
+      "registry": "live",
+      "before": ["manage_members", "manage_roles", "manage_stock", "view_financials"],
+      "after": ["full_access"],
+      "lost": []
+    },
+    {
+      "name": "after is full_access: an unknown key in before is still lost (full_access covers registry keys only)",
+      "registry": "live",
+      "before": ["full_access", "legacy_key"],
+      "after": ["full_access"],
+      "lost": ["legacy_key"]
+    }
+  ]
+}

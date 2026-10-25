@@ -34,16 +34,18 @@ function renderShell(capabilities: string[]) {
   const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } });
   vi.stubGlobal(
     "fetch",
-    vi.fn(async () => new Response(JSON.stringify({ items: [], nextCursor: null }), { status: 200 })),
+    vi.fn(
+      async () => new Response(JSON.stringify({ items: [], nextCursor: null }), { status: 200 }),
+    ),
   );
   return render(
     <QueryClientProvider client={queryClient}>
       <SessionProvider bootstrap={async () => true}>
-      <ActiveOrgProvider value={activeOrg(capabilities)}>
-        <AppShell>
-          <div>เนื้อหา</div>
-        </AppShell>
-      </ActiveOrgProvider>
+        <ActiveOrgProvider value={activeOrg(capabilities)}>
+          <AppShell>
+            <div>เนื้อหา</div>
+          </AppShell>
+        </ActiveOrgProvider>
       </SessionProvider>
     </QueryClientProvider>,
   );
@@ -74,6 +76,25 @@ describe("AppShell", () => {
   it("shows สมาชิก with manage_members", () => {
     renderShell([CAPABILITY_MANAGE_MEMBERS]);
     expect(screen.getByText(orgTh.shell.nav.members)).toBeInTheDocument();
+  });
+
+  it("★ T-003-W05 · EW3-11 (unit half) — บทบาทและสิทธิ์ is a link to the roles screen for manage_roles", () => {
+    renderShell(["manage_roles"]);
+    const link = screen.getByRole("link", { name: orgTh.shell.nav.roles });
+    expect(link).toHaveAttribute("href", "/o/org_1/settings/roles");
+  });
+
+  it("★ an OWNER (full_access wildcard) sees บทบาทและสิทธิ์ below สมาชิก", () => {
+    renderShell(["full_access"]);
+    const names = screen.getAllByRole("link").map((a) => a.textContent);
+    const members = names.indexOf(orgTh.shell.nav.members);
+    expect(members).toBeGreaterThanOrEqual(0);
+    expect(names.indexOf(orgTh.shell.nav.roles)).toBe(members + 1);
+  });
+
+  it("★ hides บทบาทและสิทธิ์ without manage_roles — even with manage_members (no cross-grant)", () => {
+    renderShell([CAPABILITY_MANAGE_MEMBERS, "view_products"]);
+    expect(screen.queryByText(orgTh.shell.nav.roles)).not.toBeInTheDocument();
   });
 
   it("★ the shop name is visible on every page (org context is never ambiguous)", () => {

@@ -7,7 +7,7 @@
 import { describe, it, expect, beforeAll, afterAll } from "vitest";
 import { PrismaClient, hashInvitationToken } from "@omnistock/db";
 import { SYSTEM_ROLE_BLUEPRINT } from "@omnistock/core-domain";
-import { createSeedKit, type SeedKit } from "./f002-seed.kit";
+import { F002_SCENARIOS, createSeedKit, type SeedKit } from "./f002-seed.kit";
 import { runSeedCli } from "./cli/seed-cli";
 import { applyTestEnv } from "./app.kit";
 
@@ -129,6 +129,24 @@ d("f002-seed.kit (DB)", () => {
       where: { organizationId: result.orgs[0].id, key: null },
     });
     expect(nulls).toBeGreaterThanOrEqual(3); // Custom A, Custom B, and the freed Owner
+  });
+
+  it("★ R3-03: every scenario leaves only roles the F-003 CHECKs accept (read back from the DB)", async () => {
+    // F-003 data-model §3.1: cardinality(capabilities) >= 1, and full_access ⇒
+    // isSystem. Asked of the ROWS, after `setRoleKey`, not of the kit's specs.
+    const orgIds: string[] = [];
+    for (const scenario of F002_SCENARIOS) {
+      const seeded = await kit.scenario(scenario);
+      orgIds.push(...seeded.orgs.map((o) => o.id));
+    }
+    const rows = await prisma.role.findMany({
+      where: { organizationId: { in: orgIds } },
+      select: { name: true, isSystem: true, capabilities: true },
+    });
+    // Non-vacuity: fifty-orgs alone is 150 rows.
+    expect(rows.length).toBeGreaterThanOrEqual(3 * orgIds.length);
+    expect(rows.filter((r) => r.capabilities.length === 0)).toEqual([]);
+    expect(rows.filter((r) => !r.isSystem && r.capabilities.includes("full_access"))).toEqual([]);
   });
 
   it("scenario two-orgs: two tenants, two owners, no shared membership", async () => {

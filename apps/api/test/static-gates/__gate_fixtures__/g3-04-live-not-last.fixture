@@ -1,0 +1,8 @@
+// G3-04 red (review L-2): the helper is present but does not bind the read.
+async function f(tx, id, input) {
+  // a later spread can carry `deletedAt` and override the filter
+  const a = await tx.role.findFirst({ where: { id, ...LIVE_ROLE_WHERE, ...input } });
+  // inside OR the deleted row matches through the other branch
+  const b = await tx.role.findMany({ where: { OR: [LIVE_ROLE_WHERE, { id }] } });
+  return [a, b];
+}

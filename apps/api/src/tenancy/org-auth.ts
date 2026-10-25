@@ -16,6 +16,9 @@ import type { Request } from "express";
  * - `no_membership`— no membership row for (org, user) — INCLUDING "org does not
  *                    exist"; the two are indistinguishable on purpose (I-5).
  * - `revoked` / `not_active` — a membership exists but is not `active`.
+ * - `role_deleted` — (F-003) active membership whose role is soft-deleted. The DB
+ *                    trigger makes this unreachable; if it happens anyway the
+ *                    request is refused like a non-member (fail-closed, §8).
  * - `ok`           — active membership; the org context was established.
  */
 export type OrgAuthOutcome =
@@ -25,6 +28,7 @@ export type OrgAuthOutcome =
   | "no_membership"
   | "revoked"
   | "not_active"
+  | "role_deleted"
   | "skipped";
 
 /**

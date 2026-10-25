@@ -115,7 +115,7 @@ export class OrgProfileService {
           select: {
             status: true,
             roleId: true,
-            role: { select: { name: true, key: true, capabilities: true } },
+            role: { select: { name: true, key: true, capabilities: true, nameCustomized: true } },
           },
         }),
         this.prisma.orgEntitlement.findFirst({
@@ -147,6 +147,7 @@ export class OrgProfileService {
         roleId: membership.roleId,
         roleName: membership.role.name,
         roleKey: membership.role.key,
+        roleNameCustomized: membership.role.nameCustomized,
         capabilities: membership.role.capabilities,
         status: membership.status,
       },

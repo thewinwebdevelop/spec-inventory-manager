@@ -264,6 +264,35 @@ export const ERROR_CODES = {
     status: HttpStatus.FORBIDDEN,
     message: "ไม่มีสิทธิ์เข้าถึง",
   },
+  // F-003 · api-spec §4.3 / §5 (D-034 · AC-5.1/5.3/5.4) — the two authority
+  // refusals the SHIPPED member/invitation routes gain. Both are 403 and both
+  // stay DISTINCT from FORBIDDEN: FORBIDDEN means "you may not do this kind of
+  // thing here", these mean "not to THIS target / not with THIS role" — the
+  // client keeps the user on the screen, refetches, and shows a reason.
+  // Check order on member/invitation routes (api-spec §4.3): FORBIDDEN →
+  // TARGET_NOT_BELOW_ACTOR → ROLE_EXCEEDS_ACTOR, so every case F-002 already
+  // refused still answers byte-for-byte what it did.
+  //
+  // ⚠️ Neither carries `details` on member/invitation routes (AC-6.4): the
+  // capability key that exceeded lives in the `escalation_denied` event only.
+  // The default copy names no capability either (pinned by test).
+  //
+  // Grant axis (⊆): the role being GRANTED (invite / change-role / reissue /
+  // cancel an invitation of it) holds a capability the actor does not.
+  ROLE_EXCEEDS_ACTOR: {
+    code: "ROLE_EXCEEDS_ACTOR",
+    status: HttpStatus.FORBIDDEN,
+    message: "บทบาทนี้มีสิทธิ์ที่คุณไม่มี — ให้เจ้าของร้านทำแทน",
+  },
+  // Target axis (⊊): the TARGET's current role is not strictly below the actor
+  // (equal, above, or incomparable) — change-role / remove a member (D-034), and
+  // edit/delete a role other active members hold with caps equal to the actor's
+  // (D-034 Addendum).
+  TARGET_NOT_BELOW_ACTOR: {
+    code: "TARGET_NOT_BELOW_ACTOR",
+    status: HttpStatus.FORBIDDEN,
+    message: "คุณจัดการรายการนี้ไม่ได้ — ให้เจ้าของร้านช่วย",
+  },
   // F-002 · I-5 — deliberately SEPARATE from FORBIDDEN. "You are not an active
   // member of this org" (incl. the org not existing, or you having been removed)
   // must be distinguishable by the client from "you are a member but lack this

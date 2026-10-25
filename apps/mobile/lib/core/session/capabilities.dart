@@ -23,6 +23,12 @@ const String manageOrgSettingsCapability = 'manage_org_settings';
 /// F-001 defines this one; it is here for the same reason.
 const String manageMembersCapability = 'manage_members';
 
+/// F-003: may see and edit the shop's roles (api-spec: every roles route is
+/// gated on it). It does NOT come with `manage_members`, nor the other way
+/// round — a holder of only this one has no members tab, which is why the
+/// entry lives on "ข้อมูลร้าน" as well (ux-wireframe R1 "ทางเข้า (mobile)").
+const String manageRolesCapability = 'manage_roles';
+
 /// ★ The rule, in one place: `full_access` answers every question.
 ///
 /// A system Owner's role carries `full_access` and nothing else, so a plain

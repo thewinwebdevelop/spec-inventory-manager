@@ -1,4 +1,5 @@
 import '../entities/org_entities.dart';
+import '../entities/role_entities.dart';
 
 /// T-002-M3 — the org feature's ports.
 ///
@@ -21,17 +22,39 @@ abstract interface class OrgDirectory {
 
 abstract interface class OrgScoped {
   /// `GET /orgs/{orgId}/members`.
-  Future<PagedResult<MemberRow>> listMembers({String status = 'active', String? cursor});
+  ///
+  /// [roleId] (F-003, ux R6) narrows to one role, ANDed with [status].
+  Future<PagedResult<MemberRow>> listMembers({
+    String status = 'active',
+    String? roleId,
+    String? cursor,
+  });
 
   /// `GET /orgs/{orgId}/invitations`.
   ///
   /// Defaults to `pending` — the section's job is the work still outstanding
   /// (ux-wireframe §7). `all` is what the "ดูคำเชิญที่หมดอายุ/ยกเลิกแล้ว"
   /// toggle asks for.
-  Future<PagedResult<InvitationRow>> listInvitations({String status = 'pending', String? cursor});
+  ///
+  /// [roleId] (F-003, ux R6) narrows to one role. `pending` here is the
+  /// stored status — it includes rows the server now reports as `expired`.
+  Future<PagedResult<InvitationRow>> listInvitations({
+    String status = 'pending',
+    String? roleId,
+    String? cursor,
+  });
 
   /// `GET /orgs/{orgId}/roles`.
   Future<List<RoleRow>> listRoles();
+
+  /// `GET /orgs/{orgId}/role-details` (F-003 R1/R2) — every live role in full,
+  /// with the caller's per-role verdicts and the create verdict + ceiling.
+  /// Requires `manage_roles`; a refusal arrives as an `ApiFailure`.
+  Future<RoleDetailsPage> listRoleDetails();
+
+  /// `GET /orgs/{orgId}/capabilities` (F-003) — the capability catalog whose
+  /// labels R2 prints (D-037). Requires `manage_roles`.
+  Future<CapabilityCatalogView> getCapabilityCatalog();
 
   /// `GET /orgs/{orgId}` — the shop's profile, for the tax card (§3.4).
   Future<OrgProfileView> getOrganization();

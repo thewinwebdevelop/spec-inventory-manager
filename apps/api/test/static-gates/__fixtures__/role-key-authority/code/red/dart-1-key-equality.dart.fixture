@@ -1,0 +1,9 @@
+// G-12 red fixture DART-1 — a role key compared with == / != (any quote, either side).
+bool canManage(Role role, Membership m, String roleKey) {
+  if (role.key == 'owner') return true; // ← hit
+  if (m.role?.key != "staff") return true; // ← hit
+  if (roleKey == ownerKey) return true; // ← hit
+  if (m.roleKey! != 'admin') return false; // ← hit
+  if ('owner' == key) return true; // ← hit
+  return false;
+}

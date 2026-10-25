@@ -1,0 +1,9 @@
+// G-12 red fixture DART-2 — branching / set membership on a role key.
+int limitFor(Membership m, String? roleKey) {
+  final elevated = const ['owner', 'admin'].contains(m.roleKey); // ← hit
+  if (kElevated.contains(m.role.key)) return 1; // ← hit
+  return switch (roleKey) { // ← hit
+    'owner' => 99, // ← hit DART-3
+    _ => 0,
+  };
+}

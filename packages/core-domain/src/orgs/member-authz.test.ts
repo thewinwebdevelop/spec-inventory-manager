@@ -1,5 +1,27 @@
 import { describe, it, expect } from "vitest";
-import { canAssignRole, isOwnerRole } from "./member-authz";
+import { isOwnerRole } from "./member-authz";
+import { decideMemberAuthority, type MemberAuthorityInput } from "../rbac/member-authority";
+
+/**
+ * F-003 · T-003-B17: the F-002 wrapper `canAssignRole` is deleted (no caller
+ * left). Its mandatory cases still pin the Owner-only rule — now asked of
+ * `decideMemberAuthority` directly, with Owner-marker sets (`[full_access]`
+ * when the target / granted role is an Owner, `[]` otherwise), which isolates
+ * floor + Owner-only from the D-034 axes exactly as the wrapper did.
+ */
+function ownerOnlyRule(input: {
+  readonly actorCapabilities: readonly string[];
+  readonly targetIsOwner: boolean;
+  readonly newRoleIsOwner: boolean;
+}): boolean {
+  return decideMemberAuthority({
+    op: "change_role",
+    actorCapabilities: input.actorCapabilities,
+    actorIsTarget: false,
+    targetCurrentCapabilities: input.targetIsOwner ? ["full_access"] : [],
+    grantCapabilities: input.newRoleIsOwner ? ["full_access"] : [],
+  }).ok;
+}
 
 // F-002 · T-002-08 — U-CD-02 (test-plan §3) + the 8 mandatory cases of
 // data-model §6. Rule under test: only `full_access` may create or touch an
@@ -33,10 +55,10 @@ describe("isOwnerRole (data-model §5.2 — 'is Owner' == has full_access)", () 
   });
 });
 
-describe("canAssignRole — 8 mandatory cases (data-model §6)", () => {
+describe("Owner-only rule via decideMemberAuthority — 8 mandatory cases (data-model §6)", () => {
   it("① Admin changes Staff → Staff: allowed", () => {
     expect(
-      canAssignRole({
+      ownerOnlyRule({
         actorCapabilities: ADMIN_CAPS,
         targetIsOwner: false,
         newRoleIsOwner: false,
@@ -46,7 +68,7 @@ describe("canAssignRole — 8 mandatory cases (data-model §6)", () => {
 
   it("② Admin promotes someone else to Owner: denied", () => {
     expect(
-      canAssignRole({
+      ownerOnlyRule({
         actorCapabilities: ADMIN_CAPS,
         targetIsOwner: false,
         newRoleIsOwner: true,
@@ -58,7 +80,7 @@ describe("canAssignRole — 8 mandatory cases (data-model §6)", () => {
     // Self-promotion is the same shape as ② — the fn must not need to know who
     // the target is; that is exactly why it cannot be bypassed by aiming at self.
     expect(
-      canAssignRole({
+      ownerOnlyRule({
         actorCapabilities: ADMIN_CAPS,
         targetIsOwner: false,
         newRoleIsOwner: true,
@@ -68,7 +90,7 @@ describe("canAssignRole — 8 mandatory cases (data-model §6)", () => {
 
   it("④ Admin demotes an Owner to Staff: denied", () => {
     expect(
-      canAssignRole({
+      ownerOnlyRule({
         actorCapabilities: ADMIN_CAPS,
         targetIsOwner: true,
         newRoleIsOwner: false,
@@ -78,7 +100,7 @@ describe("canAssignRole — 8 mandatory cases (data-model §6)", () => {
 
   it("⑤ Admin revokes an Owner (newRoleIsOwner=false): denied", () => {
     expect(
-      canAssignRole({
+      ownerOnlyRule({
         actorCapabilities: ADMIN_CAPS,
         targetIsOwner: true,
         newRoleIsOwner: false,
@@ -90,7 +112,7 @@ describe("canAssignRole — 8 mandatory cases (data-model §6)", () => {
     for (const targetIsOwner of [false, true]) {
       for (const newRoleIsOwner of [false, true]) {
         expect(
-          canAssignRole({
+          ownerOnlyRule({
             actorCapabilities: OWNER_CAPS,
             targetIsOwner,
             newRoleIsOwner,
@@ -103,7 +125,7 @@ describe("canAssignRole — 8 mandatory cases (data-model §6)", () => {
   it("⑦ actor has manage_members but not full_access + new role holds full_access: denied", () => {
     // A custom F-003 role named anything at all, holding full_access.
     expect(
-      canAssignRole({
+      ownerOnlyRule({
         actorCapabilities: ["manage_members"],
         targetIsOwner: false,
         newRoleIsOwner: true,
@@ -115,7 +137,7 @@ describe("canAssignRole — 8 mandatory cases (data-model §6)", () => {
     for (const targetIsOwner of [false, true]) {
       for (const newRoleIsOwner of [false, true]) {
         expect(
-          canAssignRole({
+          ownerOnlyRule({
             actorCapabilities: [],
             targetIsOwner,
             newRoleIsOwner,
@@ -126,12 +148,12 @@ describe("canAssignRole — 8 mandatory cases (data-model §6)", () => {
   });
 });
 
-describe("canAssignRole — qa additions (U-CD-02 ⑨⑩)", () => {
+describe("Owner-only rule via decideMemberAuthority — qa additions (U-CD-02 ⑨⑩)", () => {
   it("⑨ actor holding full_access AND manage_members: allowed in every combination", () => {
     for (const targetIsOwner of [false, true]) {
       for (const newRoleIsOwner of [false, true]) {
         expect(
-          canAssignRole({
+          ownerOnlyRule({
             actorCapabilities: ["full_access", "manage_members"],
             targetIsOwner,
             newRoleIsOwner,
@@ -143,7 +165,7 @@ describe("canAssignRole — qa additions (U-CD-02 ⑨⑩)", () => {
 
   it("⑩ Admin moves an Owner onto another Owner-capable role: denied", () => {
     expect(
-      canAssignRole({
+      ownerOnlyRule({
         actorCapabilities: ADMIN_CAPS,
         targetIsOwner: true,
         newRoleIsOwner: true,
@@ -152,12 +174,12 @@ describe("canAssignRole — qa additions (U-CD-02 ⑨⑩)", () => {
   });
 });
 
-describe("canAssignRole — call-site shapes (architecture §3.2 table)", () => {
+describe("Owner-only rule via decideMemberAuthority — call-site shapes (architecture §3.2 table)", () => {
   it("Staff (no manage_members) is denied even for an ordinary role change", () => {
     // Defence in depth: the CapabilityGuard already blocks this, but the pure fn
     // must not be the layer that says "yes" to a caller with no member powers.
     expect(
-      canAssignRole({
+      ownerOnlyRule({
         actorCapabilities: STAFF_CAPS,
         targetIsOwner: false,
         newRoleIsOwner: false,
@@ -167,14 +189,14 @@ describe("canAssignRole — call-site shapes (architecture §3.2 table)", () => 
 
   it("create-invite with an Owner role: Admin denied, Owner allowed (targetIsOwner=false)", () => {
     const invite = (actorCapabilities: readonly string[]) =>
-      canAssignRole({ actorCapabilities, targetIsOwner: false, newRoleIsOwner: true });
+      ownerOnlyRule({ actorCapabilities, targetIsOwner: false, newRoleIsOwner: true });
     expect(invite(ADMIN_CAPS)).toBe(false);
     expect(invite(OWNER_CAPS)).toBe(true);
   });
 
   it("admin-reset of an Owner (NEW-1/D-030): Admin denied, Owner allowed", () => {
     const reset = (actorCapabilities: readonly string[]) =>
-      canAssignRole({ actorCapabilities, targetIsOwner: true, newRoleIsOwner: false });
+      ownerOnlyRule({ actorCapabilities, targetIsOwner: true, newRoleIsOwner: false });
     expect(reset(ADMIN_CAPS)).toBe(false);
     expect(reset(OWNER_CAPS)).toBe(true);
   });
@@ -182,8 +204,105 @@ describe("canAssignRole — call-site shapes (architecture §3.2 table)", () => 
   it("does not mutate or depend on capability order", () => {
     const caps = Object.freeze(["manage_members", "full_access"]);
     expect(
-      canAssignRole({ actorCapabilities: caps, targetIsOwner: true, newRoleIsOwner: true }),
+      ownerOnlyRule({ actorCapabilities: caps, targetIsOwner: true, newRoleIsOwner: true }),
     ).toBe(true);
     expect(caps).toEqual(["manage_members", "full_access"]);
+  });
+});
+
+// ── F-003 — the F-002 regression ───────────────────────────────────────────
+// The wrapper `canAssignRole` (U-RB-15: "no logic of its own") was deleted in
+// T-003-B17 once its last call site moved; the equality test that pinned it
+// went with it. The F-002 formula is written out below as the ORACLE — the
+// literal rule that shipped — so "every case F-002 refused is still refused,
+// and still as FORBIDDEN" is checked against history, not against itself.
+
+/** The rule F-002 shipped (F-002 architecture §3.2 + the manage_members floor). */
+function f002CanAssignRole(
+  actor: readonly string[],
+  targetIsOwner: boolean,
+  newRoleIsOwner: boolean,
+): boolean {
+  const owner = actor.includes("full_access");
+  return targetIsOwner || newRoleIsOwner ? owner : owner || actor.includes("manage_members");
+}
+
+const ACTORS: readonly (readonly string[])[] = [
+  [],
+  OWNER_CAPS,
+  ADMIN_CAPS,
+  STAFF_CAPS,
+  ["manage_members"],
+  ["full_access", "manage_members"],
+  ["manage_members", "mystery_key"],
+  ["view_financials"],
+];
+const BOOLS = [false, true] as const;
+
+describe("F-002 oracle · decideMemberAuthority on Owner-marker sets", () => {
+  it("gives F-002's answer for every (actor, targetIsOwner, newRoleIsOwner)", () => {
+    for (const actorCapabilities of ACTORS)
+      for (const targetIsOwner of BOOLS)
+        for (const newRoleIsOwner of BOOLS)
+          expect(
+            ownerOnlyRule({ actorCapabilities, targetIsOwner, newRoleIsOwner }),
+            `actor=${actorCapabilities} tOwner=${targetIsOwner} nOwner=${newRoleIsOwner}`,
+          ).toBe(f002CanAssignRole(actorCapabilities, targetIsOwner, newRoleIsOwner));
+  });
+});
+
+describe("F-002 regression (api-spec §4.3 'ลำดับ code') — every case F-002 refused is still refused as FORBIDDEN, never as a new code", () => {
+  // Whatever the target/grant hold, if F-002 said no, the new rule must say
+  // forbidden | owner_only (→ 403 FORBIDDEN, byte-identical) — the Owner case
+  // wins over TARGET_NOT_BELOW_ACTOR / ROLE_EXCEEDS_ACTOR.
+  const SETS: readonly (readonly string[])[] = [
+    [],
+    OWNER_CAPS,
+    ADMIN_CAPS,
+    STAFF_CAPS,
+    ["manage_members"],
+    ["manage_products", "full_access"],
+    ["manage_members", "manage_roles"],
+    ["mystery_key"],
+  ];
+  const TOUCHES_TARGET = new Set(["change_role", "remove", "reset_password"]);
+  const GRANTS = new Set(["change_role", "invite_create", "invite_reissue"]);
+
+  function inputFor(
+    op: "change_role" | "remove" | "reset_password" | "invite_create" | "invite_reissue",
+    actorCapabilities: readonly string[],
+    t: readonly string[],
+    g: readonly string[],
+  ): MemberAuthorityInput {
+    const base = { actorCapabilities, actorIsTarget: false };
+    if (op === "change_role")
+      return { ...base, op, targetCurrentCapabilities: t, grantCapabilities: g };
+    if (op === "remove" || op === "reset_password")
+      return { ...base, op, targetCurrentCapabilities: t };
+    return { ...base, op, grantCapabilities: g };
+  }
+
+  it("holds for every op F-002 ruled on × actor × target × grant", () => {
+    let refusedByF002 = 0;
+    for (const op of [
+      "change_role",
+      "remove",
+      "reset_password",
+      "invite_create",
+      "invite_reissue",
+    ] as const)
+      for (const actor of ACTORS)
+        for (const t of SETS)
+          for (const g of SETS) {
+            const targetIsOwner = TOUCHES_TARGET.has(op) && isOwnerRole(t);
+            const newRoleIsOwner = GRANTS.has(op) && isOwnerRole(g);
+            if (f002CanAssignRole(actor, targetIsOwner, newRoleIsOwner)) continue;
+            refusedByF002++;
+            const r = decideMemberAuthority(inputFor(op, actor, t, g));
+            const label = `${op} actor=${actor} t=${t} g=${g}`;
+            expect(r.ok, label).toBe(false);
+            if (!r.ok) expect(["forbidden", "owner_only"], label).toContain(r.reason);
+          }
+    expect(refusedByF002).toBeGreaterThan(500); // non-vacuity
   });
 });

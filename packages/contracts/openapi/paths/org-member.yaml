@@ -27,6 +27,24 @@ patch:
     The target's state is re-read INSIDE the transaction, after the shop's row
     lock is taken — so a `PATCH` racing a `DELETE` answers `404`, never a 500 or
     a resurrection.
+
+
+    ⚠️ F-003 NARROWS THIS ROUTE — THE WIRE SHAPE IS UNCHANGED, SO NO DIFF TOOL
+    SEES IT (F-003 api-spec §4.3, D-034 · AC-5.1/5.4). Checks run in this fixed
+    order, and every case F-002 already refused still answers exactly what it
+    did:
+      1. touching an Owner without `full_access` → `403 FORBIDDEN` (as before);
+      2. the target's CURRENT role is not strictly below the caller's
+         capabilities (equal, above, or incomparable) →
+         `403 TARGET_NOT_BELOW_ACTOR` — except when the target is the caller
+         (stepping yourself down stays allowed, D-029);
+      3. the NEW role holds a capability the caller does not →
+         `403 ROLE_EXCEEDS_ACTOR` — this one applies to yourself too.
+    Neither new code carries `details` (AC-6.4). A "change" to the role the
+    target already has is checked the same way and is not short-circuited:
+    refused → the 403 above; allowed → `200` and the same `role_changed` event
+    as F-002 (SR-19). The route also joins the `memberWrite` rate limit
+    (120/hour per caller per shop) → `429 RATE_LIMITED` with `Retry-After`.
   tags:
     - members
   security:
@@ -58,7 +76,11 @@ patch:
     "403":
       description: >
         `FORBIDDEN` — missing `manage_members`, or the Owner-only rule — or
-        `ORG_ACCESS_DENIED` (not a member of this shop).
+        `ORG_ACCESS_DENIED` (not a member of this shop) · F-003:
+        `TARGET_NOT_BELOW_ACTOR` — the target's current role is not strictly
+        below yours · `ROLE_EXCEEDS_ACTOR` — the new role holds a capability
+        you do not. Neither carries `details`; refetch the member list and
+        roles rather than retrying.
       content:
         application/json:
           schema:
@@ -97,6 +119,18 @@ patch:
         application/json:
           schema:
             $ref: "../components/common.yaml#/ErrorResponse"
+    "429":
+      description: >
+        `RATE_LIMITED` — F-003 `memberWrite`: 120 member writes per hour per
+        caller per shop, shared with `DELETE …/members/{userId}` and
+        `DELETE …/invitations/{invitationId}`.
+      headers:
+        Retry-After:
+          $ref: "../components/headers.yaml#/RetryAfter"
+      content:
+        application/json:
+          schema:
+            $ref: "../components/common.yaml#/ErrorResponse"
 
 delete:
   operationId: revokeMember
@@ -129,6 +163,14 @@ delete:
 
     Idempotency under a race: two concurrent revokes of the same person produce
     one `200` and one `404`, and `revokedAt` is written once.
+
+
+    ⚠️ F-003 NARROWS THIS ROUTE (wire shape unchanged — F-003 api-spec §4.3,
+    D-034 · AC-5.4): after the Owner rule, a target whose role is not strictly
+    below the caller's capabilities → `403 TARGET_NOT_BELOW_ACTOR` (no
+    `details`). Removing yourself is exempt (D-029). The route also joins the
+    `memberWrite` rate limit (120/hour per caller per shop) →
+    `429 RATE_LIMITED` with `Retry-After`.
   tags:
     - members
   security:
@@ -154,7 +196,9 @@ delete:
     "403":
       description: >
         `FORBIDDEN` — missing `manage_members`, or removing an Owner without
-        `full_access` — or `ORG_ACCESS_DENIED`.
+        `full_access` — or `ORG_ACCESS_DENIED` · F-003:
+        `TARGET_NOT_BELOW_ACTOR` — the target's role is not strictly below
+        yours (no `details`).
       content:
         application/json:
           schema:
@@ -175,6 +219,17 @@ delete:
             $ref: "../components/common.yaml#/ErrorResponse"
     "422":
       description: "`ORG_CONTEXT_REQUIRED` / `ORG_MISMATCH`"
+      content:
+        application/json:
+          schema:
+            $ref: "../components/common.yaml#/ErrorResponse"
+    "429":
+      description: >
+        `RATE_LIMITED` — F-003 `memberWrite` (shared with PATCH on this path
+        and `DELETE …/invitations/{invitationId}`).
+      headers:
+        Retry-After:
+          $ref: "../components/headers.yaml#/RetryAfter"
       content:
         application/json:
           schema:

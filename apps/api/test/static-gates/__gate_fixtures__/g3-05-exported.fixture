@@ -1,0 +1,5 @@
+// G3-05 red fixture: member-authority.ts exporting the comparison, which
+// would let any other file call it without the two-axis order around it.
+export function isProperSubset(a: readonly string[], b: readonly string[]): boolean {
+  return a.length < b.length;
+}

@@ -34,6 +34,7 @@ import type { Response } from "express";
 import { CAPABILITY_MANAGE_MEMBERS, type MemberRow } from "@omnistock/core-domain";
 import { domainError } from "../common";
 import { RequireCapability } from "../common/authz";
+import { OrgRateLimit } from "../common/org-rate-limit.decorator";
 import { requireCursor, resolveLimit } from "../common/cursor";
 import { JsonOnlyGuard } from "../auth";
 import { UpdateMemberRoleDto } from "./dto";
@@ -44,6 +45,7 @@ import {
   type RevokeMemberResult,
 } from "./members.service";
 import { ORG_PROFILE_RESPONSE_HEADERS, applyResponseHeaders } from "./response-headers";
+import { resolveRoleIdFilter } from "./role-filter";
 
 /**
  * `?status=` — api-spec §3.7. `invited` is NOT an option: no production write
@@ -75,6 +77,7 @@ export class MembersController {
     @Query("cursor") cursor?: string,
     @Query("limit") limit?: string,
     @Query("withTotal") withTotal?: string,
+    @Query("roleId") roleId?: unknown,
   ): Promise<MemberListPage> {
     // §3.7 — `all` is the DEFAULT here (unlike `/me/organizations`, where the
     // default is `active`): this screen is the audit view of who is and who was
@@ -93,6 +96,8 @@ export class MembersController {
       // Opt-in only (api-spec §1): a `count` on every page is a second query
       // the switcher-style callers do not need.
       withTotal: withTotal === "true",
+      // F-003 (api-spec §4.2b) — ANDed with `status`.
+      roleId: resolveRoleIdFilter(roleId),
     });
   }
 
@@ -101,11 +106,16 @@ export class MembersController {
    * client never has to refetch the list to render the new state.
    *
    * Errors: `403 FORBIDDEN` (missing capability, or the Owner-only rule) ·
+   * F-003 (D-034): `403 TARGET_NOT_BELOW_ACTOR` (the target's role is not
+   * strictly below yours — unless the target is you) · `403 ROLE_EXCEEDS_ACTOR`
+   * (the new role holds something you do not) ·
    * `404 NOT_FOUND` (not an active member of this shop) · `409 LAST_OWNER` ·
    * `409 CONFLICT` + `details.reason="busy"` (lock contention) ·
-   * `422 ROLE_INVALID` / `422 VALIDATION_FAILED` · `415`.
+   * `422 ROLE_INVALID` / `422 VALIDATION_FAILED` · `415` · `429 RATE_LIMITED`
+   * (`memberWrite`, shared with DELETE — architecture §10).
    */
   @RequireCapability(CAPABILITY_MANAGE_MEMBERS)
+  @OrgRateLimit("memberWrite")
   @Patch(":userId")
   @UseGuards(JsonOnlyGuard)
   async updateRole(
@@ -131,8 +141,13 @@ export class MembersController {
    * Removing YOURSELF through this route is allowed, but only for someone who
    * already holds `manage_members`; everybody else uses `DELETE …/membership`
    * (§3.17). This route grants nobody a softer path (D-029).
+   *
+   * F-003 (D-034): removing someone whose role is not strictly below yours is
+   * `403 TARGET_NOT_BELOW_ACTOR` (yourself excepted) · `429 RATE_LIMITED`
+   * (`memberWrite`).
    */
   @RequireCapability(CAPABILITY_MANAGE_MEMBERS)
+  @OrgRateLimit("memberWrite")
   @Delete(":userId")
   async revoke(
     @Param("userId") userId: string,

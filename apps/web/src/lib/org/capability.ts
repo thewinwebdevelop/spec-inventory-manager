@@ -4,7 +4,8 @@
  * It exists because the answer is not `set.has(x)`, and getting that wrong is
  * invisible in every unit test that supplies its own capability list.
  *
- * `full_access` is a WILDCARD (core-domain `hasCapability`, and the server's
+ * `full_access` is a WILDCARD over every REGISTERED capability (core-domain
+ * `hasCapability` expands it via CAPABILITY_REGISTRY — F-003; the server's
  * `CapabilityGuard` honours it). A system Owner's role carries `full_access`
  * and NOTHING else — `SYSTEM_ROLE_BLUEPRINT` grants no `manage_members`, no
  * `manage_org_settings` — so a membership test written as `has("manage_x")`
@@ -27,6 +28,7 @@ import {
   CAPABILITY_FULL_ACCESS,
   CAPABILITY_MANAGE_MEMBERS,
   CAPABILITY_MANAGE_ORG_SETTINGS,
+  CAPABILITY_MANAGE_ROLES,
 } from "@omnistock/core-domain";
 
 export function can(capabilities: ReadonlySet<string>, capability: string): boolean {
@@ -46,3 +48,17 @@ export function can(capabilities: ReadonlySet<string>, capability: string): bool
  * The guard in `capability-lint.test.ts` now fails on a sixth copy.
  */
 export { CAPABILITY_FULL_ACCESS, CAPABILITY_MANAGE_MEMBERS, CAPABILITY_MANAGE_ORG_SETTINGS };
+
+/**
+ * ★ T-003-W01 / W05 — F-003's gate for the roles screens (api-spec: every new
+ * role route requires it). Re-exported from core-domain now that
+ * `rbac/registry` (T-003-B03) has landed — the W01 TODO, closed.
+ */
+export { CAPABILITY_MANAGE_ROLES };
+
+/** The capabilities a route may be gated on. A typo is a compile error, not a
+ *  silently hidden screen. Grows as features add names. */
+export type GateCapability =
+  | typeof CAPABILITY_MANAGE_MEMBERS
+  | typeof CAPABILITY_MANAGE_ORG_SETTINGS
+  | typeof CAPABILITY_MANAGE_ROLES;

@@ -23,6 +23,11 @@ part 'member_row.g.dart';
 /// * [createdAt] 
 /// * [isMe] - Decided server-side, so the client never compares ids itself.
 /// * [isOwner] - This row's role holds `full_access`. Computed from CAPABILITIES, never from the role's name or key. Use it to hide buttons; the server enforces. 
+/// * [roleNameCustomized] - F-003 (AC-1.5) — the shop renamed this role (always `true` when `roleKey` is `null`). Display `roleNameCustomized ? roleName : (translate roleKey ?? roleName)`. 
+/// * [viewerCanManage] - F-003 (api-spec §3.1) — may the CALLER change this member's role or remove them? The same rule the write applies (the target must hold strictly less than the caller; your own row is `true`). A UX input, never enforcement: the write re-reads permissions and may still refuse.  ⚠️ PRESENT ONLY when the caller holds BOTH `manage_members` and `manage_roles`, and only on `active` rows (architecture §1.2 — anyone else would learn \"this role equals mine exactly\"). Absent ⇒ keep the F-002 behaviour (show the buttons on active, non-Owner, non-self rows) and show generic copy if the write answers `403 TARGET_NOT_BELOW_ACTOR`. `LAST_OWNER` is shop state, not part of this verdict. 
+/// * [manageBlockedReason] - Present with `viewerCanManage`; `null` when it is `true`. OPEN SET, in this fixed order: `owner_only` → `equal_permissions` (same permissions as you — ask the Owner) → `exceeds_your_permissions`. Any other value → generic copy. 
+/// * [viewerCanResetPassword] - F-003 — may the CALLER reset this member's password? Same audience as `viewerCanManage`. `true` means \"no rule you can see blocks it\": the reset may still answer its uniform `404` for a reason that is not yours to see (e.g. the member also belongs to another shop). 
+/// * [resetBlockedReason] - Present with `viewerCanResetPassword`; `null` when it is `true`. OPEN SET, in this fixed order: `self` → `owner_only` → `equal_permissions` → `exceeds_your_permissions`. Any other value → generic copy. 
 @BuiltValue()
 abstract class MemberRow implements Built<MemberRow, MemberRowBuilder> {
   @BuiltValueField(wireName: r'userId')
@@ -62,6 +67,26 @@ abstract class MemberRow implements Built<MemberRow, MemberRowBuilder> {
   /// This row's role holds `full_access`. Computed from CAPABILITIES, never from the role's name or key. Use it to hide buttons; the server enforces. 
   @BuiltValueField(wireName: r'isOwner')
   bool get isOwner;
+
+  /// F-003 (AC-1.5) — the shop renamed this role (always `true` when `roleKey` is `null`). Display `roleNameCustomized ? roleName : (translate roleKey ?? roleName)`. 
+  @BuiltValueField(wireName: r'roleNameCustomized')
+  bool? get roleNameCustomized;
+
+  /// F-003 (api-spec §3.1) — may the CALLER change this member's role or remove them? The same rule the write applies (the target must hold strictly less than the caller; your own row is `true`). A UX input, never enforcement: the write re-reads permissions and may still refuse.  ⚠️ PRESENT ONLY when the caller holds BOTH `manage_members` and `manage_roles`, and only on `active` rows (architecture §1.2 — anyone else would learn \"this role equals mine exactly\"). Absent ⇒ keep the F-002 behaviour (show the buttons on active, non-Owner, non-self rows) and show generic copy if the write answers `403 TARGET_NOT_BELOW_ACTOR`. `LAST_OWNER` is shop state, not part of this verdict. 
+  @BuiltValueField(wireName: r'viewerCanManage')
+  bool? get viewerCanManage;
+
+  /// Present with `viewerCanManage`; `null` when it is `true`. OPEN SET, in this fixed order: `owner_only` → `equal_permissions` (same permissions as you — ask the Owner) → `exceeds_your_permissions`. Any other value → generic copy. 
+  @BuiltValueField(wireName: r'manageBlockedReason')
+  String? get manageBlockedReason;
+
+  /// F-003 — may the CALLER reset this member's password? Same audience as `viewerCanManage`. `true` means \"no rule you can see blocks it\": the reset may still answer its uniform `404` for a reason that is not yours to see (e.g. the member also belongs to another shop). 
+  @BuiltValueField(wireName: r'viewerCanResetPassword')
+  bool? get viewerCanResetPassword;
+
+  /// Present with `viewerCanResetPassword`; `null` when it is `true`. OPEN SET, in this fixed order: `self` → `owner_only` → `equal_permissions` → `exceeds_your_permissions`. Any other value → generic copy. 
+  @BuiltValueField(wireName: r'resetBlockedReason')
+  String? get resetBlockedReason;
 
   MemberRow._();
 
@@ -141,6 +166,41 @@ class _$MemberRowSerializer implements PrimitiveSerializer<MemberRow> {
       object.isOwner,
       specifiedType: const FullType(bool),
     );
+    if (object.roleNameCustomized != null) {
+      yield r'roleNameCustomized';
+      yield serializers.serialize(
+        object.roleNameCustomized,
+        specifiedType: const FullType(bool),
+      );
+    }
+    if (object.viewerCanManage != null) {
+      yield r'viewerCanManage';
+      yield serializers.serialize(
+        object.viewerCanManage,
+        specifiedType: const FullType(bool),
+      );
+    }
+    if (object.manageBlockedReason != null) {
+      yield r'manageBlockedReason';
+      yield serializers.serialize(
+        object.manageBlockedReason,
+        specifiedType: const FullType.nullable(String),
+      );
+    }
+    if (object.viewerCanResetPassword != null) {
+      yield r'viewerCanResetPassword';
+      yield serializers.serialize(
+        object.viewerCanResetPassword,
+        specifiedType: const FullType(bool),
+      );
+    }
+    if (object.resetBlockedReason != null) {
+      yield r'resetBlockedReason';
+      yield serializers.serialize(
+        object.resetBlockedReason,
+        specifiedType: const FullType.nullable(String),
+      );
+    }
   }
 
   @override
@@ -243,6 +303,43 @@ class _$MemberRowSerializer implements PrimitiveSerializer<MemberRow> {
             specifiedType: const FullType(bool),
           ) as bool;
           result.isOwner = valueDes;
+          break;
+        case r'roleNameCustomized':
+          final valueDes = serializers.deserialize(
+            value,
+            specifiedType: const FullType(bool),
+          ) as bool;
+          result.roleNameCustomized = valueDes;
+          break;
+        case r'viewerCanManage':
+          final valueDes = serializers.deserialize(
+            value,
+            specifiedType: const FullType(bool),
+          ) as bool;
+          result.viewerCanManage = valueDes;
+          break;
+        case r'manageBlockedReason':
+          final valueDes = serializers.deserialize(
+            value,
+            specifiedType: const FullType.nullable(String),
+          ) as String?;
+          if (valueDes == null) continue;
+          result.manageBlockedReason = valueDes;
+          break;
+        case r'viewerCanResetPassword':
+          final valueDes = serializers.deserialize(
+            value,
+            specifiedType: const FullType(bool),
+          ) as bool;
+          result.viewerCanResetPassword = valueDes;
+          break;
+        case r'resetBlockedReason':
+          final valueDes = serializers.deserialize(
+            value,
+            specifiedType: const FullType.nullable(String),
+          ) as String?;
+          if (valueDes == null) continue;
+          result.resetBlockedReason = valueDes;
           break;
         default:
           unhandled.add(key);

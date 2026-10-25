@@ -1,0 +1,8 @@
+// G3-04 red: raw SQL reading Role — FROM and JOIN, neither labelled.
+async function raw(tx) {
+  await tx.$queryRawUnsafe(`SELECT id FROM "Role" WHERE "organizationId" = $1`, org);
+  return tx.$queryRawUnsafe(
+    `SELECT m.id FROM "Membership" m
+       JOIN "Role" r ON r.id = m."roleId"`,
+  );
+}

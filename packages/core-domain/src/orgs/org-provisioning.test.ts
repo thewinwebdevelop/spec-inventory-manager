@@ -23,6 +23,7 @@ import {
   CAPABILITY_MANAGE_MEMBERS,
   CAPABILITY_MANAGE_ORG_SETTINGS,
 } from "../auth/capabilities";
+import { CAPABILITY_MANAGE_ROLES } from "../rbac/registry";
 
 describe("SYSTEM_ROLE_BLUEPRINT — data-model §5.2, row for row", () => {
   it("is exactly Owner / Admin / Staff, in that order", () => {
@@ -50,6 +51,13 @@ describe("SYSTEM_ROLE_BLUEPRINT — data-model §5.2, row for row", () => {
     // …and NOT full_access: an Admin who could promote themselves to Owner is
     // finding C-1 (architecture §3.2).
     expect(admin.capabilities).not.toContain(CAPABILITY_FULL_ACCESS);
+  });
+
+  it("Admin holds manage_roles (AC-1.2 · T-003-B11) and is stored in canonical byte order", () => {
+    const admin = SYSTEM_ROLE_BLUEPRINT[1];
+    expect(admin.capabilities).toContain(CAPABILITY_MANAGE_ROLES);
+    expect(admin.capabilities).toHaveLength(8);
+    expect([...admin.capabilities]).toEqual([...admin.capabilities].sort());
   });
 
   it("Staff holds neither of the two F-002 capabilities", () => {

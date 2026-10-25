@@ -36,7 +36,8 @@
 > `.fg`/`.bg`/`.border` = สีตัวอักษร/พื้นหลัง/เส้นขอบของ role นั้น. ทุก status pair (fg-on-bg) ผ่าน AA.
 
 | Token | Hex | ใช้ที่ไหน |
-|---|---|---|
+| ----- | --- | --------- |
+
 > **แบรนด์: "Calm Teal (deep)"** — เขียว-teal เข้ม (เชื่อใจ+calm) + apricot อุ่น (เป็นมิตร) บนพื้น
 > near-neutral · เคาะ 2026-07-19 จาก mockup [mockup/foundation.html](mockup/foundation.html) (ทิศทาง E) →
 > D-026 · แทนที่ชุดฟ้า `#1F6FEB` เดิม (F-000/F-001) — โค้ด F-001 ต้อง refactor ตาม (Phase 2)
@@ -85,24 +86,24 @@
 > ธีมมืดเปิดผ่าน `prefers-color-scheme` + toggle (`data-theme`) · พื้น **neutral charcoal** (ไม่อมเขียว
 > จัด) เพื่อให้ปุ่ม/สีแบรนด์ป็อป · status ปรับให้อ่านบนพื้นมืด
 
-| Token | Hex (dark) | หมายเหตุ |
-|---|---|---|
-| `color.primary` | `#2FBBA6` | ลิงก์/focus/ไอคอน/โลโก้บนพื้นมืด (สว่างพอให้อ่านออก — **ไม่ใช่สีปุ่ม**, ดู §1.1c) |
-| `color.primary.hover` | `#45C7B3` | hover ลิงก์/ghost |
-| `color.accent` | `#EEB073` | highlight/chip (apricot หรี่) |
-| `color.accent.soft` | `#33291B` | พื้น chip เน้นอ่อน |
-| `color.accent.text` | `#F1C48C` | ตัวอักษรบน accent.soft |
-| `color.danger` / `.bg` / `.border` / `.text` | `#E9897F` / `#2C1A18` / `#5A322D` / `#F0A79E` | error (dark) |
-| `color.warning` / `.bg` / `.border` / `.text` | `#E0B25A` / `#2A2213` / `#544321` / `#EBC981` | throttle (dark) |
-| `color.success` / `.bg` / `.border` / `.text` | `#6FC194` / `#16261D` / `#2C4636` / `#8FD3AD` | success (dark) |
-| `color.info.bg` / `.border` / `.text` | `#2A2D2C` / `#363A38` / `#E9EEEB` | `Banner` tone info (dark) — เป็นกลาง ไม่ใช่สีสถานะ |
-| `color.badge.neutral.bg` / `.text` | `#2A2D2C` / `#98A29D` | `Badge` variant `neutral` (dark) |
-| `color.surface` | `#212423` | พื้น card/dialog |
-| `color.surface.muted` | `#2A2D2C` | พื้นรอง |
-| `color.bg` | `#171918` | พื้นหลังหน้า (neutral charcoal) |
-| `color.text` | `#E9EEEB` | ตัวอักษรหลัก |
-| `color.text.muted` | `#98A29D` | helper/subtitle |
-| `color.border.default` | `#363A38` | เส้นคั่น/field border |
+| Token                                         | Hex (dark)                                    | หมายเหตุ                                                                          |
+| --------------------------------------------- | --------------------------------------------- | --------------------------------------------------------------------------------- |
+| `color.primary`                               | `#2FBBA6`                                     | ลิงก์/focus/ไอคอน/โลโก้บนพื้นมืด (สว่างพอให้อ่านออก — **ไม่ใช่สีปุ่ม**, ดู §1.1c) |
+| `color.primary.hover`                         | `#45C7B3`                                     | hover ลิงก์/ghost                                                                 |
+| `color.accent`                                | `#EEB073`                                     | highlight/chip (apricot หรี่)                                                     |
+| `color.accent.soft`                           | `#33291B`                                     | พื้น chip เน้นอ่อน                                                                |
+| `color.accent.text`                           | `#F1C48C`                                     | ตัวอักษรบน accent.soft                                                            |
+| `color.danger` / `.bg` / `.border` / `.text`  | `#E9897F` / `#2C1A18` / `#5A322D` / `#F0A79E` | error (dark)                                                                      |
+| `color.warning` / `.bg` / `.border` / `.text` | `#E0B25A` / `#2A2213` / `#544321` / `#EBC981` | throttle (dark)                                                                   |
+| `color.success` / `.bg` / `.border` / `.text` | `#6FC194` / `#16261D` / `#2C4636` / `#8FD3AD` | success (dark)                                                                    |
+| `color.info.bg` / `.border` / `.text`         | `#2A2D2C` / `#363A38` / `#E9EEEB`             | `Banner` tone info (dark) — เป็นกลาง ไม่ใช่สีสถานะ                                |
+| `color.badge.neutral.bg` / `.text`            | `#2A2D2C` / `#98A29D`                         | `Badge` variant `neutral` (dark)                                                  |
+| `color.surface`                               | `#212423`                                     | พื้น card/dialog                                                                  |
+| `color.surface.muted`                         | `#2A2D2C`                                     | พื้นรอง                                                                           |
+| `color.bg`                                    | `#171918`                                     | พื้นหลังหน้า (neutral charcoal)                                                   |
+| `color.text`                                  | `#E9EEEB`                                     | ตัวอักษรหลัก                                                                      |
+| `color.text.muted`                            | `#98A29D`                                     | helper/subtitle                                                                   |
+| `color.border.default`                        | `#363A38`                                     | เส้นคั่น/field border                                                             |
 
 ### 1.1c Interaction tokens (ปุ่ม — token แยกจาก `color.primary`)
 
@@ -128,38 +129,38 @@
 
 #### 1.1c-1 Focus ring (D-031 ข้อ 4)
 
-| token / กติกา | ค่า |
-|---|---|
-| `focus.ring.color` | `color.primary` (light `#0C6155` · dark `#2FBBA6`) |
-| `focus.ring.w` | `2.5px` |
-| `focus.ring.offset` | `2px` — **จำเป็น** เพราะปุ่มหลักมีพื้นเป็น `color.primary` สีเดียวกับ ring; offset 0 = ring หายกลืนไปกับพื้นปุ่ม |
-| แสดงเมื่อไหร่ | **`:focus-visible` เท่านั้น** (คลิกเมาส์ไม่ขึ้น ring) · Flutter = `FocusableActionDetector` / `WidgetState.focused` ที่มาจาก **keyboard traversal** — พฤติกรรมเดียวกัน |
-| ⛔ ห้าม | ใช้ ring แทนการทำ "ปุ่มเด่น" · โชว์ ring ค้าง · ลบ ring ทิ้งโดยไม่ใส่ของแทน · **ลำดับความสำคัญของปุ่มสื่อด้วย `variant` เท่านั้น** |
-| mockup | ห้ามวาด ring ค้างในภาพนิ่ง — ใช้ป้ายกำกับ "ภาพจำลอง `:focus-visible`" คู่กับภาพสถานะพัก |
+| token / กติกา       | ค่า                                                                                                                                                                    |
+| ------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `focus.ring.color`  | `color.primary` (light `#0C6155` · dark `#2FBBA6`)                                                                                                                     |
+| `focus.ring.w`      | `2.5px`                                                                                                                                                                |
+| `focus.ring.offset` | `2px` — **จำเป็น** เพราะปุ่มหลักมีพื้นเป็น `color.primary` สีเดียวกับ ring; offset 0 = ring หายกลืนไปกับพื้นปุ่ม                                                       |
+| แสดงเมื่อไหร่       | **`:focus-visible` เท่านั้น** (คลิกเมาส์ไม่ขึ้น ring) · Flutter = `FocusableActionDetector` / `WidgetState.focused` ที่มาจาก **keyboard traversal** — พฤติกรรมเดียวกัน |
+| ⛔ ห้าม             | ใช้ ring แทนการทำ "ปุ่มเด่น" · โชว์ ring ค้าง · ลบ ring ทิ้งโดยไม่ใส่ของแทน · **ลำดับความสำคัญของปุ่มสื่อด้วย `variant` เท่านั้น**                                     |
+| mockup              | ห้ามวาด ring ค้างในภาพนิ่ง — ใช้ป้ายกำกับ "ภาพจำลอง `:focus-visible`" คู่กับภาพสถานะพัก                                                                                |
 
 #### 1.1c-2 ปุ่ม/ลิงก์ที่อยู่ **ใน** `Banner` — ใช้โทนของกล่องนั้น (D-031 ข้อ 3)
 
 > ที่มา: ปุ่ม "ลองใหม่" ใน `ErrorBanner` เดิมเป็น outline โทนกลาง (ตัวอักษร `color.text` + ขอบเทา) วางบนพื้น
 > `danger.bg` ⇒ ดูเหมือนของที่ลอยมาจากที่อื่น ไม่ใช่ส่วนหนึ่งของกล่อง
 
-| กติกา | ค่า |
-|---|---|
-| ตัวอักษรปุ่ม | `currentColor` = `<tone>.text` ของ banner นั้น (danger `#8F291F` / warning `#7E5008` / success `#1F5D3D` / info `color.text`) |
-| ขอบปุ่ม | `color-mix(in srgb, currentColor 65%, transparent)` — ผ่าน ≥3:1 บนพื้น `<tone>.bg` ทั้ง light + dark (ตรวจแล้ว) · สูตรเดียวกับปุ่ม outline ด้านบน แต่ยึดกับ fg ของ tone แทน `text.muted` |
-| hover | ขอบ `currentColor` เต็ม + พื้น `color-mix(in srgb, currentColor 10%, transparent)` |
-| ⛔ ห้าม | ปุ่ม fill (`primary` / `destructive`) ในกล่องโทน **danger / warning / success** — แย่ง hierarchy กับปุ่มหลักของจอ และสีปุ่มชนกับพื้นสถานะ |
-| ยกเว้น | กล่องโทน **info** (เป็นกลาง) ใช้ปุ่ม `primary` ได้ **1 ปุ่ม** ถ้าเป็น CTA หลักของการ์ดนั้น · ถ้าเป็นแค่คำแนะนำ ใช้ `secondary` / `tertiary` |
+| กติกา        | ค่า                                                                                                                                                                                      |
+| ------------ | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| ตัวอักษรปุ่ม | `currentColor` = `<tone>.text` ของ banner นั้น (danger `#8F291F` / warning `#7E5008` / success `#1F5D3D` / info `color.text`)                                                            |
+| ขอบปุ่ม      | `color-mix(in srgb, currentColor 65%, transparent)` — ผ่าน ≥3:1 บนพื้น `<tone>.bg` ทั้ง light + dark (ตรวจแล้ว) · สูตรเดียวกับปุ่ม outline ด้านบน แต่ยึดกับ fg ของ tone แทน `text.muted` |
+| hover        | ขอบ `currentColor` เต็ม + พื้น `color-mix(in srgb, currentColor 10%, transparent)`                                                                                                       |
+| ⛔ ห้าม      | ปุ่ม fill (`primary` / `destructive`) ในกล่องโทน **danger / warning / success** — แย่ง hierarchy กับปุ่มหลักของจอ และสีปุ่มชนกับพื้นสถานะ                                                |
+| ยกเว้น       | กล่องโทน **info** (เป็นกลาง) ใช้ปุ่ม `primary` ได้ **1 ปุ่ม** ถ้าเป็น CTA หลักของการ์ดนั้น · ถ้าเป็นแค่คำแนะนำ ใช้ `secondary` / `tertiary`                                              |
 
 #### 1.1c-3 `Button` — variant / size / state (D-031 ข้อ 2 + 5)
 
-| variant / size | Visual spec (token เท่านั้น) | ใช้เมื่อไหร่ |
-|---|---|---|
-| `size="md"` (default) | `type.button.md` (16/24/600) · padding `space.3` / 18px · **min-height `size.tap-target.min` (44px)** | ปุ่มทั่วไป |
-| `size="sm"` | **`type.button.sm` (14/20/600)** · padding แนวนอน `space.3` (12px) · **min-height ยังเป็น 44px** | ปุ่มรองในแถวรายการ / แถวข้อมูล / กล่องสถานะ ที่ต้องไม่แย่งสายตาปุ่มหลักของจอ |
-| `variant="tertiary"` | ไม่มีพื้น/ไม่มีขอบ · ตัวอักษร **`color.primary` เสมอ** (ห้าม `text.muted`) · `type.button.sm` · **hover/focus = พื้น `surface.muted` — ห้ามขีดเส้นใต้** · padding ข้าง `space.2` · **min-height 44px** | การกระทำรองสุด ("ไว้ทีหลัง", "ออกจากร้านนี้", "ใช้บัญชีอื่น") |
-| `state="confirmed"` | `success.bg` + `success.border` + `success.text` + ไอคอน `icon.check` — โชว์ ~2 วินาทีแล้วกลับสถานะเดิม | ฟีดแบ็กชั่วคราวหลังกด ("คัดลอกลิงก์" → "คัดลอกแล้ว") |
+| variant / size        | Visual spec (token เท่านั้น)                                                                                                                                                                           | ใช้เมื่อไหร่                                                                 |
+| --------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ | ---------------------------------------------------------------------------- |
+| `size="md"` (default) | `type.button.md` (16/24/600) · padding `space.3` / 18px · **min-height `size.tap-target.min` (44px)**                                                                                                  | ปุ่มทั่วไป                                                                   |
+| `size="sm"`           | **`type.button.sm` (14/20/600)** · padding แนวนอน `space.3` (12px) · **min-height ยังเป็น 44px**                                                                                                       | ปุ่มรองในแถวรายการ / แถวข้อมูล / กล่องสถานะ ที่ต้องไม่แย่งสายตาปุ่มหลักของจอ |
+| `variant="tertiary"`  | ไม่มีพื้น/ไม่มีขอบ · ตัวอักษร **`color.primary` เสมอ** (ห้าม `text.muted`) · `type.button.sm` · **hover/focus = พื้น `surface.muted` — ห้ามขีดเส้นใต้** · padding ข้าง `space.2` · **min-height 44px** | การกระทำรองสุด ("ไว้ทีหลัง", "ออกจากร้านนี้", "ใช้บัญชีอื่น")                |
+| `state="confirmed"`   | `success.bg` + `success.border` + `success.text` + ไอคอน `icon.check` — โชว์ ~2 วินาทีแล้วกลับสถานะเดิม                                                                                                | ฟีดแบ็กชั่วคราวหลังกด ("คัดลอกลิงก์" → "คัดลอกแล้ว")                         |
 
-- ⛔ **`size="sm"` = ความหนาแน่นของ *ตัวอักษรและระยะข้าง* ไม่ใช่พื้นที่แตะ** — ดู `size.tap-target.min` ที่ §1.3
+- ⛔ **`size="sm"` = ความหนาแน่นของ _ตัวอักษรและระยะข้าง_ ไม่ใช่พื้นที่แตะ** — ดู `size.tap-target.min` ที่ §1.3
 - **`tertiary` ห้ามขีดเส้นใต้ตอน hover** — ปุ่มไม่ใช่ลิงก์ จึงไม่ควรมีสัญญะของลิงก์ · affordance ใช้พื้นหลัง `surface.muted` แทน
 - **`Link` ในเนื้อความ (ในย่อหน้า) แยกตัวด้วย `color.primary`** ไม่ใช่เส้นใต้ — ตรงกับ §1.1 ที่ระบุอยู่แล้วว่า
   `color.primary` = สีของลิงก์ · วัดแล้ว: ต่างจากข้อความรอบข้าง 2.22:1 · อ่านบนพื้นกล่อง 6.29:1 (ผ่าน AA) ·
@@ -175,68 +176,72 @@
 > Fallback stack: `Sarabun, "Noto Sans Thai", system-ui, sans-serif`.
 > line-height เผื่อ ascender/descender ไทย (ไม้เอก-โท-ตรี + สระบน/ล่าง) จึงสูงกว่า Latin ปกติ.
 
-| Token | size / line-height / weight | ใช้ที่ไหน |
-|---|---|---|
-| `type.heading.md` | 24 / 32 / 600 | หัวข้อหน้า (สมัคร/เข้าสู่ระบบ/อุปกรณ์ที่เข้าสู่ระบบ), หัวข้อ dialog |
-| `type.heading.sm` | 18 / 28 / 600 | หัวข้อ section (เปลี่ยนรหัสผ่าน) |
-| `type.body.md` | 16 / 26 / 400 | body หลัก, เนื้อหา dialog, subtitle |
-| `type.body.sm` | 14 / 22 / 400 | helper text ใต้ field, `last_active`, banner helper |
-| `type.label.sm` | 14 / 20 / 500 | field label |
-| `type.button.md` | 16 / 24 / 600 | ตัวอักษรบนปุ่ม (default) |
-| `type.button.sm` | 14 / 20 / 600 | ตัวอักษรบนปุ่ม `size="sm"` และ `variant="tertiary"` (§1.1c-3) — **ตัวอักษรเล็กลง ปุ่มไม่เตี้ยลง** |
-| `type.numeric.tabular` | (feature) `font-variant-numeric: tabular-nums` / Flutter `FontFeature.tabularFigures()` | countdown `{mm}:{ss}` / `{N}` ใน `ThrottleBanner` — บังคับ tabular กัน layout ขยับทุกวินาที |
+| Token                  | size / line-height / weight                                                             | ใช้ที่ไหน                                                                                         |
+| ---------------------- | --------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------- |
+| `type.heading.md`      | 24 / 32 / 600                                                                           | หัวข้อหน้า (สมัคร/เข้าสู่ระบบ/อุปกรณ์ที่เข้าสู่ระบบ), หัวข้อ dialog                               |
+| `type.heading.sm`      | 18 / 28 / 600                                                                           | หัวข้อ section (เปลี่ยนรหัสผ่าน)                                                                  |
+| `type.body.md`         | 16 / 26 / 400                                                                           | body หลัก, เนื้อหา dialog, subtitle                                                               |
+| `type.body.sm`         | 14 / 22 / 400                                                                           | helper text ใต้ field, `last_active`, banner helper                                               |
+| `type.label.sm`        | 14 / 20 / 500                                                                           | field label                                                                                       |
+| `type.button.md`       | 16 / 24 / 600                                                                           | ตัวอักษรบนปุ่ม (default)                                                                          |
+| `type.button.sm`       | 14 / 20 / 600                                                                           | ตัวอักษรบนปุ่ม `size="sm"` และ `variant="tertiary"` (§1.1c-3) — **ตัวอักษรเล็กลง ปุ่มไม่เตี้ยลง** |
+| `type.numeric.tabular` | (feature) `font-variant-numeric: tabular-nums` / Flutter `FontFeature.tabularFigures()` | countdown `{mm}:{ss}` / `{N}` ใน `ThrottleBanner` — บังคับ tabular กัน layout ขยับทุกวินาที       |
 
 > **เลข/เงิน/วันที่แบบไทย** (จาก `thai-ux`): เงิน "฿1,250.00" (2 ตำแหน่ง, คั่นหลักพัน, display เท่านั้น),
 > สต๊อก = จำนวนเต็ม, วันที่ "23 มิ.ย. 2026, 14:30", ไม่มี plural inflection ใช้ classifier ("12 รายการ").
 
 ### 1.3 Spacing / radius (4-pt grid)
 
-| Token | ค่า | ใช้ที่ไหน |
-|---|---|---|
-| `space.1` | 4px | gap เล็กสุด (icon↔text) |
-| `space.2` | 8px | gap label↔input, helper↔field |
-| `space.3` | 12px | padding ภายในปุ่ม (แนวตั้ง) |
-| `space.4` | 16px | `space.form.gap` (ระหว่างฟิลด์ในฟอร์ม auth), padding row session |
-| `space.5` | 20px | — |
-| `space.6` | 24px | `space.card.padding` (web auth card), `space.screen.padding` (mobile full-screen) |
-| `space.8` | 32px | ระยะ header↔ฟอร์ม |
-| `radius.button` | 8px | มุมโค้งปุ่ม, input field |
-| `radius.card` | 12px | มุมโค้ง auth card, dialog, banner |
-| `radius.badge` | 9999px (pill) | badge "อุปกรณ์นี้" |
-| `size.auth-card.max-w` | 400px | max-width auth card (web); mobile ไม่ใช้ (เต็มจอ) |
-| `size.tap-target.min` | 44px | **ความสูงขั้นต่ำของทุกอย่างที่กดได้** (ดูกติกาใต้ตาราง) |
-| `size.dialog.max-w` | 480px | ความกว้างสูงสุดของ dialog / การ์ดกึ่งกลางทั่วไป (web) — **คนละตัวกับ** `size.auth-card.max-w` (400px) |
-| `size.dialog.inline-w` | 90% | ความกว้างของ dialog **เมื่อจอแคบกว่า** `size.dialog.max-w` — เหลือขอบให้เห็นฉากหลัง 5% สองข้าง (dialog ที่ชนขอบพอดีอ่านเหมือน "เปลี่ยนหน้า" ไม่ใช่ "ชั้นที่ปิดได้") |
-| `size.sidebar.w` | 240px | sidebar **ถาวร** ของ AppShell (web ≥lg) |
-| `size.drawer.w` | 280px | **drawer ที่ลอยทับหน้า** (web <lg, §8.2) — **คนละตัวกับ** `size.sidebar.w` โดยเจตนา: ของที่ทับหน้าอยู่ต้องกว้างกว่าเพื่อให้อ่านเป็นชั้นแยก และไม่ควรขยับตามเวลา sidebar ถาวรเปลี่ยนความกว้าง |
-| `size.drawer.max-w` | 85% | เพดานของ drawer บนจอแคบ — **ต้องเหลือ scrim ให้เห็น** ไม่งั้นผู้ใช้ไม่รู้ว่ากดตรงไหนให้มันหายไป |
-| `size.list-row.min-h` | 56px | ความสูงขั้นต่ำของแถวรายการ / แถวเมนู (ทั้ง web + mobile) |
-| `size.data-row.label-w` | 150px | คอลัมน์ label ของแถว "ป้าย → ค่า" (`DataRow`) — ค่าคงที่เพื่อให้ label ทุกแถวเรียงเป็นคอลัมน์เดียวกัน |
-| `size.data-row.value-min-w` | 180px | ความกว้างขั้นต่ำของคอลัมน์ค่า ก่อนที่ค่าจะตัดลงบรรทัดใหม่ใต้ label |
-| `size.content.max-w` | 1280px | ความกว้างสูงสุดของเนื้อหาที่จัดกึ่งกลาง (§8.1) |
-| `size.content.narrow-max-w` | 640px | หน้าที่เป็น **คอลัมน์เดียวและอ่านเป็นหลัก** (การตั้งค่า / ความปลอดภัย) — ยาวกว่านี้ตาจะหาต้นบรรทัดถัดไปไม่เจอ · ⛔ ไม่ใช่ `size.dialog.max-w` (480px = ของที่ลอยอยู่บนฉากมืด คนละงานกัน) |
-| `size.toast.max-w` | 360px | ความกว้างสูงสุดของ toast (web) |
-| `size.dropdown.w` | 290px | dropdown/popover ที่ผูกกับตัวเปิด (org switcher) — กว้างพอใส่ชื่อร้าน + สิทธิ์ในบรรทัดเดียว |
-| `opacity.dim` | 0.62 | ความจางของ **แถวที่ไม่ใช้งานแล้ว** (สมาชิกที่ถูกถอด / คำเชิญที่ตายแล้ว) — "อยู่ตรงนั้น อ่านออก แต่ไม่ใช่ของที่ทำอะไรได้" · ตรวจแล้วผ่าน AA ทั้ง light (~5.0:1) และ dark (~5.6:1) · ⛔ อย่าลดต่ำกว่านี้เพื่อ "ให้ดูจางขึ้น" — จะตกเกณฑ์เงียบ ๆ |
-| `z.dropdown` | 40 | dropdown/popover ที่ผูกกับตัวเปิด |
-| `z.overlay` | 50 | scrim + dialog + drawer (ทุกอย่างที่กินทั้งจอ) |
-| `z.toast` | 100 | toast — **ต้องอยู่เหนือ overlay เสมอ** เพราะมันรายงานผลของสิ่งที่ผู้ใช้เพิ่งกดใน dialog |
+| Token                       | ค่า           | ใช้ที่ไหน                                                                                                                                                                                                                                     |
+| --------------------------- | ------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `space.1`                   | 4px           | gap เล็กสุด (icon↔text)                                                                                                                                                                                                                       |
+| `space.2`                   | 8px           | gap label↔input, helper↔field                                                                                                                                                                                                                 |
+| `space.3`                   | 12px          | padding ภายในปุ่ม (แนวตั้ง)                                                                                                                                                                                                                   |
+| `space.4`                   | 16px          | `space.form.gap` (ระหว่างฟิลด์ในฟอร์ม auth), padding row session                                                                                                                                                                              |
+| `space.5`                   | 20px          | —                                                                                                                                                                                                                                             |
+| `space.6`                   | 24px          | `space.card.padding` (web auth card), `space.screen.padding` (mobile full-screen)                                                                                                                                                             |
+| `space.8`                   | 32px          | ระยะ header↔ฟอร์ม                                                                                                                                                                                                                             |
+| `radius.button`             | 8px           | มุมโค้งปุ่ม, input field                                                                                                                                                                                                                      |
+| `radius.card`               | 12px          | มุมโค้ง auth card, dialog, banner                                                                                                                                                                                                             |
+| `radius.badge`              | 9999px (pill) | badge "อุปกรณ์นี้"                                                                                                                                                                                                                            |
+| `radius.checkbox`           | 4px           | มุมกล่อง `Checkbox` — เล็กกว่า `radius.button` เพราะกล่อง 20px มุม 8px จะอ่านเป็นวงกลม (ชนกับ radio) (F-003)                                                                                                                                  |
+| `size.auth-card.max-w`      | 400px         | max-width auth card (web); mobile ไม่ใช้ (เต็มจอ)                                                                                                                                                                                             |
+| `size.tap-target.min`       | 44px          | **ความสูงขั้นต่ำของทุกอย่างที่กดได้** (ดูกติกาใต้ตาราง)                                                                                                                                                                                       |
+| `size.dialog.max-w`         | 480px         | ความกว้างสูงสุดของ dialog / การ์ดกึ่งกลางทั่วไป (web) — **คนละตัวกับ** `size.auth-card.max-w` (400px)                                                                                                                                         |
+| `size.dialog.inline-w`      | 90%           | ความกว้างของ dialog **เมื่อจอแคบกว่า** `size.dialog.max-w` — เหลือขอบให้เห็นฉากหลัง 5% สองข้าง (dialog ที่ชนขอบพอดีอ่านเหมือน "เปลี่ยนหน้า" ไม่ใช่ "ชั้นที่ปิดได้")                                                                           |
+| `size.sidebar.w`            | 240px         | sidebar **ถาวร** ของ AppShell (web ≥lg)                                                                                                                                                                                                       |
+| `size.drawer.w`             | 280px         | **drawer ที่ลอยทับหน้า** (web <lg, §8.2) — **คนละตัวกับ** `size.sidebar.w` โดยเจตนา: ของที่ทับหน้าอยู่ต้องกว้างกว่าเพื่อให้อ่านเป็นชั้นแยก และไม่ควรขยับตามเวลา sidebar ถาวรเปลี่ยนความกว้าง                                                  |
+| `size.drawer.max-w`         | 85%           | เพดานของ drawer บนจอแคบ — **ต้องเหลือ scrim ให้เห็น** ไม่งั้นผู้ใช้ไม่รู้ว่ากดตรงไหนให้มันหายไป                                                                                                                                               |
+| `size.list-row.min-h`       | 56px          | ความสูงขั้นต่ำของแถวรายการ / แถวเมนู (ทั้ง web + mobile)                                                                                                                                                                                      |
+| `size.checkbox`             | 20px          | กล่อง `Checkbox` — **ไม่ใช่พื้นที่แตะ** (แถว `CheckboxRow` ≥ `size.list-row.min-h` คือพื้นที่แตะ) (F-003)                                                                                                                                     |
+| `checkbox.border.w`         | 2px           | ขอบกล่อง `Checkbox` ทุกสถานะ (F-003)                                                                                                                                                                                                          |
+| `size.data-row.label-w`     | 150px         | คอลัมน์ label ของแถว "ป้าย → ค่า" (`DataRow`) — ค่าคงที่เพื่อให้ label ทุกแถวเรียงเป็นคอลัมน์เดียวกัน                                                                                                                                         |
+| `size.data-row.value-min-w` | 180px         | ความกว้างขั้นต่ำของคอลัมน์ค่า ก่อนที่ค่าจะตัดลงบรรทัดใหม่ใต้ label                                                                                                                                                                            |
+| `size.content.max-w`        | 1280px        | ความกว้างสูงสุดของเนื้อหาที่จัดกึ่งกลาง (§8.1)                                                                                                                                                                                                |
+| `size.content.narrow-max-w` | 640px         | หน้าที่เป็น **คอลัมน์เดียวและอ่านเป็นหลัก** (การตั้งค่า / ความปลอดภัย) — ยาวกว่านี้ตาจะหาต้นบรรทัดถัดไปไม่เจอ · ⛔ ไม่ใช่ `size.dialog.max-w` (480px = ของที่ลอยอยู่บนฉากมืด คนละงานกัน)                                                      |
+| `size.toast.max-w`          | 360px         | ความกว้างสูงสุดของ toast (web)                                                                                                                                                                                                                |
+| `size.dropdown.w`           | 290px         | dropdown/popover ที่ผูกกับตัวเปิด (org switcher) — กว้างพอใส่ชื่อร้าน + สิทธิ์ในบรรทัดเดียว                                                                                                                                                   |
+| `opacity.dim`               | 0.62          | ความจางของ **แถวที่ไม่ใช้งานแล้ว** (สมาชิกที่ถูกถอด / คำเชิญที่ตายแล้ว) — "อยู่ตรงนั้น อ่านออก แต่ไม่ใช่ของที่ทำอะไรได้" · ตรวจแล้วผ่าน AA ทั้ง light (~5.0:1) และ dark (~5.6:1) · ⛔ อย่าลดต่ำกว่านี้เพื่อ "ให้ดูจางขึ้น" — จะตกเกณฑ์เงียบ ๆ |
+| `z.dropdown`                | 40            | dropdown/popover ที่ผูกกับตัวเปิด                                                                                                                                                                                                             |
+| `z.overlay`                 | 50            | scrim + dialog + drawer (ทุกอย่างที่กินทั้งจอ)                                                                                                                                                                                                |
+| `z.toast`                   | 100           | toast — **ต้องอยู่เหนือ overlay เสมอ** เพราะมันรายงานผลของสิ่งที่ผู้ใช้เพิ่งกดใน dialog                                                                                                                                                       |
 
 > **`z.*` มี 3 ชั้นพอ และห้ามเพิ่มเลขนอกบันได** — z-index ที่คิดกันเองทีละจุดคือวิธีมาตรฐานที่ทำให้ modal
 > ไปอยู่ใต้ header ได้เงียบ ๆ · ต้องการชั้นใหม่ = contribute-back (§6.1) ไม่ใช่พิมพ์ `z-[999]`
-| `size.icon.sm` | 16px | ไอคอนในบรรทัดข้อความ |
-| `size.icon.md` | 20px | **ค่า default** — banner, ปุ่ม, แถวรายการ |
-| `size.icon.lg` | 24px | nav, AppBar, icon-button |
-| `size.icon.xl` | 40px | `EmptyState` (ที่ขนาดนี้ `icon.stroke` ลดเป็น `1.5` กันหนาเกิน) |
-| `icon.stroke` | 2 | ความหนาเส้นไอคอน (grid 24) — ดู §1.6 |
-| `focus.ring.color` | `color.primary` | สี focus ring (§1.1c-1) |
-| `focus.ring.w` | 2.5px | ความหนา focus ring |
-| `focus.ring.offset` | 2px | ระยะห่างจากขอบองค์ประกอบ — **ห้ามเป็น 0** (ring จะกลืนกับพื้นปุ่มหลัก) |
+> | `size.icon.sm` | 16px | ไอคอนในบรรทัดข้อความ |
+> | `size.icon.md` | 20px | **ค่า default** — banner, ปุ่ม, แถวรายการ |
+> | `size.icon.lg` | 24px | nav, AppBar, icon-button |
+> | `size.icon.xl` | 40px | `EmptyState` (ที่ขนาดนี้ `icon.stroke` ลดเป็น `1.5` กันหนาเกิน) |
+> | `icon.stroke` | 2 | ความหนาเส้นไอคอน (grid 24) — ดู §1.6 |
+> | `focus.ring.color` | `color.primary` | สี focus ring (§1.1c-1) |
+> | `focus.ring.w` | 2.5px | ความหนา focus ring |
+> | `focus.ring.offset` | 2px | ระยะห่างจากขอบองค์ประกอบ — **ห้ามเป็น 0** (ring จะกลืนกับพื้นปุ่มหลัก) |
 
 > ### ⛔ กติกา tap target — 44px คือขั้นต่ำ **ไม่มีข้อยกเว้น** (D-031 ข้อ 2)
 >
 > **ทุกองค์ประกอบที่กดได้ ทุก platform ต้องสูง ≥ `size.tap-target.min` (44px)** รวมถึงปุ่มในแถวรายการ,
 > icon-button, ปุ่ม `size="sm"`, `variant="tertiary"` และลิงก์ที่ทำหน้าที่เป็นปุ่ม
+>
 > - **"ปุ่มเล็ก" = ตัวอักษรและระยะข้างแน่นขึ้น ไม่ใช่เตี้ยลง** — ถ้าต้องการให้ดูเบา ให้ลด `variant`/น้ำหนักสี
 >   ไม่ใช่ลดพื้นที่แตะ
 > - **ข้อเสนอ "ยกเว้นบริบท pointer-only" ถูกปฏิเสธแล้ว** — web รองรับลงถึง tablet ที่เป็น touch จริง (§8)
@@ -246,11 +251,11 @@
 
 ### 1.4 Elevation
 
-| Token | ค่า | ใช้ที่ไหน |
-|---|---|---|
-| `elevation.card` | `0 1px 3px rgba(16,24,40,.10), 0 1px 2px rgba(16,24,40,.06)` | auth card shadow เบา (web); mobile = ไม่มี (full-screen ไม่มี card) |
+| Token              | ค่า                                                                      | ใช้ที่ไหน                                                                                 |
+| ------------------ | ------------------------------------------------------------------------ | ----------------------------------------------------------------------------------------- |
+| `elevation.card`   | `0 1px 3px rgba(16,24,40,.10), 0 1px 2px rgba(16,24,40,.06)`             | auth card shadow เบา (web); mobile = ไม่มี (full-screen ไม่มี card)                       |
 | `elevation.dialog` | `0 20px 24px -4px rgba(16,24,40,.10), 0 8px 8px -4px rgba(16,24,40,.04)` | `ConfirmDialog` (web modal); mobile bottom-sheet ใช้ elevation ตาม native pattern (F-006) |
-| `elevation.toast` | `0 8px 16px -4px rgba(16,24,40,.14)` | toast (web) |
+| `elevation.toast`  | `0 8px 16px -4px rgba(16,24,40,.14)`                                     | toast (web)                                                                               |
 
 > **breaking-change policy:** ตาราง §1.1–§1.4 คือค่ากลาง ถ้าจะเปลี่ยนแบบ breaking (rename/ลบ role,
 > เปลี่ยนความหมาย) → ux แจ้ง frontend + log `D-XXX` ใน [DECISIONS.md](DECISIONS.md) ตาม §6.
@@ -258,7 +263,7 @@
 ### 1.5 Token → Tailwind theme mapping (web, D-020)
 
 > `frontend` note (implementation detail, values still owned by `ux` — §1.1–§1.4 is
-> the source of truth; this table only records *how* those values are wired into
+> the source of truth; this table only records _how_ those values are wired into
 > Tailwind v4). apps/web migrated from plain CSS custom properties + inline
 > `style` to Tailwind v4 + shadcn/ui (D-020) — same token values, same semantic
 > names, now expressed as a Tailwind v4 CSS-first `@theme` block
@@ -268,19 +273,20 @@
 Tailwind v4 resolves theme keys by **CSS variable prefix**, so each §1 namespace maps to a
 specific `--<prefix>-*` key and a family of utilities:
 
-| design-system namespace | `@theme` key | Tailwind utility example |
-|---|---|---|
-| `color.*` | `--color-*` | `bg-primary`, `text-danger-text`, `border-warning-border` |
-| `type.heading.md` / `.sm`, `type.body.md` / `.sm`, `type.label.sm`, `type.button.md` | `--text-*` (+ paired `--text-*--line-height`, `--text-*--font-weight`) | `text-heading-md`, `text-body-sm` (sets font-size + line-height + weight together) |
-| `type.numeric.tabular` | n/a — kept as the existing `.tabular-nums` utility class (Tailwind's built-in `font-variant-numeric` utility) | `tabular-nums` |
-| `space.form.gap`, `space.card.padding`, `space.screen.padding` | `--spacing-form-gap`, `--spacing-card-padding`, `--spacing-screen-padding` (named `--spacing-*` keys) | `mb-form-gap`, `p-card-padding` |
-| `space.1`…`space.8` (generic 4-pt gaps not covered by a named alias above) | Tailwind's built-in numeric `--spacing` multiplier (4px) already matches this grid 1:1 | `p-3` = `space.3` (12px), `gap-4` = `space.4` (16px), … |
-| `radius.button`, `radius.card`, `radius.badge` | `--radius-button`, `--radius-card`, `--radius-badge` | `rounded-button`, `rounded-card`, `rounded-badge` |
-| `size.auth-card.max-w`, `size.tap-target.min` | plain `--size-*` custom properties (not a Tailwind-recognized prefix — referenced via arbitrary values) | `max-w-[var(--size-auth-card-max-w)]`, `min-h-[var(--size-tap-target-min)]` |
-| `opacity.dim` | plain `--opacity-*` custom property (same treatment as `--size-*`) | `opacity-[var(--opacity-dim)]` |
-| `z.dropdown`, `z.overlay`, `z.toast` | plain `--z-*` custom properties — Tailwind v4 has no `z-index` theme namespace, so these are referenced via arbitrary values | `z-[var(--z-overlay)]` |
-| `elevation.card`, `elevation.dialog`, `elevation.toast` | `--shadow-card`, `--shadow-dialog`, `--shadow-toast` | `shadow-card`, `shadow-dialog`, `shadow-toast` |
-| Skeleton shimmer (§2) | `--animate-shimmer` (kept as its own named animation — Tailwind's built-in `animate-pulse` uses a different 2s/cubic-bezier timing, which would have changed the value) | `animate-shimmer` |
+| design-system namespace                                                              | `@theme` key                                                                                                                                                            | Tailwind utility example                                                                                |
+| ------------------------------------------------------------------------------------ | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------- |
+| `color.*`                                                                            | `--color-*`                                                                                                                                                             | `bg-primary`, `text-danger-text`, `border-warning-border`                                               |
+| `type.heading.md` / `.sm`, `type.body.md` / `.sm`, `type.label.sm`, `type.button.md` | `--text-*` (+ paired `--text-*--line-height`, `--text-*--font-weight`)                                                                                                  | `text-heading-md`, `text-body-sm` (sets font-size + line-height + weight together)                      |
+| `type.numeric.tabular`                                                               | n/a — kept as the existing `.tabular-nums` utility class (Tailwind's built-in `font-variant-numeric` utility)                                                           | `tabular-nums`                                                                                          |
+| `space.form.gap`, `space.card.padding`, `space.screen.padding`                       | `--spacing-form-gap`, `--spacing-card-padding`, `--spacing-screen-padding` (named `--spacing-*` keys)                                                                   | `mb-form-gap`, `p-card-padding`                                                                         |
+| `space.1`…`space.8` (generic 4-pt gaps not covered by a named alias above)           | Tailwind's built-in numeric `--spacing` multiplier (4px) already matches this grid 1:1                                                                                  | `p-3` = `space.3` (12px), `gap-4` = `space.4` (16px), …                                                 |
+| `radius.button`, `radius.card`, `radius.badge`, `radius.checkbox`                    | `--radius-button`, `--radius-card`, `--radius-badge`, `--radius-checkbox`                                                                                               | `rounded-button`, `rounded-card`, `rounded-badge`, `rounded-checkbox`                                   |
+| `size.auth-card.max-w`, `size.tap-target.min`, `size.checkbox`                       | plain `--size-*` custom properties (not a Tailwind-recognized prefix — referenced via arbitrary values)                                                                 | `max-w-[var(--size-auth-card-max-w)]`, `min-h-[var(--size-tap-target-min)]`, `h-[var(--size-checkbox)]` |
+| `checkbox.border.w`                                                                  | plain `--checkbox-*` custom property (its own namespace — a border WIDTH, not a `size`/`radius` value; referenced via arbitrary values like `--size-*`)                 | `border-[length:var(--checkbox-border-w)]`                                                              |
+| `opacity.dim`                                                                        | plain `--opacity-*` custom property (same treatment as `--size-*`)                                                                                                      | `opacity-[var(--opacity-dim)]`                                                                          |
+| `z.dropdown`, `z.overlay`, `z.toast`                                                 | plain `--z-*` custom properties — Tailwind v4 has no `z-index` theme namespace, so these are referenced via arbitrary values                                            | `z-[var(--z-overlay)]`                                                                                  |
+| `elevation.card`, `elevation.dialog`, `elevation.toast`                              | `--shadow-card`, `--shadow-dialog`, `--shadow-toast`                                                                                                                    | `shadow-card`, `shadow-dialog`, `shadow-toast`                                                          |
+| Skeleton shimmer (§2)                                                                | `--animate-shimmer` (kept as its own named animation — Tailwind's built-in `animate-pulse` uses a different 2s/cubic-bezier timing, which would have changed the value) | `animate-shimmer`                                                                                       |
 
 Naming stays 1:1 with §1's `namespace.role[.variant]` convention (`color.warning.bg` →
 `--color-warning-bg` → `bg-warning-bg`), so a token gap is still a gap to raise with `ux`
@@ -304,16 +310,16 @@ mechanical restyle.
 
 #### 1.6.1 นโยบายไอคอน (บังคับทุก feature)
 
-| กติกา | ค่า |
-|---|---|
-| สไตล์ | **outline / stroke เท่านั้น** (Phosphor weight `regular`) — ⛔ ห้าม emoji · ⛔ ห้ามไอคอนทึบ (fill/duotone) · ⛔ ห้ามรูปประกอบสี/ภาพ raster |
-| grid / stroke | 24×24 · `icon.stroke` = **2** · cap + join = round |
-| ขนาด | `size.icon.sm` 16 · `size.icon.md` **20 (default)** · `size.icon.lg` 24 · `size.icon.xl` 40 (stroke ลดเป็น 1.5) — §1.3 |
-| สี | **`currentColor` เสมอ** (รับสีจาก role ของกล่องที่มันอยู่) · ระบุสีเองได้เฉพาะ 2 กรณี: `EmptyState` (`color.text.muted`) และเครื่องหมายสำเร็จเต็มจอ (`color.success`) |
-| ความหมาย | **ไอคอนห้ามเป็นตัวสื่อความหมายเดี่ยว ๆ** — ต้องมีข้อความไทยคู่เสมอ · `aria-hidden="true"` เมื่อมีข้อความอยู่แล้ว · `aria-label` **ภาษาไทย** เมื่อเป็น icon-button |
-| i18n | **ห้ามฝังสัญลักษณ์ไว้ใน i18n string** — `"+ เชิญสมาชิก"` ผิด · key ต้องเป็น `"เชิญสมาชิก"` แล้วให้ component ใส่ `icon.plus` เอง (ไม่งั้นแปลภาษาอื่นจะลากสัญลักษณ์ไปด้วย และเปลี่ยนชุดไอคอนไม่ได้) |
-| ship | web = **component ที่ tree-shake ได้** จาก `@phosphor-icons/react` — ⛔ ไม่ใช้ icon font · ⛔ ไม่ fetch sprite ภายนอก · Flutter = `IconData` จาก `phosphor_flutter` (ชุดเดียวกัน) · mockup = inline SVG ที่วาดตามรูปของชุดนี้ |
-| tap | icon-button ต้องสูง ≥ `size.tap-target.min` (44px) แม้ไอคอนข้างในจะ 20–24px (§1.3) |
+| กติกา         | ค่า                                                                                                                                                                                                                           |
+| ------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| สไตล์         | **outline / stroke เท่านั้น** (Phosphor weight `regular`) — ⛔ ห้าม emoji · ⛔ ห้ามไอคอนทึบ (fill/duotone) · ⛔ ห้ามรูปประกอบสี/ภาพ raster                                                                                    |
+| grid / stroke | 24×24 · `icon.stroke` = **2** · cap + join = round                                                                                                                                                                            |
+| ขนาด          | `size.icon.sm` 16 · `size.icon.md` **20 (default)** · `size.icon.lg` 24 · `size.icon.xl` 40 (stroke ลดเป็น 1.5) — §1.3                                                                                                        |
+| สี            | **`currentColor` เสมอ** (รับสีจาก role ของกล่องที่มันอยู่) · ระบุสีเองได้เฉพาะ 2 กรณี: `EmptyState` (`color.text.muted`) และเครื่องหมายสำเร็จเต็มจอ (`color.success`)                                                         |
+| ความหมาย      | **ไอคอนห้ามเป็นตัวสื่อความหมายเดี่ยว ๆ** — ต้องมีข้อความไทยคู่เสมอ · `aria-hidden="true"` เมื่อมีข้อความอยู่แล้ว · `aria-label` **ภาษาไทย** เมื่อเป็น icon-button                                                             |
+| i18n          | **ห้ามฝังสัญลักษณ์ไว้ใน i18n string** — `"+ เชิญสมาชิก"` ผิด · key ต้องเป็น `"เชิญสมาชิก"` แล้วให้ component ใส่ `icon.plus` เอง (ไม่งั้นแปลภาษาอื่นจะลากสัญลักษณ์ไปด้วย และเปลี่ยนชุดไอคอนไม่ได้)                            |
+| ship          | web = **component ที่ tree-shake ได้** จาก `@phosphor-icons/react` — ⛔ ไม่ใช้ icon font · ⛔ ไม่ fetch sprite ภายนอก · Flutter = `IconData` จาก `phosphor_flutter` (ชุดเดียวกัน) · mockup = inline SVG ที่วาดตามรูปของชุดนี้ |
+| tap           | icon-button ต้องสูง ≥ `size.tap-target.min` (44px) แม้ไอคอนข้างในจะ 20–24px (§1.3)                                                                                                                                            |
 
 #### 1.6.2 `icon.<role>` → ชื่อไอคอนจริง (web / Flutter)
 
@@ -321,43 +327,47 @@ mechanical restyle.
 > · Flutter API ที่อ้างถึง = `phosphor_flutter` v2 (`PhosphorIconsRegular.<name>`; รูปแบบ
 > `PhosphorIcons.<name>(PhosphorIconsStyle.regular)` ก็ให้ไอคอนตัวเดียวกัน — **ห้ามใช้ style อื่นนอกจาก `regular`**)
 
-| `icon.<role>` | web (`@phosphor-icons/react`) | Flutter (`phosphor_flutter`) | ใช้ที่ไหน |
-|---|---|---|---|
-| `icon.warn` | `<Warning />` | `PhosphorIconsRegular.warning` | `Banner` tone warning, `ThrottleBanner` |
-| `icon.info` | `<Info />` | `PhosphorIconsRegular.info` | `Banner` tone info, helper สำคัญ |
-| `icon.error` | `<WarningCircle />` | `PhosphorIconsRegular.warningCircle` | `Banner` tone danger, `ErrorBanner` |
-| `icon.check` | `<Check />` | `PhosphorIconsRegular.check` | รายการที่เลือกอยู่, `Button state="confirmed"` |
-| `icon.check-circle` | `<CheckCircle />` | `PhosphorIconsRegular.checkCircle` | สถานะสำเร็จ, `Banner` tone success, จอสำเร็จ |
-| `icon.mail` | `<Envelope />` | `PhosphorIconsRegular.envelope` | แถวคำเชิญ (อีเมลผู้ถูกเชิญ) |
-| `icon.users` | `<Users />` | `PhosphorIconsRegular.users` | เมนู/หัวข้อ "สมาชิก", `EmptyState` ของรายชื่อ |
-| `icon.clock` | `<Clock />` | `PhosphorIconsRegular.clock` | เวลา/วันหมดอายุ |
-| `icon.hourglass` | `<Hourglass />` | `PhosphorIconsRegular.hourglass` | สถานะ "รอตอบรับ" / รอเวลา |
-| `icon.more` | `<DotsThree />` | `PhosphorIconsRegular.dotsThree` | เมนูการกระทำของแถว (`⋯`) |
-| `icon.chevron-right` | `<CaretRight />` | `PhosphorIconsRegular.caretRight` | แถวที่กดเข้าไปต่อได้ (`ListRow` slot ขวา) |
-| `icon.chevron-down` | `<CaretDown />` | `PhosphorIconsRegular.caretDown` | ตัวเปิด dropdown / org switcher |
-| `icon.plus` | `<Plus />` | `PhosphorIconsRegular.plus` | ปุ่มสร้าง/เพิ่ม (เชิญสมาชิก, สร้างร้าน) |
-| `icon.circle` | `<Circle />` | `PhosphorIconsRegular.circle` | จุดหัวข้อ/ตัวเลือกที่ยังไม่เลือก (`RadioCardGroup`) |
-| `icon.menu` | `<List />` | `PhosphorIconsRegular.list` | hamburger เปิด drawer (tablet) |
-| `icon.close` | `<X />` | `PhosphorIconsRegular.x` | ปิด dialog / sheet / แผ่นข้อมูล |
-| `icon.lock` | `<Lock />` | `PhosphorIconsRegular.lock` | `EmptyState` preset `ForbiddenPanel`, ของที่ล็อกตาม tier (§5) |
-| `icon.copy` | `<Copy />` | `PhosphorIconsRegular.copy` | ปุ่มคัดลอกใน `CopyField` |
-| `icon.back` | `<ArrowLeft />` | `PhosphorIconsRegular.arrowLeft` | ปุ่มย้อนกลับของ `ScreenHeader`/AppBar (§7) |
-| `icon.eye` | `<Eye />` | `PhosphorIconsRegular.eye` | ปุ่มแสดงค่าที่ถูกปิดบัง (รหัสผ่าน, เลขผู้เสียภาษี) |
-| `icon.eye-off` | `<EyeSlash />` | `PhosphorIconsRegular.eyeSlash` | ปุ่มซ่อนค่ากลับ |
+| `icon.<role>`        | web (`@phosphor-icons/react`) | Flutter (`phosphor_flutter`)         | ใช้ที่ไหน                                                                                                                                                     |
+| -------------------- | ----------------------------- | ------------------------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `icon.warn`          | `<Warning />`                 | `PhosphorIconsRegular.warning`       | `Banner` tone warning, `ThrottleBanner`                                                                                                                       |
+| `icon.info`          | `<Info />`                    | `PhosphorIconsRegular.info`          | `Banner` tone info, helper สำคัญ                                                                                                                              |
+| `icon.error`         | `<WarningCircle />`           | `PhosphorIconsRegular.warningCircle` | `Banner` tone danger, `ErrorBanner`                                                                                                                           |
+| `icon.check`         | `<Check />`                   | `PhosphorIconsRegular.check`         | รายการที่เลือกอยู่, `Button state="confirmed"`                                                                                                                |
+| `icon.check-circle`  | `<CheckCircle />`             | `PhosphorIconsRegular.checkCircle`   | สถานะสำเร็จ, `Banner` tone success, จอสำเร็จ                                                                                                                  |
+| `icon.mail`          | `<Envelope />`                | `PhosphorIconsRegular.envelope`      | แถวคำเชิญ (อีเมลผู้ถูกเชิญ)                                                                                                                                   |
+| `icon.users`         | `<Users />`                   | `PhosphorIconsRegular.users`         | เมนู/หัวข้อ "สมาชิก", `EmptyState` ของรายชื่อ                                                                                                                 |
+| `icon.clock`         | `<Clock />`                   | `PhosphorIconsRegular.clock`         | เวลา/วันหมดอายุ                                                                                                                                               |
+| `icon.hourglass`     | `<Hourglass />`               | `PhosphorIconsRegular.hourglass`     | สถานะ "รอตอบรับ" / รอเวลา                                                                                                                                     |
+| `icon.more`          | `<DotsThree />`               | `PhosphorIconsRegular.dotsThree`     | เมนูการกระทำของแถว (`⋯`)                                                                                                                                      |
+| `icon.chevron-right` | `<CaretRight />`              | `PhosphorIconsRegular.caretRight`    | แถวที่กดเข้าไปต่อได้ (`ListRow` slot ขวา)                                                                                                                     |
+| `icon.chevron-down`  | `<CaretDown />`               | `PhosphorIconsRegular.caretDown`     | ตัวเปิด dropdown / org switcher                                                                                                                               |
+| `icon.plus`          | `<Plus />`                    | `PhosphorIconsRegular.plus`          | ปุ่มสร้าง/เพิ่ม (เชิญสมาชิก, สร้างร้าน)                                                                                                                       |
+| `icon.circle`        | `<Circle />`                  | `PhosphorIconsRegular.circle`        | จุดหัวข้อ/ตัวเลือกที่ยังไม่เลือก (`RadioCardGroup`)                                                                                                           |
+| `icon.menu`          | `<List />`                    | `PhosphorIconsRegular.list`          | hamburger เปิด drawer (tablet)                                                                                                                                |
+| `icon.close`         | `<X />`                       | `PhosphorIconsRegular.x`             | ปิด dialog / sheet / แผ่นข้อมูล                                                                                                                               |
+| `icon.lock`          | `<Lock />`                    | `PhosphorIconsRegular.lock`          | `EmptyState` preset `ForbiddenPanel`, ของที่ล็อกตาม tier (§5), **เหตุผล "ดูได้อย่างเดียว" ตามสิทธิ์** (F-003: แถบ, บรรทัดเหตุผลใต้แถว, แถว checklist ที่ล็อก) |
+| `icon.copy`          | `<Copy />`                    | `PhosphorIconsRegular.copy`          | ปุ่มคัดลอกใน `CopyField`                                                                                                                                      |
+| `icon.back`          | `<ArrowLeft />`               | `PhosphorIconsRegular.arrowLeft`     | ปุ่มย้อนกลับของ `ScreenHeader`/AppBar (§7)                                                                                                                    |
+| `icon.eye`           | `<Eye />`                     | `PhosphorIconsRegular.eye`           | ปุ่มแสดงค่าที่ถูกปิดบัง (รหัสผ่าน, เลขผู้เสียภาษี)                                                                                                            |
+| `icon.eye-off`       | `<EyeSlash />`                | `PhosphorIconsRegular.eyeSlash`      | ปุ่มซ่อนค่ากลับ                                                                                                                                               |
+| `icon.roles`         | `<ShieldCheck />`             | `PhosphorIconsRegular.shieldCheck`   | เมนู/แถวทางเข้า "บทบาทและสิทธิ์" (F-003)                                                                                                                      |
+
+- **ไอคอนพับ/กาง (`Disclosure`) ใช้ `icon.chevron-down` ตัวเดียว** — เปิด 0° · ปิด หมุน −90° · ไม่มี role `chevron-up`/`chevron-left` แยก (F-003)
 
 - **ต้องการ role ใหม่ = contribute-back** (§6/§9) — เพิ่มแถวในตารางนี้ก่อน แล้วค่อยใช้ · ⛔ ห้าม
   import ไอคอน Phosphor ตรง ๆ ในโค้ด feature โดยไม่มี role · ⛔ ห้ามใช้ไอคอนคนละความหมายกับ role
 - ถ้า Phosphor **ไม่มี**ไอคอนที่ตรงกับ role ที่ต้องการ → แจ้ง `@ux` (ห้าม dev เลือกเอง / ห้ามวาดเอง)
 
 ## 2. UI states มาตรฐาน (ทุกจอต้องมีครบ)
+
 ทุกหน้าจอออกแบบครบ 4 state ไม่ใช่แค่ตอนมีข้อมูล:
 
-| state | มาตรฐาน |
-|---|---|
-| **loading** | **Skeleton shimmer** (reusable widget) — *ไม่ใช่ spinner* · แถบไล่แสง (`shimmerHi` เหนือ `surface.muted`) **วิ่งผ่าน** (ไม่ใช่ opacity pulse — มองไม่เห็นว่า animate) · โครง skeleton **ตาม layout จริงของจอนั้น** |
-| **empty** | ข้อความ + CTA เริ่มต้น (เช่น "ยังไม่มีสินค้า เริ่มเพิ่มชิ้นแรก") |
-| **error** | ข้อความ (จาก error mapping i18n) + ปุ่ม "ลองใหม่" |
-| **success/data** | แสดงข้อมูลปกติ |
+| state            | มาตรฐาน                                                                                                                                                                                                            |
+| ---------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| **loading**      | **Skeleton shimmer** (reusable widget) — _ไม่ใช่ spinner_ · แถบไล่แสง (`shimmerHi` เหนือ `surface.muted`) **วิ่งผ่าน** (ไม่ใช่ opacity pulse — มองไม่เห็นว่า animate) · โครง skeleton **ตาม layout จริงของจอนั้น** |
+| **empty**        | ข้อความ + CTA เริ่มต้น (เช่น "ยังไม่มีสินค้า เริ่มเพิ่มชิ้นแรก")                                                                                                                                                   |
+| **error**        | ข้อความ (จาก error mapping i18n) + ปุ่ม "ลองใหม่"                                                                                                                                                                  |
+| **success/data** | แสดงข้อมูลปกติ                                                                                                                                                                                                     |
 
 > Skeleton shimmer = มาตรฐาน loading **ทั้ง web + mobile** · F-006 ทำเป็น reusable widget ใน shell ให้ทุกจอเรียกใช้
 
@@ -368,22 +378,27 @@ mechanical restyle.
   ไม่ยกทั้งจอเป็น error
 
 ## 3. i18n (internationalization)
+
 - UI copy = **i18n key** (ไม่ใช่ string ตายตัว) · **default ไทย** · ผู้ใช้สลับภาษาเองใน settings (ไม่ auto-detect)
 - **ไทยครบก่อน** · อังกฤษเติม progressive (forward-commitments)
 - error message ก็เป็น i18n key (ดู error mapping ใน F-006)
 - เจ้าของ copy = ux (ผลิตเป็น key + คำแปล) — frontend แค่ประกอบ
 
 ## 4. หลักที่ UI ต้องเคารพ (จาก WEB_TEAM Gate D)
+
 - ครบทุก state + Thai copy ชัดเจน
 - UI ไม่บิดความจริงของโมเดล (เช่น SellableSku ไม่ทำให้ดูเหมือนมีสต๊อกเอง)
 - ไม่มี money math บน float ฝั่ง client — แสดงค่าที่ server คำนวณ
 
 ## 5. FeatureGate (tier paywall) — ดู F-007
+
 - component กลาง `<FeatureGate feature>` — feature ที่ tier ไม่มี → โชว์+ล็อก+ปุ่มอัปเกรด (ไม่ซ่อน)
 - visual ของ paywall/lock state = งาน ux (Gate 2)
 
 ## 6. Reuse-first & contribute-back (central design system)
+
 design system นี้เป็นของ **กลาง 1 ชุด ไม่ใช่ต่อ feature** — โตขึ้นเรื่อย ๆ
+
 - **แหล่งความจริงเดียว:** Claude Design project (visual) + ไฟล์นี้ (spec/usage) + `thai-ux` tokens (code) — ux ดูแลให้ sync กัน
 - **reuse-first:** ทุก feature เช็ค component/token ที่ reuse ได้ก่อน — ห้ามสร้างซ้ำ/one-off
 - **contribute-back:** ต้องการของใหม่ → ux เพิ่มเข้า design system กลาง (ไม่ฝังเฉพาะ feature) → feature หลัง reuse
@@ -412,7 +427,7 @@ design system นี้เป็นของ **กลาง 1 ชุด ไม�
 - **สูง 56px** · พื้น `color.surface` · เส้นล่าง `color.border.default` · icon-button (back/action) **tap 44px**
 - **title** = `type.heading.sm` (18/28/600) ชิดซ้าย · **back** = ไอคอนลูกศรซ้าย ชิดซ้ายสุด สี `color.text`
 - **กติกา:** ทุก **จอย่อย (pushed route) ต้องมี back ซ้ายเสมอ** (`icon.back`) · จอ **root** (tab หลัก) ไม่มี back — โชว์แบรนด์/หัวข้อ
-  + action ขวา (ถ้ามี เช่น help/เมนู)
+  - action ขวา (ถ้ามี เช่น help/เมนู)
 - **จอ root ของ mobile ที่เป็น org-scoped: title = ชื่อร้าน + `icon.chevron-down` และตัว title ทั้งก้อนคือ
   ตัวสลับร้าน (org switcher)** — แตะแล้วเปิด bottom sheet รายชื่อร้าน · ทำให้ "ตอนนี้อยู่ร้านไหน" อยู่ในสายตา
   ตลอดเวลาโดยไม่กินพื้นที่เพิ่ม และแก้ปัญหาผู้ใช้ทำรายการผิดร้าน · แถบทั้งก้อนต้องสูง ≥ `size.tap-target.min`
@@ -428,12 +443,12 @@ design system นี้เป็นของ **กลาง 1 ชุด ไม�
 
 ### 8.1 Breakpoints (align Tailwind default → frontend ใช้ `md:`/`lg:`/`xl:` ได้ตรง)
 
-| token | ค่า | ช่วง | design target |
-|---|---|---|---|
-| (base) | `<768px` | phone browser | **out of scope** — ต้องไม่พังยับ แต่ไม่ optimize |
-| `bp.md` | `768px` | tablet | รองรับ (condensed) |
-| `bp.lg` | `1024px` | desktop | layout หลัก (เต็มรูป) |
-| `bp.xl` | `1280px` | wide desktop | cap ความกว้างเนื้อหา |
+| token   | ค่า      | ช่วง          | design target                                    |
+| ------- | -------- | ------------- | ------------------------------------------------ |
+| (base)  | `<768px` | phone browser | **out of scope** — ต้องไม่พังยับ แต่ไม่ optimize |
+| `bp.md` | `768px`  | tablet        | รองรับ (condensed)                               |
+| `bp.lg` | `1024px` | desktop       | layout หลัก (เต็มรูป)                            |
+| `bp.xl` | `1280px` | wide desktop  | cap ความกว้างเนื้อหา                             |
 
 - `size.content.max-w` = **1280px** (เนื้อหา centered; page เต็มกว้าง + padding) — token อยู่ใน §1.3
   · หน้าคอลัมน์เดียวที่เป็นการ **อ่าน** เป็นหลัก (การตั้งค่า/ความปลอดภัย) ใช้ `size.content.narrow-max-w` (640px) แทน
@@ -441,13 +456,13 @@ design system นี้เป็นของ **กลาง 1 ชุด ไม�
 
 ### 8.2 กติกา responsive ต่อ component (desktop → tablet)
 
-| component | desktop (≥lg) | tablet (md 768–1023) |
-|---|---|---|
-| **AppShell nav** (org switcher + เมนู) | sidebar ถาวรซ้าย `size.sidebar.w` | ยุบเป็น top bar (56px) + **drawer ที่ลอยทับหน้า** `size.drawer.w` / สูงสุด `size.drawer.max-w` + scrim `color.overlay` (`z.overlay`) |
-| **DataTable** | คอลัมน์เต็ม | `overflow-x:auto` ในกรอบ (เลื่อนแนวนอน) — คอลัมน์คีย์คงไว้ |
-| **Form** | 1–2 คอลัมน์ตามเหมาะ | 1 คอลัมน์ |
-| **Auth card** | centered `size.auth-card.max-w` (400px) | เหมือนกัน (ใช้ได้ทุกกว้าง) |
-| **Header/ScreenHeader** (§7) | full bar | เหมือนกัน |
+| component                              | desktop (≥lg)                           | tablet (md 768–1023)                                                                                                                 |
+| -------------------------------------- | --------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------ |
+| **AppShell nav** (org switcher + เมนู) | sidebar ถาวรซ้าย `size.sidebar.w`       | ยุบเป็น top bar (56px) + **drawer ที่ลอยทับหน้า** `size.drawer.w` / สูงสุด `size.drawer.max-w` + scrim `color.overlay` (`z.overlay`) |
+| **DataTable**                          | คอลัมน์เต็ม                             | `overflow-x:auto` ในกรอบ (เลื่อนแนวนอน) — คอลัมน์คีย์คงไว้                                                                           |
+| **Form**                               | 1–2 คอลัมน์ตามเหมาะ                     | 1 คอลัมน์                                                                                                                            |
+| **Auth card**                          | centered `size.auth-card.max-w` (400px) | เหมือนกัน (ใช้ได้ทุกกว้าง)                                                                                                           |
+| **Header/ScreenHeader** (§7)           | full bar                                | เหมือนกัน                                                                                                                            |
 
 - **drawer = ชั้นที่ลอยทับ ไม่ใช่บล็อกที่ดันหน้าลง** — ถ้ามันแทรกอยู่ในสายเนื้อหา ผู้ใช้จะอ่านว่าเป็น
   "ส่วนหนึ่งของหน้า" และหาทางปิดไม่เจอ · ต้องมีครบ: scrim ที่กดปิดได้ · `Escape` ปิด · ปิดเองเมื่อเลือกเมนู
@@ -482,34 +497,39 @@ design system นี้เป็นของ **กลาง 1 ชุด ไม�
 
 ### 9.1 ของกลาง (reuse ได้ทุก feature)
 
-| Component | feature ต้นทาง | หมายเหตุ / variant ที่ประกาศแล้ว |
-|---|---|---|
-| `AuthForm` | F-001 | โครงฟอร์ม auth |
-| `AuthCard` | F-001 | การ์ดกึ่งกลาง `size.auth-card.max-w` |
-| `TextField` | F-001 | label + helper + error inline |
-| `PasswordField` | F-001 | ปุ่มตา `icon.eye` / `icon.eye-off` (tap 44px) |
-| `Button` | F-001 (+F-002) | variant `primary` / `secondary` / `destructive` / **`tertiary`** · size `md` / **`sm`** · state `loading` / **`confirmed`** (§1.1c-3) |
-| `ErrorBanner` | F-001 | = `Banner` tone `danger` เชิง visual — คงชื่อเดิมไว้ |
-| `ThrottleBanner` | F-001 | = `Banner` tone `warning` + countdown (`type.numeric.tabular`) |
-| `ConfirmDialog` | F-001 (+F-002) | focus trap + Escape = cancel · **`body` รับหลายบรรทัด/รายการ** · **prop `focusCancel`** (default = `variant === "destructive"`) |
-| `Skeleton` | F-001 | shimmer วิ่งผ่าน (§2) — ไม่ใช่ spinner |
-| `Toast` | F-001 | web = มุมบนขวา · mobile = ล่างจอเหนือ safe-area |
-| `SessionListItem` | F-001 | แถวอุปกรณ์ + `color.badge.current.*` |
-| `EmptyState` | F-002 | ไอคอน `size.icon.xl` + หัวข้อ + คำอธิบาย + ปุ่ม 0–2 · **preset `ForbiddenPanel`** (`icon.lock`) ใช้กับทุก route ที่ RBAC ปฏิเสธ |
-| `Banner` | F-002 | 4 tone: `info` / `warning` / `success` / `danger` · ปุ่มในกล่องใช้โทนของกล่อง (§1.1c-2) |
-| `Badge` | F-002 | 4 variant: `success` / `warning` / `neutral` / `danger` · **ต้องมีข้อความไทยเสมอ** (ห้ามสื่อด้วยสีอย่างเดียว) |
-| `SectionCard` | F-002 | หัวข้อ + action มุมขวา + แถว label→value |
-| `CopyField` | F-002 | read-only + ปุ่ม `icon.copy` + ฟีดแบ็ก `Button state="confirmed"` · ต้องโฟกัส/เลือกข้อความได้ |
-| `RadioCardGroup` | F-002 | การ์ดตัวเลือก + คำอธิบาย + disabled พร้อมเหตุผล · แตะได้ทั้งการ์ด (≥44px) |
-| `ListRow` | F-002 | avatar/ไอคอน + บรรทัดหลัก/รอง + slot ขวา · สูง ≥ `size.list-row.min-h` |
+| Component         | feature ต้นทาง | หมายเหตุ / variant ที่ประกาศแล้ว                                                                                                                                                                                                                                                                                                                                                |
+| ----------------- | -------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `AuthForm`        | F-001          | โครงฟอร์ม auth                                                                                                                                                                                                                                                                                                                                                                  |
+| `AuthCard`        | F-001          | การ์ดกึ่งกลาง `size.auth-card.max-w`                                                                                                                                                                                                                                                                                                                                            |
+| `TextField`       | F-001          | label + helper + error inline                                                                                                                                                                                                                                                                                                                                                   |
+| `PasswordField`   | F-001          | ปุ่มตา `icon.eye` / `icon.eye-off` (tap 44px)                                                                                                                                                                                                                                                                                                                                   |
+| `Button`          | F-001 (+F-002) | variant `primary` / `secondary` / `destructive` / **`tertiary`** · size `md` / **`sm`** · state `loading` / **`confirmed`** (§1.1c-3)                                                                                                                                                                                                                                           |
+| `ErrorBanner`     | F-001          | = `Banner` tone `danger` เชิง visual — คงชื่อเดิมไว้                                                                                                                                                                                                                                                                                                                            |
+| `ThrottleBanner`  | F-001          | = `Banner` tone `warning` + countdown (`type.numeric.tabular`)                                                                                                                                                                                                                                                                                                                  |
+| `ConfirmDialog`   | F-001 (+F-002) | focus trap + Escape = cancel · **`body` รับหลายบรรทัด/รายการ** · **prop `focusCancel`** (default = `variant === "destructive"`)                                                                                                                                                                                                                                                 |
+| `Skeleton`        | F-001          | shimmer วิ่งผ่าน (§2) — ไม่ใช่ spinner                                                                                                                                                                                                                                                                                                                                          |
+| `Toast`           | F-001          | web = มุมบนขวา · mobile = ล่างจอเหนือ safe-area                                                                                                                                                                                                                                                                                                                                 |
+| `SessionListItem` | F-001          | แถวอุปกรณ์ + `color.badge.current.*`                                                                                                                                                                                                                                                                                                                                            |
+| `EmptyState`      | F-002          | ไอคอน `size.icon.xl` + หัวข้อ + คำอธิบาย + ปุ่ม 0–2 · **preset `ForbiddenPanel`** (`icon.lock`) ใช้กับทุก route ที่ RBAC ปฏิเสธ                                                                                                                                                                                                                                                 |
+| `Banner`          | F-002 (+F-003) | 4 tone: `info` / `warning` / `success` / `danger` · ปุ่มในกล่องใช้โทนของกล่อง (§1.1c-2) · **ไอคอนตั้งต้นตาม tone (`icon.info`/`icon.warn`/`icon.check-circle`/`icon.error`); override ได้เฉพาะ role จาก §1.6.2 — ที่ประกาศแล้ว: tone `info` + `icon.lock` = "ดูได้อย่างเดียวตามสิทธิ์"**                                                                                        |
+| `Badge`           | F-002          | 4 variant: `success` / `warning` / `neutral` / `danger` · **ต้องมีข้อความไทยเสมอ** (ห้ามสื่อด้วยสีอย่างเดียว)                                                                                                                                                                                                                                                                   |
+| `SectionCard`     | F-002          | หัวข้อ + action มุมขวา + แถว label→value                                                                                                                                                                                                                                                                                                                                        |
+| `CopyField`       | F-002          | read-only + ปุ่ม `icon.copy` + ฟีดแบ็ก `Button state="confirmed"` · ต้องโฟกัส/เลือกข้อความได้                                                                                                                                                                                                                                                                                   |
+| `RadioCardGroup`  | F-002          | การ์ดตัวเลือก + คำอธิบาย + disabled พร้อมเหตุผล · แตะได้ทั้งการ์ด (≥44px)                                                                                                                                                                                                                                                                                                       |
+| `ListRow`         | F-002          | avatar/ไอคอน + บรรทัดหลัก/รอง + slot ขวา · สูง ≥ `size.list-row.min-h`                                                                                                                                                                                                                                                                                                          |
+| `Checkbox`        | F-003          | กล่อง `size.checkbox` / `radius.checkbox` / `checkbox.border.w` · 4 สถานะ: ว่าง (ขอบสูตรปุ่ม outline) · ติ๊ก (`btn.bg` + ขอบ `color.primary` + `icon.check` สี `btn.fg`) · disabled-ติ๊ก/ล็อก และ disabled-ว่าง (`surface.muted` + ขอบ `border.default`, เครื่องหมาย `text.muted`) · ⛔ ไม่ใช้ opacity · ⛔ ไม่ใช้เดี่ยว ๆ — อยู่ใน `CheckboxRow` เสมอ · ยังไม่มี indeterminate |
+| `CheckboxRow`     | F-003          | กล่อง + ป้าย (`type.body.md`) + คำอธิบาย (`type.body.sm` `text.muted`) + `Badge` + บรรทัดเหตุผล (`icon.lock` sm) · **แตะได้ทั้งแถว ≥ `size.list-row.min-h`** · focus ring ที่แถว · disabled ยังโฟกัสได้ (`aria-disabled`) เพื่อให้อ่านเหตุผล · ป้ายไม่จางเมื่อ disabled                                                                                                         |
+| `Disclosure`      | F-003          | หัวข้อพับได้ · ทั้งแถวเป็นปุ่ม ≥ 56px · `type.button.md` + ตัวนับ `type.body.sm` ชิดขวา · `icon.chevron-down` (ปิด = −90°) · `aria-expanded` · เคารพ reduced-motion                                                                                                                                                                                                             |
+| `StickyActionBar` | F-003          | แถบปุ่มติดล่าง · พื้น `surface` + เส้นบน `border.default` · padding `space.3`/`space.4` + safe-area · mobile = ปุ่มหลักเดียวเต็มกว้าง · web = sticky ในคอลัมน์ ปุ่มชิดขวา gap `space.3` · ไม่มีเงา · ไม่ตั้ง z เอง                                                                                                                                                              |
 
 ### 9.2 ของระดับ feature (**ไม่**อยู่ใน DS — ห้าม feature อื่นลากไปใช้ตรง ๆ)
 
-| Component | feature | เหตุผลที่ไม่เข้า DS |
-|---|---|---|
-| `AppShell` · `OrgSwitcher` | F-002 | org-aware (ผูก `/o/[orgId]`) — ของกลางต้อง org-agnostic |
-| `CopyLinkPanel` | F-002 | ผูกกับกติกา "ลิงก์แสดงครั้งเดียว" (D-027) |
-| `MemberRow` · `InvitationRow` | F-002 | ผูก schema ของ F-002 (ประกอบจาก `ListRow` + `Badge` ซึ่งเป็นของกลาง) |
+| Component                                                                                                                | feature | เหตุผลที่ไม่เข้า DS                                                                                                                                    |
+| ------------------------------------------------------------------------------------------------------------------------ | ------- | ------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| `AppShell` · `OrgSwitcher`                                                                                               | F-002   | org-aware (ผูก `/o/[orgId]`) — ของกลางต้อง org-agnostic                                                                                                |
+| `CopyLinkPanel`                                                                                                          | F-002   | ผูกกับกติกา "ลิงก์แสดงครั้งเดียว" (D-027)                                                                                                              |
+| `MemberRow` · `InvitationRow`                                                                                            | F-002   | ผูก schema ของ F-002 (ประกอบจาก `ListRow` + `Badge` ซึ่งเป็นของกลาง)                                                                                   |
+| `CapabilityChecklist` · `CapabilityReadList` · `RoleListRow` · `RoleMetaLine` · `RoleReasonBanner` · `RoleChangedBanner` | F-003   | ผูก schema `CapabilityCatalog`/`RoleDetail` + กติกา reason ของ F-003 (ประกอบจาก `CheckboxRow` `Disclosure` `ListRow` `Badge` `Banner` ซึ่งเป็นของกลาง) |
 
 - **Claude Design sync (`/design-sync` + `DesignSync`):** push เฉพาะของใน **§9.1** เท่านั้น — ของใน §9.2 ไม่ push
 - component ระดับ feature ที่ feature ที่ 2 อยากใช้ = สัญญาณให้ **generalize แล้วย้ายขึ้น §9.1** (ผ่าน `@ux`)

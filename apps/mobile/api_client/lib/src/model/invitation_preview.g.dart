@@ -84,6 +84,8 @@ class _$InvitationPreview extends InvitationPreview {
   @override
   final String? roleKey;
   @override
+  final bool? roleNameCustomized;
+  @override
   final String emailMasked;
   @override
   final DateTime expiresAt;
@@ -98,6 +100,7 @@ class _$InvitationPreview extends InvitationPreview {
       {required this.organizationName,
       required this.roleName,
       this.roleKey,
+      this.roleNameCustomized,
       required this.emailMasked,
       required this.expiresAt,
       required this.status})
@@ -117,6 +120,7 @@ class _$InvitationPreview extends InvitationPreview {
         organizationName == other.organizationName &&
         roleName == other.roleName &&
         roleKey == other.roleKey &&
+        roleNameCustomized == other.roleNameCustomized &&
         emailMasked == other.emailMasked &&
         expiresAt == other.expiresAt &&
         status == other.status;
@@ -128,6 +132,7 @@ class _$InvitationPreview extends InvitationPreview {
     _$hash = $jc(_$hash, organizationName.hashCode);
     _$hash = $jc(_$hash, roleName.hashCode);
     _$hash = $jc(_$hash, roleKey.hashCode);
+    _$hash = $jc(_$hash, roleNameCustomized.hashCode);
     _$hash = $jc(_$hash, emailMasked.hashCode);
     _$hash = $jc(_$hash, expiresAt.hashCode);
     _$hash = $jc(_$hash, status.hashCode);
@@ -141,6 +146,7 @@ class _$InvitationPreview extends InvitationPreview {
           ..add('organizationName', organizationName)
           ..add('roleName', roleName)
           ..add('roleKey', roleKey)
+          ..add('roleNameCustomized', roleNameCustomized)
           ..add('emailMasked', emailMasked)
           ..add('expiresAt', expiresAt)
           ..add('status', status))
@@ -165,6 +171,11 @@ class InvitationPreviewBuilder
   String? get roleKey => _$this._roleKey;
   set roleKey(String? roleKey) => _$this._roleKey = roleKey;
 
+  bool? _roleNameCustomized;
+  bool? get roleNameCustomized => _$this._roleNameCustomized;
+  set roleNameCustomized(bool? roleNameCustomized) =>
+      _$this._roleNameCustomized = roleNameCustomized;
+
   String? _emailMasked;
   String? get emailMasked => _$this._emailMasked;
   set emailMasked(String? emailMasked) => _$this._emailMasked = emailMasked;
@@ -187,6 +198,7 @@ class InvitationPreviewBuilder
       _organizationName = $v.organizationName;
       _roleName = $v.roleName;
       _roleKey = $v.roleKey;
+      _roleNameCustomized = $v.roleNameCustomized;
       _emailMasked = $v.emailMasked;
       _expiresAt = $v.expiresAt;
       _status = $v.status;
@@ -216,6 +228,7 @@ class InvitationPreviewBuilder
           roleName: BuiltValueNullFieldError.checkNotNull(
               roleName, r'InvitationPreview', 'roleName'),
           roleKey: roleKey,
+          roleNameCustomized: roleNameCustomized,
           emailMasked: BuiltValueNullFieldError.checkNotNull(
               emailMasked, r'InvitationPreview', 'emailMasked'),
           expiresAt: BuiltValueNullFieldError.checkNotNull(

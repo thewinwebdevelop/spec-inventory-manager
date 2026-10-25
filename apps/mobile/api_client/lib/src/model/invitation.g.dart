@@ -100,6 +100,12 @@ class _$Invitation extends Invitation {
   final String? acceptedByUserId;
   @override
   final bool? acceptedUserCreatedAfterInvite;
+  @override
+  final bool? roleNameCustomized;
+  @override
+  final bool? viewerCanManage;
+  @override
+  final String? manageBlockedReason;
 
   factory _$Invitation([void Function(InvitationBuilder)? updates]) =>
       (InvitationBuilder()..update(updates))._build();
@@ -117,7 +123,10 @@ class _$Invitation extends Invitation {
       required this.createdAt,
       this.acceptedAt,
       this.acceptedByUserId,
-      this.acceptedUserCreatedAfterInvite})
+      this.acceptedUserCreatedAfterInvite,
+      this.roleNameCustomized,
+      this.viewerCanManage,
+      this.manageBlockedReason})
       : super._();
   @override
   Invitation rebuild(void Function(InvitationBuilder) updates) =>
@@ -142,7 +151,11 @@ class _$Invitation extends Invitation {
         createdAt == other.createdAt &&
         acceptedAt == other.acceptedAt &&
         acceptedByUserId == other.acceptedByUserId &&
-        acceptedUserCreatedAfterInvite == other.acceptedUserCreatedAfterInvite;
+        acceptedUserCreatedAfterInvite ==
+            other.acceptedUserCreatedAfterInvite &&
+        roleNameCustomized == other.roleNameCustomized &&
+        viewerCanManage == other.viewerCanManage &&
+        manageBlockedReason == other.manageBlockedReason;
   }
 
   @override
@@ -161,6 +174,9 @@ class _$Invitation extends Invitation {
     _$hash = $jc(_$hash, acceptedAt.hashCode);
     _$hash = $jc(_$hash, acceptedByUserId.hashCode);
     _$hash = $jc(_$hash, acceptedUserCreatedAfterInvite.hashCode);
+    _$hash = $jc(_$hash, roleNameCustomized.hashCode);
+    _$hash = $jc(_$hash, viewerCanManage.hashCode);
+    _$hash = $jc(_$hash, manageBlockedReason.hashCode);
     _$hash = $jf(_$hash);
     return _$hash;
   }
@@ -181,7 +197,10 @@ class _$Invitation extends Invitation {
           ..add('acceptedAt', acceptedAt)
           ..add('acceptedByUserId', acceptedByUserId)
           ..add(
-              'acceptedUserCreatedAfterInvite', acceptedUserCreatedAfterInvite))
+              'acceptedUserCreatedAfterInvite', acceptedUserCreatedAfterInvite)
+          ..add('roleNameCustomized', roleNameCustomized)
+          ..add('viewerCanManage', viewerCanManage)
+          ..add('manageBlockedReason', manageBlockedReason))
         .toString();
   }
 }
@@ -246,6 +265,21 @@ class InvitationBuilder implements Builder<Invitation, InvitationBuilder> {
   set acceptedUserCreatedAfterInvite(bool? acceptedUserCreatedAfterInvite) =>
       _$this._acceptedUserCreatedAfterInvite = acceptedUserCreatedAfterInvite;
 
+  bool? _roleNameCustomized;
+  bool? get roleNameCustomized => _$this._roleNameCustomized;
+  set roleNameCustomized(bool? roleNameCustomized) =>
+      _$this._roleNameCustomized = roleNameCustomized;
+
+  bool? _viewerCanManage;
+  bool? get viewerCanManage => _$this._viewerCanManage;
+  set viewerCanManage(bool? viewerCanManage) =>
+      _$this._viewerCanManage = viewerCanManage;
+
+  String? _manageBlockedReason;
+  String? get manageBlockedReason => _$this._manageBlockedReason;
+  set manageBlockedReason(String? manageBlockedReason) =>
+      _$this._manageBlockedReason = manageBlockedReason;
+
   InvitationBuilder() {
     Invitation._defaults(this);
   }
@@ -266,6 +300,9 @@ class InvitationBuilder implements Builder<Invitation, InvitationBuilder> {
       _acceptedAt = $v.acceptedAt;
       _acceptedByUserId = $v.acceptedByUserId;
       _acceptedUserCreatedAfterInvite = $v.acceptedUserCreatedAfterInvite;
+      _roleNameCustomized = $v.roleNameCustomized;
+      _viewerCanManage = $v.viewerCanManage;
+      _manageBlockedReason = $v.manageBlockedReason;
       _$v = null;
     }
     return this;
@@ -308,6 +345,9 @@ class InvitationBuilder implements Builder<Invitation, InvitationBuilder> {
           acceptedAt: acceptedAt,
           acceptedByUserId: acceptedByUserId,
           acceptedUserCreatedAfterInvite: acceptedUserCreatedAfterInvite,
+          roleNameCustomized: roleNameCustomized,
+          viewerCanManage: viewerCanManage,
+          manageBlockedReason: manageBlockedReason,
         );
     replace(_$result);
     return _$result;

@@ -1,0 +1,6 @@
+// G-12 red fixture DART-5 — a `roleLabel` declared outside the known label map.
+bool roleLabel(String k) => kElevated.contains(k); // ← hit
+String? roleLabel(String? k) { // ← hit
+  return k;
+}
+final roleLabel = (String k) => kElevated.contains(k); // ← hit

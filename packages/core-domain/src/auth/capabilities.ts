@@ -1,37 +1,15 @@
-// F-001 · T-001-01 / T-001-07 — capability constants (single source of truth).
-// api-spec §2.8 step 1: F-001 defines CAPABILITY_MANAGE_MEMBERS as THE string
-// constant for the admin-reset capability. F-003 reuses this constant; it does
-// NOT redefine it. Living in core-domain (pure, framework-free) keeps it shared
-// between the F-001 inline check and the future F-003 guard without either
-// hard-coding the literal.
+// F-001 · T-001-01 / T-001-07 — capability constants + check.
 //
-// The capability registry (docs/01-data-model.md §Tenancy & Auth) is open-ended;
-// F-001 only needs the one it enforces. Others are added as their features land.
-
-/** Capability required to reset a member's password (admin-reset, api-spec §2.8). */
-export const CAPABILITY_MANAGE_MEMBERS = "manage_members" as const;
-
-/**
- * Capability guarding the org profile + tax profile (F-002 · api-spec §3.4/§3.5/§3.16).
- *
- * Moved here by T-002-08c. T-002-05 had to declare it inside `apps/api` because
- * that task was fenced out of `packages/**`; the string value is what must never
- * move, so the move is mechanical and the literal is pinned by a test below.
- */
-export const CAPABILITY_MANAGE_ORG_SETTINGS = "manage_org_settings" as const;
-
-/** Full-access capability (Owner). Present so a capability check can honor the
- *  system Owner role without listing every capability (F-000 Role.isSystem). */
-export const CAPABILITY_FULL_ACCESS = "full_access" as const;
-
-/**
- * Pure capability check: does a role's capability list grant `required`?
- * `full_access` is a wildcard that grants everything (the system Owner role).
- * Used by the admin-reset inline check (api-spec §2.8 step 2) and, later, F-003.
- */
-export function hasCapability(
-  capabilities: readonly string[],
-  required: string,
-): boolean {
-  return capabilities.includes(CAPABILITY_FULL_ACCESS) || capabilities.includes(required);
-}
+// F-003 (T-003-B03) moved both into `rbac/` (registry + expand); this module
+// keeps the names F-001/F-002 call sites import, as re-exports of the SAME
+// bindings (architecture §1: "export ชื่อเดิมคงไว้"). String values never
+// change — they are compared against `Role.capabilities` rows in the database.
+//
+// `hasCapability` now runs through `expandCapabilities`: `full_access` grants
+// every registered key and `manage_X` grants `view_X` (AC-7.3).
+export {
+  CAPABILITY_MANAGE_MEMBERS,
+  CAPABILITY_MANAGE_ORG_SETTINGS,
+  CAPABILITY_FULL_ACCESS,
+} from "../rbac/registry";
+export { hasCapability } from "../rbac/expand";

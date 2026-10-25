@@ -1,0 +1,13 @@
+// G-12 red fixture TS-9 — a `roleLabel` declared outside the known label maps
+// (e.g. in apps/api, deciding inside: `return ELEVATED.has(k)`). Every
+// declaration spelling is a hit; only the two known label maps pin theirs.
+export function roleLabel(k: string): boolean { // ← hit
+  return ELEVATED.has(k);
+}
+export const roleLabel = (k: string) => ELEVATED.has(k); // ← hit
+class Labels {
+  static roleLabel(k: string): boolean { // ← hit
+    return ELEVATED.has(k);
+  }
+}
+const helpers = { roleLabel: (k: string) => ELEVATED.has(k) }; // ← hit

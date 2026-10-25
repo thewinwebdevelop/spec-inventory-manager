@@ -1,0 +1,2 @@
+// G-09 red fixture: mail sent with no mailer package at all.
+const relay = process.env.SMTP_URL ?? "smtp://localhost:25";

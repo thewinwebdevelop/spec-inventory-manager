@@ -61,7 +61,7 @@ Name | Type | Description  | Notes
 [[Back to top]](#) [[Back to API list]](../README.md#documentation-for-api-endpoints) [[Back to Model list]](../README.md#documentation-for-models) [[Back to README]](../README.md)
 
 # **listMembers**
-> MemberListPage listMembers(orgId, status, cursor, limit, withTotal, xOrganizationId)
+> MemberListPage listMembers(orgId, status, roleId, cursor, limit, withTotal, xOrganizationId)
 
 List the shop's members
 
@@ -74,13 +74,14 @@ import 'package:omnistock_api_client/api.dart';
 final api = OmnistockApiClient().getMembersApi();
 final String orgId = orgId_example; // String | Organization id. On F-002 org-scoped routes this is one of the two accepted sources of org context (the other is the `X-Organization-Id` header, D-025); sending both with different values is `422 ORG_MISMATCH`. 
 final String status = status_example; // String | Default `all`. Any other value → `422`.
+final String roleId = roleId_example; // String | F-003 — only members holding this role, ANDed with `status` (and with `total`). A role id of another shop (or one that never existed) answers `200` with an empty page, never an error. A deleted role still filters (its former holders). Longer than 64 characters, or repeated → `422 VALIDATION_FAILED` (`fieldErrors.roleId`). 
 final String cursor = cursor_example; // String | Opaque keyset cursor from the previous page's `nextCursor`. Base64url — clients MUST NOT decode or construct one. Unreadable value → `422 VALIDATION_FAILED` with `fieldErrors.cursor`. 
 final int limit = 56; // int | Page size. Default 25, clamped to 100. Non-integer / < 1 → `422 VALIDATION_FAILED` with `fieldErrors.limit` (a bug is not silently corrected). 
 final bool withTotal = true; // bool | Opt in to the `total` count on this page. OPT-IN PER ENDPOINT: only the endpoints that declare this parameter compute a total — see the endpoint's own documentation. (`GET /me/organizations` and `GET /orgs/{orgId}/invitations` do NOT support it today; api-spec §1 states the convention generally, the server implements it on `GET /orgs/{orgId}/members` only.) 
 final String xOrganizationId = xOrganizationId_example; // String | Org context (api-spec §1). Optional on routes that already carry `{orgId}` in the path; if both are sent they MUST match, otherwise `422 ORG_MISMATCH`. User-scoped and public routes ignore this header entirely (I-3). 
 
 try {
-    final response = api.listMembers(orgId, status, cursor, limit, withTotal, xOrganizationId);
+    final response = api.listMembers(orgId, status, roleId, cursor, limit, withTotal, xOrganizationId);
     print(response);
 } on DioException catch (e) {
     print('Exception when calling MembersApi->listMembers: $e\n');
@@ -93,6 +94,7 @@ Name | Type | Description  | Notes
 ------------- | ------------- | ------------- | -------------
  **orgId** | **String**| Organization id. On F-002 org-scoped routes this is one of the two accepted sources of org context (the other is the `X-Organization-Id` header, D-025); sending both with different values is `422 ORG_MISMATCH`.  | 
  **status** | **String**| Default `all`. Any other value → `422`. | [optional] [default to 'all']
+ **roleId** | **String**| F-003 — only members holding this role, ANDed with `status` (and with `total`). A role id of another shop (or one that never existed) answers `200` with an empty page, never an error. A deleted role still filters (its former holders). Longer than 64 characters, or repeated → `422 VALIDATION_FAILED` (`fieldErrors.roleId`).  | [optional] 
  **cursor** | **String**| Opaque keyset cursor from the previous page's `nextCursor`. Base64url — clients MUST NOT decode or construct one. Unreadable value → `422 VALIDATION_FAILED` with `fieldErrors.cursor`.  | [optional] 
  **limit** | **int**| Page size. Default 25, clamped to 100. Non-integer / < 1 → `422 VALIDATION_FAILED` with `fieldErrors.limit` (a bug is not silently corrected).  | [optional] [default to 25]
  **withTotal** | **bool**| Opt in to the `total` count on this page. OPT-IN PER ENDPOINT: only the endpoints that declare this parameter compute a total — see the endpoint's own documentation. (`GET /me/organizations` and `GET /orgs/{orgId}/invitations` do NOT support it today; api-spec §1 states the convention generally, the server implements it on `GET /orgs/{orgId}/members` only.)  | [optional] [default to false]
@@ -118,7 +120,7 @@ Name | Type | Description  | Notes
 
 Remove another member from the shop
 
-F-002 US-5 (api-spec §3.9). Requires `manage_members`, plus `full_access` when the target is an Owner (D-028/C-1).  SOFT delete: `status → revoked` and `revokedAt` is stamped. The row stays, because history references it and because `revokedAt` is a security input — an invitation issued BEFORE it can no longer be accepted (I-1).  In the SAME transaction, any pending invitation for that person's email in this shop is cancelled; `cancelledInvitations` reports how many, so the UI can say so.  Effect is immediate: the removed member's next request to this shop is `403 ORG_ACCESS_DENIED` and the shop is gone from their `GET /me/organizations`. Their session is not destroyed and their other shops are untouched.  Removing YOURSELF through this route works, but only if you already hold `manage_members`. Everyone else uses `DELETE /orgs/{orgId}/membership` — this route grants nobody a softer path (D-029).  Idempotency under a race: two concurrent revokes of the same person produce one `200` and one `404`, and `revokedAt` is written once. 
+F-002 US-5 (api-spec §3.9). Requires `manage_members`, plus `full_access` when the target is an Owner (D-028/C-1).  SOFT delete: `status → revoked` and `revokedAt` is stamped. The row stays, because history references it and because `revokedAt` is a security input — an invitation issued BEFORE it can no longer be accepted (I-1).  In the SAME transaction, any pending invitation for that person's email in this shop is cancelled; `cancelledInvitations` reports how many, so the UI can say so.  Effect is immediate: the removed member's next request to this shop is `403 ORG_ACCESS_DENIED` and the shop is gone from their `GET /me/organizations`. Their session is not destroyed and their other shops are untouched.  Removing YOURSELF through this route works, but only if you already hold `manage_members`. Everyone else uses `DELETE /orgs/{orgId}/membership` — this route grants nobody a softer path (D-029).  Idempotency under a race: two concurrent revokes of the same person produce one `200` and one `404`, and `revokedAt` is written once.  ⚠️ F-003 NARROWS THIS ROUTE (wire shape unchanged — F-003 api-spec §4.3, D-034 · AC-5.4): after the Owner rule, a target whose role is not strictly below the caller's capabilities → `403 TARGET_NOT_BELOW_ACTOR` (no `details`). Removing yourself is exempt (D-029). The route also joins the `memberWrite` rate limit (120/hour per caller per shop) → `429 RATE_LIMITED` with `Retry-After`. 
 
 ### Example
 ```dart
@@ -165,7 +167,7 @@ Name | Type | Description  | Notes
 
 Change a member's role
 
-F-002 US-6 (api-spec §3.8). Requires `manage_members`, and additionally `full_access` (Owner-only, D-028/C-1) when EITHER the new role holds `full_access` (promoting somebody — including yourself — to Owner) OR the target's CURRENT role holds it (editing an Owner). Otherwise `403 FORBIDDEN`.  Acting on yourself is allowed (an Owner stepping down after appointing a successor), subject to the last-Owner rule.  Answers with the §3.7 member row, so the client never has to refetch the list to render the new state — which is why this response carries an email address and therefore the §3.7 `no-store` policy (api-spec §1 lists §3.7 but not §3.8 by number; the classification follows the SHAPE, and `RESPONSE_HEADER_POLICY` in apps/api encodes that).  The target's state is re-read INSIDE the transaction, after the shop's row lock is taken — so a `PATCH` racing a `DELETE` answers `404`, never a 500 or a resurrection. 
+F-002 US-6 (api-spec §3.8). Requires `manage_members`, and additionally `full_access` (Owner-only, D-028/C-1) when EITHER the new role holds `full_access` (promoting somebody — including yourself — to Owner) OR the target's CURRENT role holds it (editing an Owner). Otherwise `403 FORBIDDEN`.  Acting on yourself is allowed (an Owner stepping down after appointing a successor), subject to the last-Owner rule.  Answers with the §3.7 member row, so the client never has to refetch the list to render the new state — which is why this response carries an email address and therefore the §3.7 `no-store` policy (api-spec §1 lists §3.7 but not §3.8 by number; the classification follows the SHAPE, and `RESPONSE_HEADER_POLICY` in apps/api encodes that).  The target's state is re-read INSIDE the transaction, after the shop's row lock is taken — so a `PATCH` racing a `DELETE` answers `404`, never a 500 or a resurrection.  ⚠️ F-003 NARROWS THIS ROUTE — THE WIRE SHAPE IS UNCHANGED, SO NO DIFF TOOL SEES IT (F-003 api-spec §4.3, D-034 · AC-5.1/5.4). Checks run in this fixed order, and every case F-002 already refused still answers exactly what it did:   1. touching an Owner without `full_access` → `403 FORBIDDEN` (as before);   2. the target's CURRENT role is not strictly below the caller's      capabilities (equal, above, or incomparable) →      `403 TARGET_NOT_BELOW_ACTOR` — except when the target is the caller      (stepping yourself down stays allowed, D-029);   3. the NEW role holds a capability the caller does not →      `403 ROLE_EXCEEDS_ACTOR` — this one applies to yourself too. Neither new code carries `details` (AC-6.4). A \"change\" to the role the target already has is checked the same way and is not short-circuited: refused → the 403 above; allowed → `200` and the same `role_changed` event as F-002 (SR-19). The route also joins the `memberWrite` rate limit (120/hour per caller per shop) → `429 RATE_LIMITED` with `Retry-After`. 
 
 ### Example
 ```dart

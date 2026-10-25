@@ -6,7 +6,7 @@
 // verify (§9); wrong-password and unknown-email both return the identical
 // INVALID_CREDENTIALS shape. Throttle is ALWAYS its own 429 (M-1), never folded
 // into the 401.
-import { Injectable } from "@nestjs/common";
+import { Injectable, Logger } from "@nestjs/common";
 import { ORG_TX_TIMEOUTS } from "@omnistock/config";
 import {
   checkPasswordPolicy,
@@ -23,7 +23,7 @@ import {
 import { domainError } from "../common/domain-exception";
 import { rethrowOrgLockError } from "@omnistock/db";
 import { PrismaService } from "../prisma/prisma.service";
-import type { SecurityEventType } from "./security-events.service";
+import type { DirectSecurityEventType } from "./security-events.service";
 import { HashingService } from "./hashing.service";
 import { RefreshTokenService, type IssuedRefresh } from "./refresh-token.service";
 import { AccessTokenService } from "./access-token.service";
@@ -63,11 +63,82 @@ class AdminResetRefusedRollback extends Error {
  * OWNER's password" is an account-takeover signal, not a side effect of the
  * multi-org policy, and an investigator must be able to tell them apart.
  */
-const ADMIN_RESET_REFUSAL_EVENTS: Readonly<Partial<Record<AdminResetRefusal, SecurityEventType>>> =
-  Object.freeze({
-    target_active_in_other_org: "auth.password.admin_reset_blocked_multi_org",
-    target_is_owner: "auth.password.admin_reset_blocked_owner_target",
-  });
+const ADMIN_RESET_REFUSAL_EVENTS: Readonly<
+  Partial<Record<AdminResetRefusal, DirectSecurityEventType>>
+> = Object.freeze({
+  target_active_in_other_org: "auth.password.admin_reset_blocked_multi_org",
+  target_is_owner: "auth.password.admin_reset_blocked_owner_target",
+  // F-003 · T-003-B20 (D-034 · architecture §7): the target is not strictly
+  // below the caller (equal / more / incomparable). Its own type, so "an Admin
+  // tried to reset an equal Admin" is not mistaken for the Owner signal.
+  target_not_proper_subset: "auth.password.admin_reset_blocked_privilege",
+});
+
+// ── T-003-B20 ★ SR-05 — the locks under the decision (architecture §3 · api-spec §6) ──
+//
+// Order: `User` FOR UPDATE (target) → `Membership` FOR SHARE (caller + target,
+// by `userId` asc) → `Role` FOR SHARE (their roles, by `id` asc) → decide.
+//
+// Why: PATCH/DELETE member UPDATEs the `Membership` row, which conflicts with
+// FOR SHARE. So a reset cannot decide on a `roleId` that is being changed: a
+// PATCH that is already in flight makes the reset wait, then the reset reads
+// the committed row (Read Committed re-checks a locked row after the wait). A
+// PATCH that arrives later waits for the reset to commit. Locking the `Role`
+// rows does the same against a role edit (UPDATE `Role`). The facts the
+// decision uses are built from THESE rows and from nothing read before them.
+//
+// Both statements are org-scoped (golden rule 3), and the id lists are sorted
+// so two transactions can never take the same locks in opposite orders (the
+// lock graph stays a DAG — architecture §3).
+//
+// A member's CURRENT role is read without the live filter on purpose (a
+// history read). A role an active member holds cannot be soft-deleted (trigger
+// `f003_role_in_use`). Filtering `deletedAt` here would turn the row into
+// "missing" → `[]`, and `[]` is strictly below EVERY caller, so it would ALLOW
+// the reset. Instead the row is read WITH `deletedAt`, and what it reveals is
+// refused (fix round 1, security review L-1/L-2): a missing row, or an ACTIVE
+// membership on a deleted role, is a broken invariant → `authority_rule_drift`
+// → the uniform 404 + error log. That matches B15's OrgContextMiddleware, which
+// this `@UserScoped` route does not pass through.
+// (No `LIVE_ROLE_WHERE` — B15's helper — on purpose, for the reason above.)
+const LOCK_MEMBERSHIPS_SQL =
+  'SELECT "userId", "roleId", "status"::text AS "status" FROM "Membership" ' +
+  'WHERE "organizationId" = $1 AND "userId" = ANY($2::text[]) ' +
+  'ORDER BY "userId" ASC FOR SHARE';
+// role-read: history — the role a member HOLDS; deleted/missing is refused fail-closed, never read as []
+const LOCK_ROLES_SQL =
+  'SELECT id, capabilities, "deletedAt" FROM "Role" ' +
+  'WHERE "organizationId" = $1 AND id = ANY($2::text[]) ' +
+  "ORDER BY id ASC FOR SHARE";
+
+interface LockedMembershipRow {
+  userId: string;
+  roleId: string;
+  status: string;
+}
+interface LockedRoleRow {
+  id: string;
+  capabilities: string[];
+  deletedAt: Date | null;
+}
+
+/**
+ * Fix round 1 (L-1 · L-2) — the locked read revealed a broken role invariant.
+ * Thrown out of `lockMembershipFacts` to roll back. The service maps it to
+ * `authority_rule_drift` (the uniform 404 + one error log). It never reaches
+ * the wire and is never decided on.
+ */
+class RoleInvariantBroken extends Error {
+  constructor(kind: "role_missing" | "role_deleted", detail: string) {
+    super(`${kind}: ${detail}`);
+    this.name = "RoleInvariantBroken";
+  }
+}
+
+const DRIFT_REFUSAL: AdminResetDecision = Object.freeze({
+  allowed: false,
+  refusals: Object.freeze(["authority_rule_drift"]) as readonly AdminResetRefusal[],
+});
 
 /**
  * `SET LOCAL lock_timeout` value for the admin-reset transaction. Read from
@@ -79,15 +150,15 @@ const ADMIN_RESET_REFUSAL_EVENTS: Readonly<Partial<Record<AdminResetRefusal, Sec
 function adminResetLockTimeoutMs(): number {
   const ms = ORG_TX_TIMEOUTS.lockTimeoutMs;
   if (!Number.isInteger(ms) || ms <= 0) {
-    throw new Error(
-      `ORG_TX_TIMEOUTS.lockTimeoutMs must be a positive integer (got ${String(ms)})`,
-    );
+    throw new Error(`ORG_TX_TIMEOUTS.lockTimeoutMs must be a positive integer (got ${String(ms)})`);
   }
   return ms;
 }
 
 @Injectable()
 export class AuthService {
+  private readonly logger = new Logger(AuthService.name);
+
   constructor(
     private readonly prisma: PrismaService,
     private readonly hashing: HashingService,
@@ -103,7 +174,10 @@ export class AuthService {
 
   // ─── US-1 signup ───────────────────────────────────────────────────────────
 
-  async signup(rawEmail: string, password: string): Promise<{ userId: string; email: string; verified: boolean }> {
+  async signup(
+    rawEmail: string,
+    password: string,
+  ): Promise<{ userId: string; email: string; verified: boolean }> {
     const email = normalizeEmail(rawEmail);
     if (!isValidEmailShape(email)) {
       throw domainError("EMAIL_INVALID");
@@ -281,6 +355,58 @@ export class AuthService {
     };
   }
 
+  /**
+   * T-003-B20 · SR-05 — lock the caller's and the target's `Membership` rows
+   * (FOR SHARE, `userId` asc), then the `Role` rows they point at (FOR SHARE,
+   * `id` asc), and build both sides' facts from those locked rows only.
+   *
+   * Must run after the target `User` row is locked (architecture §3 order).
+   * A missing membership row = `status: null` (refused by the decision as
+   * before). A membership whose role row did not come back (impossible under
+   * the composite FK), or an ACTIVE membership on a soft-deleted role
+   * (impossible while the triggers hold) → `RoleInvariantBroken`, which the
+   * caller maps to the uniform 404 + error log. It is never decided on:
+   * `[]` reads as "below everyone" and would allow the reset.
+   */
+  private async lockMembershipFacts(
+    tx: { $queryRawUnsafe: <T>(sql: string, ...params: unknown[]) => Promise<T> },
+    organizationId: string,
+    callerUserId: string,
+    targetUserId: string,
+  ): Promise<{ caller: AdminResetMembershipFacts; target: AdminResetMembershipFacts }> {
+    const userIds = [...new Set([callerUserId, targetUserId])].sort();
+    const memberships = await tx.$queryRawUnsafe<LockedMembershipRow[]>(
+      LOCK_MEMBERSHIPS_SQL,
+      organizationId,
+      userIds,
+    );
+    const roleIds = [...new Set(memberships.map((m) => m.roleId))].sort();
+    const roles =
+      roleIds.length === 0
+        ? []
+        : await tx.$queryRawUnsafe<LockedRoleRow[]>(LOCK_ROLES_SQL, organizationId, roleIds);
+    const roleById = new Map(roles.map((r) => [r.id, r]));
+
+    const factsOf = (userId: string): AdminResetMembershipFacts => {
+      const m = memberships.find((row) => row.userId === userId);
+      if (!m) return { status: null, capabilities: [] };
+      const role = roleById.get(m.roleId);
+      const where = `membership ${organizationId}/${userId} role ${m.roleId}`;
+      if (role === undefined) throw new RoleInvariantBroken("role_missing", where);
+      // History stays readable: only an ACTIVE membership on a deleted role is
+      // refused (B15's middleware policy). A revoked/invited one is refused by
+      // the decision anyway, silently, as before.
+      if (role.deletedAt !== null && m.status === "active") {
+        throw new RoleInvariantBroken("role_deleted", where);
+      }
+      return {
+        status: m.status as AdminResetMembershipFacts["status"],
+        capabilities: role.capabilities,
+      };
+    };
+    return { caller: factsOf(callerUserId), target: factsOf(targetUserId) };
+  }
+
   async adminResetPassword(
     callerUserId: string,
     orgId: string,
@@ -290,9 +416,15 @@ export class AuthService {
     // Carried out of the transaction callback in a box: the values must survive
     // the deliberate rollback, and TypeScript does not track assignments made
     // inside a callback.
-    const outcome: { refused: AdminResetDecision | null; targetEmail: string | null } = {
+    const outcome: {
+      refused: AdminResetDecision | null;
+      targetEmail: string | null;
+      /** Why `authority_rule_drift` fired — for the error log only. */
+      driftCause: string;
+    } = {
       refused: null,
       targetEmail: null,
+      driftCause: "decideMemberAuthority answered a reason reset cannot produce",
     };
 
     // (0) Password policy FIRST, before anything reads the database.
@@ -354,8 +486,16 @@ export class AuthService {
             // outside the transaction: a membership revoked while we were
             // hashing must stop the write, and the pre-check is an optimisation,
             // never the authority.
-            const caller = await this.readMembershipFacts(tx, orgId, callerUserId);
-            const target = await this.readMembershipFacts(tx, orgId, targetUserId);
+            //
+            // T-003-B20 · SR-05: both memberships and their roles come from
+            // the LOCKED rows (Membership FOR SHARE → Role FOR SHARE), never
+            // from a read taken before the lock.
+            const { caller, target } = await this.lockMembershipFacts(
+              tx,
+              orgId,
+              callerUserId,
+              targetUserId,
+            );
             // The ONE deliberately cross-org query in this file (C-2). It is
             // legal here because `auth/` is on the SYSTEM_PRISMA allowlist
             // (architecture §2.1) and because the whole point of the check is
@@ -404,6 +544,11 @@ export class AuthService {
       // Our own rollback signal is the ONLY thing swallowed here.
       if (err instanceof AdminResetRefusedRollback) {
         // fall through to the refusal handling below
+      } else if (err instanceof RoleInvariantBroken) {
+        // Fix round 1 (L-1 · L-2): the same fail-closed path as a rule drift —
+        // rolled back, the uniform 404, one error log. Never a 500 (an oracle).
+        outcome.refused = DRIFT_REFUSAL;
+        outcome.driftCause = err.message;
       } else {
         // §15 row 6b — `SET LOCAL lock_timeout` firing, a deadlock, or a pool
         // timeout is "the database made us stop", not "we are broken". Left
@@ -427,6 +572,16 @@ export class AuthService {
         if (type) {
           this.securityEvents.emit(type, { actorUserId: callerUserId, orgId, targetUserId });
         }
+      }
+      // T-003-B20 — the two copies of "who may" disagreed, or (fix round 1)
+      // the locked read showed a broken role invariant. The caller still gets
+      // the uniform 404 (fail-closed, and a 500 would be an oracle). We log it
+      // at error level so on-call sees it. Ids only: no password, no hash.
+      if (refused.refusals.some((r) => r === "authority_rule_drift")) {
+        this.logger.error(
+          `admin reset refused on authority_rule_drift (${outcome.driftCause}) ` +
+            `actor=${callerUserId} org=${orgId} target=${targetUserId}`,
+        );
       }
       // The SAME 404 as "user not found" — same code, same message, same
       // fields. Constructed at ONE place for all four refusals so the bodies

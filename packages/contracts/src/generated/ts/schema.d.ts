@@ -177,10 +177,14 @@ export interface paths {
          * Admin resets a member's password
          * @description US-5. Bearer-authed. The capability check is INLINE application logic (F-001-owned): the caller must have an ACTIVE Membership(orgId) whose role grants `manage_members`, AND the target must be an ACTIVE member of orgId (H-2). Any failure → the same-shape 404 (never 403 — no org-existence/status/capability oracle). On success: sets the target's password and revokes all the target's families. The capability check is not expressible as an OpenAPI security requirement.
          *
-         *     ⚠️ THE WIRE SHAPE IS UNCHANGED SINCE F-001, BUT THE BEHAVIOUR NARROWED TWICE — cases that used to answer `200` now answer the SAME `404`, and no diff tool can see it (api-spec §2 note / architecture §15):
+         *     ⚠️ THE WIRE SHAPE IS UNCHANGED SINCE F-001, BUT THE BEHAVIOUR NARROWED THREE TIMES — cases that used to answer `200` now answer the SAME `404`, and no diff tool can see it (api-spec §2 note / architecture §15):
          *       • D-028/C-2 — the target also holds an active membership in ANOTHER shop;
          *       • D-030/NEW-1 — the target is an Owner (role holds `full_access`) and the
-         *         caller does not hold `full_access`.
+         *         caller does not hold `full_access`;
+         *       • F-003 (api-spec §6, AC-5.5/5.5b) — the target's role is not strictly
+         *         below the caller's capabilities (equal, above, or incomparable): an
+         *         Admin can no longer reset another Admin. Same status, same body, same
+         *         headers as "not a member" (only the trace id differs).
          *     Accepted consequence (D-030): a shop with a single Owner who forgets their password cannot self-recover until F-081.
          */
         post: operations["authAdminResetPassword"];
@@ -409,6 +413,8 @@ export interface paths {
          *     Removing YOURSELF through this route works, but only if you already hold `manage_members`. Everyone else uses `DELETE /orgs/{orgId}/membership` — this route grants nobody a softer path (D-029).
          *
          *     Idempotency under a race: two concurrent revokes of the same person produce one `200` and one `404`, and `revokedAt` is written once.
+         *
+         *     ⚠️ F-003 NARROWS THIS ROUTE (wire shape unchanged — F-003 api-spec §4.3, D-034 · AC-5.4): after the Owner rule, a target whose role is not strictly below the caller's capabilities → `403 TARGET_NOT_BELOW_ACTOR` (no `details`). Removing yourself is exempt (D-029). The route also joins the `memberWrite` rate limit (120/hour per caller per shop) → `429 RATE_LIMITED` with `Retry-After`.
          */
         delete: operations["revokeMember"];
         options?: never;
@@ -422,6 +428,16 @@ export interface paths {
          *     Answers with the §3.7 member row, so the client never has to refetch the list to render the new state — which is why this response carries an email address and therefore the §3.7 `no-store` policy (api-spec §1 lists §3.7 but not §3.8 by number; the classification follows the SHAPE, and `RESPONSE_HEADER_POLICY` in apps/api encodes that).
          *
          *     The target's state is re-read INSIDE the transaction, after the shop's row lock is taken — so a `PATCH` racing a `DELETE` answers `404`, never a 500 or a resurrection.
+         *
+         *     ⚠️ F-003 NARROWS THIS ROUTE — THE WIRE SHAPE IS UNCHANGED, SO NO DIFF TOOL SEES IT (F-003 api-spec §4.3, D-034 · AC-5.1/5.4). Checks run in this fixed order, and every case F-002 already refused still answers exactly what it did:
+         *       1. touching an Owner without `full_access` → `403 FORBIDDEN` (as before);
+         *       2. the target's CURRENT role is not strictly below the caller's
+         *          capabilities (equal, above, or incomparable) →
+         *          `403 TARGET_NOT_BELOW_ACTOR` — except when the target is the caller
+         *          (stepping yourself down stays allowed, D-029);
+         *       3. the NEW role holds a capability the caller does not →
+         *          `403 ROLE_EXCEEDS_ACTOR` — this one applies to yourself too.
+         *     Neither new code carries `details` (AC-6.4). A "change" to the role the target already has is checked the same way and is not short-circuited: refused → the 403 above; allowed → `200` and the same `role_changed` event as F-002 (SR-19). The route also joins the `memberWrite` rate limit (120/hour per caller per shop) → `429 RATE_LIMITED` with `Retry-After`.
          */
         patch: operations["updateMemberRole"];
         trace?: never;
@@ -441,13 +457,103 @@ export interface paths {
         };
         /**
          * List this shop's roles (the invite dropdown)
-         * @description F-002 (api-spec §3.6). Any ACTIVE member may read it: the response carries no personal data and nothing about anybody else — three role names the caller can already see on their own membership. Requiring `manage_members` would mean a Staff member could not be shown the name of their own role.
+         * @description F-002 (api-spec §3.6). Any ACTIVE member may read it: the response carries no personal data and nothing about anybody else — the shop's live role names. Requiring `manage_members` would mean a Staff member could not be shown the name of their own role. Deleted roles are not listed.
+         *
+         *     F-003: still NO `capabilities` (AC-6.4 — reading what a role allows needs `manage_roles`, via the role-details read). Each row adds `nameCustomized` (display rule) and `viewerCanAssign` / `assignBlockedReason`, which are present only when the caller holds `manage_members`.
          *
          *     It exists because AC US-3 makes choosing a role MANDATORY when inviting somebody: without this endpoint no client can populate that dropdown, so the acceptance criterion could not be met at all.
          *
-         *     Read-only in F-002. F-003 adds create/update/delete.
+         *     This list is read-only; F-003's role create/update/delete are separate routes gated by `manage_roles`.
          */
         get: operations["listOrgRoles"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/orgs/{orgId}/roles/{roleId}": {
+        parameters: {
+            query?: never;
+            header?: {
+                /** @description Org context (api-spec §1). Optional on routes that already carry `{orgId}` in the path; if both are sent they MUST match, otherwise `422 ORG_MISMATCH`. User-scoped and public routes ignore this header entirely (I-3). */
+                "X-Organization-Id"?: components["parameters"]["OrgIdHeader"];
+            };
+            path: {
+                /** @description Organization id. On F-002 org-scoped routes this is one of the two accepted sources of org context (the other is the `X-Organization-Id` header, D-025); sending both with different values is `422 ORG_MISMATCH`. */
+                orgId: components["parameters"]["OrgIdParam"];
+                /** @description Role id (`RoleDetail.id`). */
+                roleId: string;
+            };
+            cookie?: never;
+        };
+        /**
+         * One role of this shop, in full (edit and clone screens)
+         * @description F-003 (api-spec §1, §3). The same `RoleDetail` as the matching item of `GET /orgs/{orgId}/role-details`. Requires `manage_roles`.
+         *
+         *     `lastEdited.by` is decided at read time against THIS shop only: `me`, a current member (their CURRENT role here), or `former_member` — never an e-mail, a user id, or anything from another shop.
+         */
+        get: operations["getOrgRoleDetail"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/orgs/{orgId}/role-details": {
+        parameters: {
+            query?: never;
+            header?: {
+                /** @description Org context (api-spec §1). Optional on routes that already carry `{orgId}` in the path; if both are sent they MUST match, otherwise `422 ORG_MISMATCH`. User-scoped and public routes ignore this header entirely (I-3). */
+                "X-Organization-Id"?: components["parameters"]["OrgIdHeader"];
+            };
+            path: {
+                /** @description Organization id. On F-002 org-scoped routes this is one of the two accepted sources of org context (the other is the `X-Organization-Id` header, D-025); sending both with different values is `422 ORG_MISMATCH`. */
+                orgId: components["parameters"]["OrgIdParam"];
+            };
+            cookie?: never;
+        };
+        /**
+         * Every live role of this shop, in full (the role list screen)
+         * @description F-003 (api-spec §1, §3). Each item is a `RoleDetail` — capabilities, usage counts, who edited it last and the caller's per-role verdicts — and the page carries the create verdict and the role ceiling. Requires `manage_roles`.
+         *
+         *     A separate path from `GET /orgs/{orgId}/roles` on purpose: that list is readable by every active member and does NOT publish `capabilities` (AC-6.4); one route, one capability.
+         *
+         *     One page, oldest first (`createdAt asc, id asc`); `nextCursor` is always `null` while the role ceiling fits in a page. `viewer.*` is a UX input — a write re-reads permissions and may still refuse. While role writes are switched off every write verdict is `writes_disabled`.
+         */
+        get: operations["listOrgRoleDetails"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/orgs/{orgId}/capabilities": {
+        parameters: {
+            query?: never;
+            header?: {
+                /** @description Org context (api-spec §1). Optional on routes that already carry `{orgId}` in the path; if both are sent they MUST match, otherwise `422 ORG_MISMATCH`. User-scoped and public routes ignore this header entirely (I-3). */
+                "X-Organization-Id"?: components["parameters"]["OrgIdHeader"];
+            };
+            path: {
+                /** @description Organization id. On F-002 org-scoped routes this is one of the two accepted sources of org context (the other is the `X-Organization-Id` header, D-025); sending both with different values is `422 ORG_MISMATCH`. */
+                orgId: components["parameters"]["OrgIdParam"];
+            };
+            cookie?: never;
+        };
+        /**
+         * The capability catalog this shop can see (role checklist)
+         * @description F-003 (api-spec §1, §3 · D-037). The ONE source of capability keys, their Thai labels and descriptions, groups, status and `implies` edges — clients render the checklist from this and never hard-code a key (AC-7.1).
+         *
+         *     Org-scoped and requires `manage_roles`: a tier that needs an entitlement is HIDDEN entirely, not flagged (AC-7.4), so the answer can differ per shop — cache it per shop. `full_access` is present with `selectable: false` and `group: null` so a role holding it can be labelled; it is never a checklist item.
+         */
+        get: operations["getOrgCapabilityCatalog"];
         put?: never;
         post?: never;
         delete?: never;
@@ -541,6 +647,8 @@ export interface paths {
          *     Inviting an address that already has a live invitation is `409 INVITATION_PENDING` WITH `details.invitationId` (+ `expiresAt`, `roleId`, `roleName`), so the UI can immediately offer "issue a new link" or "cancel" instead of leaving the user in a dead end (D-027).
          *
          *     `Cache-Control: no-store` + `Referrer-Policy: no-referrer` — the body carries a live credential.
+         *
+         *     ⚠️ F-003 NARROWS THIS ROUTE (wire shape unchanged — F-003 api-spec §4.3, AC-5.3): after the Owner rule, a role holding any capability the caller does not → `403 ROLE_EXCEEDS_ACTOR` (no `details`); a role that has been deleted → `422 ROLE_INVALID`, the same answer as a role of another shop.
          */
         post: operations["createInvitation"];
         delete?: never;
@@ -570,6 +678,8 @@ export interface paths {
         /**
          * Cancel a pending invitation
          * @description F-002 api-spec §3.13. Requires `manage_members`. Any link already sent stops working immediately.
+         *
+         *     ⚠️ F-003 NARROWS THIS ROUTE, WHICH HAD NO ROLE RULE AT ALL (wire shape unchanged — F-003 api-spec §4.3): cancelling an invitation to a role holding `full_access` now needs `full_access` → `403 FORBIDDEN` (an Admin can no longer cancel an Owner invitation); an invitation whose role holds a capability the caller does not → `403 ROLE_EXCEEDS_ACTOR` (no `details`). The route also joins the `memberWrite` rate limit (120/hour per caller per shop) → `429 RATE_LIMITED` with `Retry-After`.
          */
         delete: operations["cancelInvitation"];
         options?: never;
@@ -607,6 +717,8 @@ export interface paths {
          *     An EXPIRED invitation can still be reissued (its stored status is still `pending`) — deliberately, to avoid a dead end on screen; with the Owner-only rule in place, forbidding it would buy no security.
          *
          *     `Cache-Control: no-store` + `Referrer-Policy: no-referrer`.
+         *
+         *     ⚠️ F-003 NARROWS THIS ROUTE (wire shape unchanged — F-003 api-spec §4.3, D-035 Addendum): after the Owner rule, an invitation whose role holds a capability the caller does not → `403 ROLE_EXCEEDS_ACTOR` (no `details`). Holding `manage_roles` now counts as elevated for the 24-hour TTL. The reissuer becomes the invitation's issuer of record (not on the wire): from then on, `POST /invitations/accept` re-checks THE REISSUER's standing instead of the original inviter's.
          */
         post: operations["reissueInvitationLink"];
         delete?: never;
@@ -633,6 +745,8 @@ export interface paths {
          *     Returns no `organizationId`, no full email address and no member list.
          *
          *     `Cache-Control: no-store` + `Referrer-Policy: no-referrer`.
+         *
+         *     ⚠️ F-003 (api-spec §4.3): preview does NOT run accept's issuer re-check (D-035), so it can show a `pending` invitation that `accept` then answers with `409 INVITATION_CANCELLED`. Handle that answer on the accept step.
          *
          *     @frontend: read the token out of the URL, `history.replaceState` it away immediately, and keep it in memory (never localStorage) for the whole sign-up → sign-in → accept flow.
          */
@@ -665,6 +779,8 @@ export interface paths {
          *     Decision order, pinned by unit test: unknown token → expired → cancelled/accepted → email mismatch → role unavailable → already a member → superseded → success. Every one of these is re-checked INSIDE the transaction that holds the shop's row lock, so `accept` cannot slip between a `revoke`/`cancel`/`reissue` and win.
          *
          *     `Cache-Control: no-store` + `Referrer-Policy: no-referrer`.
+         *
+         *     ⚠️ F-003 ADDS A LAST CHECK (wire shape unchanged — F-003 api-spec §4.3, D-035 + Addendum). After every refusal above, the server re-checks whoever issued the CURRENT link (the latest reissuer, else the original inviter): if they are no longer an active member of the shop, OR no longer hold `manage_members`, OR their current capabilities no longer cover the invitation's role, the invitation is cancelled in the same transaction and the answer is `409 INVITATION_CANCELLED` — byte-for-byte the body of an invitation the shop cancelled itself (no new `details`). Every earlier case still gets the answer it got before. `expiresAt` may also be shortened (AC-10.4).
          */
         post: operations["acceptInvitation"];
         delete?: never;
@@ -677,6 +793,41 @@ export interface paths {
 export type webhooks = Record<string, never>;
 export interface components {
     schemas: {
+        RoleDetailListPage: {
+            /** @description Every live role of the shop, `createdAt asc, id asc`. */
+            items: components["schemas"]["RoleDetail"][];
+            /** @description Always `null` while the role ceiling fits in one page. Present so a client written today survives the day it is not. */
+            nextCursor: string | null;
+            viewer: components["schemas"]["RoleDetailListViewer"];
+        };
+        /** @description Creates a custom role; "clone" is this same request pre-filled from another role. There is no `key`, `isSystem` or `version`: unknown fields are stripped, so a created role always has `key: null` (AC-1.4). */
+        CreateRoleRequest: {
+            /** @description 1–50 code points AFTER the server normalises it (NFC, trim, collapse inner whitespace); invisible/control characters (Unicode Cc/Cf) are refused. The response carries the normalised name. */
+            name: string;
+            /** @description Keys from the capability catalog with `selectable: true`. Stored in canonical form (api-spec §2) — the response may differ from what was sent (duplicates and implied keys removed, sorted). */
+            capabilities: string[];
+        };
+        /** @description Rename and/or replace the capability set. At least one of `name` and `capabilities` must be sent. Sending the values already stored is a no-op: `200` with the current role, `version` unchanged. */
+        UpdateRoleRequest: {
+            /** @description The `RoleDetail.version` the user was looking at. */
+            version: number;
+            /** @description Same rules as `CreateRoleRequest.name`. */
+            name?: string;
+            /** @description The WHOLE new set (replace, not a diff). Same rules as `CreateRoleRequest.capabilities`. */
+            capabilities?: string[];
+        };
+        /** @description The success body of deleting a role. Deletion is soft: history keeps showing the role's name (AC-3.9b), but it is gone from every live list. */
+        DeletedRole: {
+            id: string;
+            /** Format: date-time */
+            deletedAt: string;
+        };
+        /** @description The capabilities this shop can see (data-model §1). Cache it PER SHOP: an entitlement-gated tier is hidden entirely, not flagged (AC-7.4). */
+        CapabilityCatalog: {
+            /** @description Checklist sections, in display order. */
+            groups: components["schemas"]["CapabilityGroup"][];
+            items: components["schemas"]["CapabilityEntry"][];
+        };
         HealthResponse: {
             /**
              * @description Literal "ok" when the service is healthy, "error" when one or more dependency checks fail (returned with HTTP 503).
@@ -860,6 +1011,8 @@ export interface components {
             roleName?: string;
             /** @description Present only on the `active` (full) shape. */
             roleKey?: string | null;
+            /** @description F-003 (AC-1.5) — present only on the `active` (full) shape. The shop renamed this role (always `true` when `roleKey` is `null`): show `roleName` as-is instead of translating `roleKey`. */
+            roleNameCustomized?: boolean;
             /**
              * Format: date-time
              * @description Present only on the revoked (short) shape.
@@ -907,7 +1060,13 @@ export interface components {
             roleName: string;
             /** @description `owner|admin|staff` for a system role, `null` for an F-003 custom one. Open set — an unknown value MUST fall back to showing `roleName`. ⛔ Never use it to decide permissions; use `capabilities`. */
             roleKey: string | null;
-            /** @description What the client may OFFER. Not enforcement — the server refuses the call regardless (architecture §3.1). */
+            /** @description F-003 (AC-1.5) — the shop renamed this role (always `true` for a role with `roleKey: null`). Display `roleNameCustomized ? roleName : (translate roleKey ?? roleName)`. Absent (older server) = `false`. */
+            roleNameCustomized?: boolean;
+            /**
+             * @description What the client may OFFER. Not enforcement — the server refuses the call regardless (architecture §3.1).
+             *
+             *     F-003: the STORED canonical set of the caller's role — NOT expanded, so a key implied by another key in the set is not repeated (api-spec §3.1(1)). To tell the user what a role edit would take away from them (AC-3.10), compare expanded sets — use core-domain `lostCapabilities` (or its golden vectors), never a plain set difference of this array.
+             */
             capabilities: string[];
             /** @description Always `active` here — a non-member cannot reach this endpoint. */
             status: string;
@@ -1001,6 +1160,20 @@ export interface components {
             isMe: boolean;
             /** @description This row's role holds `full_access`. Computed from CAPABILITIES, never from the role's name or key. Use it to hide buttons; the server enforces. */
             isOwner: boolean;
+            /** @description F-003 (AC-1.5) — the shop renamed this role (always `true` when `roleKey` is `null`). Display `roleNameCustomized ? roleName : (translate roleKey ?? roleName)`. */
+            roleNameCustomized?: boolean;
+            /**
+             * @description F-003 (api-spec §3.1) — may the CALLER change this member's role or remove them? The same rule the write applies (the target must hold strictly less than the caller; your own row is `true`). A UX input, never enforcement: the write re-reads permissions and may still refuse.
+             *
+             *     ⚠️ PRESENT ONLY when the caller holds BOTH `manage_members` and `manage_roles`, and only on `active` rows (architecture §1.2 — anyone else would learn "this role equals mine exactly"). Absent ⇒ keep the F-002 behaviour (show the buttons on active, non-Owner, non-self rows) and show generic copy if the write answers `403 TARGET_NOT_BELOW_ACTOR`. `LAST_OWNER` is shop state, not part of this verdict.
+             */
+            viewerCanManage?: boolean;
+            /** @description Present with `viewerCanManage`; `null` when it is `true`. OPEN SET, in this fixed order: `owner_only` → `equal_permissions` (same permissions as you — ask the Owner) → `exceeds_your_permissions`. Any other value → generic copy. */
+            manageBlockedReason?: string | null;
+            /** @description F-003 — may the CALLER reset this member's password? Same audience as `viewerCanManage`. `true` means "no rule you can see blocks it": the reset may still answer its uniform `404` for a reason that is not yours to see (e.g. the member also belongs to another shop). */
+            viewerCanResetPassword?: boolean;
+            /** @description Present with `viewerCanResetPassword`; `null` when it is `true`. OPEN SET, in this fixed order: `self` → `owner_only` → `equal_permissions` → `exceeds_your_permissions`. Any other value → generic copy. */
+            resetBlockedReason?: string | null;
         };
         MemberListPage: {
             items: components["schemas"]["MemberRow"][];
@@ -1034,7 +1207,7 @@ export interface components {
          */
         RoleRow: {
             id: string;
-            /** @description Display name. F-003 lets people rename roles, so do NOT map this to Thai copy — use `key`, and fall back to this string. */
+            /** @description Display name. Display rule (AC-1.5): `nameCustomized ? name : (translate key ?? name)` — a role the shop renamed shows THIS string, otherwise translate `key` and fall back to it. (A client that ignores `nameCustomized` shows the translation instead of the shop's own name — cosmetic, never a permission issue.) */
             name: string;
             /**
              * @description Stable slug for TRANSLATION ONLY (ux Q4). Guaranteed `owner`, `admin` or `staff` for the three system roles — those values are part of the contract and changing one is a breaking change. `null` for any role F-003 lets a user create, because `key` is the system's namespace.
@@ -1050,13 +1223,115 @@ export interface components {
              *     ⚠️ OPTIONAL on purpose (contract-evolution): a client newer than the server must not fail to parse a role list, so absent means "this server does not say" and the client falls back to its previous behaviour. It is a UX input — which option to disable, and why — never a permission check: the server refuses an over-privileged grant regardless (C-1/D-028).
              */
             grantsOwnership?: boolean;
-            /** @description True for roles the system provisions with the shop. F-003 will refuse to delete these. */
+            /** @description `true` only for the shop's locked Owner role (F-003): it can be neither edited, renamed nor deleted. Admin and Staff are presets the shop may edit, so they read `false`. Labelling only — use `grantsOwnership` for "is this ownership?". */
             isSystem: boolean;
+            /** @description F-003 (AC-1.5) — the shop renamed this role (always `true` for a role with `key: null`). When `true`, show `name` as-is instead of translating `key`. Absent (older server) = `false`. */
+            nameCustomized?: boolean;
+            /**
+             * @description F-003 (AC-2.2) — may the CALLER hand out this role (invite with it, or change a member to it)? The same rule the write applies: the role must not grant ownership unless you are an Owner, and must not hold a permission you lack. Show a `false` option DISABLED with the reason — never hide it. A UX input, never enforcement.
+             *
+             *     Present only when the caller holds `manage_members`.
+             */
+            viewerCanAssign?: boolean;
+            /** @description Present with `viewerCanAssign`; `null` when it is `true`. OPEN SET: `owner_only` · `exceeds_your_permissions`. Never names the missing permission (`capabilities` stays unpublished here). Any other value → generic copy. */
+            assignBlockedReason?: string | null;
         };
         RoleListPage: {
             items: components["schemas"]["RoleRow"][];
-            /** @description Always `null` in F-002 — a shop has exactly its three system roles until F-003. The field is present so a client written today does not need rewriting the day a fourth role exists. */
+            /** @description Always `null`: every live role fits in one page while the per-shop role ceiling (30) is below the page maximum (100). Present so a client written today survives the day that stops being true. */
             nextCursor: string | null;
+        };
+        /** @description How many hold this role — counts only, never who (AC-6.4). */
+        RoleUsage: {
+            activeMembers: number;
+            /** @description Invitations still `pending` for this role, INCLUDING ones whose link has expired (AC-3.9) — both block deletion. */
+            pendingInvitations: number;
+        };
+        /** @description Who last edited the role, as the VIEWER may know it (AC-9.6). Decided at read time against this shop only. There is deliberately no e-mail, user id or display name on the wire (api-spec §3 — `displayName` waits for a profile feature; adding an optional field later is non-breaking). */
+        RoleLastEditedBy: {
+            /** @description OPEN SET. `me` → "คุณ" · `member` → the editor's CURRENT role in this shop (the three `role*` fields below) · `former_member` → "อดีตสมาชิก" (no longer an active member of this shop, including a deleted account). Any other value → generic copy. */
+            kind: string;
+            /** @description Present only when `kind` is `member`. Display per AC-1.5. */
+            roleName?: string;
+            /** @description Present only when `kind` is `member`. Translation only — OPEN SET, fall back to `roleName`. */
+            roleKey?: string | null;
+            /** @description Present only when `kind` is `member`. */
+            roleNameCustomized?: boolean;
+        };
+        RoleLastEdited: {
+            /** Format: date-time */
+            at: string;
+            by: components["schemas"]["RoleLastEditedBy"];
+        };
+        /** @description The server's verdict for THIS caller at read time — whether to enable a button and why not. It is a UX input: every write re-reads the caller's permissions inside its transaction and may still refuse (AC-5.7). */
+        RoleWriteVerdict: {
+            allowed: boolean;
+            /** @description `null` when `allowed` is `true`. OPEN SET (api-spec §3), first match wins in this fixed order: `writes_disabled` → `role_locked` → `exceeds_your_permissions` → `in_use_requires_manage_members` → `equal_permissions_in_use` → `in_use` → `history_limit_reached`; `canClone` uses `owner_role` · `exceeds_your_permissions` · `role_limit_reached` · `writes_disabled`; `canCreate` uses `role_limit_reached` · `writes_disabled`. `writes_disabled` outranks every other reason while role writes are switched off. Any other value → generic copy. */
+            reason: string | null;
+        };
+        /** @description Per-role verdicts. `canEdit` covers renaming too. `canClone` is not affected by who holds the role — cloning never touches anyone's permissions. */
+        RoleDetailViewer: {
+            canEdit: components["schemas"]["RoleWriteVerdict"];
+            canDelete: components["schemas"]["RoleWriteVerdict"];
+            canClone: components["schemas"]["RoleWriteVerdict"];
+        };
+        /**
+         * @description One role in full — the body of the role detail read, each item of the role list page, and the success body of creating or updating a role (api-spec §3). Readable only by a holder of `manage_roles`.
+         *
+         *     Unlike `RoleRow` (readable by every active member), this DOES publish `capabilities`: the reader can already edit roles, so the list is the thing they are here to see.
+         */
+        RoleDetail: {
+            id: string;
+            /** @description The stored name, already normalised (NFC, trimmed, inner whitespace collapsed). Display rule (AC-1.5): `nameCustomized ? name : (translate key ?? name)`. */
+            name: string;
+            /**
+             * @description Stable slug for TRANSLATION ONLY: `owner`, `admin` or `staff` for the system presets, `null` for every role a user created. OPEN SET — on `null` or an unrecognised value fall back to `name`.
+             *
+             *     ⛔ NEVER a permission input. Whether a role grants ownership is `grantsOwnership`; what it allows is `capabilities`.
+             */
+            key: string | null;
+            /** @description The shop renamed this role (always `true` for a role with `key: null`). When `true`, show `name` as-is instead of translating `key`. */
+            nameCustomized: boolean;
+            /** @description The locked Owner role. It can be neither edited, renamed nor deleted. `viewer` already says so per action — use this for labelling only. */
+            isSystem: boolean;
+            /** @description Derived server-side from `capabilities` (`full_access`), never from `key`. */
+            grantsOwnership: boolean;
+            /** @description The CANONICAL stored set, sorted by key (api-spec §2): a key implied by another key in the set is not repeated. The Owner role is exactly `["full_access"]`. May contain keys whose catalog `status` is `upcoming`, and — from an older catalog — keys a client does not know: render those generically, never drop them silently. */
+            capabilities: string[];
+            /** @description Optimistic-concurrency token. Send it back unchanged in `UpdateRoleRequest.version`. On a version conflict the client MUST re-fetch this role and show the difference — it must never resubmit automatically with the newer version (AC-3.12). */
+            version: number;
+            usage: components["schemas"]["RoleUsage"];
+            /** @description `null` = never edited since the system provisioned it ("ค่าเริ่มต้นของระบบ", AC-9.6). */
+            lastEdited: components["schemas"]["RoleLastEdited"] | null;
+            viewer: components["schemas"]["RoleDetailViewer"];
+            /** Format: date-time */
+            createdAt: string;
+        };
+        RoleDetailListViewer: {
+            canCreate: components["schemas"]["RoleWriteVerdict"];
+            /** @description How many live roles this shop may have (the create ceiling). */
+            limit: number;
+        };
+        CapabilityGroup: {
+            /** @description OPEN SET (e.g. `team`, `shop`, `catalog_stock`, `channels`, `orders`, `finance`). */
+            key: string;
+            labelTh: string;
+        };
+        /** @description One capability. The registry's `tier` and `scope` are internal and are not published. */
+        CapabilityEntry: {
+            /** @description Stable snake_case identifier — the value stored in `RoleDetail.capabilities`. OPEN SET: new keys ship with new features. */
+            key: string;
+            labelTh: string;
+            /** @description One sentence — what holding it actually lets someone do. */
+            descriptionTh: string;
+            /** @description A `CapabilityGroup.key`, or `null` for an entry that is not a checklist item (`full_access`). OPEN SET — an unknown group goes in a generic section. */
+            group: string | null;
+            /** @description OPEN SET. `live` · `upcoming` (shown as "เร็ว ๆ นี้"; may be ticked in advance, AC-7.5). Any other value → generic copy. */
+            status: string;
+            /** @description Keys granted automatically with this one (one level only, e.g. `manage_X` → `view_X`). Shown ticked and disabled. */
+            implies: string[];
+            /** @description `false` = may never appear in a create/update request (`full_access`). */
+            selectable: boolean;
         };
         /** @description `200` of `DELETE /orgs/{orgId}/membership` (api-spec §3.17, D-029). */
         LeaveOrgResult: {
@@ -1102,6 +1377,16 @@ export interface components {
             acceptedByUserId: string | null;
             /** @description Was the accepting ACCOUNT created after `createdAt`? `null` until somebody accepts — "we do not know yet" is not "no". Phase 0 cannot verify email addresses, so this is the only signal that a link may have been redeemed by whoever found it. Render it as a soft flag, not an accusation. */
             acceptedUserCreatedAfterInvite: boolean | null;
+            /** @description F-003 (AC-1.5) — the shop renamed this role (always `true` when `roleKey` is `null`): show `roleName` as-is instead of translating `roleKey`. */
+            roleNameCustomized?: boolean;
+            /**
+             * @description F-003 (api-spec §3.1) — the AUTHORITY answer for both actions on this invitation (cancel, issue a new link): `false` when the invitation's role grants ownership and the caller is not an Owner, or when the role has a permission the caller lacks. Says exactly what `RoleRow.viewerCanAssign` says for the same role. A UX input, never enforcement.
+             *
+             *     Present only when the caller holds `manage_members` and the stored status is pending — `status` `pending` OR `expired`. Absent on accepted / cancelled rows. What each action additionally needs: CANCEL works on both `pending` and `expired` rows. ISSUE A NEW LINK also needs `status === "pending"`: on an `expired` row it answers `409 INVITATION_EXPIRED` whatever this verdict says — do not offer it there (invite again instead).
+             */
+            viewerCanManage?: boolean;
+            /** @description Present with `viewerCanManage`; `null` when it is `true`. OPEN SET: `owner_only` → `exceeds_your_permissions`. Any other value → generic copy. */
+            manageBlockedReason?: string | null;
         };
         InvitationListPage: {
             items: components["schemas"]["Invitation"][];
@@ -1156,6 +1441,8 @@ export interface components {
             organizationName: string;
             roleName: string;
             roleKey: string | null;
+            /** @description F-003 (AC-1.5) — the shop renamed this role (always `true` when `roleKey` is `null`): show `roleName` as-is instead of translating `roleKey`. */
+            roleNameCustomized?: boolean;
             /**
              * @description `u***@example.com` — enough to pick the right account, not an address.
              * @example n***@example.com
@@ -1173,6 +1460,8 @@ export interface components {
             roleId: string;
             roleName: string;
             roleKey: string | null;
+            /** @description F-003 (AC-1.5) — the shop renamed this role (always `true` when `roleKey` is `null`): show `roleName` as-is instead of translating `roleKey`. */
+            roleNameCustomized?: boolean;
             /** @enum {string} */
             status: "active";
         };
@@ -2127,6 +2416,8 @@ export interface operations {
             query?: {
                 /** @description Default `all`. Any other value → `422`. */
                 status?: "active" | "revoked" | "all";
+                /** @description F-003 — only members holding this role, ANDed with `status` (and with `total`). A role id of another shop (or one that never existed) answers `200` with an empty page, never an error. A deleted role still filters (its former holders). Longer than 64 characters, or repeated → `422 VALIDATION_FAILED` (`fieldErrors.roleId`). */
+                roleId?: string;
                 /** @description Opaque keyset cursor from the previous page's `nextCursor`. Base64url — clients MUST NOT decode or construct one. Unreadable value → `422 VALIDATION_FAILED` with `fieldErrors.cursor`. */
                 cursor?: components["parameters"]["CursorParam"];
                 /** @description Page size. Default 25, clamped to 100. Non-integer / < 1 → `422 VALIDATION_FAILED` with `fieldErrors.limit` (a bug is not silently corrected). */
@@ -2175,7 +2466,7 @@ export interface operations {
                     "application/json": components["schemas"]["ErrorResponse"];
                 };
             };
-            /** @description `VALIDATION_FAILED` (`status` / `cursor` / `limit`) or `ORG_CONTEXT_REQUIRED` / `ORG_MISMATCH`. */
+            /** @description `VALIDATION_FAILED` (`status` / `roleId` / `cursor` / `limit`) or `ORG_CONTEXT_REQUIRED` / `ORG_MISMATCH`. */
             422: {
                 headers: {
                     [name: string]: unknown;
@@ -2223,7 +2514,7 @@ export interface operations {
                     "application/json": components["schemas"]["ErrorResponse"];
                 };
             };
-            /** @description `FORBIDDEN` — missing `manage_members`, or removing an Owner without `full_access` — or `ORG_ACCESS_DENIED`. */
+            /** @description `FORBIDDEN` — missing `manage_members`, or removing an Owner without `full_access` — or `ORG_ACCESS_DENIED` · F-003: `TARGET_NOT_BELOW_ACTOR` — the target's role is not strictly below yours (no `details`). */
             403: {
                 headers: {
                     [name: string]: unknown;
@@ -2253,6 +2544,16 @@ export interface operations {
             /** @description `ORG_CONTEXT_REQUIRED` / `ORG_MISMATCH` */
             422: {
                 headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description `RATE_LIMITED` — F-003 `memberWrite` (shared with PATCH on this path and `DELETE …/invitations/{invitationId}`). */
+            429: {
+                headers: {
+                    "Retry-After": components["headers"]["RetryAfter"];
                     [name: string]: unknown;
                 };
                 content: {
@@ -2302,7 +2603,7 @@ export interface operations {
                     "application/json": components["schemas"]["ErrorResponse"];
                 };
             };
-            /** @description `FORBIDDEN` — missing `manage_members`, or the Owner-only rule — or `ORG_ACCESS_DENIED` (not a member of this shop). */
+            /** @description `FORBIDDEN` — missing `manage_members`, or the Owner-only rule — or `ORG_ACCESS_DENIED` (not a member of this shop) · F-003: `TARGET_NOT_BELOW_ACTOR` — the target's current role is not strictly below yours · `ROLE_EXCEEDS_ACTOR` — the new role holds a capability you do not. Neither carries `details`; refetch the member list and roles rather than retrying. */
             403: {
                 headers: {
                     [name: string]: unknown;
@@ -2341,6 +2642,16 @@ export interface operations {
             /** @description `ROLE_INVALID` — `roleId` is not a role of THIS shop (a foreign id and a non-existent id are indistinguishable by construction) · `VALIDATION_FAILED` — `roleId` missing · `ORG_CONTEXT_REQUIRED` / `ORG_MISMATCH`. */
             422: {
                 headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description `RATE_LIMITED` — F-003 `memberWrite`: 120 member writes per hour per caller per shop, shared with `DELETE …/members/{userId}` and `DELETE …/invitations/{invitationId}`. */
+            429: {
+                headers: {
+                    "Retry-After": components["headers"]["RetryAfter"];
                     [name: string]: unknown;
                 };
                 content: {
@@ -2393,6 +2704,179 @@ export interface operations {
                 };
             };
             /** @description `ORG_MISMATCH` — `X-Organization-Id` disagrees with the path (a client bug; the server never picks a side). */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+        };
+    };
+    getOrgRoleDetail: {
+        parameters: {
+            query?: never;
+            header?: {
+                /** @description Org context (api-spec §1). Optional on routes that already carry `{orgId}` in the path; if both are sent they MUST match, otherwise `422 ORG_MISMATCH`. User-scoped and public routes ignore this header entirely (I-3). */
+                "X-Organization-Id"?: components["parameters"]["OrgIdHeader"];
+            };
+            path: {
+                /** @description Organization id. On F-002 org-scoped routes this is one of the two accepted sources of org context (the other is the `X-Organization-Id` header, D-025); sending both with different values is `422 ORG_MISMATCH`. */
+                orgId: components["parameters"]["OrgIdParam"];
+                /** @description Role id (`RoleDetail.id`). */
+                roleId: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description The role. */
+            200: {
+                headers: {
+                    "Cache-Control": components["headers"]["CacheControlNoStore"];
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["RoleDetail"];
+                };
+            };
+            /** @description Missing/invalid access token (`UNAUTHENTICATED`) */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description `FORBIDDEN` — missing `manage_roles` · `ORG_ACCESS_DENIED` — not an active member of this shop. */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description `NOT_FOUND` — no live role with this id in this shop. A deleted role, another shop's role and an unknown id answer identically. */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description `ORG_MISMATCH` — `X-Organization-Id` disagrees with the path. */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+        };
+    };
+    listOrgRoleDetails: {
+        parameters: {
+            query?: never;
+            header?: {
+                /** @description Org context (api-spec §1). Optional on routes that already carry `{orgId}` in the path; if both are sent they MUST match, otherwise `422 ORG_MISMATCH`. User-scoped and public routes ignore this header entirely (I-3). */
+                "X-Organization-Id"?: components["parameters"]["OrgIdHeader"];
+            };
+            path: {
+                /** @description Organization id. On F-002 org-scoped routes this is one of the two accepted sources of org context (the other is the `X-Organization-Id` header, D-025); sending both with different values is `422 ORG_MISMATCH`. */
+                orgId: components["parameters"]["OrgIdParam"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Every live role, oldest first. */
+            200: {
+                headers: {
+                    "Cache-Control": components["headers"]["CacheControlNoStore"];
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["RoleDetailListPage"];
+                };
+            };
+            /** @description Missing/invalid access token (`UNAUTHENTICATED`) */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description `FORBIDDEN` — missing `manage_roles` · `ORG_ACCESS_DENIED` — not an active member of this shop. */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description `ORG_MISMATCH` — `X-Organization-Id` disagrees with the path. */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+        };
+    };
+    getOrgCapabilityCatalog: {
+        parameters: {
+            query?: never;
+            header?: {
+                /** @description Org context (api-spec §1). Optional on routes that already carry `{orgId}` in the path; if both are sent they MUST match, otherwise `422 ORG_MISMATCH`. User-scoped and public routes ignore this header entirely (I-3). */
+                "X-Organization-Id"?: components["parameters"]["OrgIdHeader"];
+            };
+            path: {
+                /** @description Organization id. On F-002 org-scoped routes this is one of the two accepted sources of org context (the other is the `X-Organization-Id` header, D-025); sending both with different values is `422 ORG_MISMATCH`. */
+                orgId: components["parameters"]["OrgIdParam"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description The catalog, groups in display order. */
+            200: {
+                headers: {
+                    "Cache-Control": components["headers"]["CacheControlNoStore"];
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["CapabilityCatalog"];
+                };
+            };
+            /** @description Missing/invalid access token (`UNAUTHENTICATED`) */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description `FORBIDDEN` — missing `manage_roles` · `ORG_ACCESS_DENIED` — not an active member of this shop. */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description `ORG_MISMATCH` — `X-Organization-Id` disagrees with the path. */
             422: {
                 headers: {
                     [name: string]: unknown;
@@ -2472,6 +2956,8 @@ export interface operations {
             query?: {
                 /** @description Default `pending` — the actionable view. Any other value → `422`. */
                 status?: "pending" | "accepted" | "cancelled" | "expired" | "all";
+                /** @description F-003 — only invitations for this role, ANDed with `status`. A role id of another shop (or one that never existed) answers `200` with an empty page, never an error. A deleted role still filters. Longer than 64 characters, or repeated → `422 VALIDATION_FAILED` (`fieldErrors.roleId`). The number `ROLE_IN_USE.details.pendingInvitations` counts is `pending` + `expired` for that role. */
+                roleId?: string;
                 /** @description Opaque keyset cursor from the previous page's `nextCursor`. Base64url — clients MUST NOT decode or construct one. Unreadable value → `422 VALIDATION_FAILED` with `fieldErrors.cursor`. */
                 cursor?: components["parameters"]["CursorParam"];
                 /** @description Page size. Default 25, clamped to 100. Non-integer / < 1 → `422 VALIDATION_FAILED` with `fieldErrors.limit` (a bug is not silently corrected). */
@@ -2518,7 +3004,7 @@ export interface operations {
                     "application/json": components["schemas"]["ErrorResponse"];
                 };
             };
-            /** @description `VALIDATION_FAILED` (`status` / `cursor` / `limit`) or `ORG_CONTEXT_REQUIRED` / `ORG_MISMATCH`. */
+            /** @description `VALIDATION_FAILED` (`status` / `roleId` / `cursor` / `limit`) or `ORG_CONTEXT_REQUIRED` / `ORG_MISMATCH`. */
             422: {
                 headers: {
                     [name: string]: unknown;
@@ -2569,7 +3055,7 @@ export interface operations {
                     "application/json": components["schemas"]["ErrorResponse"];
                 };
             };
-            /** @description `FORBIDDEN` — missing `manage_members`, or inviting an Owner-capable role without `full_access` — or `ORG_ACCESS_DENIED`. */
+            /** @description `FORBIDDEN` — missing `manage_members`, or inviting an Owner-capable role without `full_access` — or `ORG_ACCESS_DENIED` · F-003: `ROLE_EXCEEDS_ACTOR` — the role holds a capability you do not (no `details`). */
             403: {
                 headers: {
                     [name: string]: unknown;
@@ -2654,7 +3140,7 @@ export interface operations {
                     "application/json": components["schemas"]["ErrorResponse"];
                 };
             };
-            /** @description `FORBIDDEN` (no `manage_members`) or `ORG_ACCESS_DENIED` */
+            /** @description `FORBIDDEN` (no `manage_members`; F-003: or the invitation's role holds `full_access` and you do not) or `ORG_ACCESS_DENIED` · F-003: `ROLE_EXCEEDS_ACTOR` — the invitation's role holds a capability you do not (no `details`). */
             403: {
                 headers: {
                     [name: string]: unknown;
@@ -2684,6 +3170,16 @@ export interface operations {
             /** @description `ORG_CONTEXT_REQUIRED` / `ORG_MISMATCH` */
             422: {
                 headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description `RATE_LIMITED` — F-003 `memberWrite` (shared with PATCH/DELETE `…/members/{userId}`). */
+            429: {
+                headers: {
+                    "Retry-After": components["headers"]["RetryAfter"];
                     [name: string]: unknown;
                 };
                 content: {
@@ -2730,7 +3226,7 @@ export interface operations {
                     "application/json": components["schemas"]["ErrorResponse"];
                 };
             };
-            /** @description `FORBIDDEN` — missing `manage_members`, or reissuing an Owner invitation without `full_access` (nothing is written when this fires) — or `ORG_ACCESS_DENIED`. */
+            /** @description `FORBIDDEN` — missing `manage_members`, or reissuing an Owner invitation without `full_access` (nothing is written when this fires) — or `ORG_ACCESS_DENIED` · F-003: `ROLE_EXCEEDS_ACTOR` — the invitation's role holds a capability you do not (no `details`; nothing is written). */
             403: {
                 headers: {
                     [name: string]: unknown;
@@ -2903,7 +3399,7 @@ export interface operations {
                     "application/json": components["schemas"]["ErrorResponse"];
                 };
             };
-            /** @description `INVITATION_EXPIRED` · `INVITATION_CANCELLED` · `INVITATION_ALREADY_ACCEPTED` · `ALREADY_MEMBER` · `INVITATION_SUPERSEDED` (the link predates your removal) · `INVITATION_ROLE_UNAVAILABLE` (the invited role was deleted — checked at ACCEPT, not only at creation) · `CONFLICT` + `details.reason = "busy"` (lock contention, retry). */
+            /** @description `INVITATION_EXPIRED` · `INVITATION_CANCELLED` (F-003: also when the issuer of the current link lost their standing — see above) · `INVITATION_ALREADY_ACCEPTED` · `ALREADY_MEMBER` · `INVITATION_SUPERSEDED` (the link predates your removal) · `INVITATION_ROLE_UNAVAILABLE` (the invited role was deleted — checked at ACCEPT, not only at creation) · `CONFLICT` + `details.reason = "busy"` (lock contention, retry). */
             409: {
                 headers: {
                     [name: string]: unknown;

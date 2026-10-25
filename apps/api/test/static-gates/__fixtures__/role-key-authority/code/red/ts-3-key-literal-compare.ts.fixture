@@ -1,0 +1,9 @@
+// G-12 red fixture TS-3 — any `key` compared to a system-role literal, in every
+// quote style. Covers the destructured case TS-1/TS-2 cannot see.
+export function gate({ key }: { key: string }, r: { key: string }) {
+  if (key === "owner") return 1; // ← hit
+  if (key !== 'admin') return 2; // ← hit
+  if (r.key == `staff`) return 3; // ← hit
+  if ("Admin" === key) return 4; // ← hit
+  return 0;
+}

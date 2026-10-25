@@ -1,0 +1,7 @@
+// G-12 red fixture DART-6 — the label helper's result used as a decision (UNPINNABLE).
+void gate(AppLocalizations t, Role role, String k, String n) {
+  if (roleLabel(t, k, n) == t.roleOwner) allow(); // ← hit
+  final ok = kElevated.contains(roleLabel(t, k, n)); // ← hit
+  final pick = roleLabel(t, k, n) != t.roleStaff ? 1 : 0; // ← hit
+  if (roleLabel(t, k, n).isNotEmpty) allow(); // ← hit
+}

@@ -8,7 +8,11 @@
 // keep-current (US-6).
 import { describe, it, expect, beforeAll, afterAll, beforeEach } from "vitest";
 import { Test } from "@nestjs/testing";
-import { ValidationPipe, UnprocessableEntityException, type INestApplication } from "@nestjs/common";
+import {
+  ValidationPipe,
+  UnprocessableEntityException,
+  type INestApplication,
+} from "@nestjs/common";
 import cookieParser from "cookie-parser";
 import request from "supertest";
 import { Redis } from "ioredis";
@@ -59,9 +63,7 @@ const STRONG_PW = "correct-horse-battery-staple-9f3aK!";
  * a stray field, a different code, a different message would all still be caught.
  */
 function stripVolatile(body: unknown): unknown {
-  const clone = JSON.parse(JSON.stringify(body ?? null)) as
-    | { error?: { traceId?: string } }
-    | null;
+  const clone = JSON.parse(JSON.stringify(body ?? null)) as { error?: { traceId?: string } } | null;
   if (clone && typeof clone === "object" && clone.error && typeof clone.error === "object") {
     delete clone.error.traceId;
   }
@@ -90,7 +92,10 @@ d("auth endpoints (E2E, DB+Redis)", () => {
     // Mirror main.ts: trust proxy so a per-test X-Forwarded-For gives each test
     // its own throttle IP bucket (avoids the shared-localhost IP cap across the
     // many requests a single admin-reset test makes).
-    (app.getHttpAdapter().getInstance() as { set: (k: string, v: unknown) => void }).set("trust proxy", true);
+    (app.getHttpAdapter().getInstance() as { set: (k: string, v: unknown) => void }).set(
+      "trust proxy",
+      true,
+    );
     app.use(cookieParser());
     app.useGlobalPipes(
       new ValidationPipe({
@@ -98,7 +103,9 @@ d("auth endpoints (E2E, DB+Redis)", () => {
         transform: true,
         exceptionFactory: (errors) => {
           const first = errors[0];
-          const code = first?.constraints ? Object.values(first.constraints)[0] : "VALIDATION_FAILED";
+          const code = first?.constraints
+            ? Object.values(first.constraints)[0]
+            : "VALIDATION_FAILED";
           return new UnprocessableEntityException({ error: { code, message: "ข้อมูลไม่ถูกต้อง" } });
         },
       }),
@@ -163,7 +170,7 @@ d("auth endpoints (E2E, DB+Redis)", () => {
   let ipCounter = 0;
   function uniqueForwardedIp(): string {
     ipCounter += 1;
-    return `203.0.113.${ipCounter % 254 + 1}`;
+    return `203.0.113.${(ipCounter % 254) + 1}`;
   }
 
   /**
@@ -210,17 +217,31 @@ d("auth endpoints (E2E, DB+Redis)", () => {
     // already documents this technique, it just was not applied here.
     const ip = uniqueForwardedIp();
     const email = uniqueEmail("dup");
-    await request(server()).post("/auth/signup").set("Content-Type", "application/json").set("X-Forwarded-For", ip).send({ email, password: STRONG_PW });
-    const res = await request(server()).post("/auth/signup").set("Content-Type", "application/json").set("X-Forwarded-For", ip).send({ email, password: STRONG_PW });
+    await request(server())
+      .post("/auth/signup")
+      .set("Content-Type", "application/json")
+      .set("X-Forwarded-For", ip)
+      .send({ email, password: STRONG_PW });
+    const res = await request(server())
+      .post("/auth/signup")
+      .set("Content-Type", "application/json")
+      .set("X-Forwarded-For", ip)
+      .send({ email, password: STRONG_PW });
     expect(res.status).toBe(409);
     expect(res.body.error.code).toBe("EMAIL_TAKEN");
   });
 
   it("I1.3 breached/short password → 422", async () => {
-    const short = await request(server()).post("/auth/signup").set("Content-Type", "application/json").send({ email: uniqueEmail("s"), password: "short" });
+    const short = await request(server())
+      .post("/auth/signup")
+      .set("Content-Type", "application/json")
+      .send({ email: uniqueEmail("s"), password: "short" });
     expect(short.status).toBe(422);
     expect(short.body.error.code).toBe("PASSWORD_TOO_SHORT");
-    const breached = await request(server()).post("/auth/signup").set("Content-Type", "application/json").send({ email: uniqueEmail("b"), password: "password" });
+    const breached = await request(server())
+      .post("/auth/signup")
+      .set("Content-Type", "application/json")
+      .send({ email: uniqueEmail("b"), password: "password" });
     expect(breached.status).toBe(422);
     expect(breached.body.error.code).toBe("PASSWORD_BREACHED");
   });
@@ -239,8 +260,14 @@ d("auth endpoints (E2E, DB+Redis)", () => {
 
   it("I2.1 login body transport → token in body, no cookie", async () => {
     const email = uniqueEmail("login-body");
-    await request(server()).post("/auth/signup").set("Content-Type", "application/json").send({ email, password: STRONG_PW });
-    const res = await request(server()).post("/auth/login").set("Content-Type", "application/json").send({ email, password: STRONG_PW, tokenTransport: "body" });
+    await request(server())
+      .post("/auth/signup")
+      .set("Content-Type", "application/json")
+      .send({ email, password: STRONG_PW });
+    const res = await request(server())
+      .post("/auth/login")
+      .set("Content-Type", "application/json")
+      .send({ email, password: STRONG_PW, tokenTransport: "body" });
     expect(res.status).toBe(200);
     expect(res.body.accessToken).toBeTruthy();
     expect(res.body.refreshToken).toBeTruthy(); // body transport → non-null
@@ -251,8 +278,14 @@ d("auth endpoints (E2E, DB+Redis)", () => {
 
   it("I2.1/I2.1b login cookie transport → body refreshToken null, split-path cookies (H-1 + D-019)", async () => {
     const email = uniqueEmail("login-cookie");
-    await request(server()).post("/auth/signup").set("Content-Type", "application/json").send({ email, password: STRONG_PW });
-    const res = await request(server()).post("/auth/login").set("Content-Type", "application/json").send({ email, password: STRONG_PW, tokenTransport: "cookie" });
+    await request(server())
+      .post("/auth/signup")
+      .set("Content-Type", "application/json")
+      .send({ email, password: STRONG_PW });
+    const res = await request(server())
+      .post("/auth/login")
+      .set("Content-Type", "application/json")
+      .send({ email, password: STRONG_PW, tokenTransport: "cookie" });
     expect(res.status).toBe(200);
     expect(res.body.refreshToken).toBeNull(); // H-1: never in a JS-readable place
     const cookies = (res.headers["set-cookie"] as unknown as string[]) ?? [];
@@ -276,9 +309,18 @@ d("auth endpoints (E2E, DB+Redis)", () => {
 
   it("I2.2/I2.3 wrong password AND unknown email → identical generic 401", async () => {
     const email = uniqueEmail("gen");
-    await request(server()).post("/auth/signup").set("Content-Type", "application/json").send({ email, password: STRONG_PW });
-    const wrong = await request(server()).post("/auth/login").set("Content-Type", "application/json").send({ email, password: "wrong-but-long-enough" });
-    const unknown = await request(server()).post("/auth/login").set("Content-Type", "application/json").send({ email: uniqueEmail("nobody"), password: "wrong-but-long-enough" });
+    await request(server())
+      .post("/auth/signup")
+      .set("Content-Type", "application/json")
+      .send({ email, password: STRONG_PW });
+    const wrong = await request(server())
+      .post("/auth/login")
+      .set("Content-Type", "application/json")
+      .send({ email, password: "wrong-but-long-enough" });
+    const unknown = await request(server())
+      .post("/auth/login")
+      .set("Content-Type", "application/json")
+      .send({ email: uniqueEmail("nobody"), password: "wrong-but-long-enough" });
     expect(wrong.status).toBe(401);
     expect(unknown.status).toBe(401);
     // Everything a caller could learn from must match. `traceId` (T-002-10) is
@@ -293,35 +335,64 @@ d("auth endpoints (E2E, DB+Redis)", () => {
   });
 
   it("I3.5(d) refresh with neither cookie nor body → 401 NO_REFRESH_TOKEN", async () => {
-    const res = await request(server()).post("/auth/refresh").set("Content-Type", "application/json").send({});
+    const res = await request(server())
+      .post("/auth/refresh")
+      .set("Content-Type", "application/json")
+      .send({});
     expect(res.status).toBe(401);
     expect(res.body.error.code).toBe("NO_REFRESH_TOKEN");
   });
 
   it("I3.1 body-transport rotation → old token 401, new works", async () => {
     const email = uniqueEmail("rot");
-    await request(server()).post("/auth/signup").set("Content-Type", "application/json").send({ email, password: STRONG_PW });
-    const login = await request(server()).post("/auth/login").set("Content-Type", "application/json").send({ email, password: STRONG_PW, tokenTransport: "body" });
+    await request(server())
+      .post("/auth/signup")
+      .set("Content-Type", "application/json")
+      .send({ email, password: STRONG_PW });
+    const login = await request(server())
+      .post("/auth/login")
+      .set("Content-Type", "application/json")
+      .send({ email, password: STRONG_PW, tokenTransport: "body" });
     const rt1 = login.body.refreshToken as string;
-    const r2 = await request(server()).post("/auth/refresh").set("Content-Type", "application/json").send({ refreshToken: rt1 });
+    const r2 = await request(server())
+      .post("/auth/refresh")
+      .set("Content-Type", "application/json")
+      .send({ refreshToken: rt1 });
     expect(r2.status).toBe(200);
     expect(r2.body.refreshToken).toBeTruthy();
     // New token still works.
-    const r3 = await request(server()).post("/auth/refresh").set("Content-Type", "application/json").send({ refreshToken: r2.body.refreshToken });
+    const r3 = await request(server())
+      .post("/auth/refresh")
+      .set("Content-Type", "application/json")
+      .send({ refreshToken: r2.body.refreshToken });
     expect(r3.status).toBe(200);
   });
 
   it("I3.8 sessions (Bearer) + I4.4 logout-all revoke every family", async () => {
     const email = uniqueEmail("sess");
-    await request(server()).post("/auth/signup").set("Content-Type", "application/json").send({ email, password: STRONG_PW });
-    const l1 = await request(server()).post("/auth/login").set("Content-Type", "application/json").send({ email, password: STRONG_PW, deviceId: "devA", tokenTransport: "body" });
-    await request(server()).post("/auth/login").set("Content-Type", "application/json").send({ email, password: STRONG_PW, deviceId: "devB", tokenTransport: "body" });
+    await request(server())
+      .post("/auth/signup")
+      .set("Content-Type", "application/json")
+      .send({ email, password: STRONG_PW });
+    const l1 = await request(server())
+      .post("/auth/login")
+      .set("Content-Type", "application/json")
+      .send({ email, password: STRONG_PW, deviceId: "devA", tokenTransport: "body" });
+    await request(server())
+      .post("/auth/login")
+      .set("Content-Type", "application/json")
+      .send({ email, password: STRONG_PW, deviceId: "devB", tokenTransport: "body" });
     const access = l1.body.accessToken as string;
-    const sessions = await request(server()).get("/auth/sessions").set("Authorization", `Bearer ${access}`);
+    const sessions = await request(server())
+      .get("/auth/sessions")
+      .set("Authorization", `Bearer ${access}`);
     expect(sessions.status).toBe(200);
     expect(sessions.body.sessions.length).toBe(2);
     // logout-all
-    const out = await request(server()).post("/auth/logout-all").set("Content-Type", "application/json").set("Authorization", `Bearer ${access}`);
+    const out = await request(server())
+      .post("/auth/logout-all")
+      .set("Content-Type", "application/json")
+      .set("Authorization", `Bearer ${access}`);
     expect(out.status).toBe(204);
     const user = await prisma.user.findUniqueOrThrow({ where: { email } });
     const live = await prisma.refreshToken.count({ where: { userId: user.id, revokedAt: null } });
@@ -330,41 +401,75 @@ d("auth endpoints (E2E, DB+Redis)", () => {
 
   it("I6.1 change-password (Bearer) → 200, old pw fails, new works, other families revoked", async () => {
     const email = uniqueEmail("chpw");
-    await request(server()).post("/auth/signup").set("Content-Type", "application/json").send({ email, password: STRONG_PW });
+    await request(server())
+      .post("/auth/signup")
+      .set("Content-Type", "application/json")
+      .send({ email, password: STRONG_PW });
     // Current session + one other family.
-    const current = await request(server()).post("/auth/login").set("Content-Type", "application/json").send({ email, password: STRONG_PW, deviceId: "cur", tokenTransport: "body" });
-    await request(server()).post("/auth/login").set("Content-Type", "application/json").send({ email, password: STRONG_PW, deviceId: "other", tokenTransport: "body" });
+    const current = await request(server())
+      .post("/auth/login")
+      .set("Content-Type", "application/json")
+      .send({ email, password: STRONG_PW, deviceId: "cur", tokenTransport: "body" });
+    await request(server())
+      .post("/auth/login")
+      .set("Content-Type", "application/json")
+      .send({ email, password: STRONG_PW, deviceId: "other", tokenTransport: "body" });
     const NEW_PW = "another-strong-passphrase-7Yq!";
     const res = await request(server())
       .post("/auth/change-password")
       .set("Content-Type", "application/json")
       .set("Authorization", `Bearer ${current.body.accessToken}`)
-      .send({ currentPassword: STRONG_PW, newPassword: NEW_PW, refreshToken: current.body.refreshToken });
+      .send({
+        currentPassword: STRONG_PW,
+        newPassword: NEW_PW,
+        refreshToken: current.body.refreshToken,
+      });
     expect(res.status).toBe(200);
     expect(res.body).toEqual({ ok: true });
     // Old password no longer logs in; new one does.
-    const oldTry = await request(server()).post("/auth/login").set("Content-Type", "application/json").send({ email, password: STRONG_PW });
+    const oldTry = await request(server())
+      .post("/auth/login")
+      .set("Content-Type", "application/json")
+      .send({ email, password: STRONG_PW });
     expect(oldTry.status).toBe(401);
-    const newTry = await request(server()).post("/auth/login").set("Content-Type", "application/json").send({ email, password: NEW_PW });
+    const newTry = await request(server())
+      .post("/auth/login")
+      .set("Content-Type", "application/json")
+      .send({ email, password: NEW_PW });
     expect(newTry.status).toBe(200);
     // Current session's refresh still works (kept), the OTHER family is revoked.
-    const stillCurrent = await request(server()).post("/auth/refresh").set("Content-Type", "application/json").send({ refreshToken: current.body.refreshToken });
+    const stillCurrent = await request(server())
+      .post("/auth/refresh")
+      .set("Content-Type", "application/json")
+      .send({ refreshToken: current.body.refreshToken });
     expect(stillCurrent.status).toBe(200);
   });
 
   it("I6.2 wrong currentPassword → generic 401, no mutation", async () => {
     const email = uniqueEmail("chpw-wrong");
-    await request(server()).post("/auth/signup").set("Content-Type", "application/json").send({ email, password: STRONG_PW });
-    const login = await request(server()).post("/auth/login").set("Content-Type", "application/json").send({ email, password: STRONG_PW, tokenTransport: "body" });
+    await request(server())
+      .post("/auth/signup")
+      .set("Content-Type", "application/json")
+      .send({ email, password: STRONG_PW });
+    const login = await request(server())
+      .post("/auth/login")
+      .set("Content-Type", "application/json")
+      .send({ email, password: STRONG_PW, tokenTransport: "body" });
     const res = await request(server())
       .post("/auth/change-password")
       .set("Content-Type", "application/json")
       .set("Authorization", `Bearer ${login.body.accessToken}`)
-      .send({ currentPassword: "not-the-current-pw", newPassword: "another-strong-passphrase-7Yq!" });
+      .send({
+        currentPassword: "not-the-current-pw",
+        newPassword: "another-strong-passphrase-7Yq!",
+      });
     expect(res.status).toBe(401);
     expect(res.body.error.code).toBe("INVALID_CREDENTIALS");
     // Original password still works.
-    const stillOk = await request(server()).post("/auth/login").set("Content-Type", "application/json").send({ email, password: STRONG_PW });
+    const stillOk = await request(server())
+      .post("/auth/login")
+      .set("Content-Type", "application/json")
+      .send({ email, password: STRONG_PW });
     expect(stillOk.status).toBe(200);
   });
 
@@ -377,24 +482,51 @@ d("auth endpoints (E2E, DB+Redis)", () => {
     memberId: string;
     memberEmail: string;
   }> {
-    const org = await prisma.organization.create({ data: { name: `Org-${Math.random().toString(36).slice(2)}` } });
+    const org = await prisma.organization.create({
+      data: { name: `Org-${Math.random().toString(36).slice(2)}` },
+    });
     createdOrgIds.push(org.id);
     const role = await prisma.role.create({
-      data: { organizationId: org.id, name: "Admin", capabilities: [CAPABILITY_MANAGE_MEMBERS] },
+      // F-003 · T-003-B05 (D-034): reset needs the target's role ⊊ the caller's,
+      // so Admin also holds Staff's capability (as the shipped presets do).
+      data: {
+        organizationId: org.id,
+        name: "Admin",
+        capabilities: [CAPABILITY_MANAGE_MEMBERS, "manage_products"],
+      },
     });
     const staffRole = await prisma.role.create({
       data: { organizationId: org.id, name: "Staff", capabilities: ["manage_products"] },
     });
     const adminEmail = uniqueEmail("admin");
     const memberEmail = uniqueEmail("member");
-    await request(server()).post("/auth/signup").set("Content-Type", "application/json").send({ email: adminEmail, password: STRONG_PW });
-    await request(server()).post("/auth/signup").set("Content-Type", "application/json").send({ email: memberEmail, password: STRONG_PW });
+    await request(server())
+      .post("/auth/signup")
+      .set("Content-Type", "application/json")
+      .send({ email: adminEmail, password: STRONG_PW });
+    await request(server())
+      .post("/auth/signup")
+      .set("Content-Type", "application/json")
+      .send({ email: memberEmail, password: STRONG_PW });
     const admin = await prisma.user.findUniqueOrThrow({ where: { email: adminEmail } });
     const member = await prisma.user.findUniqueOrThrow({ where: { email: memberEmail } });
-    await prisma.membership.create({ data: { organizationId: org.id, userId: admin.id, roleId: role.id, status: "active" } });
-    await prisma.membership.create({ data: { organizationId: org.id, userId: member.id, roleId: staffRole.id, status: "active" } });
-    const login = await request(server()).post("/auth/login").set("Content-Type", "application/json").send({ email: adminEmail, password: STRONG_PW, tokenTransport: "body" });
-    return { orgId: org.id, adminId: admin.id, adminAccess: login.body.accessToken, memberId: member.id, memberEmail };
+    await prisma.membership.create({
+      data: { organizationId: org.id, userId: admin.id, roleId: role.id, status: "active" },
+    });
+    await prisma.membership.create({
+      data: { organizationId: org.id, userId: member.id, roleId: staffRole.id, status: "active" },
+    });
+    const login = await request(server())
+      .post("/auth/login")
+      .set("Content-Type", "application/json")
+      .send({ email: adminEmail, password: STRONG_PW, tokenTransport: "body" });
+    return {
+      orgId: org.id,
+      adminId: admin.id,
+      adminAccess: login.body.accessToken,
+      memberId: member.id,
+      memberEmail,
+    };
   }
 
   it("I5.1 admin-reset happy path → 200, target pw changed, families revoked, event emitted", async () => {
@@ -408,7 +540,10 @@ d("auth endpoints (E2E, DB+Redis)", () => {
     expect(res.status).toBe(200);
     expect(res.body).toEqual({ ok: true });
     // Target can log in with the new password.
-    const login = await request(server()).post("/auth/login").set("Content-Type", "application/json").send({ email: memberEmail, password: NEW_PW });
+    const login = await request(server())
+      .post("/auth/login")
+      .set("Content-Type", "application/json")
+      .send({ email: memberEmail, password: NEW_PW });
     expect(login.status).toBe(200);
   });
 
@@ -416,7 +551,10 @@ d("auth endpoints (E2E, DB+Redis)", () => {
     const { orgId, adminAccess, memberId, memberEmail } = await seedOrgWithAdmin();
     // Seed the target into backoff: 6 wrong-password logins → account counter set.
     for (let i = 0; i < 6; i++) {
-      await request(server()).post("/auth/login").set("Content-Type", "application/json").send({ email: memberEmail, password: "wrong-but-long-enough" });
+      await request(server())
+        .post("/auth/login")
+        .set("Content-Type", "application/json")
+        .send({ email: memberEmail, password: "wrong-but-long-enough" });
     }
     const key = `throttle:acct:${memberEmail.toLowerCase()}`;
     expect(await redis.get(key)).not.toBeNull(); // counter present (in backoff)
@@ -429,7 +567,10 @@ d("auth endpoints (E2E, DB+Redis)", () => {
     expect(res.status).toBe(200);
     // Counter cleared → target can immediately log in with the new password.
     expect(await redis.get(key)).toBeNull();
-    const login = await request(server()).post("/auth/login").set("Content-Type", "application/json").send({ email: memberEmail, password: "admin-set-passphrase-4Kx!" });
+    const login = await request(server())
+      .post("/auth/login")
+      .set("Content-Type", "application/json")
+      .send({ email: memberEmail, password: "admin-set-passphrase-4Kx!" });
     expect(login.status).toBe(200);
   });
 
@@ -437,11 +578,21 @@ d("auth endpoints (E2E, DB+Redis)", () => {
     const { orgId, memberId, memberEmail } = await seedOrgWithAdmin();
     // A staff caller (active, no manage_members).
     const staffEmail = uniqueEmail("staff");
-    await request(server()).post("/auth/signup").set("Content-Type", "application/json").send({ email: staffEmail, password: STRONG_PW });
+    await request(server())
+      .post("/auth/signup")
+      .set("Content-Type", "application/json")
+      .send({ email: staffEmail, password: STRONG_PW });
     const staff = await prisma.user.findUniqueOrThrow({ where: { email: staffEmail } });
-    const staffRole = await prisma.role.findFirstOrThrow({ where: { organizationId: orgId, name: "Staff" } });
-    await prisma.membership.create({ data: { organizationId: orgId, userId: staff.id, roleId: staffRole.id, status: "active" } });
-    const staffLogin = await request(server()).post("/auth/login").set("Content-Type", "application/json").send({ email: staffEmail, password: STRONG_PW, tokenTransport: "body" });
+    const staffRole = await prisma.role.findFirstOrThrow({
+      where: { organizationId: orgId, name: "Staff" },
+    });
+    await prisma.membership.create({
+      data: { organizationId: orgId, userId: staff.id, roleId: staffRole.id, status: "active" },
+    });
+    const staffLogin = await request(server())
+      .post("/auth/login")
+      .set("Content-Type", "application/json")
+      .send({ email: staffEmail, password: STRONG_PW, tokenTransport: "body" });
     const res = await request(server())
       .post(`/orgs/${orgId}/members/${memberId}/reset-password`)
       .set("Content-Type", "application/json")
@@ -449,7 +600,10 @@ d("auth endpoints (E2E, DB+Redis)", () => {
       .send({ newPassword: "should-not-apply-9Zz!" });
     expect(res.status).toBe(404); // never 403
     // Target's password is UNCHANGED (original still logs in).
-    const stillOriginal = await request(server()).post("/auth/login").set("Content-Type", "application/json").send({ email: memberEmail, password: STRONG_PW });
+    const stillOriginal = await request(server())
+      .post("/auth/login")
+      .set("Content-Type", "application/json")
+      .send({ email: memberEmail, password: STRONG_PW });
     expect(stillOriginal.status).toBe(200);
   });
 
@@ -466,7 +620,10 @@ d("auth endpoints (E2E, DB+Redis)", () => {
       .set("Authorization", `Bearer ${adminAccess}`)
       .send({ newPassword: "should-not-apply-8Yy!" });
     expect(res.status).toBe(404);
-    const stillOriginal = await request(server()).post("/auth/login").set("Content-Type", "application/json").send({ email: memberEmail, password: STRONG_PW });
+    const stillOriginal = await request(server())
+      .post("/auth/login")
+      .set("Content-Type", "application/json")
+      .send({ email: memberEmail, password: STRONG_PW });
     expect(stillOriginal.status).toBe(200);
   });
 
@@ -474,15 +631,24 @@ d("auth endpoints (E2E, DB+Redis)", () => {
     const { orgId, memberId, memberEmail } = await seedOrgWithAdmin();
     // A stranger with a valid token but no membership in orgId.
     const strangerEmail = uniqueEmail("stranger");
-    await request(server()).post("/auth/signup").set("Content-Type", "application/json").send({ email: strangerEmail, password: STRONG_PW });
-    const strangerLogin = await request(server()).post("/auth/login").set("Content-Type", "application/json").send({ email: strangerEmail, password: STRONG_PW, tokenTransport: "body" });
+    await request(server())
+      .post("/auth/signup")
+      .set("Content-Type", "application/json")
+      .send({ email: strangerEmail, password: STRONG_PW });
+    const strangerLogin = await request(server())
+      .post("/auth/login")
+      .set("Content-Type", "application/json")
+      .send({ email: strangerEmail, password: STRONG_PW, tokenTransport: "body" });
     const res = await request(server())
       .post(`/orgs/${orgId}/members/${memberId}/reset-password`)
       .set("Content-Type", "application/json")
       .set("Authorization", `Bearer ${strangerLogin.body.accessToken}`)
       .send({ newPassword: "should-not-apply-7Xx!" });
     expect(res.status).toBe(404);
-    const stillOriginal = await request(server()).post("/auth/login").set("Content-Type", "application/json").send({ email: memberEmail, password: STRONG_PW });
+    const stillOriginal = await request(server())
+      .post("/auth/login")
+      .set("Content-Type", "application/json")
+      .send({ email: memberEmail, password: STRONG_PW });
     expect(stillOriginal.status).toBe(200);
   });
 
@@ -592,12 +758,18 @@ d("auth endpoints (E2E, DB+Redis)", () => {
     });
     // The caller is an Owner too.
     const ownerEmail = uniqueEmail("owner");
-    await request(server()).post("/auth/signup").set("Content-Type", "application/json").send({ email: ownerEmail, password: STRONG_PW });
+    await request(server())
+      .post("/auth/signup")
+      .set("Content-Type", "application/json")
+      .send({ email: ownerEmail, password: STRONG_PW });
     const owner = await prisma.user.findUniqueOrThrow({ where: { email: ownerEmail } });
     await prisma.membership.create({
       data: { organizationId: orgId, userId: owner.id, roleId: ownerRole.id, status: "active" },
     });
-    const ownerLogin = await request(server()).post("/auth/login").set("Content-Type", "application/json").send({ email: ownerEmail, password: STRONG_PW, tokenTransport: "body" });
+    const ownerLogin = await request(server())
+      .post("/auth/login")
+      .set("Content-Type", "application/json")
+      .send({ email: ownerEmail, password: STRONG_PW, tokenTransport: "body" });
 
     const NEW_PW = "owner-resets-owner-6Ss!";
     const res = await request(server())
@@ -695,8 +867,22 @@ d("auth endpoints (E2E, DB+Redis)", () => {
 
   it("logout-all / sessions / change-password require Bearer → 401 without it", async () => {
     expect((await request(server()).get("/auth/sessions")).status).toBe(401);
-    expect((await request(server()).post("/auth/logout-all").set("Content-Type", "application/json").send({})).status).toBe(401);
-    expect((await request(server()).post("/auth/change-password").set("Content-Type", "application/json").send({ currentPassword: "x", newPassword: "y" })).status).toBe(401);
+    expect(
+      (
+        await request(server())
+          .post("/auth/logout-all")
+          .set("Content-Type", "application/json")
+          .send({})
+      ).status,
+    ).toBe(401);
+    expect(
+      (
+        await request(server())
+          .post("/auth/change-password")
+          .set("Content-Type", "application/json")
+          .send({ currentPassword: "x", newPassword: "y" })
+      ).status,
+    ).toBe(401);
   });
 });
 
@@ -741,7 +927,9 @@ d("prod-path security wiring (trust proxy 0 + CORS allow-list)", () => {
         transform: true,
         exceptionFactory: (errors) => {
           const first = errors[0];
-          const code = first?.constraints ? Object.values(first.constraints)[0] : "VALIDATION_FAILED";
+          const code = first?.constraints
+            ? Object.values(first.constraints)[0]
+            : "VALIDATION_FAILED";
           return new UnprocessableEntityException({ error: { code, message: "ข้อมูลไม่ถูกต้อง" } });
         },
       }),
@@ -796,8 +984,16 @@ d("prod-path security wiring (trust proxy 0 + CORS allow-list)", () => {
     // strength is irrelevant here — checkIp runs before the policy check.
     const spoofBase = Date.now();
     spoofEmails.push(`spoof-${spoofBase}-1@example.com`, `spoof-${spoofBase}-2@example.com`);
-    await request(server).post("/auth/signup").set("Content-Type", "application/json").set("X-Forwarded-For", "1.2.3.4").send({ email: `spoof-${spoofBase}-1@example.com`, password: STRONG_PW });
-    await request(server).post("/auth/signup").set("Content-Type", "application/json").set("X-Forwarded-For", "5.6.7.8").send({ email: `spoof-${spoofBase}-2@example.com`, password: STRONG_PW });
+    await request(server)
+      .post("/auth/signup")
+      .set("Content-Type", "application/json")
+      .set("X-Forwarded-For", "1.2.3.4")
+      .send({ email: `spoof-${spoofBase}-1@example.com`, password: STRONG_PW });
+    await request(server)
+      .post("/auth/signup")
+      .set("Content-Type", "application/json")
+      .set("X-Forwarded-For", "5.6.7.8")
+      .send({ email: `spoof-${spoofBase}-2@example.com`, password: STRONG_PW });
     // Both requests hit the SAME ip bucket → count == 2 under one key.
     const ipKeys = await redis.keys("throttle:ip:*");
     expect(ipKeys.length).toBe(1); // a single bucket, not one-per-spoofed-IP

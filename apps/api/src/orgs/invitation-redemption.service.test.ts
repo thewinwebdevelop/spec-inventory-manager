@@ -47,8 +47,14 @@ const ORG_NAME = "ร้านของจริง";
 const USER_ID = "usr_invitee";
 const USER_EMAIL = "napa@example.com";
 const RAW_TOKEN = "raw-invitation-token-value";
+const ISSUER_ID = "usr_issuer_owner";
 
-const ROLE_STAFF = { id: "rol_staff", name: "Staff", key: "staff" };
+const ROLE_STAFF = {
+  id: "rol_staff",
+  name: "Staff",
+  key: "staff",
+  capabilities: ["manage_products", "manage_stock", "manage_orders"],
+};
 const NOW = new Date("2026-08-05T10:00:00.000Z");
 const ISSUED = new Date("2026-08-01T10:00:00.000Z");
 const EXPIRES = new Date("2026-08-08T10:00:00.000Z");
@@ -67,6 +73,9 @@ interface FakeInvitation {
   acceptedUserCreatedAt: Date | null;
   cancelledAt: Date | null;
   tokenHash: string;
+  /** F-003 D-035: who issued the current link — an active Owner by default. */
+  issuedByUserId: string | null;
+  invitedByUserId: string | null;
 }
 
 interface FakeMembership {
@@ -93,6 +102,8 @@ function invitation(over: Partial<FakeInvitation> = {}): FakeInvitation {
     acceptedUserCreatedAt: null,
     cancelledAt: null,
     tokenHash: hashInvitationToken(RAW_TOKEN),
+    issuedByUserId: ISSUER_ID,
+    invitedByUserId: ISSUER_ID,
     ...over,
   };
 }
@@ -103,7 +114,13 @@ interface Options {
   /** The row the TRANSACTION finds. Defaults to `located` (the normal case). */
   readonly inTx?: FakeInvitation | null;
   readonly memberships?: readonly FakeMembership[];
-  readonly roles?: readonly { id: string; name: string; key: string | null }[];
+  readonly roles?: readonly {
+    id: string;
+    name: string;
+    key: string | null;
+    capabilities: string[];
+    deletedAt?: Date | null;
+  }[];
   readonly acceptorEmail?: string;
   readonly acceptorCreatedAt?: Date;
   /** `null` = the authenticated user's row has vanished. */
@@ -115,7 +132,10 @@ function createService(options: Options = {}) {
   const txRow = options.inTx === undefined ? located : options.inTx;
   const invitations = txRow ? [{ ...txRow }] : [];
   const memberships = (options.memberships ?? []).map((m) => ({ ...m }));
-  const roles = (options.roles ?? [ROLE_STAFF]).map((r) => ({ ...r }));
+  const roles = (options.roles ?? [ROLE_STAFF]).map((r) => ({
+    deletedAt: null as Date | null | undefined,
+    ...r,
+  }));
   const calls: string[] = [];
   const lockedOrgIds: string[] = [];
 
@@ -145,13 +165,22 @@ function createService(options: Options = {}) {
       }),
     },
     role: {
-      findFirst: vi.fn(async (args: { where: { id: string } }) => {
+      // Honours `deletedAt: null` like Postgres (F-003 · LIVE_ROLE_WHERE).
+      findFirst: vi.fn(async (args: { where: { id: string; deletedAt?: null } }) => {
         calls.push("tx:role.findFirst");
-        return roles.find((r) => r.id === args.where.id) ?? null;
+        const liveOnly = "deletedAt" in args.where && args.where.deletedAt === null;
+        return roles.find((r) => r.id === args.where.id && !(liveOnly && r.deletedAt)) ?? null;
       }),
     },
     membership: {
-      findFirst: vi.fn(async (args: { where: { userId: string } }) => {
+      findFirst: vi.fn(async (args: { where: { userId: string; status?: string } }) => {
+        if (args.where.userId === ISSUER_ID) {
+          // F-003 D-035 re-check (T-003-B19): the link's issuer, an active Owner.
+          calls.push("tx:issuer.findFirst");
+          return args.where.status === "active"
+            ? { role: { capabilities: ["full_access"], deletedAt: null } }
+            : null;
+        }
         calls.push("tx:membership.findFirst");
         const found = memberships.find((m) => m.userId === args.where.userId);
         return found ? { ...found } : null;
@@ -237,7 +266,18 @@ function createService(options: Options = {}) {
     lookup as unknown as InvitationLookupService,
   );
 
-  return { service, prisma, tx, lookup, calls, lockedOrgIds, sink, invitations, memberships, store };
+  return {
+    service,
+    prisma,
+    tx,
+    lookup,
+    calls,
+    lockedOrgIds,
+    sink,
+    invitations,
+    memberships,
+    store,
+  };
 }
 
 /** The code of the `DomainException` a call rejected with. */
@@ -313,7 +353,9 @@ describe("InvitationsService.preview — api-spec §3.14", () => {
   it("★ a ROTATED token is indistinguishable from one that never existed", async () => {
     // §3.12 overwrites `tokenHash`, so yesterday's link resolves to nothing —
     // the same nothing an invented token resolves to (I-C-05).
-    const ctx = createService({ located: invitation({ tokenHash: hashInvitationToken("rotated") }) });
+    const ctx = createService({
+      located: invitation({ tokenHash: hashInvitationToken("rotated") }),
+    });
     const stale = await refusalOf(ctx.service.preview({ token: RAW_TOKEN, now: NOW }));
     const invented = await refusalOf(ctx.service.preview({ token: "made-up", now: NOW }));
     expect(stale.code).toBe(invented.code);
@@ -374,6 +416,9 @@ describe("InvitationsService.accept — the transaction (architecture §5.1)", (
       "tx:invitation.findFirst",
       "tx:role.findFirst",
       "tx:membership.findFirst",
+      // F-003 D-035: the issuer re-check — inside the tx, after every F-002
+      // decision fact, before any write.
+      "tx:issuer.findFirst",
       "tx:membership.create",
       "tx:invitation.update",
       "tx:organization.findUnique",
@@ -427,10 +472,12 @@ describe("InvitationsService.accept — the transaction (architecture §5.1)", (
   it("the context it opens is the invitation's org + the authenticated user", async () => {
     const ctx = createService();
     let seen: unknown;
-    ctx.tx.organization.findUnique.mockImplementationOnce(async (args: { where: { id: string } }) => {
-      seen = ctx.store.get();
-      return { id: args.where.id, name: ORG_NAME };
-    });
+    ctx.tx.organization.findUnique.mockImplementationOnce(
+      async (args: { where: { id: string } }) => {
+        seen = ctx.store.get();
+        return { id: args.where.id, name: ORG_NAME };
+      },
+    );
     await ctx.service.accept({ userId: USER_ID, token: RAW_TOKEN, now: NOW });
     expect(seen).toMatchObject({ organizationId: ORG_ID, userId: USER_ID });
     // …and it does not leak past the call.
@@ -455,7 +502,11 @@ describe("InvitationsService.accept — success", () => {
       membership: { roleId: ROLE_STAFF.id, roleName: "Staff", roleKey: "staff", status: "active" },
     });
     expect(ctx.memberships).toHaveLength(1);
-    expect(ctx.memberships[0]).toMatchObject({ userId: USER_ID, roleId: ROLE_STAFF.id, status: "active" });
+    expect(ctx.memberships[0]).toMatchObject({
+      userId: USER_ID,
+      roleId: ROLE_STAFF.id,
+      status: "active",
+    });
   });
 
   it("★ never passes an organizationId in the write — the scope injects it", async () => {
@@ -563,7 +614,12 @@ describe("InvitationsService.accept — the decision order (api-spec §3.15)", (
     // The draft this replaced upserted the membership, which made "accept a
     // Staff invitation" a way for the last Owner to demote themselves and leave
     // the shop with zero Owners.
-    const ownerRole = { id: "rol_owner", name: "Owner", key: "owner" };
+    const ownerRole = {
+      id: "rol_owner",
+      name: "Owner",
+      key: "owner",
+      capabilities: ["full_access"],
+    };
     const ctx = createService({
       memberships: [member({ roleId: ownerRole.id })],
       roles: [ROLE_STAFF, ownerRole],
@@ -583,9 +639,7 @@ describe("InvitationsService.accept — the decision order (api-spec §3.15)", (
 
   it("★ INVITATION_SUPERSEDED when the link predates the removal (I-1)", async () => {
     const ctx = createService({
-      memberships: [
-        member({ status: "revoked", revokedAt: new Date(ISSUED.getTime() + 60_000) }),
-      ],
+      memberships: [member({ status: "revoked", revokedAt: new Date(ISSUED.getTime() + 60_000) })],
     });
     const error = await refusalOf(
       ctx.service.accept({ userId: USER_ID, token: RAW_TOKEN, now: NOW }),
@@ -626,6 +680,18 @@ describe("InvitationsService.accept — the decision order (api-spec §3.15)", (
     expect(ctx.tx.membership.create).not.toHaveBeenCalled();
   });
 
+  it("★ INVITATION_ROLE_UNAVAILABLE when the invited role is soft-deleted (B07 review L-4 · LIVE_ROLE_WHERE)", async () => {
+    const ctx = createService({
+      roles: [{ ...ROLE_STAFF, deletedAt: new Date("2026-10-01T00:00:00Z") }],
+    });
+    const error = await refusalOf(
+      ctx.service.accept({ userId: USER_ID, token: RAW_TOKEN, now: NOW }),
+    );
+    expect(error.code).toBe("INVITATION_ROLE_UNAVAILABLE");
+    expect(ctx.tx.role.findFirst.mock.calls[0]![0].where).toMatchObject({ deletedAt: null });
+    expect(ctx.tx.membership.create).not.toHaveBeenCalled();
+  });
+
   it("★ a mismatched account is 403 + details.emailMasked — never the address", async () => {
     const ctx = createService({ acceptorEmail: "somebody.else@example.com" });
     const error = await refusalOf(
@@ -643,6 +709,24 @@ describe("InvitationsService.accept — the decision order (api-spec §3.15)", (
     const ctx = createService({ acceptorEmail: "  NAPA@Example.COM " });
     await expect(
       ctx.service.accept({ userId: USER_ID, token: RAW_TOKEN, now: NOW }),
+    ).resolves.toMatchObject({ organization: { id: ORG_ID } });
+  });
+
+  it("★ F-003 §6 layer 2: the invited role's CURRENT capabilities re-derive the TTL at accept", async () => {
+    // Issued 96h before NOW as Staff (stored expiry 168h). The role has since
+    // gained `manage_roles` ⇒ elevated ⇒ the link died 24h after issue. The
+    // service must hand the live capabilities to `canAcceptInvitation`.
+    const elevated = { ...ROLE_STAFF, capabilities: [...ROLE_STAFF.capabilities, "manage_roles"] };
+    const ctx = createService({ roles: [elevated] });
+    expect(
+      (await refusalOf(ctx.service.accept({ userId: USER_ID, token: RAW_TOKEN, now: NOW }))).code,
+    ).toBe("INVITATION_EXPIRED");
+    expect(ctx.tx.membership.create).not.toHaveBeenCalled();
+
+    // control — the same link, the role still Staff, is accepted.
+    const control = createService();
+    await expect(
+      control.service.accept({ userId: USER_ID, token: RAW_TOKEN, now: NOW }),
     ).resolves.toMatchObject({ organization: { id: ORG_ID } });
   });
 

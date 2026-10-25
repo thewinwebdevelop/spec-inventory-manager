@@ -14,6 +14,8 @@ class _$OrgMyMembership extends OrgMyMembership {
   @override
   final String? roleKey;
   @override
+  final bool? roleNameCustomized;
+  @override
   final BuiltList<String> capabilities;
   @override
   final String status;
@@ -25,6 +27,7 @@ class _$OrgMyMembership extends OrgMyMembership {
       {required this.roleId,
       required this.roleName,
       this.roleKey,
+      this.roleNameCustomized,
       required this.capabilities,
       required this.status})
       : super._();
@@ -42,6 +45,7 @@ class _$OrgMyMembership extends OrgMyMembership {
         roleId == other.roleId &&
         roleName == other.roleName &&
         roleKey == other.roleKey &&
+        roleNameCustomized == other.roleNameCustomized &&
         capabilities == other.capabilities &&
         status == other.status;
   }
@@ -52,6 +56,7 @@ class _$OrgMyMembership extends OrgMyMembership {
     _$hash = $jc(_$hash, roleId.hashCode);
     _$hash = $jc(_$hash, roleName.hashCode);
     _$hash = $jc(_$hash, roleKey.hashCode);
+    _$hash = $jc(_$hash, roleNameCustomized.hashCode);
     _$hash = $jc(_$hash, capabilities.hashCode);
     _$hash = $jc(_$hash, status.hashCode);
     _$hash = $jf(_$hash);
@@ -64,6 +69,7 @@ class _$OrgMyMembership extends OrgMyMembership {
           ..add('roleId', roleId)
           ..add('roleName', roleName)
           ..add('roleKey', roleKey)
+          ..add('roleNameCustomized', roleNameCustomized)
           ..add('capabilities', capabilities)
           ..add('status', status))
         .toString();
@@ -86,6 +92,11 @@ class OrgMyMembershipBuilder
   String? get roleKey => _$this._roleKey;
   set roleKey(String? roleKey) => _$this._roleKey = roleKey;
 
+  bool? _roleNameCustomized;
+  bool? get roleNameCustomized => _$this._roleNameCustomized;
+  set roleNameCustomized(bool? roleNameCustomized) =>
+      _$this._roleNameCustomized = roleNameCustomized;
+
   ListBuilder<String>? _capabilities;
   ListBuilder<String> get capabilities =>
       _$this._capabilities ??= ListBuilder<String>();
@@ -106,6 +117,7 @@ class OrgMyMembershipBuilder
       _roleId = $v.roleId;
       _roleName = $v.roleName;
       _roleKey = $v.roleKey;
+      _roleNameCustomized = $v.roleNameCustomized;
       _capabilities = $v.capabilities.toBuilder();
       _status = $v.status;
       _$v = null;
@@ -136,6 +148,7 @@ class OrgMyMembershipBuilder
             roleName: BuiltValueNullFieldError.checkNotNull(
                 roleName, r'OrgMyMembership', 'roleName'),
             roleKey: roleKey,
+            roleNameCustomized: roleNameCustomized,
             capabilities: capabilities.build(),
             status: BuiltValueNullFieldError.checkNotNull(
                 status, r'OrgMyMembership', 'status'),

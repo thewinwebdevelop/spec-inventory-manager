@@ -37,6 +37,15 @@ post:
 
 
     `Cache-Control: no-store` + `Referrer-Policy: no-referrer`.
+
+
+    ⚠️ F-003 NARROWS THIS ROUTE (wire shape unchanged — F-003 api-spec §4.3,
+    D-035 Addendum): after the Owner rule, an invitation whose role holds a
+    capability the caller does not → `403 ROLE_EXCEEDS_ACTOR` (no `details`).
+    Holding `manage_roles` now counts as elevated for the 24-hour TTL. The
+    reissuer becomes the invitation's issuer of record (not on the wire): from
+    then on, `POST /invitations/accept` re-checks THE REISSUER's standing
+    instead of the original inviter's.
   tags:
     - invitations
   security:
@@ -65,7 +74,8 @@ post:
       description: >
         `FORBIDDEN` — missing `manage_members`, or reissuing an Owner invitation
         without `full_access` (nothing is written when this fires) — or
-        `ORG_ACCESS_DENIED`.
+        `ORG_ACCESS_DENIED` · F-003: `ROLE_EXCEEDS_ACTOR` — the invitation's role
+        holds a capability you do not (no `details`; nothing is written).
       content:
         application/json:
           schema:

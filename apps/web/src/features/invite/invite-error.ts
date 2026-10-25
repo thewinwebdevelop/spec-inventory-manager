@@ -60,7 +60,9 @@ const BY_CODE: Readonly<Record<string, InviteError>> = Object.freeze({
   },
   INVITATION_CANCELLED: {
     title: "คำเชิญนี้ถูกยกเลิกแล้ว",
-    body: "ติดต่อเจ้าของร้านถ้าคุณยังต้องการเข้าร่วม",
+    // R9 (D-035): ONE copy for a shop-cancelled and a re-check-cancelled
+    // invitation (B19 makes the bodies identical) - no reason, no inviter.
+    body: "ถ้าคุณยังต้องการเข้าร่วม ให้ขอลิงก์คำเชิญใหม่จากเจ้าของร้าน",
     next: HOME,
   },
   INVITATION_ALREADY_ACCEPTED: {
@@ -72,7 +74,8 @@ const BY_CODE: Readonly<Record<string, InviteError>> = Object.freeze({
     title: "คุณเป็นสมาชิกของร้านนี้อยู่แล้ว",
     // I-9: accepting again must not silently change anything, and the copy
     // says so — otherwise a second click reads as "did that do something?".
-    body: "เข้าใช้งานได้เลย — สิทธิ์เดิมของคุณไม่ถูกเปลี่ยน",
+    // F-003 §0.1 — "สิทธิ์เดิม" (F-002) meant ROLE; renamed to "บทบาทเดิม".
+    body: "เข้าใช้งานได้เลย — บทบาทเดิมของคุณไม่ถูกเปลี่ยน",
     next: { kind: "enter-org" },
   },
   INVITATION_SUPERSEDED: {
@@ -82,9 +85,12 @@ const BY_CODE: Readonly<Record<string, InviteError>> = Object.freeze({
     body: "คำเชิญนี้ถูกออกก่อนที่คุณจะถูกถอดออกจากร้าน — ขอคำเชิญใหม่จากเจ้าของร้าน",
     next: HOME,
   },
+  // F-003 §0.1 — was "สิทธิ์ที่ระบุในคำเชิญถูกเปลี่ยนไปแล้ว…" (F-002); "สิทธิ์"
+  // there meant ROLE, so the whole line is replaced (not just the word), per
+  // ux-wireframe F-003 §0.1's migration table.
   INVITATION_ROLE_UNAVAILABLE: {
     title: "คำเชิญนี้ใช้ไม่ได้แล้ว",
-    body: "สิทธิ์ที่ระบุในคำเชิญถูกเปลี่ยนไปแล้ว — ขอลิงก์ใหม่จากเจ้าของร้าน",
+    body: "บทบาทในคำเชิญนี้ใช้ไม่ได้แล้ว — ขอลิงก์ใหม่จากเจ้าของร้าน",
     next: HOME,
   },
   INVITATION_EMAIL_MISMATCH: {
@@ -110,7 +116,10 @@ const BY_CODE: Readonly<Record<string, InviteError>> = Object.freeze({
  * separator the other multi-clause copy in this feature uses. Inventing a new
  * sentence here would be writing copy, which is not this file's job.
  */
-function withMaskedEmail(error: InviteError, details: Readonly<Record<string, unknown>>): InviteError {
+function withMaskedEmail(
+  error: InviteError,
+  details: Readonly<Record<string, unknown>>,
+): InviteError {
   const masked = details.emailMasked;
   if (typeof masked !== "string" || masked.length === 0) return error;
   return { ...error, body: `${inviteScreenTh.issuedTo(masked)} · ${error.body}` };

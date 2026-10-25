@@ -46,6 +46,8 @@ tags:
     description: F-002 — who is in a shop, and leaving one.
   - name: invitations
     description: F-002 — inviting people and redeeming links.
+  - name: roles
+    description: F-003 — designing roles and the capability catalog.
 
 paths:
   /health:
@@ -89,6 +91,13 @@ paths:
     $ref: "./paths/org-member.yaml"
   /orgs/{orgId}/roles:
     $ref: "./paths/org-roles.yaml"
+  # F-003 (T-003-B21) — the role-design reads; POST/PATCH/DELETE join with B23–B25.
+  /orgs/{orgId}/roles/{roleId}:
+    $ref: "./paths/org-role.yaml"
+  /orgs/{orgId}/role-details:
+    $ref: "./paths/org-role-details.yaml"
+  /orgs/{orgId}/capabilities:
+    $ref: "./paths/org-capabilities.yaml"
   /orgs/{orgId}/membership:
     $ref: "./paths/org-membership.yaml"
   /orgs/{orgId}/invitations:
@@ -112,6 +121,22 @@ components:
         Default auth scheme for OmniStock API endpoints. Individual public
         endpoints (e.g. /health, /auth/signup, /auth/login,
         /invitations/preview) opt out per operation via `security: []`.
+  # F-003 (T-003-B01) — role/capability shapes published AHEAD of their routes
+  # so the generated clients carry the types (Q-T1: each path lands with the
+  # task that serves it — B21/B23/B24/B25). Only the ROOTS of the graph are
+  # listed; `redocly bundle` hoists everything they reference. Once a path
+  # references a schema, its line here is redundant but harmless.
+  schemas:
+    RoleDetailListPage:
+      $ref: "./components/roles.yaml#/RoleDetailListPage"
+    CreateRoleRequest:
+      $ref: "./components/roles.yaml#/CreateRoleRequest"
+    UpdateRoleRequest:
+      $ref: "./components/roles.yaml#/UpdateRoleRequest"
+    DeletedRole:
+      $ref: "./components/roles.yaml#/DeletedRole"
+    CapabilityCatalog:
+      $ref: "./components/roles.yaml#/CapabilityCatalog"
 
 security:
   - bearerAuth: []

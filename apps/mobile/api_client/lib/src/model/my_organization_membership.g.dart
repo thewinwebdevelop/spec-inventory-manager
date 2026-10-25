@@ -84,6 +84,8 @@ class _$MyOrganizationMembership extends MyOrganizationMembership {
   @override
   final String? roleKey;
   @override
+  final bool? roleNameCustomized;
+  @override
   final DateTime? revokedAt;
 
   factory _$MyOrganizationMembership(
@@ -95,6 +97,7 @@ class _$MyOrganizationMembership extends MyOrganizationMembership {
       this.roleId,
       this.roleName,
       this.roleKey,
+      this.roleNameCustomized,
       this.revokedAt})
       : super._();
   @override
@@ -114,6 +117,7 @@ class _$MyOrganizationMembership extends MyOrganizationMembership {
         roleId == other.roleId &&
         roleName == other.roleName &&
         roleKey == other.roleKey &&
+        roleNameCustomized == other.roleNameCustomized &&
         revokedAt == other.revokedAt;
   }
 
@@ -124,6 +128,7 @@ class _$MyOrganizationMembership extends MyOrganizationMembership {
     _$hash = $jc(_$hash, roleId.hashCode);
     _$hash = $jc(_$hash, roleName.hashCode);
     _$hash = $jc(_$hash, roleKey.hashCode);
+    _$hash = $jc(_$hash, roleNameCustomized.hashCode);
     _$hash = $jc(_$hash, revokedAt.hashCode);
     _$hash = $jf(_$hash);
     return _$hash;
@@ -136,6 +141,7 @@ class _$MyOrganizationMembership extends MyOrganizationMembership {
           ..add('roleId', roleId)
           ..add('roleName', roleName)
           ..add('roleKey', roleKey)
+          ..add('roleNameCustomized', roleNameCustomized)
           ..add('revokedAt', revokedAt))
         .toString();
   }
@@ -163,6 +169,11 @@ class MyOrganizationMembershipBuilder
   String? get roleKey => _$this._roleKey;
   set roleKey(String? roleKey) => _$this._roleKey = roleKey;
 
+  bool? _roleNameCustomized;
+  bool? get roleNameCustomized => _$this._roleNameCustomized;
+  set roleNameCustomized(bool? roleNameCustomized) =>
+      _$this._roleNameCustomized = roleNameCustomized;
+
   DateTime? _revokedAt;
   DateTime? get revokedAt => _$this._revokedAt;
   set revokedAt(DateTime? revokedAt) => _$this._revokedAt = revokedAt;
@@ -178,6 +189,7 @@ class MyOrganizationMembershipBuilder
       _roleId = $v.roleId;
       _roleName = $v.roleName;
       _roleKey = $v.roleKey;
+      _roleNameCustomized = $v.roleNameCustomized;
       _revokedAt = $v.revokedAt;
       _$v = null;
     }
@@ -205,6 +217,7 @@ class MyOrganizationMembershipBuilder
           roleId: roleId,
           roleName: roleName,
           roleKey: roleKey,
+          roleNameCustomized: roleNameCustomized,
           revokedAt: revokedAt,
         );
     replace(_$result);

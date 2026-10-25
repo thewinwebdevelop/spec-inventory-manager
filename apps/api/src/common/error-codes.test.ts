@@ -133,6 +133,41 @@ describe("ERROR_CODES registry", () => {
     }
   });
 
+  // F-003 · T-003-B02 · U-API3-17 (api-spec §5) — the two 403s the SHIPPED
+  // member/invitation routes gain (api-spec §4.3). The eleven role-write codes
+  // of §5 land with the role routes that answer them (T-003-B23/B24/B25 — Q-T1
+  // moved those paths there): the server↔contract audit
+  // (`test/error-code-contract.test.ts`) refuses a registry code no response
+  // description names, and those routes are not in the contract yet.
+  it("U-API3-17 pins the F-003 authority codes → 403 (api-spec §5)", () => {
+    expect(ERROR_CODES.ROLE_EXCEEDS_ACTOR.status).toBe(403);
+    expect(ERROR_CODES.TARGET_NOT_BELOW_ACTOR.status).toBe(403);
+  });
+
+  it("U-API3-17 the F-003 authority codes are distinct from FORBIDDEN and from each other", () => {
+    // FORBIDDEN = "you may not touch this at all / leave the page"; these two keep
+    // the user on the screen with a specific reason (api-spec §4.3 ordering:
+    // FORBIDDEN → TARGET_NOT_BELOW_ACTOR → ROLE_EXCEEDS_ACTOR). One code for two
+    // of them guarantees the client shows the wrong recovery path.
+    const codes = [
+      ERROR_CODES.FORBIDDEN.code,
+      ERROR_CODES.TARGET_NOT_BELOW_ACTOR.code,
+      ERROR_CODES.ROLE_EXCEEDS_ACTOR.code,
+    ];
+    expect(new Set(codes).size).toBe(3);
+  });
+
+  it("U-API3-17 the F-003 authority messages name no capability and use the D-029 wording", () => {
+    // AC-6.4: neither code carries details on member/invitation routes — the
+    // exceeding key lives in the event only. The default copy must not leak it
+    // either (no snake_case capability key such as `manage_roles`).
+    for (const def of [ERROR_CODES.ROLE_EXCEEDS_ACTOR, ERROR_CODES.TARGET_NOT_BELOW_ACTOR]) {
+      expect(def.message).not.toMatch(/[a-z]+_[a-z_]+/);
+      expect(def.message).toContain("ร้าน");
+      expect(def.message).not.toContain("องค์กร");
+    }
+  });
+
   it("uses the D-029 wording ('ร้าน', not 'องค์กร') in the org-context messages", () => {
     for (const def of [
       ERROR_CODES.ORG_CONTEXT_REQUIRED,

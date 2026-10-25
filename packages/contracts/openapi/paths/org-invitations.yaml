@@ -43,6 +43,19 @@ get:
           - expired
           - all
         default: pending
+    - name: roleId
+      in: query
+      required: false
+      description: >
+        F-003 — only invitations for this role, ANDed with `status`. A role id of
+        another shop (or one that never existed) answers `200` with an empty page,
+        never an error. A deleted role still filters. Longer than 64 characters,
+        or repeated → `422 VALIDATION_FAILED` (`fieldErrors.roleId`). The number
+        `ROLE_IN_USE.details.pendingInvitations` counts is `pending` + `expired`
+        for that role.
+      schema:
+        type: string
+        maxLength: 64
     - $ref: "../components/parameters.yaml#/CursorParam"
     - $ref: "../components/parameters.yaml#/LimitParam"
   responses:
@@ -71,7 +84,7 @@ get:
             $ref: "../components/common.yaml#/ErrorResponse"
     "422":
       description: >
-        `VALIDATION_FAILED` (`status` / `cursor` / `limit`) or
+        `VALIDATION_FAILED` (`status` / `roleId` / `cursor` / `limit`) or
         `ORG_CONTEXT_REQUIRED` / `ORG_MISMATCH`.
       content:
         application/json:
@@ -104,6 +117,12 @@ post:
 
     `Cache-Control: no-store` + `Referrer-Policy: no-referrer` — the body
     carries a live credential.
+
+
+    ⚠️ F-003 NARROWS THIS ROUTE (wire shape unchanged — F-003 api-spec §4.3,
+    AC-5.3): after the Owner rule, a role holding any capability the caller
+    does not → `403 ROLE_EXCEEDS_ACTOR` (no `details`); a role that has been
+    deleted → `422 ROLE_INVALID`, the same answer as a role of another shop.
   tags:
     - invitations
   security:
@@ -137,7 +156,9 @@ post:
     "403":
       description: >
         `FORBIDDEN` — missing `manage_members`, or inviting an Owner-capable
-        role without `full_access` — or `ORG_ACCESS_DENIED`.
+        role without `full_access` — or `ORG_ACCESS_DENIED` · F-003:
+        `ROLE_EXCEEDS_ACTOR` — the role holds a capability you do not (no
+        `details`).
       content:
         application/json:
           schema:

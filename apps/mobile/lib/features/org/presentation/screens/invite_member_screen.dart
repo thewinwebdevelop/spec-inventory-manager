@@ -12,7 +12,8 @@ import '../../application/invite_error.dart';
 import '../../application/org_providers.dart';
 import '../../domain/entities/org_entities.dart';
 import '../widgets/expiry_text.dart';
-import '../widgets/role_label.dart';
+import '../copy/role_action_blocked_copy.dart';
+import '../copy/role_display_copy.dart';
 import 'invite_link_screen.dart';
 
 /// S7 — เชิญสมาชิก, mobile (ux-wireframe §8 + §13: full screen, so the
@@ -61,8 +62,23 @@ class _InviteMemberScreenState extends ConsumerState<InviteMemberScreen> {
     // `staff` by key when it exists; otherwise the last row, which the
     // contract orders least-privileged last. Never `roles.first` — that is
     // the Owner row.
-    _roleId = (match ?? staff ?? roles.last).id;
+    // Prefer a role the server says we may hand out (R8): a disabled default
+    // would put a refusal behind the very first tap of "create link".
+    final assignable = roles.where((r) => !_isDisabled(r)).toList();
+    final fallback = [match, staff, roles.last].whereType<RoleRow>();
+    final pick = fallback.where((r) => !_isDisabled(r)).firstOrNull ?? assignable.lastOrNull;
+    // Nothing assignable -> select nothing (submit stays disabled); never
+    // pre-select a role the server already said it will refuse (403).
+    _roleId = pick?.id;
   }
+
+  /// R8 — enabled/disabled comes from the server's `viewerCanAssign`. Only
+  /// when the server does not say (field absent) does the F-002 rule apply:
+  /// the ownership-granting role is closed to a non-Owner.
+  bool _isDisabled(RoleRow r) => switch (r.viewerCanAssign) {
+        final bool can => !can,
+        null => r.grantsOwnership && !_iAmOwner,
+      };
 
   Future<void> _submit() async {
     final issued = await ref
@@ -161,24 +177,13 @@ class _InviteMemberScreenState extends ConsumerState<InviteMemberScreen> {
                         for (final role in items)
                           _RoleOption(
                             role: role,
-                            // D-028/C-1: only an Owner can create another
-                            // Owner. Disabled and explained, not hidden.
-                            //
-                            // ★ B-9: `grantsOwnership`, from the server, not
-                            // `key == 'owner'`. The slug is for translation.
-                            disabled: role.grantsOwnership && !_iAmOwner,
+                            // R8: `viewerCanAssign` from the server;
+                            // disabled and explained, never hidden.
+                            disabled: _isDisabled(role),
                           ),
                       ],
                     ),
                   ),
-                  if (items.any((r) => r.grantsOwnership) && !_iAmOwner)
-                    Padding(
-                      padding: const EdgeInsets.only(top: AppSpacing.s2),
-                      child: Text(
-                        t.inviteOwnerDisabledHelper,
-                        style: Theme.of(context).textTheme.bodySmall,
-                      ),
-                    ),
                   if (_isElevated(items)) ...[
                     const SizedBox(height: AppSpacing.s4),
                     // No number in this sentence, on purpose: the real TTL
@@ -230,20 +235,39 @@ class _RoleOption extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final t = AppLocalizations.of(context);
-    final description = switch (role.key) {
-      'owner' => t.inviteRoleOwnerDesc,
-      'admin' => t.inviteRoleAdminDesc,
-      'staff' => t.inviteRoleStaffDesc,
-      // An F-003 custom role has no ux-written description. Better an honest
-      // blank than a sentence invented about what it can do.
-      _ => null,
-    };
+    // Only the Owner description stays — it is server-locked, always true.
+    // Admin/staff descriptions were dropped (ux-wireframe §0.1): now that a
+    // store can edit what a role can do (F-003), a fixed sentence tied to
+    // the `key` would lie about what the role actually grants, and
+    // `GET /roles` does not send capabilities to check it against.
+    final description = role.key == 'owner' ? t.inviteRoleOwnerDesc : null;
+    final reason = disabled
+        ? roleAssignBlockedCopy(
+            t,
+            // Absent reason on a disabled row = F-002's owner-only rule.
+            role.assignBlockedReason ??
+                (role.viewerCanAssign == null ? 'owner_only' : ''),
+          )
+        : null;
 
     return RadioListTile<String>(
       value: role.id,
       enabled: !disabled,
-      title: Text(roleLabel(t, role.key, role.name)),
-      subtitle: description == null ? null : Text(description),
+      title: Text(roleDisplayName(
+        t,
+        roleKey: role.key,
+        name: role.name,
+        nameCustomized: role.nameCustomized,
+      )),
+      subtitle: (description == null && reason == null)
+          ? null
+          : Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                if (description != null) Text(description),
+                if (reason != null) Text(reason),
+              ],
+            ),
       contentPadding: EdgeInsets.zero,
     );
   }

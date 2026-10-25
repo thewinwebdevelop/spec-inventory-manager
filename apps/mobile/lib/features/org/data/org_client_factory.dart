@@ -25,6 +25,7 @@ OrgScoped createOrgScoped({required Dio orgDio, required String orgId}) {
     members: wire.MembersApi(orgDio, wire.standardSerializers),
     organizations: wire.OrganizationsApi(orgDio, wire.standardSerializers),
     invitations: wire.InvitationsApi(orgDio, wire.standardSerializers),
+    roles: wire.RolesApi(orgDio, wire.standardSerializers),
     orgId: orgId,
   );
 }

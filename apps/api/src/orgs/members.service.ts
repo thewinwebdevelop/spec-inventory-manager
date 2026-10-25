@@ -27,9 +27,11 @@
 // no lock because it decides nothing).
 //
 // ── WHAT IS DELIBERATELY NOT HERE ──────────────────────────────────────────
-//  * No capability check. `CapabilityGuard` did it from route metadata before
-//    this service was reached (architecture §3.1) — a check the service performs
-//    itself is a check the next endpoint forgets (I-2).
+//  * No route-level capability check. `CapabilityGuard` did it from route
+//    metadata before this service was reached (architecture §3.1) — a check the
+//    service performs itself is a check the next endpoint forgets (I-2). The
+//    in-tx `manage_members` FLOOR is not that check: it is step 1 of
+//    `decideMemberAuthority`, on caps re-read under the lock (F-003 arch §5).
 //  * No org id from the URL. It comes from the ALS context the guard chain tied
 //    to a proven active membership; `ORG_PRISMA` applies it to every query.
 //  * No retry on contention. These writes have no `Idempotency-Key` until F-011,
@@ -37,19 +39,17 @@
 //    `409 CONFLICT` + `details.reason="busy"` (§5.2) via `runInOrgLockTransaction`.
 import { Inject, Injectable } from "@nestjs/common";
 import {
-  LastOwnerError,
-  assertOwnerRemains,
-  canAssignRole,
+  decideMemberAuthority,
   isOwnerRole,
   toMemberRow,
+  type MemberAuthorityResult,
   type MemberRow,
   type MembershipStatus,
-  type OwnerChange,
-  type OwnerMembership,
 } from "@omnistock/core-domain";
-import { domainError } from "../common";
+import { LIVE_ROLE_WHERE, domainError } from "../common";
 import { paginate, type KeysetCursor } from "../common/cursor";
-import { SecurityEventsService } from "../auth";
+import { SecurityEventsService, type EscalationDeniedPayload } from "../auth";
+import { OrgOwnershipGuard } from "./org-ownership.guard";
 import {
   ORG_PRISMA,
   OrgContextStore,
@@ -118,20 +118,65 @@ interface MemberListRow {
   readonly activatedAt: Date | null;
   readonly revokedAt: Date | null;
   readonly createdAt: Date;
-  readonly role: { readonly name: string; readonly key: string | null; readonly capabilities: string[] };
+  readonly role: {
+    readonly name: string;
+    readonly key: string | null;
+    readonly capabilities: string[];
+    readonly nameCustomized: boolean;
+  };
   readonly user: { readonly email: string };
-}
-
-/** A membership whose CURRENT role holds `full_access` — any status (§5). */
-interface OwnerCandidateRow {
-  readonly userId: string;
-  readonly status: string;
-  readonly role: { readonly capabilities: string[] };
 }
 
 /** A pending invitation being cancelled alongside a revocation (I-1). */
 interface PendingInvitationRow {
   readonly id: string;
+}
+
+/**
+ * A refusal carried OUT of the locked transaction: nothing was written, and the
+ * event (if any) may only be emitted after the transaction has ended (H-3).
+ */
+interface AuthorityRefusal {
+  readonly code: "FORBIDDEN" | "TARGET_NOT_BELOW_ACTOR" | "ROLE_EXCEEDS_ACTOR";
+  readonly event: EscalationDeniedPayload | null;
+}
+
+/**
+ * `decideMemberAuthority` → wire (api-spec §4.3 "ลำดับ code"). `null` = allowed.
+ *  - `forbidden` (no `manage_members` in the tx) / `owner_only` → `FORBIDDEN`,
+ *    no escalation event — byte-for-byte what F-002 answered (AC-4.4).
+ *  - `target_not_below_actor` / `exceeds_actor` → their own code + one
+ *    `escalation_denied` (arch §7), excess keys in the event only (AC-6.4).
+ * A reason the operation cannot produce (`exceeds_actor` on a remove, which has
+ * no grant axis) is rule drift: thrown, never mapped to an answer.
+ */
+function refusalOf(
+  result: MemberAuthorityResult,
+  context: Omit<EscalationDeniedPayload, "reason" | "excessCapabilities">,
+): AuthorityRefusal | null {
+  if (result.ok) return null;
+  switch (result.reason) {
+    case "forbidden":
+    case "owner_only":
+      return { code: "FORBIDDEN", event: null };
+    case "target_not_below_actor":
+      return {
+        code: "TARGET_NOT_BELOW_ACTOR",
+        event: { ...context, reason: "target_not_below_actor", excessCapabilities: result.excess },
+      };
+    case "exceeds_actor":
+      if (context.operation !== "change_member_role") {
+        throw new Error(`decideMemberAuthority answered exceeds_actor for ${context.operation}`);
+      }
+      return {
+        code: "ROLE_EXCEEDS_ACTOR",
+        event: { ...context, reason: "exceeds_actor", excessCapabilities: result.excess },
+      };
+    default: {
+      const unknown: never = result;
+      throw new Error(`decideMemberAuthority: unmapped refusal ${JSON.stringify(unknown)}`);
+    }
+  }
 }
 
 @Injectable()
@@ -142,6 +187,8 @@ export class MembersService {
     @Inject(ORG_PRISMA) private readonly prisma: OrgScopedPrismaClient,
     @Inject(OrgContextStore) private readonly store: OrgContextStore,
     @Inject(SecurityEventsService) private readonly events: SecurityEventsService,
+    // F-003 (architecture §2): the ONE "who are the owners" query, shared with RolesService.
+    @Inject(OrgOwnershipGuard) private readonly ownership: OrgOwnershipGuard,
   ) {}
 
   // ── §3.7 GET /orgs/{orgId}/members ───────────────────────────────────────
@@ -159,17 +206,20 @@ export class MembersService {
     readonly limit: number;
     readonly cursor?: KeysetCursor;
     readonly withTotal: boolean;
+    /** F-003 `?roleId=` — ANDed with `status`; also narrows `total`. */
+    readonly roleId?: string;
   }): Promise<MemberListPage> {
     const viewerUserId = this.requireUserId();
-    const { status, limit, cursor, withTotal } = input;
+    const viewerCapabilities = this.requireViewerCapabilities();
+    const { status, limit, cursor, withTotal, roleId } = input;
 
     // `invited` is a dead state (data-model §7): no production write path
     // produces it, so it is filtered OUT of `all` rather than shown as a row a
     // client would have to interpret. `?status=invited` is not an option at all.
-    const statusFilter =
-      status === "all"
-        ? { status: { in: ["active", "revoked"] } }
-        : { status };
+    const statusFilter = {
+      ...(status === "all" ? { status: { in: ["active", "revoked"] } } : { status }),
+      ...(roleId === undefined ? {} : { roleId }),
+    };
 
     const where = {
       ...statusFilter,
@@ -199,7 +249,7 @@ export class MembersService {
         activatedAt: true,
         revokedAt: true,
         createdAt: true,
-        role: { select: { name: true, key: true, capabilities: true } },
+        role: { select: { name: true, key: true, capabilities: true, nameCustomized: true } },
         user: { select: USER_SELECT },
       },
     });
@@ -230,9 +280,15 @@ export class MembersService {
             revokedAt: row.revokedAt,
             createdAt: row.createdAt,
           },
-          role: { name: row.role.name, key: row.role.key, capabilities: row.role.capabilities },
+          role: {
+            name: row.role.name,
+            key: row.role.key,
+            capabilities: row.role.capabilities,
+            nameCustomized: row.role.nameCustomized,
+          },
           user: { email: row.user.email },
           viewerUserId,
+          viewerCapabilities,
         }),
       ),
       nextCursor: page.nextCursor,
@@ -252,10 +308,12 @@ export class MembersService {
    *      revoked between the guard chain and this line)
    *   3. re-read the ACTOR's own role        → demoted mid-flight ⇒ `403`
    *   4. resolve the NEW role in THIS org    → not ours ⇒ `422 ROLE_INVALID`
-   *   5. `canAssignRole`                     → false   ⇒ `403 FORBIDDEN`
+   *   5. `decideMemberAuthority` (D-034)     → refused ⇒ `403 FORBIDDEN` |
+   *      `TARGET_NOT_BELOW_ACTOR` | `ROLE_EXCEEDS_ACTOR` (nothing written;
+   *      the refusal leaves the tx and the event is emitted after it)
    *   6. `assertOwnerRemains`                → throws  ⇒ `409 LAST_OWNER`
    *   7. write
-   *   POST-COMMIT: `org.member.role_changed`
+   *   POST-COMMIT: `org.member.role_changed` · or `org.role.escalation_denied`
    *
    * Step 6 is what makes "two admins demoting two different Owners at the same
    * time" safe: both transactions want the same anchor, so the second one
@@ -294,23 +352,48 @@ export class MembersService {
         //
         // A comment that overstates a guarantee is worse than none, because the
         // next reader stops checking.
+        // LIVE: a soft-deleted role answers exactly like an unknown id (I3-10).
         const newRole = await tx.role.findFirst({
-          where: { id: input.roleId },
+          where: { id: input.roleId, ...LIVE_ROLE_WHERE },
           select: { id: true, name: true, key: true, capabilities: true },
         });
-        if (!newRole) throw domainError("ROLE_INVALID", { fieldErrors: { roleId: "บทบาทนี้ไม่ใช่บทบาทของร้านนี้" } });
+        if (!newRole)
+          throw domainError("ROLE_INVALID", {
+            fieldErrors: { roleId: "บทบาทนี้ไม่ใช่บทบาทของร้านนี้" },
+          });
 
-        // C-1/D-028 — touching ownership in EITHER direction (granting
-        // `full_access`, or modifying somebody who holds it) requires the actor
-        // to hold `full_access` themselves. One pure fn, five call sites.
-        const allowed = canAssignRole({
-          actorCapabilities,
-          targetIsOwner: isOwnerRole(target.role.capabilities),
-          newRoleIsOwner: isOwnerRole(newRole.capabilities),
-        });
-        if (!allowed) throw domainError("FORBIDDEN");
+        // D-034 (architecture §1.1) — ONE pure fn, both axes: the target's
+        // CURRENT role must be strictly below the actor (unless the target IS
+        // the actor), and the new role must not exceed the actor. The
+        // `manage_members` floor (on caps re-read in this tx — §5) and
+        // Owner-only (C-1/D-028) run first inside it, so every case F-002
+        // refused still answers `403 FORBIDDEN`.
+        //
+        // ⛔ No no-op short-circuit, here or above (SR-19 · api-spec §4.3): a
+        // PATCH to the role the target already holds is judged in full —
+        // refused ⇒ 403 + `escalation_denied`, allowed ⇒ 200 + `role_changed`
+        // (from = to). Skipping it would let "is B equal to me?" be asked
+        // without leaving a trace (pinned by I3-30 / MUT-08).
+        const refusal = refusalOf(
+          decideMemberAuthority({
+            op: "change_role",
+            actorCapabilities,
+            // From the ALS-proven user id, never from the request (§1.1).
+            actorIsTarget: actorUserId === input.targetUserId,
+            targetCurrentCapabilities: target.role.capabilities,
+            grantCapabilities: newRole.capabilities,
+          }),
+          {
+            actorUserId,
+            organizationId,
+            roleId: newRole.id,
+            targetUserId: input.targetUserId,
+            operation: "change_member_role",
+          },
+        );
+        if (refusal) return { kind: "refused" as const, refusal };
 
-        await this.assertOwnerRemainsInTx(tx, {
+        await this.ownership.assertOwnerRemainsInTx(tx, {
           kind: "role_change",
           userId: input.targetUserId,
           newRoleCapabilities: newRole.capabilities,
@@ -326,12 +409,13 @@ export class MembersService {
             activatedAt: true,
             revokedAt: true,
             createdAt: true,
-            role: { select: { name: true, key: true, capabilities: true } },
+            role: { select: { name: true, key: true, capabilities: true, nameCustomized: true } },
             user: { select: USER_SELECT },
           },
         });
 
         return {
+          kind: "changed" as const,
           fromRoleId: target.roleId,
           toRoleId: newRole.id,
           grantsFullAccess: isOwnerRole(newRole.capabilities),
@@ -348,14 +432,18 @@ export class MembersService {
               name: updated.role.name,
               key: updated.role.key,
               capabilities: updated.role.capabilities,
+              nameCustomized: updated.role.nameCustomized,
             },
             user: { email: updated.user.email },
             viewerUserId: actorUserId,
+            // api-spec §4.2b: the verdict on a write response uses the actor caps read in THIS tx.
+            viewerCapabilities: actorCapabilities,
           }),
         };
       },
       { operation: "updateMemberRole" },
     );
+    if (outcome.kind === "refused") return this.refuse(outcome.refusal);
 
     // POST-COMMIT (H-3). `grantsFullAccess` is the whole reason this event has
     // its own field: promoting somebody to Owner is a privilege escalation, and
@@ -381,7 +469,8 @@ export class MembersService {
    *
    * TRANSACTION: anchor → re-read target (`404` if not active — the `revoke ‖
    * revoke` case I-C-10, where exactly one request writes `revokedAt`) →
-   * re-read actor → `canAssignRole` (removing an Owner needs `full_access`) →
+   * re-read actor → `decideMemberAuthority` (`remove`: floor, Owner-only, then
+   * target ⊊ actor unless removing yourself — D-034/D-029) →
    * `assertOwnerRemains` → write the revocation AND cancel that email's pending
    * invitations IN THE SAME TRANSACTION (I-1). POST-COMMIT: `org.member.revoked`.
    *
@@ -402,27 +491,43 @@ export class MembersService {
 
         const actorCapabilities = await this.readActorCapabilities(tx, actorUserId);
 
-        // `newRoleIsOwner: false` — a revoke grants nothing. What it can do is
-        // REMOVE an Owner, which is the half of C-1 this argument pair covers.
-        const allowed = canAssignRole({
-          actorCapabilities,
-          targetIsOwner: isOwnerRole(target.role.capabilities),
-          newRoleIsOwner: false,
+        // Target axis only — a revoke grants nothing. Removing YOURSELF here is
+        // the D-029 exemption (your role is never ⊊ itself); `LAST_OWNER`
+        // below still applies.
+        const refusal = refusalOf(
+          decideMemberAuthority({
+            op: "remove",
+            actorCapabilities,
+            actorIsTarget: actorUserId === input.targetUserId,
+            targetCurrentCapabilities: target.role.capabilities,
+          }),
+          {
+            actorUserId,
+            organizationId,
+            roleId: target.roleId,
+            targetUserId: input.targetUserId,
+            operation: "remove_member",
+          },
+        );
+        if (refusal) return { kind: "refused" as const, refusal };
+
+        await this.ownership.assertOwnerRemainsInTx(tx, {
+          kind: "revoke",
+          userId: input.targetUserId,
         });
-        if (!allowed) throw domainError("FORBIDDEN");
 
-        await this.assertOwnerRemainsInTx(tx, { kind: "revoke", userId: input.targetUserId });
-
-        return this.writeRevocation(tx, {
+        const written = await this.writeRevocation(tx, {
           organizationId,
           targetUserId: input.targetUserId,
           email: target.user.email,
           roleId: target.roleId,
           revokedByUserId: actorUserId,
         });
+        return { kind: "revoked" as const, ...written };
       },
       { operation: "revokeMember" },
     );
+    if (outcome.kind === "refused") return this.refuse(outcome.refusal);
 
     // POST-COMMIT. `cancelledInvitationIds` ties the audit line to I-1: it says
     // WHICH doors were closed, not merely that some were.
@@ -453,8 +558,9 @@ export class MembersService {
    *     when `userId === ctx.userId` would instead have produced a route whose
    *     required capability depends on a path value, which `CapabilityGuard`
    *     (metadata only, fail-closed) cannot decide — reopening C-1.
-   *  2. NO `canAssignRole`. Leaving is not an act upon another person, so the
-   *     Owner-only rule has nothing to protect here. An Owner MAY leave — as
+   *  2. NO `decideMemberAuthority`. Leaving is not an act upon another person,
+   *     so neither Owner-only nor the D-034 target axis has anything to
+   *     protect here (architecture §1.1 "เส้นทางต่อตัวเอง"). An Owner MAY leave — as
    *     long as they are not the last one (rule 3).
    *  3. A DIFFERENT EVENT: `org.member.left`, never `org.member.revoked`.
    *     "The team walked out" and "the owner removed them" are different
@@ -479,7 +585,7 @@ export class MembersService {
         const self = await this.readActiveMembership(tx, actorUserId);
         if (!self) throw domainError("ORG_ACCESS_DENIED");
 
-        await this.assertOwnerRemainsInTx(tx, { kind: "revoke", userId: actorUserId });
+        await this.ownership.assertOwnerRemainsInTx(tx, { kind: "revoke", userId: actorUserId });
 
         const written = await this.writeRevocation(tx, {
           organizationId,
@@ -539,54 +645,15 @@ export class MembersService {
    * holder no longer has. The guard already used the snapshot to answer "may you
    * be here at all"; this is the finer decision, and it belongs under the lock.
    */
-  private async readActorCapabilities(tx: OrgLockTx, actorUserId: string): Promise<readonly string[]> {
+  private async readActorCapabilities(
+    tx: OrgLockTx,
+    actorUserId: string,
+  ): Promise<readonly string[]> {
     const actor = await this.readActiveMembership(tx, actorUserId);
     // Refused, not defaulted to `[]`: an actor whose membership vanished
     // mid-flight is a caller who no longer belongs here.
     if (!actor) throw domainError("ORG_ACCESS_DENIED");
     return actor.role.capabilities;
-  }
-
-  /**
-   * `assertOwnerRemains` over the owners of THIS org, read through `tx`.
-   *
-   * The `where` selects memberships whose CURRENT role holds `full_access`, in
-   * ANY status — the pure fn filters the statuses itself and needs the full set
-   * to do it (a caller that pre-filtered to `active` would hide nothing, but a
-   * caller that pre-filtered wrongly would hide the last Owner).
-   */
-  private async assertOwnerRemainsInTx(tx: OrgLockTx, change: OwnerChange): Promise<void> {
-    // ★ B-8 — the `organizationId` filter on the ROLE is explicit.
-    //
-    // `withOrgScope` injects `organizationId` at the top level of `Membership`
-    // (correct), but a nested `role: { … }` condition walks into `Role` with no
-    // org filter of its own. Before B-1's composite foreign key, a membership
-    // could point at another shop's role — and this query would then have
-    // counted that person as an Owner OF THIS SHOP, computing the
-    // "at least one Owner" invariant from a row belonging to somebody else.
-    //
-    // B-1 makes that state unrepresentable, so this line is not what makes the
-    // count correct today. It is here because the invariant should not depend
-    // on a constraint in another package to be readable as correct — and
-    // because `count owners of THIS org` is what the query means.
-    const organizationId = this.requireOrganizationId();
-    const owners: readonly OwnerCandidateRow[] = await tx.membership.findMany({
-      where: { role: { organizationId, capabilities: { has: "full_access" } } },
-      select: { userId: true, status: true, role: { select: { capabilities: true } } },
-    });
-    const input: readonly OwnerMembership[] = owners.map((row) => ({
-      userId: row.userId,
-      status: row.status as MembershipStatus,
-      capabilities: row.role.capabilities,
-    }));
-    try {
-      assertOwnerRemains({ owners: input, change });
-    } catch (error) {
-      // The pure fn throws its own typed error (it must not know about HTTP);
-      // this is the ONE place it becomes a wire result.
-      if (error instanceof LastOwnerError) throw domainError("LAST_OWNER");
-      throw error;
-    }
   }
 
   /**
@@ -633,6 +700,15 @@ export class MembersService {
     return { revokedAt, cancelledInvitationIds: pending.map((row) => row.id) };
   }
 
+  /**
+   * POST-TRANSACTION half of a refusal: emit `escalation_denied` (deduped,
+   * never throws on Redis trouble — SR-12), then refuse.
+   */
+  private async refuse(refusal: AuthorityRefusal): Promise<never> {
+    if (refusal.event) await this.events.emitEscalationDenied(refusal.event);
+    throw domainError(refusal.code);
+  }
+
   private requireOrganizationId(): string {
     const ctx = this.store.get();
     // Unreachable through the guard chain: an org-scoped route only runs with
@@ -640,6 +716,16 @@ export class MembersService {
     // is our bug — fail loud, never fall back to a path param.
     if (!ctx?.organizationId) throw domainError("INTERNAL");
     return ctx.organizationId;
+  }
+
+  /**
+   * F-003 — the caller's capabilities from the request's org context, for the
+   * READ-ONLY row verdicts (api-spec §3.1). Never a decision input for a write.
+   */
+  private requireViewerCapabilities(): readonly string[] {
+    const capabilities = this.store.get()?.capabilities;
+    if (!capabilities) throw domainError("INTERNAL");
+    return capabilities;
   }
 
   private requireUserId(): string {

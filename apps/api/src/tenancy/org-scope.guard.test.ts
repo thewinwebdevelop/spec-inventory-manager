@@ -11,7 +11,7 @@
 // ExecutionContext cannot be wrong about ordering, so it cannot prove anything
 // about it. Supertest through the real pipeline can.
 import { describe, it, expect, beforeAll, afterAll, beforeEach, vi } from "vitest";
-import { Controller, Get, Head, Module, Post, type INestApplication } from "@nestjs/common";
+import { Controller, Get, Head, Logger, Module, Post, type INestApplication } from "@nestjs/common";
 import { Test } from "@nestjs/testing";
 import request from "supertest";
 import { getOrgContext } from "@omnistock/db";
@@ -44,15 +44,20 @@ type FakeMembership = {
   id: string;
   status: "active" | "invited" | "revoked";
   roleId: string;
-  role: { capabilities: string[] };
+  /** F-003: `deletedAt` is selected; real Prisma returns `null` for a live role. */
+  role: { capabilities: string[]; deletedAt: Date | null };
 };
 
 /** Seeded memberships keyed `organizationId|userId` (the composite unique). */
 const memberships = new Map<string, FakeMembership>();
-const findUnique = vi.fn(async (args: { where: { organizationId_userId: { organizationId: string; userId: string } } }) => {
-  const { organizationId, userId } = args.where.organizationId_userId;
-  return memberships.get(`${organizationId}|${userId}`) ?? null;
-});
+const findUnique = vi.fn(
+  async (args: {
+    where: { organizationId_userId: { organizationId: string; userId: string } };
+  }) => {
+    const { organizationId, userId } = args.where.organizationId_userId;
+    return memberships.get(`${organizationId}|${userId}`) ?? null;
+  },
+);
 
 // Only `membership` — the whole point of M-1's narrow allowlist for tenancy/ is
 // that this chain reads ONE model. `$extends` exists solely because the
@@ -204,13 +209,13 @@ describe("OrgContextMiddleware + OrgScopeGuard (architecture §1.1–§1.4)", ()
       id: "mem_a",
       status: "active",
       roleId: "role_a",
-      role: { capabilities: ["manage_members"] },
+      role: { capabilities: ["manage_members"], deletedAt: null },
     });
     memberships.set(`${ORG_B}|${USER}`, {
       id: "mem_b",
       status: "active",
       roleId: "role_b",
-      role: { capabilities: ["full_access"] },
+      role: { capabilities: ["full_access"], deletedAt: null },
     });
   });
 
@@ -332,7 +337,7 @@ describe("OrgContextMiddleware + OrgScopeGuard (architecture §1.1–§1.4)", ()
       id: "mem_a",
       status: "revoked",
       roleId: "role_a",
-      role: { capabilities: [] },
+      role: { capabilities: [], deletedAt: null },
     });
 
     const denied = await request(app.getHttpServer())
@@ -348,7 +353,7 @@ describe("OrgContextMiddleware + OrgScopeGuard (architecture §1.1–§1.4)", ()
       id: "mem_a",
       status: "invited",
       roleId: "role_a",
-      role: { capabilities: [] },
+      role: { capabilities: [], deletedAt: null },
     });
     const res = await request(app.getHttpServer())
       .get("/probe/org")
@@ -356,6 +361,80 @@ describe("OrgContextMiddleware + OrgScopeGuard (architecture §1.1–§1.4)", ()
       .set("X-Organization-Id", ORG_A);
     expect(res.status).toBe(403);
     expect(res.body.error.code).toBe("ORG_ACCESS_DENIED");
+  });
+
+  // ── F-003 · data-model §2.2 / architecture §8 — active membership on a deleted role ──
+
+  it("★ active membership whose role is soft-deleted → 403 ORG_ACCESS_DENIED, no context, error log + event (fail-closed)", async () => {
+    // Unreachable while the DB trigger holds (a role with active holders cannot
+    // be deleted). If it ever happens, the member gets NOTHING — never the
+    // deleted role's capabilities.
+    const error = vi.spyOn(Logger.prototype, "error").mockImplementation(() => undefined);
+    const log = vi.spyOn(Logger.prototype, "log").mockImplementation(() => undefined);
+    try {
+      memberships.set(`${ORG_A}|${USER}`, {
+        id: "mem_a",
+        status: "active",
+        roleId: "role_a",
+        role: { capabilities: ["full_access"], deletedAt: new Date("2026-10-01T00:00:00Z") },
+      });
+      // Path source: the event's organizationId is the :orgId the caller asked for.
+      const res = await request(app.getHttpServer())
+        .get(`/orgs/${ORG_A}/probe`)
+        .set("Authorization", `Bearer ${token(USER)}`);
+      expect(res.status).toBe(403);
+      expect(res.body.error.code).toBe("ORG_ACCESS_DENIED");
+      expect(res.body.ctx).toBeUndefined();
+      const lines = error.mock.calls.map((c) => String(c[0]));
+      expect(lines.filter((l) => l.startsWith("membership_on_deleted_role "))).toEqual([
+        `membership_on_deleted_role ${JSON.stringify({ organizationId: ORG_A, membershipId: "mem_a", roleId: "role_a" })}`,
+      ]);
+      const events = log.mock.calls
+        .map((c) => String(c[0]))
+        .filter((l) => l.startsWith("org.access.denied "));
+      expect(events.map((l) => JSON.parse(l.slice("org.access.denied ".length)))).toEqual([
+        { userId: USER, organizationId: ORG_A, reason: "role_deleted" },
+      ]);
+    } finally {
+      error.mockRestore();
+      log.mockRestore();
+    }
+  });
+
+  it("★ the lookup selects role.deletedAt — the fact the fail-closed branch decides on", async () => {
+    await request(app.getHttpServer())
+      .get("/probe/org")
+      .set("Authorization", `Bearer ${token(USER)}`)
+      .set("X-Organization-Id", ORG_A);
+    const args = findUnique.mock.calls[0]![0] as unknown as {
+      select: { role: { select: Record<string, true> } };
+    };
+    expect(args.select.role.select).toEqual({ capabilities: true, deletedAt: true });
+  });
+
+  it("a deleted-role answer is byte-identical to 'not a member' (no oracle)", async () => {
+    const error = vi.spyOn(Logger.prototype, "error").mockImplementation(() => undefined);
+    try {
+      memberships.set(`${ORG_A}|${USER}`, {
+        id: "mem_a",
+        status: "active",
+        roleId: "role_a",
+        role: { capabilities: [], deletedAt: new Date() },
+      });
+      const deleted = await request(app.getHttpServer())
+        .get("/probe/org")
+        .set("Authorization", `Bearer ${token(USER)}`)
+        .set("X-Organization-Id", ORG_A);
+      const outsider = await request(app.getHttpServer())
+        .get("/probe/org")
+        .set("Authorization", `Bearer ${token("usr_outsider")}`)
+        .set("X-Organization-Id", ORG_A);
+      expect(deleted.status).toBe(outsider.status);
+      const strip = (b: { error: Record<string, unknown> }) => ({ ...b.error, traceId: undefined });
+      expect(strip(deleted.body)).toEqual(strip(outsider.body));
+    } finally {
+      error.mockRestore();
+    }
   });
 
   it("every membership lookup is a `select` on the (organizationId,userId) unique — never an include, never another model", async () => {

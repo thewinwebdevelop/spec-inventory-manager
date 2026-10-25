@@ -5,8 +5,10 @@
 ## นี่คืออะไร
 
 Next.js tenant admin console ของ OmniStock — ฝั่ง setup/config/บัญชี + งานหนัก (bulk, ตารางใหญ่, รายงาน, OAuth connect)
-**เจ้าของ:** `frontend` · flow/copy/visual → `ux` · **สถานะ track: พักไว้ (mobile-parity-first)** —
-ห้าม build web feature ใหม่ก่อนทำ "จุด restart" ให้เสร็จ (ดู [refactor-plan §5](../../docs/architecture/refactor-plan.md))
+**เจ้าของ:** `frontend` · flow/copy/visual → `ux` · **สถานะ track: active — build คู่ mobile** ตั้งแต่ F-002
+(F-002/F-003 tag `both` · user ยืนยัน 2026-09-26) · feature ที่ tag `both` ต้องทำ web ใน feature เดียวกัน ไม่เลื่อนไปทีหลัง ·
+สถานะ "พักไว้ (mobile-parity-first)" + ข้อห้าม build ก่อน "จุด restart" ([refactor-plan §5](../../docs/architecture/refactor-plan.md)) **ยกเลิกแล้ว** —
+infra ที่ยังไม่มีให้ feature แรกที่แตะเป็นผู้สร้าง (ตาราง Target patterns ข้างล่าง)
 
 > **Architecture authority: [docs/architecture/web.md](../../docs/architecture/web.md)** —
 > target design เต็ม + playbook เพิ่ม feature (§3.9) + gap plan (§6)
@@ -45,15 +47,15 @@ target = feature-first: `src/features/<f>/{api,components,forms,columns}` + `src
 
 infra เหล่านี้*ยังไม่มีของจริง* — งาน "จุด restart" + feature แรกที่แตะเป็นผู้สร้างตาม spec:
 
-| เรื่อง | ตาม | เกิดที่ |
-|---|---|---|
-| TanStack Query (`lib/api/query-client.ts`) — data fetching/invalidation เดียวทั้งแอป (ห้ามลอก manual `useState`+`useEffect` ของ SessionList) | web.md §3.1 | จุด restart |
-| `ApiFailure` discriminated union กลาง (generalize จาก `error-messages.ts`) | web.md §3.4 | จุด restart |
-| boundary gate `tool/check-boundaries.mjs` (dependency-cruiser) | web.md §5.2 | จุด restart |
-| `lib/org/` + `lib/session/` + `app/o/[orgId]/layout` + `useOrgApiClient()` (org header ได้ฟรี) | web.md §3.2 | F-002 |
-| `RouteGuard` + `FeatureGate` (`useCan()` RBAC ≠ tier — 2 แกนแยก) | web.md §3.3 | F-003/F-007 |
-| `components/ui/data-table/` (TanStack Table + URL-synced state, virtualize >200 แถว) · `form/` (RHF+zod, dirty guard) | web.md §3.5–3.6 | F-010 |
-| job polling (`use-job-polling` + `JobStatusBanner` — `GET /jobs/{id}`) · OAuth popup + postMessage | web.md §3.7–3.8 | F-021 · F-020 |
+| เรื่อง                                                                                                                                       | ตาม             | เกิดที่       |
+| -------------------------------------------------------------------------------------------------------------------------------------------- | --------------- | ------------- |
+| TanStack Query (`lib/api/query-client.ts`) — data fetching/invalidation เดียวทั้งแอป (ห้ามลอก manual `useState`+`useEffect` ของ SessionList) | web.md §3.1     | จุด restart   |
+| `ApiFailure` discriminated union กลาง (generalize จาก `error-messages.ts`)                                                                   | web.md §3.4     | จุด restart   |
+| boundary gate `tool/check-boundaries.mjs` (dependency-cruiser)                                                                               | web.md §5.2     | จุด restart   |
+| `lib/org/` + `lib/session/` + `app/o/[orgId]/layout` + `useOrgApiClient()` (org header ได้ฟรี)                                               | web.md §3.2     | F-002         |
+| `RouteGuard` + `FeatureGate` (`useCan()` RBAC ≠ tier — 2 แกนแยก)                                                                             | web.md §3.3     | F-003/F-007   |
+| `components/ui/data-table/` (TanStack Table + URL-synced state, virtualize >200 แถว) · `form/` (RHF+zod, dirty guard)                        | web.md §3.5–3.6 | F-010         |
+| job polling (`use-job-polling` + `JobStatusBanner` — `GET /jobs/{id}`) · OAuth popup + postMessage                                           | web.md §3.7–3.8 | F-021 · F-020 |
 
 ## คำสั่ง (source nvm→node22 + `corepack` ก่อน)
 

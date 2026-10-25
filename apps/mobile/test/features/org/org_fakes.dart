@@ -5,6 +5,7 @@
 // and cannot accidentally hand an org-scoped fake to the user-scoped provider.
 import 'package:mobile/core/error/api_failure.dart';
 import 'package:mobile/features/org/domain/entities/org_entities.dart';
+import 'package:mobile/features/org/domain/entities/role_entities.dart';
 import 'package:mobile/features/org/domain/repositories/org_repository.dart';
 
 class FakeOrgDirectory implements OrgDirectory {
@@ -59,6 +60,10 @@ class FakeOrgScoped implements OrgScoped {
     this.profileFailure,
     this.revealFailure,
     this.revealThrows,
+    this.roleDetails,
+    this.roleDetailsFailure,
+    this.catalog,
+    this.catalogFailure,
   });
 
   /// One entry per call — so a test can make page 2 fail after page 1 worked.
@@ -70,6 +75,7 @@ class FakeOrgScoped implements OrgScoped {
   final ApiFailure? invitationsFailure;
   final ApiFailure? rolesFailure;
   final ApiFailure? createInvitationFailure;
+  final List<String> invitedRoleIds = [];
   final IssuedInvite? issued;
   final Duration delay;
 
@@ -86,18 +92,34 @@ class FakeOrgScoped implements OrgScoped {
   /// family and left the screen stuck in `loading` forever.
   final Object? revealThrows;
   int revealCalls = 0;
+
+  // F-003 R1/R2 — `null` page/catalog = an empty-but-valid answer.
+  final RoleDetailsPage? roleDetails;
+  final ApiFailure? roleDetailsFailure;
+  final CapabilityCatalogView? catalog;
+  final ApiFailure? catalogFailure;
+  int roleDetailsCalls = 0;
+  int catalogCalls = 0;
   int profileCalls = 0;
 
   int memberCalls = 0;
   int invitationCalls = 0;
   final List<String?> cursorsSeen = <String?>[];
   final List<String> statusesSeen = <String>[];
+  final List<String?> memberRoleIdsSeen = <String?>[];
+  final List<String> invitationStatusesSeen = <String>[];
+  final List<String?> invitationRoleIdsSeen = <String?>[];
 
   @override
-  Future<PagedResult<MemberRow>> listMembers({String status = 'active', String? cursor}) async {
+  Future<PagedResult<MemberRow>> listMembers({
+    String status = 'active',
+    String? roleId,
+    String? cursor,
+  }) async {
     final index = memberCalls++;
     cursorsSeen.add(cursor);
     statusesSeen.add(status);
+    memberRoleIdsSeen.add(roleId);
     await Future<void>.delayed(delay);
     if (membersFailure != null) throw membersFailure!;
     if (index >= memberPages.length) return const PagedResult(items: []);
@@ -107,9 +129,12 @@ class FakeOrgScoped implements OrgScoped {
   @override
   Future<PagedResult<InvitationRow>> listInvitations({
     String status = 'pending',
+    String? roleId,
     String? cursor,
   }) async {
     final index = invitationCalls++;
+    invitationStatusesSeen.add(status);
+    invitationRoleIdsSeen.add(roleId);
     await Future<void>.delayed(delay);
     if (invitationsFailure != null) throw invitationsFailure!;
     if (index >= invitationPages.length) return const PagedResult(items: []);
@@ -124,7 +149,25 @@ class FakeOrgScoped implements OrgScoped {
   }
 
   @override
+  Future<RoleDetailsPage> listRoleDetails() async {
+    roleDetailsCalls++;
+    await Future<void>.delayed(delay);
+    if (roleDetailsFailure != null) throw roleDetailsFailure!;
+    return roleDetails ??
+        const RoleDetailsPage(items: [], canCreate: RoleVerdict(allowed: true), limit: 30);
+  }
+
+  @override
+  Future<CapabilityCatalogView> getCapabilityCatalog() async {
+    catalogCalls++;
+    await Future<void>.delayed(delay);
+    if (catalogFailure != null) throw catalogFailure!;
+    return catalog ?? const CapabilityCatalogView(items: []);
+  }
+
+  @override
   Future<IssuedInvite> createInvitation({required String email, required String roleId}) async {
+    invitedRoleIds.add(roleId);
     await Future<void>.delayed(delay);
     if (createInvitationFailure != null) throw createInvitationFailure!;
     return issued ??
@@ -180,6 +223,8 @@ MemberRow member({
   String status = 'active',
   String? roleKey = 'staff',
   String roleName = 'Staff',
+  bool? viewerCanManage,
+  String? manageBlockedReason,
 }) {
   return MemberRow(
     userId: id,
@@ -189,6 +234,8 @@ MemberRow member({
     status: status,
     isMe: isMe,
     isOwner: isOwner,
+    viewerCanManage: viewerCanManage,
+    manageBlockedReason: manageBlockedReason,
   );
 }
 

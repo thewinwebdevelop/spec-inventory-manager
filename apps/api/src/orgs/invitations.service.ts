@@ -12,7 +12,9 @@
 //   * rotating it invalidates the previous one IMMEDIATELY. The old hash is
 //     overwritten, so the old link stops resolving on the next request.
 //
-// ── WHY REISSUE GOES THROUGH `canAssignRole` (NEW-2) ───────────────────────
+// ── WHY REISSUE GOES THROUGH THE GRANT RULE (NEW-2) ────────────────────────
+// (F-002 called `canAssignRole`; F-003 T-003-B18 moved create / reissue /
+// cancel onto `decideMemberAuthority` directly — `judgeInvitationGrant` below.)
 // D-027 made reissue restart the clock. Without an Owner-only check on THIS
 // route, anybody holding `manage_members` could take an Owner invitation and
 // mint an unlimited series of fresh Owner links — copying the key to the Owner
@@ -27,11 +29,11 @@
 import { Inject, Injectable } from "@nestjs/common";
 import {
   canAcceptInvitation,
-  canAssignRole,
+  decideMemberAuthority,
   invitationTtlHours,
   invitationExpiryFrom,
-  isOwnerRole,
   isValidEmailShape,
+  judgeInviterRecheck,
   maskEmail,
   normalizeEmail,
   resolveInvitationStatus,
@@ -43,13 +45,15 @@ import {
   type InvitationPreview,
   type InvitationAcceptResult,
   type InvitationRow,
+  type InviterRecheckReason,
   type MembershipStatus,
   type StoredInvitationStatus,
 } from "@omnistock/core-domain";
 import { generateInvitationToken, hashInvitationToken } from "../prisma/invitation-token";
-import { domainError, type ErrorCodeKey } from "../common";
+import { LIVE_ROLE_WHERE, domainError, type ErrorCodeKey } from "../common";
 import { paginate, type KeysetCursor } from "../common/cursor";
 import { SecurityEventsService } from "../auth";
+import type { EscalationCheckedOperation } from "../auth/security-events.service";
 import {
   ORG_PRISMA,
   OrgContextStore,
@@ -98,7 +102,8 @@ const INVITATION_SELECT = {
   acceptedAt: true,
   acceptedByUserId: true,
   acceptedUserCreatedAt: true,
-  role: { select: { name: true, key: true } },
+  // `capabilities` feeds ONLY the viewer verdict (F-003) and is never projected.
+  role: { select: { name: true, key: true, nameCustomized: true, capabilities: true } },
 } as const;
 
 interface InvitationSelected {
@@ -113,7 +118,7 @@ interface InvitationSelected {
   acceptedAt: Date | null;
   acceptedByUserId: string | null;
   acceptedUserCreatedAt: Date | null;
-  role: { name: string; key: string | null };
+  role: { name: string; key: string | null; nameCustomized: boolean; capabilities: string[] };
 }
 
 /**
@@ -161,7 +166,11 @@ function invitationStatusFilter(status: string | undefined, now: Date): Record<s
  * (`expiresAt <= now` is already expired) stays testable to the millisecond,
  * and so one listing cannot resolve two rows against two different clocks.
  */
-function toRow(row: InvitationSelected, now: Date): InvitationRow {
+function toRow(
+  row: InvitationSelected,
+  now: Date,
+  viewerCapabilities: readonly string[],
+): InvitationRow {
   return toInvitationRow(
     {
       id: row.id,
@@ -179,7 +188,13 @@ function toRow(row: InvitationSelected, now: Date): InvitationRow {
       acceptedByUserId: row.acceptedByUserId,
       acceptedUserCreatedAt: row.acceptedUserCreatedAt,
     },
-    row.role,
+    {
+      name: row.role.name,
+      key: row.role.key,
+      nameCustomized: row.role.nameCustomized,
+      capabilities: row.role.capabilities,
+    },
+    viewerCapabilities,
   );
 }
 
@@ -230,6 +245,21 @@ interface AcceptInvitationRow {
   readonly status: string;
   readonly expiresAt: Date;
   readonly tokenIssuedAt: Date;
+  /** Who issued the CURRENT link (create or last reissue — D-035 Addendum P3). */
+  readonly issuedByUserId: string | null;
+  /** Who first invited — the re-check falls back to it only on a legacy row. */
+  readonly invitedByUserId: string | null;
+}
+
+/**
+ * D-035 refusal evidence — carried out of the transaction so the
+ * `org.invitation.accept_blocked_inviter` event is emitted post-commit (H-3).
+ * Never reaches the wire: the invitee gets the plain `INVITATION_CANCELLED`.
+ */
+interface BlockedInviter {
+  readonly issuerUserId: string | null;
+  readonly reason: InviterRecheckReason;
+  readonly excess: readonly string[];
 }
 
 /** The caller's membership in the invitation's org, as it is inside the lock. */
@@ -252,13 +282,84 @@ type AcceptOutcome =
       readonly invitationId: string;
       readonly tokenIssuedAt: Date;
       readonly organization: { readonly id: string; readonly name: string };
-      readonly role: { readonly id: string; readonly name: string; readonly key: string | null };
+      readonly role: {
+        readonly id: string;
+        readonly name: string;
+        readonly key: string | null;
+        readonly nameCustomized: boolean;
+      };
       /** `revokedAt` of the membership this accept woke up, or `null`. */
       readonly reactivatedFrom: Date | null;
     }
-  | { readonly kind: "refused"; readonly decision: AcceptRefusal; readonly emailMasked?: string };
+  | {
+      readonly kind: "refused";
+      readonly decision: AcceptRefusal;
+      readonly emailMasked?: string;
+      /** Set only when the D-035 re-check cancelled the invitation in this tx. */
+      readonly blockedInviter?: BlockedInviter & { readonly invitationId: string };
+    };
 
 const REFUSED_INVALID: AcceptOutcome = Object.freeze({ kind: "refused", decision: "invalid" });
+
+// ── F-003 · T-003-B18: who may hand out / withdraw an invitation's role ─────
+
+/** The three shipped routes that hand out (or withdraw) a role through an invitation. */
+type InviteGrantOp = Extract<
+  EscalationCheckedOperation,
+  "invite_create" | "invite_reissue" | "invite_cancel"
+>;
+
+/**
+ * An `exceeds_actor` refusal, RETURNED out of the transaction rather than
+ * thrown in it: `org.role.escalation_denied` is emitted after the transaction
+ * settles (post-commit rule, H-3), then the 403 is thrown.
+ */
+interface GrantRefusal {
+  readonly kind: "exceeds_actor";
+  readonly roleId: string;
+  readonly excess: readonly string[];
+}
+
+/**
+ * D-034 grant axis (⊆) for invitations — architecture §1.1 rows
+ * `invite_create · invite_reissue · invite_cancel`. The rule is
+ * `decideMemberAuthority`; this only maps its answer onto the wire, in the
+ * fixed order of api-spec §4.3, so every case F-002 refused answers the same
+ * bytes:
+ *   `forbidden` (no `manage_members` in tx) · `owner_only` (role holds
+ *   `full_access`, actor does not)  → throw `403 FORBIDDEN` (shipped code)
+ *   `exceeds_actor` (role ⊄ actor)  → return a refusal (event, then 403)
+ * A target-axis reason cannot come out of a grant-only op; if it ever does,
+ * fail loud instead of guessing a code or letting the write through.
+ *
+ * Called BEFORE any write in every caller — a refused reissue must not have
+ * rotated the token, a refused cancel must not have cancelled.
+ */
+function judgeInvitationGrant(
+  op: InviteGrantOp,
+  actorCapabilities: readonly string[],
+  role: { readonly id: string; readonly capabilities: readonly string[] },
+): GrantRefusal | null {
+  const verdict = decideMemberAuthority({
+    op,
+    actorCapabilities,
+    actorIsTarget: false,
+    grantCapabilities: role.capabilities,
+  });
+  if (verdict.ok) return null;
+  switch (verdict.reason) {
+    case "forbidden":
+    case "owner_only":
+      throw domainError("FORBIDDEN");
+    case "exceeds_actor":
+      return { kind: "exceeds_actor", roleId: role.id, excess: verdict.excess };
+    default:
+      throw new Error(
+        `judgeInvitationGrant(${op}): decideMemberAuthority answered ` +
+          `${JSON.stringify(verdict.reason)} for a grant-only op`,
+      );
+  }
+}
 
 @Injectable()
 export class InvitationsService {
@@ -285,13 +386,19 @@ export class InvitationsService {
     readonly status?: string;
     readonly cursor?: KeysetCursor;
     readonly limit: number;
+    /** F-003 `?roleId=` — ANDed with `status`. */
+    readonly roleId?: string;
   }): Promise<{ items: readonly InvitationRow[]; nextCursor: string | null }> {
+    // Read-only verdict input (api-spec §3.1) — the request's org context.
+    const viewerCapabilities = this.store.get()?.capabilities;
+    if (!viewerCapabilities) throw domainError("INTERNAL");
     // ONE clock for the whole page: the filter and the rendered `status` must
     // agree, and reading `new Date()` twice could put a row on the boundary in
     // one and not the other.
     const now = new Date();
     const where = {
       ...invitationStatusFilter(input.status, now),
+      ...(input.roleId === undefined ? {} : { roleId: input.roleId }),
       // Keyset predicate for the fixed `createdAt desc, id desc` sort (§1).
       // Offset pagination would skip and repeat rows as invitations are created
       // and cancelled under the reader.
@@ -317,12 +424,19 @@ export class InvitationsService {
       createdAt: row.createdAt.toISOString(),
       id: row.id,
     }));
-    return { items: page.items.map((row) => toRow(row, now)), nextCursor: page.nextCursor };
+    return {
+      items: page.items.map((row) => toRow(row, now, viewerCapabilities)),
+      nextCursor: page.nextCursor,
+    };
   }
 
   // ── §3.11 create ─────────────────────────────────────────────────────────
 
-  async create(input: { readonly email: string; readonly roleId: string; readonly now: Date }): Promise<IssuedInvitation> {
+  async create(input: {
+    readonly email: string;
+    readonly roleId: string;
+    readonly now: Date;
+  }): Promise<IssuedInvitation> {
     const organizationId = this.requireOrganizationId();
     const actorUserId = this.requireUserId();
     // Normalized SERVER-side (api-spec §3.11): the partial unique index that
@@ -370,13 +484,11 @@ export class InvitationsService {
         const role = await this.readRole(tx, input.roleId);
         const actorCapabilities = await this.readActorCapabilities(tx, actorUserId);
 
-        // C-1/D-028 — inviting somebody AS an Owner is granting Owner.
-        const allowed = canAssignRole({
-          actorCapabilities,
-          targetIsOwner: false,
-          newRoleIsOwner: isOwnerRole(role.capabilities),
-        });
-        if (!allowed) throw domainError("FORBIDDEN");
+        // C-1/D-028 — inviting somebody AS an Owner is granting Owner · F-003
+        // D-034 — and inviting into a role you do not hold all of is granting
+        // more than you have (AC-2.3 / AC-5.1).
+        const refusal = judgeInvitationGrant("invite_create", actorCapabilities, role);
+        if (refusal) return { kind: "refused", refusal } as const;
 
         await this.assertNotAlreadyMember(tx, email);
         await this.assertNoPendingInvitation(tx, email);
@@ -398,14 +510,20 @@ export class InvitationsService {
             tokenIssuedAt: input.now,
             expiresAt,
             invitedByUserId: actorUserId,
+            // D-035 Addendum P3 — "who issued the CURRENT link", written in the
+            // same INSERT as the token. Accept re-checks this person's authority.
+            issuedByUserId: actorUserId,
           },
           select: INVITATION_SELECT,
         })) as InvitationSelected;
 
-        return { row, token };
+        return { kind: "issued", row, token, actorCapabilities } as const;
       },
       { operation: "createInvitation" },
     );
+    if (created.kind === "refused") {
+      return this.refuseEscalation(actorUserId, organizationId, "invite_create", created.refusal);
+    }
 
     // POST-COMMIT. The email is MASKED (architecture §9): an audit trail that
     // records who was invited should not itself become a directory of the
@@ -421,7 +539,8 @@ export class InvitationsService {
     });
 
     return {
-      invitation: toRow(created.row, input.now),
+      // api-spec §4.2b: verdict from the actor caps read inside the create tx.
+      invitation: toRow(created.row, input.now, created.actorCapabilities),
       token: created.token,
       inviteUrl: this.inviteUrl(created.token),
     };
@@ -429,7 +548,10 @@ export class InvitationsService {
 
   // ── §3.12 reissue link ───────────────────────────────────────────────────
 
-  async reissueLink(input: { readonly invitationId: string; readonly now: Date }): Promise<ReissuedLink> {
+  async reissueLink(input: {
+    readonly invitationId: string;
+    readonly now: Date;
+  }): Promise<ReissuedLink> {
     const organizationId = this.requireOrganizationId();
     const actorUserId = this.requireUserId();
 
@@ -476,21 +598,26 @@ export class InvitationsService {
         //
         // The status must be RESOLVED here rather than compared to the column,
         // for the same reason as A-4 — the column cannot answer this question.
-        if (resolveInvitationStatus({ status: "pending", expiresAt: invitation.expiresAt }, input.now) === "expired") {
+        if (
+          resolveInvitationStatus(
+            { status: "pending", expiresAt: invitation.expiresAt },
+            input.now,
+          ) === "expired"
+        ) {
           throw domainError("INVITATION_EXPIRED");
         }
 
         const actorCapabilities = await this.readActorCapabilities(tx, actorUserId);
-        // NEW-2 — the whole reason this route is not just a token generator.
-        const allowed = canAssignRole({
-          actorCapabilities,
-          targetIsOwner: false,
-          newRoleIsOwner: isOwnerRole(invitation.role.capabilities),
-        });
-        // ⛔ THROWN BEFORE ANY WRITE. A 403 that had already rotated the token
+        // NEW-2 — the whole reason this route is not just a token generator ·
+        // F-003 D-034: the same grant rule as create (⊆, Owner-only).
+        // ⛔ DECIDED BEFORE ANY WRITE. A 403 that had already rotated the token
         // would invalidate the inviter's live link as a side effect of being
         // refused — the caller is told "no" while the damage is done.
-        if (!allowed) throw domainError("FORBIDDEN");
+        const refusal = judgeInvitationGrant("invite_reissue", actorCapabilities, {
+          id: invitation.roleId,
+          capabilities: invitation.role.capabilities,
+        });
+        if (refusal) return { kind: "refused", refusal } as const;
 
         const token = generateInvitationToken();
         // D-027 — the clock restarts. Same TTL rule as creation, recomputed from
@@ -503,14 +630,27 @@ export class InvitationsService {
 
         const row = (await tx.invitation.update({
           where: { id: invitation.id },
-          data: { tokenHash: hashInvitationToken(token), tokenIssuedAt: input.now, expiresAt },
+          // D-035 Addendum P3 — `issuedByUserId` rides in the SAME update as
+          // the token (U-API3-08): from this statement on, accept re-checks the
+          // reissuer's authority, never the original inviter's. A separate
+          // statement would leave a live token naming the wrong issuer.
+          // `invitedByUserId` is history ("who invited") and is not touched.
+          data: {
+            tokenHash: hashInvitationToken(token),
+            tokenIssuedAt: input.now,
+            expiresAt,
+            issuedByUserId: actorUserId,
+          },
           select: { id: true, expiresAt: true, tokenIssuedAt: true },
         })) as { id: string; expiresAt: Date; tokenIssuedAt: Date };
 
-        return { row, token };
+        return { kind: "issued", row, token } as const;
       },
       { operation: "reissueInvitationLink" },
     );
+    if (reissued.kind === "refused") {
+      return this.refuseEscalation(actorUserId, organizationId, "invite_reissue", reissued.refusal);
+    }
 
     this.events.emit("org.invitation.link_reissued", {
       actorUserId,
@@ -529,7 +669,10 @@ export class InvitationsService {
 
   // ── §3.13 cancel ─────────────────────────────────────────────────────────
 
-  async cancel(input: { readonly invitationId: string; readonly now: Date }): Promise<{ id: string; status: "cancelled" }> {
+  async cancel(input: {
+    readonly invitationId: string;
+    readonly now: Date;
+  }): Promise<{ id: string; status: "cancelled" }> {
     const organizationId = this.requireOrganizationId();
     const actorUserId = this.requireUserId();
 
@@ -538,28 +681,52 @@ export class InvitationsService {
       async (tx) => {
         const invitation = (await tx.invitation.findUnique({
           where: { id: input.invitationId },
-          select: { id: true, status: true },
-        })) as { id: string; status: string } | null;
+          select: {
+            id: true,
+            status: true,
+            roleId: true,
+            role: { select: { capabilities: true } },
+          },
+        })) as {
+          id: string;
+          status: string;
+          roleId: string;
+          role: { capabilities: string[] };
+        } | null;
         if (!invitation) throw domainError("NOT_FOUND");
         if (invitation.status !== "pending") throw domainError("CONFLICT");
+
+        // F-003 api-spec §4.3 — F-002 had NO role rule here. Now ⊆ (D-034 is
+        // ⊆ on cancel, not ⊊ — architecture §1.1): an Owner invitation needs
+        // `full_access` (403 FORBIDDEN), a role holding something the caller
+        // lacks is ROLE_EXCEEDS_ACTOR. Read in the lock, decided before the write.
+        const actorCapabilities = await this.readActorCapabilities(tx, actorUserId);
+        const refusal = judgeInvitationGrant("invite_cancel", actorCapabilities, {
+          id: invitation.roleId,
+          capabilities: invitation.role.capabilities,
+        });
+        if (refusal) return { kind: "refused", refusal } as const;
 
         await tx.invitation.update({
           where: { id: invitation.id },
           data: { status: "cancelled", cancelledAt: input.now },
           select: { id: true },
         });
-        return invitation.id;
+        return { kind: "cancelled", id: invitation.id } as const;
       },
       { operation: "cancelInvitation" },
     );
+    if (cancelled.kind === "refused") {
+      return this.refuseEscalation(actorUserId, organizationId, "invite_cancel", cancelled.refusal);
+    }
 
     this.events.emit("org.invitation.cancelled", {
       actorUserId,
       organizationId,
-      invitationId: cancelled,
+      invitationId: cancelled.id,
     });
 
-    return { id: cancelled, status: "cancelled" };
+    return { id: cancelled.id, status: "cancelled" };
   }
 
   // ── §3.14 preview (PUBLIC) ───────────────────────────────────────────────
@@ -604,6 +771,7 @@ export class InvitationsService {
       organizationName: row.organizationName,
       roleName: row.roleName,
       roleKey: row.roleKey,
+      roleNameCustomized: row.roleNameCustomized,
       // Masked INSIDE the projection — this service never holds a shape that
       // could put the full address on a public response.
       email: row.email,
@@ -689,6 +857,8 @@ export class InvitationsService {
               status: true,
               expiresAt: true,
               tokenIssuedAt: true,
+              issuedByUserId: true,
+              invitedByUserId: true,
             },
           })) as AcceptInvitationRow | null;
           if (!invitation) return REFUSED_INVALID;
@@ -696,10 +866,18 @@ export class InvitationsService {
           // M-6 — `ORG_PRISMA` confines this to the invitation's org, so "the
           // role was deleted" and "the role belongs to another shop" are the
           // same answer by construction.
+          // LIVE (B07 review L-4): a soft-deleted role is `role_unavailable`,
+          // the same answer as a role that never existed here.
           const role = (await tx.role.findFirst({
-            where: { id: invitation.roleId },
-            select: { id: true, name: true, key: true },
-          })) as { id: string; name: string; key: string | null } | null;
+            where: { id: invitation.roleId, ...LIVE_ROLE_WHERE },
+            select: { id: true, name: true, key: true, capabilities: true, nameCustomized: true },
+          })) as {
+            id: string;
+            name: string;
+            key: string | null;
+            capabilities: string[];
+            nameCustomized: boolean;
+          } | null;
 
           const membership = (await tx.membership.findFirst({
             where: { userId: input.userId },
@@ -718,12 +896,18 @@ export class InvitationsService {
                   revokedAt: membership.revokedAt,
                 }
               : null,
-            roleExistsInOrg: role !== null,
+            // F-003 §6 layer 2 — the role's CURRENT capabilities re-derive the
+            // TTL (a role that became elevated shortens a live link).
+            role: role ? { capabilities: role.capabilities } : null,
             now: input.now,
           });
 
           // 1) the clock and the stored status, before anything about the caller.
-          if (decision === "expired" || decision === "cancelled" || decision === "already_accepted") {
+          if (
+            decision === "expired" ||
+            decision === "cancelled" ||
+            decision === "already_accepted"
+          ) {
             return { kind: "refused", decision };
           }
 
@@ -762,9 +946,40 @@ export class InvitationsService {
           }
 
           // ── decision === "ok" — the only path that writes a membership ────
-          // `role` is non-null here: `roleExistsInOrg` was false ⇒
+          // `role` is non-null here: `role` was null ⇒
           // `role_unavailable` ⇒ returned above.
-          const grantedRole = role as { id: string; name: string; key: string | null };
+          const grantedRole = role as {
+            id: string;
+            name: string;
+            key: string | null;
+            capabilities: string[];
+            nameCustomized: boolean;
+          };
+
+          // 4) D-035 (+ Addendum) — may the issuer of the CURRENT link still
+          //    hand this role out? Only here: after `ok` AND after the email
+          //    binding (arch §6.1 "ตำแหน่ง"), so no F-002 answer changes and a
+          //    holder whose email does not match cannot cancel the invitation.
+          //    Issuer = COALESCE(issuedByUserId, invitedByUserId) (P3), read
+          //    through an ACTIVE membership in this tx, under the org lock.
+          //    `judgeInviterRecheck` throwing is NOT caught: it rolls the tx
+          //    back as a 500 rather than letting the accept through.
+          const blocked = await this.recheckIssuer(tx, invitation, grantedRole.capabilities);
+          if (blocked) {
+            // Same pattern as `already_member`: the refusal COMMITS — the
+            // invitation is cancelled for good (arch §6.1), so preview and the
+            // next accept agree and nothing revives when the issuer regains power.
+            await tx.invitation.update({
+              where: { id: invitation.id },
+              data: { status: "cancelled", cancelledAt: input.now },
+              select: { id: true },
+            });
+            return {
+              kind: "refused",
+              decision: "cancelled",
+              blockedInviter: { ...blocked, invitationId: invitation.id },
+            };
+          }
           const reactivatedFrom = membership?.status === "revoked" ? membership.revokedAt : null;
 
           if (membership) {
@@ -831,6 +1046,18 @@ export class InvitationsService {
     );
 
     if (outcome.kind === "refused") {
+      if (outcome.blockedInviter) {
+        // POST-COMMIT (H-3). The internal reason lives here only; the invitee
+        // gets the same bytes as an invitation the shop cancelled itself.
+        this.events.emit("org.invitation.accept_blocked_inviter", {
+          actorUserId: input.userId,
+          organizationId,
+          invitationId: outcome.blockedInviter.invitationId,
+          issuerUserId: outcome.blockedInviter.issuerUserId,
+          reason: outcome.blockedInviter.reason,
+          excessCapabilities: [...outcome.blockedInviter.excess],
+        });
+      }
       throw domainError(ACCEPT_REFUSAL_ERRORS[outcome.decision], {
         ...(outcome.emailMasked ? { details: { emailMasked: outcome.emailMasked } } : {}),
       });
@@ -872,15 +1099,77 @@ export class InvitationsService {
         roleId: outcome.role.id,
         roleName: outcome.role.name,
         roleKey: outcome.role.key,
+        roleNameCustomized: outcome.role.nameCustomized,
       },
     });
   }
 
   // ── helpers (every one takes `tx` — M-2) ─────────────────────────────────
 
+  /**
+   * `exceeds_actor` on an invitation route: emit `org.role.escalation_denied`
+   * (deduped, SR-12 — after the transaction, which wrote nothing), then
+   * `403 ROLE_EXCEEDS_ACTOR` with NO details (AC-6.4: the excess keys live in
+   * the event only). Never returns.
+   */
+  private async refuseEscalation(
+    actorUserId: string,
+    organizationId: string,
+    operation: InviteGrantOp,
+    refusal: GrantRefusal,
+  ): Promise<never> {
+    await this.events.emitEscalationDenied({
+      actorUserId,
+      organizationId,
+      roleId: refusal.roleId,
+      targetUserId: null,
+      operation,
+      reason: "exceeds_actor",
+      excessCapabilities: refusal.excess,
+    });
+    throw domainError("ROLE_EXCEEDS_ACTOR");
+  }
+
+  /**
+   * D-035 (+ Addendum P2/P3) — arch §6.1. `null` = the issuer may still hand
+   * this role out; otherwise why not. The issuer is whoever issued the CURRENT
+   * link (`issuedByUserId`, written with every token); `invitedByUserId` is
+   * the fallback for a row issued before F-003 only. Both null ⇒ no issuer ⇒
+   * fail closed (`inviter_not_active`).
+   *
+   * The membership read is `ORG_PRISMA` through `tx` (org-scoped, under the
+   * org lock) and requires `status: active`: removed, left and deleted
+   * accounts all read as "no issuer". An active membership whose role is
+   * soft-deleted cannot exist (trigger) — if it ever does, it fails closed too.
+   */
+  private async recheckIssuer(
+    tx: OrgLockTx,
+    invitation: AcceptInvitationRow,
+    invitationRoleCapabilities: readonly string[],
+  ): Promise<BlockedInviter | null> {
+    const issuerUserId = invitation.issuedByUserId ?? invitation.invitedByUserId;
+    const issuer =
+      issuerUserId === null
+        ? null
+        : ((await tx.membership.findFirst({
+            where: { userId: issuerUserId, status: "active" },
+            select: { role: { select: { capabilities: true, deletedAt: true } } },
+          })) as { role: { capabilities: string[]; deletedAt: Date | null } } | null);
+    const verdict = judgeInviterRecheck({
+      inviter:
+        issuer && issuer.role.deletedAt === null
+          ? { capabilities: issuer.role.capabilities }
+          : null,
+      invitationRoleCapabilities,
+    });
+    if (verdict.ok) return null;
+    return { issuerUserId, reason: verdict.reason, excess: verdict.excess };
+  }
+
   private async readRole(tx: OrgLockTx, roleId: string) {
+    // LIVE: invite create/reissue may not hand out a soft-deleted role.
     const role = (await tx.role.findUnique({
-      where: { id: roleId },
+      where: { id: roleId, ...LIVE_ROLE_WHERE },
       select: ROLE_SELECT,
     })) as { id: string; name: string; key: string | null; capabilities: string[] } | null;
     // 422 rather than 404: the role id is INPUT the client sent, and the org is
@@ -891,7 +1180,10 @@ export class InvitationsService {
     return role;
   }
 
-  private async readActorCapabilities(tx: OrgLockTx, actorUserId: string): Promise<readonly string[]> {
+  private async readActorCapabilities(
+    tx: OrgLockTx,
+    actorUserId: string,
+  ): Promise<readonly string[]> {
     const membership = (await tx.membership.findFirst({
       where: { userId: actorUserId, status: "active" },
       select: { role: { select: { capabilities: true } } },

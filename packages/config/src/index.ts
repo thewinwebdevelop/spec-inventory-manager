@@ -6,6 +6,8 @@
 // `@omnistock/config/env` remains valid wherever subpath exports resolve
 // (e.g. tsx-run scripts) — this barrel is an additive, equivalent path.
 export { envSchema, loadEnv } from "./env";
+// F-003 §12: the exact-"true" rule behind `Env.ROLE_WRITES_ENABLED`.
+export { parseRoleWritesEnabled } from "./env";
 export type { Env } from "./env";
 // F-002 policy surface (architecture.md §5.2/§8/§15 row 8): the pinned defaults
 // plus the env-tunable effective values. `packages/db`'s org-lock helper and
@@ -13,14 +15,20 @@ export type { Env } from "./env";
 export {
   ORG_RATE_LIMITS,
   ORG_TX_TIMEOUTS,
+  ROLE_CAPACITY,
   orgRateLimitsSchema,
   orgTxTimeoutsSchema,
+  roleCapacitySchema,
   resolveOrgRateLimits,
   resolveInvitationTokenSecret,
   resolveOrgTxTimeouts,
+  resolveRoleCapacity,
 } from "./env";
+export type { RoleCapacity } from "./env";
 export {
+  MAX_DELETED_ROLES_PER_ORG_DEFAULT,
   MAX_ORGS_PER_USER_DEFAULT,
+  MAX_ROLES_PER_ORG_DEFAULT,
   ORG_RATE_LIMIT_DEFAULTS,
   ORG_RATE_LIMIT_ENV_VARS,
   ORG_TX_TIMEOUT_DEFAULTS,

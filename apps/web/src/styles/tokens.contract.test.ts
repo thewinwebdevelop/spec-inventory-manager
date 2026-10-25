@@ -49,6 +49,11 @@ const PREFIX: Readonly<Record<string, string>> = Object.freeze({
   // now records it.
   opacity: "--opacity-",
   z: "--z-",
+  // F-003 (T-003-W02) — `checkbox.border.w` is its own namespace rather than
+  // living under `size`/`radius` because it is a border WIDTH, not a size or
+  // a corner radius; `radius.checkbox` and `size.checkbox` already resolve
+  // fine through the existing `radius`/`size` prefixes above.
+  checkbox: "--checkbox-",
 });
 
 /**
@@ -114,9 +119,7 @@ describe("★ every token design-system.md declares exists in tokens.css", () =>
     // The failure this prevents: a new namespace appears in the document, maps
     // to nothing, and is silently skipped rather than noticed.
     const namespaces = new Set(declaredTokens(doc).map((t) => t.split(".")[0]));
-    const unclassified = [...namespaces].filter(
-      (ns) => !(ns in PREFIX) && !(ns in NO_VARIABLE),
-    );
+    const unclassified = [...namespaces].filter((ns) => !(ns in PREFIX) && !(ns in NO_VARIABLE));
     expect(
       unclassified,
       "add it to PREFIX with its `--var-` prefix, or to NO_VARIABLE with the reason",

@@ -44,6 +44,8 @@ export interface InvitationByToken {
   readonly organizationName: string;
   readonly roleName: string;
   readonly roleKey: string | null;
+  /** The `Role.nameCustomized` column (F-003 · AC-1.5). */
+  readonly roleNameCustomized: boolean;
 }
 
 /** The accepting account, as `USER_SELECT` allows it to be read. */
@@ -91,7 +93,7 @@ export class InvitationLookupService {
         // returns whole rows, and a whole `Organization` row carries the shop's
         // tax id — on a PUBLIC endpoint.
         organization: { select: { name: true } },
-        role: { select: { name: true, key: true } },
+        role: { select: { name: true, key: true, nameCustomized: true } },
       },
     });
     if (!row) return null;
@@ -108,6 +110,7 @@ export class InvitationLookupService {
       organizationName: row.organization.name,
       roleName: row.role.name,
       roleKey: row.role.key,
+      roleNameCustomized: row.role.nameCustomized,
     };
   }
 

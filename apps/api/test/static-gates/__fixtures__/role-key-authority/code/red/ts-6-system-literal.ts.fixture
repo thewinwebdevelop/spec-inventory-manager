@@ -1,0 +1,16 @@
+// G-12 red fixture TS-6 — a system-role literal compared or cased on, whatever
+// the left side is (the key was carried away first). `← hit X` = rule X.
+export function gate(role: { key: string }, key: string) {
+  const k = role.key; // ← hit TS-7
+  if (k === "owner") return 1; // ← hit
+  if (role.key.toLowerCase() === "owner") return 2; // ← hit
+  if (String(role.key) === 'admin') return 3; // ← hit
+  if ("staff" !== normalize(k)) return 4; // ← hit
+  switch (key) { // ← hit TS-8
+    case "owner": // ← hit
+      return 5;
+    case `admin`: // ← hit
+      return 6;
+  }
+  return 0;
+}
