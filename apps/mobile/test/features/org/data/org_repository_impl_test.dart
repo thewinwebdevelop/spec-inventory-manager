@@ -241,5 +241,67 @@ void main() {
       expect(adapter.seen.last.queryParameters['status'], 'all');
       expect(adapter.seen.last.queryParameters['cursor'], 'cur_2');
     });
+
+    OrgScopedImpl repoOn(_FakeAdapter adapter) => OrgScopedImpl(
+          members: MembersApi(_dio(adapter), standardSerializers),
+          organizations: OrganizationsApi(_dio(adapter), standardSerializers),
+          invitations: InvitationsApi(_dio(adapter), standardSerializers),
+          orgId: 'org_1',
+        );
+
+    test('★ T-003-M10: roleId reaches BOTH lists as a query param, and only when asked', () async {
+      final adapter = _FakeAdapter(200, {'items': <Object>[], 'nextCursor': null});
+      final repo = repoOn(adapter);
+
+      await repo.listMembers();
+      await repo.listMembers(status: 'active', roleId: 'rol_staff');
+      await repo.listInvitations(roleId: 'rol_staff');
+
+      expect(adapter.seen[0].queryParameters.containsKey('roleId'), isFalse);
+      expect(adapter.seen[1].queryParameters['roleId'], 'rol_staff');
+      expect(adapter.seen[1].queryParameters['status'], 'active');
+      expect(adapter.seen[2].queryParameters['roleId'], 'rol_staff');
+      expect(adapter.seen[2].queryParameters['status'], 'pending');
+    });
+
+    Map<String, Object?> memberJson(String id, Map<String, Object?> extra) => {
+          'userId': id,
+          'email': '$id@shop.com',
+          'roleId': 'rol_1',
+          'roleName': 'Staff',
+          'roleKey': 'staff',
+          'status': 'active',
+          'activatedAt': null,
+          'revokedAt': null,
+          'createdAt': '2026-08-01T00:00:00.000Z',
+          'isMe': false,
+          'isOwner': false,
+          ...extra,
+        };
+
+    test('★ T-003-M10: the server\'s row verdict crosses the boundary as-is — including absent',
+        () async {
+      final adapter = _FakeAdapter(200, {
+        'items': [
+          memberJson('usr_a', {'viewerCanManage': true, 'manageBlockedReason': null}),
+          memberJson('usr_b', {'viewerCanManage': false, 'manageBlockedReason': 'equal_permissions'}),
+          memberJson('usr_c', {'viewerCanManage': false, 'manageBlockedReason': 'brand_new'}),
+          memberJson('usr_d', {}),
+        ],
+        'nextCursor': null,
+      });
+
+      final rows = (await repoOn(adapter).listMembers()).items;
+
+      expect(rows[0].viewerCanManage, isTrue);
+      expect(rows[0].manageBlockedReason, isNull);
+      expect(rows[1].viewerCanManage, isFalse);
+      expect(rows[1].manageBlockedReason, 'equal_permissions');
+      // OPEN set: an unknown reason is carried, not dropped or rejected.
+      expect(rows[2].manageBlockedReason, 'brand_new');
+      // Absent stays absent — never defaulted to true or false.
+      expect(rows[3].viewerCanManage, isNull);
+      expect(rows[3].manageBlockedReason, isNull);
+    });
   });
 }

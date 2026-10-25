@@ -111,9 +111,18 @@ class OrgScopedImpl implements OrgScoped {
   final String _orgId;
 
   @override
-  Future<PagedResult<MemberRow>> listMembers({String status = 'active', String? cursor}) async {
+  Future<PagedResult<MemberRow>> listMembers({
+    String status = 'active',
+    String? roleId,
+    String? cursor,
+  }) async {
     try {
-      final page = await _members.listMembers(orgId: _orgId, status: status, cursor: cursor);
+      final page = await _members.listMembers(
+        orgId: _orgId,
+        status: status,
+        roleId: roleId,
+        cursor: cursor,
+      );
       final body = page.data;
       final items = body?.items.toList() ?? const <wire.MemberRow>[];
       return PagedResult(
@@ -127,6 +136,9 @@ class OrgScopedImpl implements OrgScoped {
                 status: m.status.name,
                 isMe: m.isMe,
                 isOwner: m.isOwner,
+                // Carried as-is: absent stays null, never defaulted.
+                viewerCanManage: m.viewerCanManage,
+                manageBlockedReason: m.manageBlockedReason,
               ),
             )
             .toList(growable: false),
@@ -142,12 +154,14 @@ class OrgScopedImpl implements OrgScoped {
   @override
   Future<PagedResult<InvitationRow>> listInvitations({
     String status = 'pending',
+    String? roleId,
     String? cursor,
   }) async {
     try {
       final page = await _invitations.listInvitations(
         orgId: _orgId,
         status: status,
+        roleId: roleId,
         cursor: cursor,
       );
       final body = page.data;

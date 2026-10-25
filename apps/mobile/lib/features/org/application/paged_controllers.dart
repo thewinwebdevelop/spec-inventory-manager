@@ -138,3 +138,30 @@ final invitationsControllerProvider =
     NotifierProvider.autoDispose.family<InvitationsController, PagedState<InvitationRow>, String>(
   InvitationsController.new,
 );
+
+/// T-003-M10 — ux R6 "คนที่ใช้บทบาท …": the same two sections, narrowed to one
+/// role. [arg] is the `roleId`; the status is fixed by R6 (active members,
+/// stored-pending invitations — i.e. pending + expired, AC-3.9).
+class RoleMembersController extends PagedController<MemberRow> {
+  @override
+  Future<PagedResult<MemberRow>> fetch({String? cursor}) => ref
+      .read(orgScopedRepositoryProvider)
+      .listMembers(status: 'active', roleId: arg, cursor: cursor);
+}
+
+class RoleInvitationsController extends PagedController<InvitationRow> {
+  @override
+  Future<PagedResult<InvitationRow>> fetch({String? cursor}) => ref
+      .read(orgScopedRepositoryProvider)
+      .listInvitations(status: 'pending', roleId: arg, cursor: cursor);
+}
+
+final roleMembersControllerProvider =
+    NotifierProvider.autoDispose.family<RoleMembersController, PagedState<MemberRow>, String>(
+  RoleMembersController.new,
+);
+
+final roleInvitationsControllerProvider = NotifierProvider.autoDispose
+    .family<RoleInvitationsController, PagedState<InvitationRow>, String>(
+  RoleInvitationsController.new,
+);

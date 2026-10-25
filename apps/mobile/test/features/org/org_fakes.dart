@@ -92,12 +92,20 @@ class FakeOrgScoped implements OrgScoped {
   int invitationCalls = 0;
   final List<String?> cursorsSeen = <String?>[];
   final List<String> statusesSeen = <String>[];
+  final List<String?> memberRoleIdsSeen = <String?>[];
+  final List<String> invitationStatusesSeen = <String>[];
+  final List<String?> invitationRoleIdsSeen = <String?>[];
 
   @override
-  Future<PagedResult<MemberRow>> listMembers({String status = 'active', String? cursor}) async {
+  Future<PagedResult<MemberRow>> listMembers({
+    String status = 'active',
+    String? roleId,
+    String? cursor,
+  }) async {
     final index = memberCalls++;
     cursorsSeen.add(cursor);
     statusesSeen.add(status);
+    memberRoleIdsSeen.add(roleId);
     await Future<void>.delayed(delay);
     if (membersFailure != null) throw membersFailure!;
     if (index >= memberPages.length) return const PagedResult(items: []);
@@ -107,9 +115,12 @@ class FakeOrgScoped implements OrgScoped {
   @override
   Future<PagedResult<InvitationRow>> listInvitations({
     String status = 'pending',
+    String? roleId,
     String? cursor,
   }) async {
     final index = invitationCalls++;
+    invitationStatusesSeen.add(status);
+    invitationRoleIdsSeen.add(roleId);
     await Future<void>.delayed(delay);
     if (invitationsFailure != null) throw invitationsFailure!;
     if (index >= invitationPages.length) return const PagedResult(items: []);
@@ -180,6 +191,8 @@ MemberRow member({
   String status = 'active',
   String? roleKey = 'staff',
   String roleName = 'Staff',
+  bool? viewerCanManage,
+  String? manageBlockedReason,
 }) {
   return MemberRow(
     userId: id,
@@ -189,6 +202,8 @@ MemberRow member({
     status: status,
     isMe: isMe,
     isOwner: isOwner,
+    viewerCanManage: viewerCanManage,
+    manageBlockedReason: manageBlockedReason,
   );
 }
 

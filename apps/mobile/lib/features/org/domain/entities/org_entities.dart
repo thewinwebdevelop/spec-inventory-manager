@@ -60,6 +60,8 @@ class MemberRow {
     required this.status,
     required this.isMe,
     required this.isOwner,
+    this.viewerCanManage,
+    this.manageBlockedReason,
   });
 
   final String userId;
@@ -82,6 +84,17 @@ class MemberRow {
   /// recompute "is this an Owner" is the client-side authorization the server
   /// avoids by answering the question itself.
   final bool isOwner;
+
+  /// F-003 (api-spec §3.1) — the SERVER's answer to "may the viewer change
+  /// this member's role?". Present only when the viewer holds
+  /// `manage_members` ∧ `manage_roles` and the row is active; `null` means
+  /// absent, which is NOT a "no" and NOT a "yes" — see
+  /// `domain/member_row_affordance.dart`.
+  final bool? viewerCanManage;
+
+  /// With `viewerCanManage == false`. An OPEN set — carried verbatim, mapped
+  /// to copy (unknown → generic) only in presentation.
+  final String? manageBlockedReason;
 
   bool get isActive => status == 'active';
 }
