@@ -4,6 +4,7 @@ owner: "@backend-api"
 signoff: approved     # user 2026-09-27 (หลังรวม SR-17 ข · D-034 Addendum 2)
 ---
 # [F-003] Architecture / Technical design
+> **amendment 2026-10-25 (build · T-003-B19 · security review):** §13.7(1) ผู้ออกลิงก์ที่ถูกลดเป็น Staff (ไม่มี `manage_members`) ⇒ reason = **`inviter_not_authorized`** ตามลำดับ P2 ของ D-035 Addendum (ไม่ใช่ `inviter_exceeds`) · `inviter_exceeds` = ผู้ออกลิงก์ยังถือ `manage_members` แต่ caps ไม่ ⊇ role ที่เชิญ
 > **amendment 2026-10-25 (build · T-003-B17 · security review L-3):** §7 `org.role.escalation_denied` จาก route สมาชิก — `roleId` = **role ที่ขอ** (PATCH) / **role ปัจจุบันของเป้า** (DELETE) · `canAssignRole` ของ F-002 ถูกลบแล้ว (gate ห้ามเรียกใน `apps/api/src` + core-domain)
 > **amendment 2026-10-25 (build · T-003-B06 + T-003-QA07 · security review):**
 > (1) §1 `decideRoleWrite`: `next` **บังคับ** (ไม่ใช่ `next?`) — update = `ValidatedCapabilities | "unchanged"` (rename-only ส่ง `"unchanged"` ให้ fn แปลงเป็น caps ของ role เอง) · create = `ValidatedCapabilities` เท่านั้น (runtime guard ด้วย) — ละ `next` แล้วข้ามเช็ค ⊆ ไม่ได้ (fail-closed · review B06 M-1/L-3) ·
