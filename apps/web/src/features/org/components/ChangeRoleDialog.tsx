@@ -21,17 +21,17 @@
 import { useState } from "react";
 import { useChangeMemberRole } from "../api/use-member-mutations";
 import { useQueryClient } from "@tanstack/react-query";
-import { memberActionErrorMessage, memberRateLimitedMessage } from "../role-copy";
+import { displayRoleName, memberActionErrorMessage, memberRateLimitedMessage } from "../role-copy";
 import { orgKey } from "../../../lib/org/org-keys";
 import { useRoles } from "../api/use-members";
 import { useActiveOrg } from "../../../lib/org/org-context";
-import { isOwner } from "../member-actions";
+import { roleOptionState } from "../role-picker";
 import { toApiFailure } from "../../../lib/api/error";
-import { roleLabel } from "../i18n";
 import { useToast } from "../../../components/providers/ToastProvider";
 import { Button } from "../../../components/ui/Button";
 import { DialogShell } from "../../../components/ui/DialogShell";
 import { ErrorBanner } from "../../../components/ui/ErrorBanner";
+import { RoleCapabilitiesLink } from "./RoleCapabilitiesLink";
 import { RadioCardGroup } from "../../../components/ui/RadioCardGroup";
 
 /**
@@ -43,7 +43,6 @@ import { RadioCardGroup } from "../../../components/ui/RadioCardGroup";
 export const CHANGE_ROLE_COPY = {
   title: (email: string) => `เปลี่ยนบทบาทของ ${email}`,
   currentTag: "(บทบาทปัจจุบัน)",
-  ownerOnlyHelper: "เฉพาะเจ้าของร้านเท่านั้นที่ตั้งหรือเปลี่ยนบทบาทของเจ้าของร้าน",
   lastOwnerWarning: "ร้านนี้ต้องมีเจ้าของอย่างน้อย 1 คนเสมอ",
   submit: "บันทึกบทบาท",
   submitLoading: "กำลังบันทึก...",
@@ -78,7 +77,6 @@ export function ChangeRoleDialog({
   const [roleId, setRoleId] = useState(member.roleId);
   const [banner, setBanner] = useState<string | null>(null);
 
-  const iAmOwner = isOwner(org.capabilities);
   const offered = roles.data?.items ?? [];
   const selected = offered.find((role) => role.id === roleId);
 
@@ -100,7 +98,13 @@ export function ChangeRoleDialog({
           toast.success(
             CHANGE_ROLE_COPY.successToast(
               member.email,
-              roleLabel(selected?.key ?? null, selected?.name ?? ""),
+              selected
+                ? displayRoleName({
+                    name: selected.name,
+                    roleKey: selected.key,
+                    nameCustomized: selected.nameCustomized,
+                  })
+                : "",
             ),
           );
           onClose();
@@ -158,17 +162,25 @@ export function ChangeRoleDialog({
         value={roleId}
         onChange={setRoleId}
         options={offered.map((role) => {
-          const isOwnerOption = ownerRoleIds.has(role.id);
-          const closed = isOwnerOption && !iAmOwner;
+          // R8: the server's verdict decides. The member's CURRENT role may be
+          // closed to the viewer yet stays checked - it is the default value, and
+          // save is disabled because nothing changes.
+          const state = roleOptionState(role, org.capabilities, ownerRoleIds);
           return {
             value: role.id,
-            label: roleLabel(role.key, role.name),
+            label: displayRoleName({
+              name: role.name,
+              roleKey: role.key,
+              nameCustomized: role.nameCustomized,
+            }),
             description: role.id === member.roleId ? CHANGE_ROLE_COPY.currentTag : undefined,
-            disabled: change.isPending || closed,
-            disabledReason: closed ? CHANGE_ROLE_COPY.ownerOnlyHelper : undefined,
+            disabled: change.isPending || state.closed,
+            disabledReason: state.reason,
           };
         })}
       />
+
+      <RoleCapabilitiesLink />
 
       {/* Before the press, never as an error afterwards (§10.1). */}
       {demotingAnOwner && <p className="text-body-sm">{CHANGE_ROLE_COPY.lastOwnerWarning}</p>}

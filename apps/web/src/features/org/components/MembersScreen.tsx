@@ -99,7 +99,12 @@ export function MembersScreen() {
    * is not an Owner, in which case `roleId` stays `undefined` so S7 opens with
    * no option pre-filled (⛔ never pre-fill a choice that cannot be submitted).
    */
-  const [reinviting, setReinviting] = useState<{ email: string; roleId?: string } | null>(null);
+  const [reinviting, setReinviting] = useState<{
+    email: string;
+    roleId?: string;
+    /** Set when the original role is closed to the viewer (R8 helper line). */
+    blockedRoleName?: string;
+  } | null>(null);
 
   // R6: the filtered view is a fixed question (active members + every
   // invitation, narrowed below to the still-open ones), not the F-002 toggles.
@@ -348,23 +353,33 @@ export function MembersScreen() {
                           <Button
                             variant="secondary"
                             size="sm"
-                            onClick={() =>
+                            onClick={() => {
+                              // ⛔ Never pre-fill a role the presser cannot submit
+                              // (R7): `viewerCanAssign` decides; absent ⇒ F-002's
+                              // Owner-role rule.
+                              const roleId = reinviteRoleIdFor(
+                                invitation.roleId,
+                                roles.data?.items ?? [],
+                                () =>
+                                  !(
+                                    ownerRoleIds.has(invitation.roleId) &&
+                                    !isOwner(org.capabilities)
+                                  ),
+                              );
                               setReinviting({
                                 email: invitation.email,
-                                // ⛔ Never pre-fill a role the presser cannot submit
-                                // (R7): `viewerCanAssign` decides; absent ⇒ F-002's
-                                // Owner-role rule.
-                                roleId: reinviteRoleIdFor(
-                                  invitation.roleId,
-                                  roles.data?.items ?? [],
-                                  () =>
-                                    !(
-                                      ownerRoleIds.has(invitation.roleId) &&
-                                      !isOwner(org.capabilities)
-                                    ),
-                                ),
-                              })
-                            }
+                                roleId,
+                                // R8: say which role was withheld, and why the choice is empty.
+                                blockedRoleName:
+                                  roleId === undefined
+                                    ? displayRoleName({
+                                        name: invitation.roleName,
+                                        roleKey: invitation.roleKey,
+                                        nameCustomized: invitation.roleNameCustomized,
+                                      })
+                                    : undefined,
+                              });
+                            }}
                           >
                             {membersTh.inviteAgain}
                           </Button>
@@ -575,6 +590,7 @@ export function MembersScreen() {
           ownerRoleIds={ownerRoleIds}
           defaultEmail={reinviting.email}
           defaultRoleId={reinviting.roleId}
+          blockedOriginalRoleName={reinviting.blockedRoleName}
           onClose={() => setReinviting(null)}
           onIssued={(issued) => {
             setReinviting(null);

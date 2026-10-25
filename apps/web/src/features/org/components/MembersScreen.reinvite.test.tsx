@@ -44,9 +44,27 @@ const base = {
   acceptedUserCreatedAfterInvite: null,
 };
 
-const PENDING = { ...base, id: "inv_pending", email: "pending@shop.com", status: "pending" as const, acceptedAt: null };
-const EXPIRED = { ...base, id: "inv_expired", email: "expired@shop.com", status: "expired" as const, acceptedAt: null };
-const CANCELLED = { ...base, id: "inv_cancelled", email: "cancelled@shop.com", status: "cancelled" as const, acceptedAt: null };
+const PENDING = {
+  ...base,
+  id: "inv_pending",
+  email: "pending@shop.com",
+  status: "pending" as const,
+  acceptedAt: null,
+};
+const EXPIRED = {
+  ...base,
+  id: "inv_expired",
+  email: "expired@shop.com",
+  status: "expired" as const,
+  acceptedAt: null,
+};
+const CANCELLED = {
+  ...base,
+  id: "inv_cancelled",
+  email: "cancelled@shop.com",
+  status: "cancelled" as const,
+  acceptedAt: null,
+};
 const ACCEPTED = {
   ...base,
   id: "inv_accepted",
@@ -152,7 +170,9 @@ describe('§7 — "เชิญใหม่อีกครั้ง" shows only 
     const row = rowFor("pending@shop.com");
     expect(within(row).queryByRole("button", { name: membersTh.inviteAgain })).toBeNull();
     expect(within(row).getByRole("button", { name: membersTh.reissue })).toBeInTheDocument();
-    expect(within(row).getByRole("button", { name: membersTh.cancelInvitation })).toBeInTheDocument();
+    expect(
+      within(row).getByRole("button", { name: membersTh.cancelInvitation }),
+    ).toBeInTheDocument();
   });
 });
 
@@ -181,7 +201,9 @@ describe("§7 — the button pre-fills S7 from the dead row", () => {
     );
 
     const dialog = screen.getByRole("dialog", { name: inviteFormTh.title });
-    const ownerRadio = within(dialog).getByRole("radio", { name: /เจ้าของร้าน/ }) as HTMLInputElement;
+    const ownerRadio = within(dialog).getByRole("radio", {
+      name: /เจ้าของร้าน/,
+    }) as HTMLInputElement;
     expect(ownerRadio.checked).toBe(true);
   });
 
@@ -200,8 +222,16 @@ describe("§7 — the button pre-fills S7 from the dead row", () => {
     const radios = within(dialog).getAllByRole("radio") as HTMLInputElement[];
     expect(radios.some((r) => r.checked)).toBe(false);
     // The Owner option is shown, disabled, with the same helper §8 already uses.
-    const ownerRadio = within(dialog).getByRole("radio", { name: /เจ้าของร้าน/ }) as HTMLInputElement;
+    const ownerRadio = within(dialog).getByRole("radio", {
+      name: /เจ้าของร้าน/,
+    }) as HTMLInputElement;
     expect(ownerRadio.disabled).toBe(true);
     expect(within(dialog).getByText(inviteFormTh.ownerOnlyHelper)).toBeInTheDocument();
+    // R8: and the empty choice is explained, naming the withheld role.
+    expect(
+      within(dialog).getByText(
+        'บทบาทเดิมของคำเชิญนี้ ("เจ้าของร้าน") คุณมอบให้ไม่ได้ เลือกบทบาทอื่น',
+      ),
+    ).toBeInTheDocument();
   });
 });

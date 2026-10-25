@@ -92,7 +92,7 @@ vi.mock("../api/use-members", () => ({
 import { MembersScreen } from "./MembersScreen";
 import { ActiveOrgProvider, type ActiveOrg } from "../../../lib/org/org-context";
 import { ToastProvider } from "../../../components/providers/ToastProvider";
-import { membersTh } from "../i18n";
+import { inviteFormTh, membersTh } from "../i18n";
 import { CHANGE_ROLE_COPY } from "./ChangeRoleDialog";
 import { REMOVE_MEMBER_COPY } from "./RemoveMemberDialog";
 import { LEAVE_ORG_DIALOG_COPY } from "./LeaveOrgDialog";
@@ -250,7 +250,7 @@ describe("S9 · เปลี่ยนบทบาท (§10.1)", () => {
     const dialog = screen.getByRole("dialog", { name: CHANGE_ROLE_COPY.title("malee@shop.com") });
 
     expect(within(dialog).getByRole("radio", { name: /เจ้าของร้าน/ })).toBeDisabled();
-    expect(within(dialog).getByText(CHANGE_ROLE_COPY.ownerOnlyHelper)).toBeInTheDocument();
+    expect(within(dialog).getByText(inviteFormTh.ownerOnlyHelper)).toBeInTheDocument();
   });
 
   it("★ a role whose KEY says owner but whose flag says no is offerable", async () => {

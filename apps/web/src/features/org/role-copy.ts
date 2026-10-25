@@ -241,6 +241,14 @@ export function assignBlockedReasonCopy(reason: string | null | undefined): stri
   }
 }
 
+/** R8 - tertiary link under the role picker (manage_roles holders only). */
+export const roleCapabilitiesLinkLabel = "ดูว่าแต่ละบทบาททำอะไรได้บ้าง";
+
+/** R7/R8 helper - "เชิญใหม่อีกครั้ง" when the row's original role is closed to the viewer. */
+export function reinviteRoleBlockedHelper(roleName: string): string {
+  return `บทบาทเดิมของคำเชิญนี้ ("${roleName}") คุณมอบให้ไม่ได้ เลือกบทบาทอื่น`;
+}
+
 /** `MemberRow.manageBlockedReason` — แถวสมาชิกที่แตะไม่ได้ (R7/R8) */
 export function memberManageBlockedReasonCopy(reason: string | null | undefined): string {
   switch (reason) {

@@ -158,12 +158,6 @@ const PRESENTATION_ALLOWLIST: readonly PresentationAllowance[] = Object.freeze([
     "<p>{inviteScreenTh.invitedAs(roleLabel(previewed.roleKey, previewed.roleName))}</p>",
     "roleName: roleLabel(result.membership.roleKey, result.membership.roleName),",
   ]),
-  labelCalls("apps/web/src/features/org/components/ChangeRoleDialog.tsx", [
-    "label: roleLabel(role.key, role.name),",
-  ]),
-  labelCalls("apps/web/src/features/org/components/InviteDialog.tsx", [
-    "label: roleLabel(role.key, role.name),",
-  ]),
   labelCalls("apps/web/src/features/org/components/MembersScreen.tsx", [
     "{roleLabel(invitation.roleKey, invitation.roleName)}",
     "roleName: roleLabel(invitation.roleKey, invitation.roleName),",

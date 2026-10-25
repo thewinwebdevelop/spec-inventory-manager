@@ -9,6 +9,8 @@
  * lives inside a string (the "+" on "สร้างร้านใหม่" comes from the component),
  * and a count is interpolated rather than baked in.
  */
+import { assignBlockedReasonCopy } from "./role-copy";
+
 export const orgTh = {
   /** S1 — เลือกร้าน */
   selectOrg: {
@@ -369,7 +371,8 @@ export const inviteFormTh = {
    * business answering it in different words; web could not ask it at all
    * before the server published `grantsOwnership`.
    */
-  ownerOnlyHelper: "เฉพาะเจ้าของร้านเท่านั้นที่ตั้งเจ้าของร้านคนใหม่ได้",
+  // One copy: the R8 owner_only sentence lives in role-copy.ts.
+  ownerOnlyHelper: assignBlockedReasonCopy("owner_only"),
   submit: "สร้างลิงก์คำเชิญ",
   submitLoading: "กำลังสร้างลิงก์...",
   cancel: "ยกเลิก",
