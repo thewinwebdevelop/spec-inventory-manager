@@ -206,6 +206,9 @@ class OrgScopedImpl implements OrgScoped {
               // Optional on the wire (contract-evolution): absent means the
               // server does not publish it, which is not the same as "no".
               grantsOwnership: r.grantsOwnership ?? false,
+              nameCustomized: r.nameCustomized,
+              viewerCanAssign: r.viewerCanAssign,
+              assignBlockedReason: r.assignBlockedReason,
             ),
           )
           .toList(growable: false);

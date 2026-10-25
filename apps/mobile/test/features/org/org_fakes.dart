@@ -70,6 +70,7 @@ class FakeOrgScoped implements OrgScoped {
   final ApiFailure? invitationsFailure;
   final ApiFailure? rolesFailure;
   final ApiFailure? createInvitationFailure;
+  final List<String> invitedRoleIds = [];
   final IssuedInvite? issued;
   final Duration delay;
 
@@ -136,6 +137,7 @@ class FakeOrgScoped implements OrgScoped {
 
   @override
   Future<IssuedInvite> createInvitation({required String email, required String roleId}) async {
+    invitedRoleIds.add(roleId);
     await Future<void>.delayed(delay);
     if (createInvitationFailure != null) throw createInvitationFailure!;
     return issued ??

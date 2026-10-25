@@ -123,6 +123,108 @@ void main() {
     expect(find.textContaining('24 ชั่วโมง'), findsNothing);
   });
 
+  RadioListTile<String> tileFor(WidgetTester tester, String label) =>
+      tester.widget<RadioListTile<String>>(find.ancestor(
+        of: find.text(label),
+        matching: find.byType(RadioListTile<String>),
+      ));
+
+  testWidgets('R8 · viewerCanAssign=false disables the option and shows the server reason',
+      (tester) async {
+    final roles = [
+      const RoleRow(
+          id: 'rol_owner', name: 'Owner', key: 'owner', grantsOwnership: true,
+          viewerCanAssign: false, assignBlockedReason: 'owner_only'),
+      const RoleRow(
+          id: 'rol_ext', name: 'บัญชีภายนอก', key: null, nameCustomized: true,
+          viewerCanAssign: false, assignBlockedReason: 'exceeds_your_permissions'),
+      const RoleRow(
+          id: 'rol_pack', name: 'พนักงานแพ็คของ', key: null, nameCustomized: true,
+          viewerCanAssign: true),
+    ];
+    await _pump(tester, FakeOrgScoped(roles: roles), asOwner: false);
+
+    expect(tileFor(tester, 'บัญชีภายนอก').enabled, isFalse);
+    Finder inTile(String label, String text) => find.descendant(
+        of: find.ancestor(of: find.text(label), matching: find.byType(RadioListTile<String>)),
+        matching: find.text(text));
+    expect(inTile('บัญชีภายนอก', 'บทบาทนี้มีสิทธิ์ที่คุณไม่มี จึงมอบให้คนอื่นไม่ได้'),
+        findsOneWidget);
+    expect(inTile('เจ้าของร้าน', 'เฉพาะเจ้าของร้านเท่านั้นที่ตั้งเจ้าของร้านคนใหม่ได้'),
+        findsOneWidget);
+    expect(tileFor(tester, 'พนักงานแพ็คของ').enabled, isTrue);
+  });
+
+  testWidgets('R8 · an unknown assignBlockedReason falls back to generic copy', (tester) async {
+    final roles = [
+      const RoleRow(
+          id: 'rol_x', name: 'X', key: null, nameCustomized: true,
+          viewerCanAssign: false, assignBlockedReason: 'something_new'),
+      const RoleRow(
+          id: 'rol_ok', name: 'OK', key: null, nameCustomized: true, viewerCanAssign: true),
+    ];
+    await _pump(tester, FakeOrgScoped(roles: roles), asOwner: false);
+
+    expect(find.text('คุณมอบบทบาทนี้ไม่ได้'), findsOneWidget);
+    expect(tileFor(tester, 'X').enabled, isFalse);
+  });
+
+  testWidgets('R8 · the server flag beats the Owner-only default', (tester) async {
+    final roles = [
+      const RoleRow(
+          id: 'rol_owner', name: 'Owner', key: 'owner', grantsOwnership: true,
+          viewerCanAssign: true),
+      const RoleRow(id: 'rol_staff', name: 'Staff', key: 'staff', viewerCanAssign: true),
+    ];
+    await _pump(tester, FakeOrgScoped(roles: roles), asOwner: false);
+    expect(tileFor(tester, 'เจ้าของร้าน').enabled, isTrue);
+  });
+
+  testWidgets("R8 · a renamed system role shows the shop's name, not the translation",
+      (tester) async {
+    final roles = [
+      const RoleRow(id: 'rol_staff', name: 'แคชเชียร์', key: 'staff', nameCustomized: true),
+    ];
+    await _pump(tester, FakeOrgScoped(roles: roles));
+    expect(find.text('แคชเชียร์'), findsOneWidget);
+    expect(find.text('พนักงาน'), findsNothing);
+  });
+
+  testWidgets('R8 · the default selection is never a disabled role', (tester) async {
+    final roles = [
+      const RoleRow(id: 'rol_a', name: 'A', key: null, viewerCanAssign: true),
+      const RoleRow(
+          id: 'rol_staff', name: 'Staff', key: 'staff', viewerCanAssign: false,
+          assignBlockedReason: 'exceeds_your_permissions'),
+    ];
+    final scoped = FakeOrgScoped(roles: roles);
+    await _pump(tester, scoped, asOwner: false);
+
+    await tester.enterText(find.byType(TextField), 'malee@shop.com');
+    await tester.tap(find.text('สร้างลิงก์คำเชิญ'));
+    await tester.pumpAndSettle();
+    // `staff` is the usual default but is closed to this caller; the form must
+    // not submit it.
+    expect(find.byType(InviteLinkScreen), findsOneWidget);
+    expect(scoped.invitedRoleIds, ['rol_a']);
+  });
+
+  testWidgets('R8 · every role disabled: nothing is pre-selected and submit is disabled',
+      (tester) async {
+    final roles = [
+      const RoleRow(
+          id: 'rol_a', name: 'A', key: null, viewerCanAssign: false,
+          assignBlockedReason: 'exceeds_your_permissions'),
+      const RoleRow(
+          id: 'rol_staff', name: 'Staff', key: 'staff', viewerCanAssign: false,
+          assignBlockedReason: 'exceeds_your_permissions'),
+    ];
+    await _pump(tester, FakeOrgScoped(roles: roles), asOwner: false);
+
+    final button = tester.widget<ElevatedButton>(find.byType(ElevatedButton));
+    expect(button.onPressed, isNull);
+  });
+
   testWidgets('the nudge opens this screen with Owner already chosen', (tester) async {
     await _pump(tester, FakeOrgScoped(roles: threeRoles), initialRoleKey: 'owner');
 
