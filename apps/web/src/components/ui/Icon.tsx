@@ -21,12 +21,40 @@
 import { cn } from "./utils";
 
 const PATHS = {
-  warn: <><path d="M12 3.6 2.8 19.4h18.4L12 3.6Z" /><path d="M12 9.6v4.1" /><path d="M12 17.1h.01" /></>,
-  info: <><circle cx="12" cy="12" r="8.8" /><path d="M12 11.2v5" /><path d="M12 7.9h.01" /></>,
-  error: <><circle cx="12" cy="12" r="8.8" /><path d="M12 7.4v5.4" /><path d="M12 16.4h.01" /></>,
+  warn: (
+    <>
+      <path d="M12 3.6 2.8 19.4h18.4L12 3.6Z" />
+      <path d="M12 9.6v4.1" />
+      <path d="M12 17.1h.01" />
+    </>
+  ),
+  info: (
+    <>
+      <circle cx="12" cy="12" r="8.8" />
+      <path d="M12 11.2v5" />
+      <path d="M12 7.9h.01" />
+    </>
+  ),
+  error: (
+    <>
+      <circle cx="12" cy="12" r="8.8" />
+      <path d="M12 7.4v5.4" />
+      <path d="M12 16.4h.01" />
+    </>
+  ),
   check: <path d="m4.8 12.6 4.9 4.9L19.4 7.8" />,
-  "check-circle": <><circle cx="12" cy="12" r="8.8" /><path d="m8.1 12.2 2.7 2.7 5.3-5.3" /></>,
-  mail: <><rect x="3.2" y="5.6" width="17.6" height="12.8" rx="2" /><path d="m3.6 7 8.4 5.8L20.4 7" /></>,
+  "check-circle": (
+    <>
+      <circle cx="12" cy="12" r="8.8" />
+      <path d="m8.1 12.2 2.7 2.7 5.3-5.3" />
+    </>
+  ),
+  mail: (
+    <>
+      <rect x="3.2" y="5.6" width="17.6" height="12.8" rx="2" />
+      <path d="m3.6 7 8.4 5.8L20.4 7" />
+    </>
+  ),
   users: (
     <>
       <path d="M15.5 20.4v-1.7a4 4 0 0 0-4-4H6.2a4 4 0 0 0-4 4v1.7" />
@@ -35,7 +63,12 @@ const PATHS = {
       <path d="M16.2 4a4 4 0 0 1 0 7.75" />
     </>
   ),
-  clock: <><circle cx="12" cy="12" r="8.8" /><path d="M12 7.2V12l3 1.9" /></>,
+  clock: (
+    <>
+      <circle cx="12" cy="12" r="8.8" />
+      <path d="M12 7.2V12l3 1.9" />
+    </>
+  ),
   hourglass: (
     <>
       <path d="M7 3.4h10" />
@@ -46,14 +79,37 @@ const PATHS = {
   ),
   "chevron-right": <path d="m9.5 5.5 6.5 6.5-6.5 6.5" />,
   "chevron-down": <path d="m5.5 9.5 6.5 6.5 6.5-6.5" />,
-  plus: <><path d="M12 5.2v13.6" /><path d="M5.2 12h13.6" /></>,
+  plus: (
+    <>
+      <path d="M12 5.2v13.6" />
+      <path d="M5.2 12h13.6" />
+    </>
+  ),
   circle: <circle cx="12" cy="12" r="8.3" />,
-  menu: <><path d="M4 6h16" /><path d="M4 12h16" /><path d="M4 18h16" /></>,
-  close: <><path d="M6 6l12 12" /><path d="M18 6 6 18" /></>,
+  menu: (
+    <>
+      <path d="M4 6h16" />
+      <path d="M4 12h16" />
+      <path d="M4 18h16" />
+    </>
+  ),
+  close: (
+    <>
+      <path d="M6 6l12 12" />
+      <path d="M18 6 6 18" />
+    </>
+  ),
   lock: (
     <>
       <rect x="4.2" y="10.4" width="15.6" height="10" rx="2" />
       <path d="M8 10.4V7.6a4 4 0 0 1 8 0v2.8" />
+    </>
+  ),
+  /** `icon.roles` (F-003 ui.md §4) — Phosphor ShieldCheck: the roles-and-permissions entry. */
+  roles: (
+    <>
+      <path d="M12 3.2 4.6 5.9v5.6c0 4.4 3 8 7.4 9.3 4.4-1.3 7.4-4.9 7.4-9.3V5.9L12 3.2Z" />
+      <path d="m8.9 12.1 2.2 2.2 4-4.1" />
     </>
   ),
   copy: (
@@ -62,8 +118,18 @@ const PATHS = {
       <path d="M15.6 8.4V6.2a2 2 0 0 0-2-2H6.2a2 2 0 0 0-2 2v7.4a2 2 0 0 0 2 2h2.2" />
     </>
   ),
-  back: <><path d="M19 12H5" /><path d="m11 6-6 6 6 6" /></>,
-  eye: <><path d="M2.4 12S6.2 5.6 12 5.6 21.6 12 21.6 12 17.8 18.4 12 18.4 2.4 12 2.4 12Z" /><circle cx="12" cy="12" r="3.2" /></>,
+  back: (
+    <>
+      <path d="M19 12H5" />
+      <path d="m11 6-6 6 6 6" />
+    </>
+  ),
+  eye: (
+    <>
+      <path d="M2.4 12S6.2 5.6 12 5.6 21.6 12 21.6 12 17.8 18.4 12 18.4 2.4 12 2.4 12Z" />
+      <circle cx="12" cy="12" r="3.2" />
+    </>
+  ),
   "eye-off": (
     <>
       <path d="M4 4.6 19.4 20" />

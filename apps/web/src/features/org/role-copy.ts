@@ -280,6 +280,17 @@ export function roleNameFieldErrorMessage(): string {
   return "ชื่อนี้มีอักขระที่ใช้ไม่ได้ (เช่น อักขระที่มองไม่เห็นซึ่งติดมาจากการคัดลอก) ลองพิมพ์ชื่อใหม่เอง";
 }
 
+/**
+ * ForbiddenPanel ของจอบทบาท R1–R4 (ux §0 "ForbiddenPanel") — เปิด URL ตรง ๆ โดยไม่มี
+ * `manage_roles` หรือได้ `403 FORBIDDEN` กลางทาง. หัว + เนื้อ + ปุ่มกลับ ครบ (UX01):
+ * `roleFormErrorMessage("FORBIDDEN")` เคยมีแค่หัว.
+ */
+export const ROLE_FORBIDDEN_PANEL_COPY = {
+  title: "หน้านี้สำหรับคนที่จัดการบทบาทได้",
+  body: 'ถ้าต้องการใช้ ให้เจ้าของร้านเปิดสิทธิ์ "จัดการบทบาทและสิทธิ์" ให้คุณ',
+  back: "กลับไปหน้าข้อมูลร้าน",
+} as const;
+
 /** R3/R4/R5 — ฟอร์มบทบาท (ErrorBanner เว้นแต่ระบุ) */
 export function roleFormErrorMessage(
   code: string,
@@ -313,7 +324,7 @@ export function roleFormErrorMessage(
     case "ROLE_WRITES_DISABLED":
       return bannerReasonCopy("writes_disabled").body;
     case "FORBIDDEN":
-      return "หน้านี้สำหรับคนที่จัดการบทบาทได้";
+      return `${ROLE_FORBIDDEN_PANEL_COPY.title} ${ROLE_FORBIDDEN_PANEL_COPY.body}`;
     case "NOT_FOUND":
       return "ไม่พบบทบาทนี้ · บทบาทนี้อาจถูกลบไปแล้ว";
     case "CONFLICT":

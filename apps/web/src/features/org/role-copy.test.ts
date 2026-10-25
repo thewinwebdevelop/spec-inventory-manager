@@ -17,6 +17,7 @@ import {
   lastEditedLine,
   memberActionErrorMessage,
   memberManageBlockedReasonCopy,
+  ROLE_FORBIDDEN_PANEL_COPY,
   roleBadgeLabel,
   roleFormErrorMessage,
   roleNameFieldErrorMessage,
@@ -298,5 +299,20 @@ describe("§E — memberActionErrorMessage", () => {
 
   it("★ unmapped code never throws or returns empty", () => {
     expect(memberActionErrorMessage("SOME_5XX", "changeRole")).not.toBe("");
+  });
+});
+
+describe("UX01 — ForbiddenPanel copy of the roles screens (ux §0)", () => {
+  it("has title, body and the back button, verbatim", () => {
+    expect(ROLE_FORBIDDEN_PANEL_COPY).toEqual({
+      title: "หน้านี้สำหรับคนที่จัดการบทบาทได้",
+      body: 'ถ้าต้องการใช้ ให้เจ้าของร้านเปิดสิทธิ์ "จัดการบทบาทและสิทธิ์" ให้คุณ',
+      back: "กลับไปหน้าข้อมูลร้าน",
+    });
+  });
+  it("FORBIDDEN from roleFormErrorMessage carries the body too, not just the title", () => {
+    const msg = roleFormErrorMessage("FORBIDDEN");
+    expect(msg).toContain(ROLE_FORBIDDEN_PANEL_COPY.title);
+    expect(msg).toContain(ROLE_FORBIDDEN_PANEL_COPY.body);
   });
 });
