@@ -21,14 +21,27 @@ abstract interface class OrgDirectory {
 
 abstract interface class OrgScoped {
   /// `GET /orgs/{orgId}/members`.
-  Future<PagedResult<MemberRow>> listMembers({String status = 'active', String? cursor});
+  ///
+  /// [roleId] (F-003, ux R6) narrows to one role, ANDed with [status].
+  Future<PagedResult<MemberRow>> listMembers({
+    String status = 'active',
+    String? roleId,
+    String? cursor,
+  });
 
   /// `GET /orgs/{orgId}/invitations`.
   ///
   /// Defaults to `pending` — the section's job is the work still outstanding
   /// (ux-wireframe §7). `all` is what the "ดูคำเชิญที่หมดอายุ/ยกเลิกแล้ว"
   /// toggle asks for.
-  Future<PagedResult<InvitationRow>> listInvitations({String status = 'pending', String? cursor});
+  ///
+  /// [roleId] (F-003, ux R6) narrows to one role. `pending` here is the
+  /// stored status — it includes rows the server now reports as `expired`.
+  Future<PagedResult<InvitationRow>> listInvitations({
+    String status = 'pending',
+    String? roleId,
+    String? cursor,
+  });
 
   /// `GET /orgs/{orgId}/roles`.
   Future<List<RoleRow>> listRoles();

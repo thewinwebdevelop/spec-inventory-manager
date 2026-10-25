@@ -209,6 +209,46 @@ void main() {
       ['inv_1', 'inv_2'],
     );
   });
+
+  test('★ T-003-M10: the role-filtered lists carry roleId, page with it, and keep it on loadMore',
+      () async {
+    final scoped = FakeOrgScoped(
+      memberPages: [
+        PagedResult(items: [member(id: 'usr_1')], nextCursor: 'cur_2'),
+        PagedResult(items: [member(id: 'usr_2')]),
+      ],
+      invitationPages: [
+        PagedResult(items: [invitation(id: 'inv_1')]),
+      ],
+    );
+    final container = _container(scoped);
+    _keep(container, roleMembersControllerProvider('rol_staff'));
+    _keep(container, roleInvitationsControllerProvider('rol_staff'));
+    await _settle();
+
+    await container.read(roleMembersControllerProvider('rol_staff').notifier).loadMore();
+
+    expect(
+      container.read(roleMembersControllerProvider('rol_staff')).items.map((m) => m.userId),
+      ['usr_1', 'usr_2'],
+    );
+    expect(scoped.memberRoleIdsSeen, ['rol_staff', 'rol_staff']);
+    expect(scoped.statusesSeen, ['active', 'active']);
+    expect(scoped.cursorsSeen, [null, 'cur_2']);
+    expect(scoped.invitationRoleIdsSeen, ['rol_staff']);
+    expect(scoped.invitationStatusesSeen, ['pending']);
+  });
+
+  test('the unfiltered lists still send no roleId', () async {
+    final scoped = FakeOrgScoped();
+    final container = _container(scoped);
+    _keep(container, membersControllerProvider('active'));
+    _keep(container, invitationsControllerProvider('pending'));
+    await _settle();
+
+    expect(scoped.memberRoleIdsSeen, [null]);
+    expect(scoped.invitationRoleIdsSeen, [null]);
+  });
 }
 
 /// PagedResult 1 succeeds, page 2 fails — a shape the shared fake cannot express
@@ -219,7 +259,11 @@ class _FailingSecondPage extends FakeOrgScoped {
   int _calls = 0;
 
   @override
-  Future<PagedResult<MemberRow>> listMembers({String status = 'active', String? cursor}) async {
+  Future<PagedResult<MemberRow>> listMembers({
+    String status = 'active',
+    String? roleId,
+    String? cursor,
+  }) async {
     if (_calls++ == 0) {
       return PagedResult(items: [member(id: 'usr_1')], nextCursor: 'cur_2');
     }
