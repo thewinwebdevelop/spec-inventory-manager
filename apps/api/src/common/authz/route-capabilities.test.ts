@@ -25,10 +25,10 @@ import {
   routeKey,
   toTemplatePath,
 } from "./route-capabilities";
-import { CAPABILITY_MANAGE_MEMBERS } from "@omnistock/core-domain";
+import { CAPABILITY_MANAGE_MEMBERS, CAPABILITY_MANAGE_ROLES } from "@omnistock/core-domain";
 
 describe("ROUTE_CAPABILITIES (api-spec §2 · architecture §3.1)", () => {
-  it("pins the F-002 endpoint→capability table exactly (10 rows)", () => {
+  it("pins the F-002 + F-003 endpoint→capability table exactly (10 + 3 rows)", () => {
     expect(ROUTE_CAPABILITIES.map(routeKey)).toEqual([
       "PATCH /orgs/{orgId}",
       "PUT /orgs/{orgId}/tax-profile",
@@ -40,13 +40,24 @@ describe("ROUTE_CAPABILITIES (api-spec §2 · architecture §3.1)", () => {
       "POST /orgs/{orgId}/invitations",
       "POST /orgs/{orgId}/invitations/{invitationId}/link",
       "DELETE /orgs/{orgId}/invitations/{invitationId}",
+      // F-003 · T-003-B21 — the role-design reads (api-spec §1)
+      "GET /orgs/{orgId}/capabilities",
+      "GET /orgs/{orgId}/role-details",
+      "GET /orgs/{orgId}/roles/{roleId}",
     ]);
   });
 
-  it("F-002 enforces exactly TWO capabilities (§3.1) — nothing invented here", () => {
+  it("F-002 enforces exactly TWO capabilities (§3.1); F-003 adds exactly manage_roles — nothing invented here", () => {
     expect(new Set(ROUTE_CAPABILITIES.map((r) => r.capability))).toEqual(
-      new Set([CAPABILITY_MANAGE_MEMBERS, CAPABILITY_MANAGE_ORG_SETTINGS]),
+      new Set([CAPABILITY_MANAGE_MEMBERS, CAPABILITY_MANAGE_ORG_SETTINGS, CAPABILITY_MANAGE_ROLES]),
     );
+    expect(
+      ROUTE_CAPABILITIES.filter((r) => r.capability === CAPABILITY_MANAGE_ROLES).map(routeKey),
+    ).toEqual([
+      "GET /orgs/{orgId}/capabilities",
+      "GET /orgs/{orgId}/role-details",
+      "GET /orgs/{orgId}/roles/{roleId}",
+    ]);
   });
 
   it("the two READ routes that hold other people's email require manage_members (D-028/I-8/N-4)", () => {

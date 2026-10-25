@@ -1,0 +1,63 @@
+parameters:
+  - $ref: "../components/parameters.yaml#/OrgIdParam"
+  - name: roleId
+    in: path
+    required: true
+    description: Role id (`RoleDetail.id`).
+    schema:
+      type: string
+  - $ref: "../components/parameters.yaml#/OrgIdHeader"
+
+get:
+  operationId: getOrgRoleDetail
+  summary: One role of this shop, in full (edit and clone screens)
+  description: >
+    F-003 (api-spec §1, §3). The same `RoleDetail` as the matching item of
+    `GET /orgs/{orgId}/role-details`. Requires `manage_roles`.
+
+
+    `lastEdited.by` is decided at read time against THIS shop only: `me`, a
+    current member (their CURRENT role here), or `former_member` — never an
+    e-mail, a user id, or anything from another shop.
+  tags:
+    - roles
+  security:
+    - bearerAuth: []
+  responses:
+    "200":
+      description: The role.
+      headers:
+        Cache-Control:
+          $ref: "../components/headers.yaml#/CacheControlNoStore"
+      content:
+        application/json:
+          schema:
+            $ref: "../components/roles.yaml#/RoleDetail"
+    "401":
+      description: Missing/invalid access token (`UNAUTHENTICATED`)
+      content:
+        application/json:
+          schema:
+            $ref: "../components/common.yaml#/ErrorResponse"
+    "403":
+      description: >
+        `FORBIDDEN` — missing `manage_roles` · `ORG_ACCESS_DENIED` — not an
+        active member of this shop.
+      content:
+        application/json:
+          schema:
+            $ref: "../components/common.yaml#/ErrorResponse"
+    "404":
+      description: >
+        `NOT_FOUND` — no live role with this id in this shop. A deleted role,
+        another shop's role and an unknown id answer identically.
+      content:
+        application/json:
+          schema:
+            $ref: "../components/common.yaml#/ErrorResponse"
+    "422":
+      description: "`ORG_MISMATCH` — `X-Organization-Id` disagrees with the path."
+      content:
+        application/json:
+          schema:
+            $ref: "../components/common.yaml#/ErrorResponse"

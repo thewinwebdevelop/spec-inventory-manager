@@ -13,6 +13,7 @@ import 'package:omnistock_api_client/src/api/auth_api.dart';
 import 'package:omnistock_api_client/src/api/invitations_api.dart';
 import 'package:omnistock_api_client/src/api/members_api.dart';
 import 'package:omnistock_api_client/src/api/organizations_api.dart';
+import 'package:omnistock_api_client/src/api/roles_api.dart';
 import 'package:omnistock_api_client/src/api/system_api.dart';
 
 class OmnistockApiClient {
@@ -131,6 +132,12 @@ class OmnistockApiClient {
   /// by doing that all interceptors will not be executed
   OrganizationsApi getOrganizationsApi() {
     return OrganizationsApi(dio, serializers);
+  }
+
+  /// Get RolesApi instance, base route and serializer can be overridden by a given but be careful,
+  /// by doing that all interceptors will not be executed
+  RolesApi getRolesApi() {
+    return RolesApi(dio, serializers);
   }
 
   /// Get SystemApi instance, base route and serializer can be overridden by a given but be careful,

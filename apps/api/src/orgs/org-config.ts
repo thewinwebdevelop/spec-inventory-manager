@@ -36,6 +36,21 @@ export const INVITATION_PENDING_CAP = Symbol("INVITATION_PENDING_CAP");
 /** Base URL the invite link is built on (architecture §7, `WEB_APP_BASE_URL`). */
 export const WEB_APP_BASE_URL = Symbol("WEB_APP_BASE_URL");
 
+/**
+ * F-003 §12 — `ROLE_WRITES_ENABLED` as a boolean, resolved once at boot. Read
+ * routes report `writes_disabled` from it (api-spec §3); the write guard (B23)
+ * consumes the same token, so a verdict and a 503 cannot disagree.
+ */
+export const ROLE_WRITES_ENABLED = Symbol("ROLE_WRITES_ENABLED");
+
+/** F-003 §10 — `{ maxRolesPerOrg, maxDeletedRolesPerOrg }` (packages/config). */
+export const ROLE_CAPACITY_LIMITS = Symbol("ROLE_CAPACITY_LIMITS");
+
+export interface RoleCapacityLimits {
+  readonly maxRolesPerOrg: number;
+  readonly maxDeletedRolesPerOrg: number;
+}
+
 /** api-spec §10 — the documented ceiling; env-tunable would be a policy change. */
 export const INVITATION_PENDING_CAP_DEFAULT = 100;
 
@@ -59,5 +74,20 @@ export const orgConfigProviders: readonly Provider[] = Object.freeze([
     // `positiveIntEnv` keeps env values as strings (they are validated as digits
     // with a bound); the numeric conversion happens here, once.
     useFactory: (): number => Number(loadEnv(process.env).MAX_ORGS_PER_USER),
+  },
+  {
+    provide: ROLE_WRITES_ENABLED,
+    // Already a boolean (exact "true" only — `parseRoleWritesEnabled`).
+    useFactory: (): boolean => loadEnv(process.env).ROLE_WRITES_ENABLED,
+  },
+  {
+    provide: ROLE_CAPACITY_LIMITS,
+    useFactory: (): RoleCapacityLimits => {
+      const env = loadEnv(process.env);
+      return Object.freeze({
+        maxRolesPerOrg: Number(env.MAX_ROLES_PER_ORG),
+        maxDeletedRolesPerOrg: Number(env.MAX_DELETED_ROLES_PER_ORG),
+      });
+    },
   },
 ]);

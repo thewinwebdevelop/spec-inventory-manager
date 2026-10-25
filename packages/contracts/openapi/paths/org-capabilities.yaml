@@ -1,0 +1,52 @@
+parameters:
+  - $ref: "../components/parameters.yaml#/OrgIdParam"
+  - $ref: "../components/parameters.yaml#/OrgIdHeader"
+
+get:
+  operationId: getOrgCapabilityCatalog
+  summary: The capability catalog this shop can see (role checklist)
+  description: >
+    F-003 (api-spec §1, §3 · D-037). The ONE source of capability keys, their
+    Thai labels and descriptions, groups, status and `implies` edges — clients
+    render the checklist from this and never hard-code a key (AC-7.1).
+
+
+    Org-scoped and requires `manage_roles`: a tier that needs an entitlement is
+    HIDDEN entirely, not flagged (AC-7.4), so the answer can differ per shop —
+    cache it per shop. `full_access` is present with `selectable: false` and
+    `group: null` so a role holding it can be labelled; it is never a checklist
+    item.
+  tags:
+    - roles
+  security:
+    - bearerAuth: []
+  responses:
+    "200":
+      description: The catalog, groups in display order.
+      headers:
+        Cache-Control:
+          $ref: "../components/headers.yaml#/CacheControlNoStore"
+      content:
+        application/json:
+          schema:
+            $ref: "../components/roles.yaml#/CapabilityCatalog"
+    "401":
+      description: Missing/invalid access token (`UNAUTHENTICATED`)
+      content:
+        application/json:
+          schema:
+            $ref: "../components/common.yaml#/ErrorResponse"
+    "403":
+      description: >
+        `FORBIDDEN` — missing `manage_roles` · `ORG_ACCESS_DENIED` — not an
+        active member of this shop.
+      content:
+        application/json:
+          schema:
+            $ref: "../components/common.yaml#/ErrorResponse"
+    "422":
+      description: "`ORG_MISMATCH` — `X-Organization-Id` disagrees with the path."
+      content:
+        application/json:
+          schema:
+            $ref: "../components/common.yaml#/ErrorResponse"
