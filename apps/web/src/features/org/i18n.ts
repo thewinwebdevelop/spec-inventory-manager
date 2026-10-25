@@ -83,6 +83,8 @@ export const orgTh = {
       menuLabel: "เมนูของร้าน",
       orgProfile: "ข้อมูลร้าน",
       members: "สมาชิก",
+      /** T-003-W05 — ux-wireframe R1 / ui.md §5: below "สมาชิก", gate `manage_roles`. */
+      roles: "บทบาทและสิทธิ์",
       security: "ความปลอดภัย",
       logout: "ออกจากระบบ",
       /**

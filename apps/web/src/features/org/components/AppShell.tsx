@@ -28,7 +28,7 @@ import { OrgSwitcher } from "./OrgSwitcher";
 import { useToast } from "../../../components/providers/ToastProvider";
 
 /** api-spec §3.3 — the capability the members screen requires. */
-import { CAPABILITY_MANAGE_MEMBERS } from "../../../lib/org/capability";
+import { CAPABILITY_MANAGE_MEMBERS, CAPABILITY_MANAGE_ROLES } from "../../../lib/org/capability";
 
 export { CAPABILITY_MANAGE_MEMBERS };
 
@@ -58,6 +58,9 @@ export function AppShell({ children }: { children: ReactNode }) {
   // §4 answers Q13 explicitly: HIDE it, do not disable it — a disabled entry
   // just raises a question the user cannot resolve.
   const canManageMembers = useCan(CAPABILITY_MANAGE_MEMBERS);
+  // T-003-W05 — the entry to R1. UX only: the route has its own RouteGuard and
+  // the server refuses every roles call without the capability.
+  const canManageRoles = useCan(CAPABILITY_MANAGE_ROLES);
   /**
    * ★ design-system §8.2: at `md` the sidebar "ยุบเป็น top bar + drawer
    * (hamburger)". None of that existed — below `md` the nav simply stacked on
@@ -99,6 +102,7 @@ export function AppShell({ children }: { children: ReactNode }) {
 
   const orgProfilePath = `/o/${orgId}/settings/org`;
   const membersPath = `/o/${orgId}/settings/members`;
+  const rolesPath = `/o/${orgId}/settings/roles`;
   // `/o/{orgId}` renders the SAME screen as `/o/{orgId}/settings/org` (S4 is
   // the shop home in Phase 0, until F-030's dashboard). Comparing the path to
   // the settings route alone left the sidebar with nothing highlighted on the
@@ -154,6 +158,18 @@ export function AppShell({ children }: { children: ReactNode }) {
           <li>
             <NavItem href={membersPath} active={pathname === membersPath}>
               {orgTh.shell.nav.members}
+            </NavItem>
+          </li>
+        )}
+        {canManageRoles && (
+          <li>
+            {/* `startsWith`: R3/R4 live under /settings/roles/… and are still "บทบาท". */}
+            <NavItem
+              href={rolesPath}
+              active={pathname === rolesPath || pathname.startsWith(`${rolesPath}/`)}
+              icon={<Icon role="roles" />}
+            >
+              {orgTh.shell.nav.roles}
             </NavItem>
           </li>
         )}
