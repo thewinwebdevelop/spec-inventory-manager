@@ -27,10 +27,12 @@ import {
   hasCapability,
 } from "@omnistock/core-domain";
 import { AccessTokenService } from "../src/auth/access-token.service";
+import { AUTH_REDIS } from "../src/auth/auth.module";
 import {
   ESCALATION_DEDUPE_PREFIX,
   collectSecurityEvents,
   type SecurityEventCollector,
+  SECURITY_EVENTS_DEDUPE_STORE,
 } from "../src/auth/security-events.service";
 import { enumerateRoutes } from "../src/common/authz";
 import { INT_LANE_ENABLED, createTestApp, type TestApp } from "./app.kit";
@@ -401,7 +403,21 @@ d("T-003-B21 role READ routes (E2E, DB+Redis)", () => {
         capsOf.set(p, m.role.capabilities);
       }
 
-      const dedupeBefore = (await redis.keys(`${ESCALATION_DEDUPE_PREFIX}*`)).length;
+      // Count only THIS app's dedupe writes. A global `KEYS secevt:dedupe:*` count raced
+      // with other suites sharing the Redis under a parallel run (red for nothing — and
+      // could stay green if another suite's key expired as ours was added). The store is
+      // the instance SecurityEventsService writes through (useExisting AUTH_REDIS).
+      const dedupeStore = on.app.get<{ set: (...a: unknown[]) => unknown }>(
+        SECURITY_EVENTS_DEDUPE_STORE,
+        { strict: false },
+      );
+      // Non-vacuity of the spy: it must be the same instance the service was wired with.
+      expect(dedupeStore).toBe(on.app.get(AUTH_REDIS, { strict: false }));
+      const dedupeSets = vi.spyOn(dedupeStore, "set");
+      const ourDedupeWrites = () =>
+        dedupeSets.mock.calls.filter(
+          (c) => typeof c[0] === "string" && c[0].startsWith(ESCALATION_DEDUPE_PREFIX),
+        ).length;
       sink.clear();
       const verdictRoutes = new Set<string>();
       let refusedVerdicts = 0;
@@ -442,7 +458,8 @@ d("T-003-B21 role READ routes (E2E, DB+Redis)", () => {
       expect(verdictRoutes.size).toBeGreaterThanOrEqual(5);
       expect(refusedVerdicts).toBeGreaterThan(0);
       expect(sink.types()).toEqual([]);
-      expect((await redis.keys(`${ESCALATION_DEDUPE_PREFIX}*`)).length).toBe(dedupeBefore);
+      expect(ourDedupeWrites()).toBe(0);
+      dedupeSets.mockRestore();
 
       // Control: a refusal on the same surface reaches the same sink.
       await get(on, `/orgs/${A().org.id}/role-details`, user("MMS")).expect(403);
