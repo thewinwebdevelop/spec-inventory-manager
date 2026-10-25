@@ -4,6 +4,7 @@ owner: "@qa"
 signoff: approved     # user 2026-09-28
 ---
 # [F-003] Test plan  (เจ้าภาพ: qa — ร่างตอน Gate 2 จาก AC)
+> **amendment 2026-10-25 (build · T-003-B19):** I3-38(a) ผู้ออกลิงก์ถูกลดเป็น Staff ⇒ คาด `inviter_not_authorized` (ลำดับ P2 ของ D-035 Addendum) · เพิ่ม **I3-38(a′)** = ผู้ออกลิงก์ยังถือ `manage_members` แต่ caps ไม่ ⊇ role ⇒ `inviter_exceeds` · I3-57 นับเฉพาะ dedupe write ของ app ตัวเอง (spy บน store ที่ wire ไว้) ไม่ใช่ `KEYS` ทั้ง Redis ที่ suite อื่นใช้ร่วม
 > **amendment 2026-10-25 (build · T-003-QA07 · security review):** §2.4 lemma — (1) invariant เพิ่ม: **ชุดผู้ถือ Owner เท่าเดิมหลังทุก op ของ non-Owner** (set equality · D-030) ใน U-RB-18 และ U-RB-20 · PATCH เป็น role Owner ตั้ง `owner` ในโมเดลเหมือน accept ·
 > (2) control เพิ่ม c5 (ปิด re-check ผู้เชิญ D-035) · o1 · o2 + mutation แถว 05/06/07 (accept/PATCH/DELETE โดย non-Owner) ต้องแดง · (3) U-RB-20 start set เพิ่ม "มีคำเชิญค้าง" (ลึก 2) · BFS หยุดเมื่อเจอตัวอย่างค้านแรก ·
 > (4) **tier:** U-RB-20 (BFS) อยู่ใน `authority-lemma.full.test.ts` — ไม่อยู่ใน unit run ปกติ · รันด้วย `pnpm --filter @omnistock/core-domain test:full` ใน `node-ci` ทุก PR + `assert-tests-ran --require …=10` · U-RB-18/19 อยู่ใน unit run ปกติ
