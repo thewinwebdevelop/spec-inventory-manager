@@ -12,7 +12,9 @@
 //   * rotating it invalidates the previous one IMMEDIATELY. The old hash is
 //     overwritten, so the old link stops resolving on the next request.
 //
-// ── WHY REISSUE GOES THROUGH `canAssignRole` (NEW-2) ───────────────────────
+// ── WHY REISSUE GOES THROUGH THE GRANT RULE (NEW-2) ────────────────────────
+// (F-002 called `canAssignRole`; F-003 T-003-B18 moved create / reissue /
+// cancel onto `decideMemberAuthority` directly — `judgeInvitationGrant` below.)
 // D-027 made reissue restart the clock. Without an Owner-only check on THIS
 // route, anybody holding `manage_members` could take an Owner invitation and
 // mint an unlimited series of fresh Owner links — copying the key to the Owner
@@ -27,10 +29,9 @@
 import { Inject, Injectable } from "@nestjs/common";
 import {
   canAcceptInvitation,
-  canAssignRole,
+  decideMemberAuthority,
   invitationTtlHours,
   invitationExpiryFrom,
-  isOwnerRole,
   isValidEmailShape,
   maskEmail,
   normalizeEmail,
@@ -50,6 +51,7 @@ import { generateInvitationToken, hashInvitationToken } from "../prisma/invitati
 import { LIVE_ROLE_WHERE, domainError, type ErrorCodeKey } from "../common";
 import { paginate, type KeysetCursor } from "../common/cursor";
 import { SecurityEventsService } from "../auth";
+import type { EscalationCheckedOperation } from "../auth/security-events.service";
 import {
   ORG_PRISMA,
   OrgContextStore,
@@ -260,6 +262,66 @@ type AcceptOutcome =
 
 const REFUSED_INVALID: AcceptOutcome = Object.freeze({ kind: "refused", decision: "invalid" });
 
+// ── F-003 · T-003-B18: who may hand out / withdraw an invitation's role ─────
+
+/** The three shipped routes that hand out (or withdraw) a role through an invitation. */
+type InviteGrantOp = Extract<
+  EscalationCheckedOperation,
+  "invite_create" | "invite_reissue" | "invite_cancel"
+>;
+
+/**
+ * An `exceeds_actor` refusal, RETURNED out of the transaction rather than
+ * thrown in it: `org.role.escalation_denied` is emitted after the transaction
+ * settles (post-commit rule, H-3), then the 403 is thrown.
+ */
+interface GrantRefusal {
+  readonly kind: "exceeds_actor";
+  readonly roleId: string;
+  readonly excess: readonly string[];
+}
+
+/**
+ * D-034 grant axis (⊆) for invitations — architecture §1.1 rows
+ * `invite_create · invite_reissue · invite_cancel`. The rule is
+ * `decideMemberAuthority`; this only maps its answer onto the wire, in the
+ * fixed order of api-spec §4.3, so every case F-002 refused answers the same
+ * bytes:
+ *   `forbidden` (no `manage_members` in tx) · `owner_only` (role holds
+ *   `full_access`, actor does not)  → throw `403 FORBIDDEN` (shipped code)
+ *   `exceeds_actor` (role ⊄ actor)  → return a refusal (event, then 403)
+ * A target-axis reason cannot come out of a grant-only op; if it ever does,
+ * fail loud instead of guessing a code or letting the write through.
+ *
+ * Called BEFORE any write in every caller — a refused reissue must not have
+ * rotated the token, a refused cancel must not have cancelled.
+ */
+function judgeInvitationGrant(
+  op: InviteGrantOp,
+  actorCapabilities: readonly string[],
+  role: { readonly id: string; readonly capabilities: readonly string[] },
+): GrantRefusal | null {
+  const verdict = decideMemberAuthority({
+    op,
+    actorCapabilities,
+    actorIsTarget: false,
+    grantCapabilities: role.capabilities,
+  });
+  if (verdict.ok) return null;
+  switch (verdict.reason) {
+    case "forbidden":
+    case "owner_only":
+      throw domainError("FORBIDDEN");
+    case "exceeds_actor":
+      return { kind: "exceeds_actor", roleId: role.id, excess: verdict.excess };
+    default:
+      throw new Error(
+        `judgeInvitationGrant(${op}): decideMemberAuthority answered ` +
+          `${JSON.stringify(verdict.reason)} for a grant-only op`,
+      );
+  }
+}
+
 @Injectable()
 export class InvitationsService {
   constructor(
@@ -374,13 +436,11 @@ export class InvitationsService {
         const role = await this.readRole(tx, input.roleId);
         const actorCapabilities = await this.readActorCapabilities(tx, actorUserId);
 
-        // C-1/D-028 — inviting somebody AS an Owner is granting Owner.
-        const allowed = canAssignRole({
-          actorCapabilities,
-          targetIsOwner: false,
-          newRoleIsOwner: isOwnerRole(role.capabilities),
-        });
-        if (!allowed) throw domainError("FORBIDDEN");
+        // C-1/D-028 — inviting somebody AS an Owner is granting Owner · F-003
+        // D-034 — and inviting into a role you do not hold all of is granting
+        // more than you have (AC-2.3 / AC-5.1).
+        const refusal = judgeInvitationGrant("invite_create", actorCapabilities, role);
+        if (refusal) return { kind: "refused", refusal } as const;
 
         await this.assertNotAlreadyMember(tx, email);
         await this.assertNoPendingInvitation(tx, email);
@@ -402,14 +462,20 @@ export class InvitationsService {
             tokenIssuedAt: input.now,
             expiresAt,
             invitedByUserId: actorUserId,
+            // D-035 Addendum P3 — "who issued the CURRENT link", written in the
+            // same INSERT as the token. Accept re-checks this person's authority.
+            issuedByUserId: actorUserId,
           },
           select: INVITATION_SELECT,
         })) as InvitationSelected;
 
-        return { row, token };
+        return { kind: "issued", row, token } as const;
       },
       { operation: "createInvitation" },
     );
+    if (created.kind === "refused") {
+      return this.refuseEscalation(actorUserId, organizationId, "invite_create", created.refusal);
+    }
 
     // POST-COMMIT. The email is MASKED (architecture §9): an audit trail that
     // records who was invited should not itself become a directory of the
@@ -493,16 +559,16 @@ export class InvitationsService {
         }
 
         const actorCapabilities = await this.readActorCapabilities(tx, actorUserId);
-        // NEW-2 — the whole reason this route is not just a token generator.
-        const allowed = canAssignRole({
-          actorCapabilities,
-          targetIsOwner: false,
-          newRoleIsOwner: isOwnerRole(invitation.role.capabilities),
-        });
-        // ⛔ THROWN BEFORE ANY WRITE. A 403 that had already rotated the token
+        // NEW-2 — the whole reason this route is not just a token generator ·
+        // F-003 D-034: the same grant rule as create (⊆, Owner-only).
+        // ⛔ DECIDED BEFORE ANY WRITE. A 403 that had already rotated the token
         // would invalidate the inviter's live link as a side effect of being
         // refused — the caller is told "no" while the damage is done.
-        if (!allowed) throw domainError("FORBIDDEN");
+        const refusal = judgeInvitationGrant("invite_reissue", actorCapabilities, {
+          id: invitation.roleId,
+          capabilities: invitation.role.capabilities,
+        });
+        if (refusal) return { kind: "refused", refusal } as const;
 
         const token = generateInvitationToken();
         // D-027 — the clock restarts. Same TTL rule as creation, recomputed from
@@ -515,14 +581,27 @@ export class InvitationsService {
 
         const row = (await tx.invitation.update({
           where: { id: invitation.id },
-          data: { tokenHash: hashInvitationToken(token), tokenIssuedAt: input.now, expiresAt },
+          // D-035 Addendum P3 — `issuedByUserId` rides in the SAME update as
+          // the token (U-API3-08): from this statement on, accept re-checks the
+          // reissuer's authority, never the original inviter's. A separate
+          // statement would leave a live token naming the wrong issuer.
+          // `invitedByUserId` is history ("who invited") and is not touched.
+          data: {
+            tokenHash: hashInvitationToken(token),
+            tokenIssuedAt: input.now,
+            expiresAt,
+            issuedByUserId: actorUserId,
+          },
           select: { id: true, expiresAt: true, tokenIssuedAt: true },
         })) as { id: string; expiresAt: Date; tokenIssuedAt: Date };
 
-        return { row, token };
+        return { kind: "issued", row, token } as const;
       },
       { operation: "reissueInvitationLink" },
     );
+    if (reissued.kind === "refused") {
+      return this.refuseEscalation(actorUserId, organizationId, "invite_reissue", reissued.refusal);
+    }
 
     this.events.emit("org.invitation.link_reissued", {
       actorUserId,
@@ -553,28 +632,52 @@ export class InvitationsService {
       async (tx) => {
         const invitation = (await tx.invitation.findUnique({
           where: { id: input.invitationId },
-          select: { id: true, status: true },
-        })) as { id: string; status: string } | null;
+          select: {
+            id: true,
+            status: true,
+            roleId: true,
+            role: { select: { capabilities: true } },
+          },
+        })) as {
+          id: string;
+          status: string;
+          roleId: string;
+          role: { capabilities: string[] };
+        } | null;
         if (!invitation) throw domainError("NOT_FOUND");
         if (invitation.status !== "pending") throw domainError("CONFLICT");
+
+        // F-003 api-spec §4.3 — F-002 had NO role rule here. Now ⊆ (D-034 is
+        // ⊆ on cancel, not ⊊ — architecture §1.1): an Owner invitation needs
+        // `full_access` (403 FORBIDDEN), a role holding something the caller
+        // lacks is ROLE_EXCEEDS_ACTOR. Read in the lock, decided before the write.
+        const actorCapabilities = await this.readActorCapabilities(tx, actorUserId);
+        const refusal = judgeInvitationGrant("invite_cancel", actorCapabilities, {
+          id: invitation.roleId,
+          capabilities: invitation.role.capabilities,
+        });
+        if (refusal) return { kind: "refused", refusal } as const;
 
         await tx.invitation.update({
           where: { id: invitation.id },
           data: { status: "cancelled", cancelledAt: input.now },
           select: { id: true },
         });
-        return invitation.id;
+        return { kind: "cancelled", id: invitation.id } as const;
       },
       { operation: "cancelInvitation" },
     );
+    if (cancelled.kind === "refused") {
+      return this.refuseEscalation(actorUserId, organizationId, "invite_cancel", cancelled.refusal);
+    }
 
     this.events.emit("org.invitation.cancelled", {
       actorUserId,
       organizationId,
-      invitationId: cancelled,
+      invitationId: cancelled.id,
     });
 
-    return { id: cancelled, status: "cancelled" };
+    return { id: cancelled.id, status: "cancelled" };
   }
 
   // ── §3.14 preview (PUBLIC) ───────────────────────────────────────────────
@@ -900,6 +1003,30 @@ export class InvitationsService {
   }
 
   // ── helpers (every one takes `tx` — M-2) ─────────────────────────────────
+
+  /**
+   * `exceeds_actor` on an invitation route: emit `org.role.escalation_denied`
+   * (deduped, SR-12 — after the transaction, which wrote nothing), then
+   * `403 ROLE_EXCEEDS_ACTOR` with NO details (AC-6.4: the excess keys live in
+   * the event only). Never returns.
+   */
+  private async refuseEscalation(
+    actorUserId: string,
+    organizationId: string,
+    operation: InviteGrantOp,
+    refusal: GrantRefusal,
+  ): Promise<never> {
+    await this.events.emitEscalationDenied({
+      actorUserId,
+      organizationId,
+      roleId: refusal.roleId,
+      targetUserId: null,
+      operation,
+      reason: "exceeds_actor",
+      excessCapabilities: refusal.excess,
+    });
+    throw domainError("ROLE_EXCEEDS_ACTOR");
+  }
 
   private async readRole(tx: OrgLockTx, roleId: string) {
     // LIVE: invite create/reissue may not hand out a soft-deleted role.
