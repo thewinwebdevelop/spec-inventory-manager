@@ -120,6 +120,14 @@ const PRESENTATION_ALLOWLIST: readonly PresentationAllowance[] = Object.freeze([
     ],
   },
   {
+    file: "packages/core-domain/src/rbac/role-view.ts",
+    reason:
+      "`wireNameCustomized()` (data-model AC-1.5 row, T-003-B21): the wire flag that tells a client " +
+      "to show `name` as-is instead of translating `key` (`key === null || column`). Display only — " +
+      "the verdicts in the same file decide from capabilities via decideRoleWrite.",
+    lines: ["return role.key === null || role.nameCustomized;"],
+  },
+  {
     file: "packages/core-domain/src/rbac/role-validation.ts",
     reason:
       "`reservedRoleNames()` (AC-3.5 · data-model §2.1, T-003-B04): picks WHICH system-role translations " +
