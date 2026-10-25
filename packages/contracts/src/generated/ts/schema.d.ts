@@ -2863,6 +2863,16 @@ export interface operations {
                     "application/json": components["schemas"]["ErrorResponse"];
                 };
             };
+            /** @description `RATE_LIMITED` — F-003 `memberWrite` (shared with PATCH/DELETE `…/members/{userId}`). */
+            429: {
+                headers: {
+                    "Retry-After": components["headers"]["RetryAfter"];
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
         };
     };
     reissueInvitationLink: {

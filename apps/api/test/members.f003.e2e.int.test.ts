@@ -13,8 +13,8 @@
 //   I3-30  SR-19: a no-op PATCH is decided in full — 200 + role_changed (from = to)
 //          on a ⊊ target, 403 + escalation_denied on an equal one (MUT-08).
 //   memberWrite: PATCH + DELETE share one per-(user, org) bucket (arch §10).
-//
-// (The invitation-cancel rows of I3-28/I3-47 belong to T-003-B18.)
+//   I3-28 (cancel) / I3-47: Admin cancels an Admin invitation 200, an Owner one
+//          403 FORBIDDEN · DELETE invitation joins the memberWrite bucket.
 import { describe, it, expect, beforeAll, afterAll } from "vitest";
 import request from "supertest";
 import { Redis } from "ioredis";
@@ -105,6 +105,22 @@ d("T-003-B17 member routes — D-034 target ⊊ / grant ⊆ (E2E, DB+Redis)", ()
     request(app.server())
       .delete(`/orgs/${orgId}/members/${targetId}`)
       .set("Authorization", `Bearer ${token(actorId)}`);
+
+  const cancelInvitation = (orgId: string, actorId: string, invitationId: string) =>
+    request(app.server())
+      .delete(`/orgs/${orgId}/invitations/${invitationId}`)
+      .set("Authorization", `Bearer ${token(actorId)}`);
+
+  let invitationSeq = 0;
+  const pendingInvitation = (org: SeededOrg, role: SeededRole, issuer: SeededUser) =>
+    kit.createInvitation({
+      organizationId: org.id,
+      email: `b17-inv-${Date.now()}-${invitationSeq++}@seed.test`,
+      roleId: role.id,
+      issuedByUserId: issuer.id,
+    });
+  const invitationStatusOf = async (id: string) =>
+    (await prisma.invitation.findUniqueOrThrow({ where: { id }, select: { status: true } })).status;
 
   const reset = (orgId: string, actorId: string, targetId: string) =>
     request(app.server())
@@ -317,6 +333,22 @@ d("T-003-B17 member routes — D-034 target ⊊ / grant ⊆ (E2E, DB+Redis)", ()
       expect(res.status, res.text).toBe(200);
       expect((await membershipOf(org.id, people.own2.id)).roleId).toBe(org.roles.Admin.id);
     });
+
+    it("invite cancel: Admin cancels an Admin invitation = 200 (⊆, not ⊊); an Owner invitation = 403 FORBIDDEN (new in F-003), row untouched, no event", async () => {
+      const { org, people } = await shop({ own: "Owner", a: "Admin" });
+      const adminInv = await pendingInvitation(org, org.roles.Admin, people.own);
+      const ownerInv = await pendingInvitation(org, org.roles.Owner, people.own);
+      sink.clear();
+
+      const ok = await cancelInvitation(org.id, people.a.id, adminInv.id);
+      expect(ok.status, ok.text).toBe(200);
+      expect(await invitationStatusOf(adminInv.id)).toBe("cancelled");
+
+      expectRefusal(await cancelInvitation(org.id, people.a.id, ownerInv.id), "FORBIDDEN");
+      expect(await invitationStatusOf(ownerInv.id)).toBe("pending");
+      expect(sink.ofType(ESCALATION)).toHaveLength(0);
+      expect(sink.ofType("org.invitation.cancelled")).toHaveLength(1);
+    });
   });
 
   // ── I3-29 ──────────────────────────────────────────────────────────────
@@ -403,6 +435,41 @@ d("T-003-B17 member routes — D-034 target ⊊ / grant ⊆ (E2E, DB+Redis)", ()
       expect((await membershipOf(org.id, people.s2.id)).status).toBe("active");
       // Keyed by user + org: the co-Owner still has a full bucket.
       expect((await remove(org.id, people.owner2.id, people.s2.id)).status).toBe(200);
+    } finally {
+      if (before === undefined) delete process.env.ORG_RATE_LIMIT_MEMBER_WRITE_PER_HOUR;
+      else process.env.ORG_RATE_LIMIT_MEMBER_WRITE_PER_HOUR = before;
+    }
+  });
+
+  it("I3-47 · memberWrite: PATCH member + DELETE member + DELETE invitation share ONE bucket → 429; invite create/reissue are not counted", async () => {
+    const before = process.env.ORG_RATE_LIMIT_MEMBER_WRITE_PER_HOUR;
+    process.env.ORG_RATE_LIMIT_MEMBER_WRITE_PER_HOUR = "3";
+    try {
+      const { org, people } = await shop({ owner: "Owner", owner2: "Owner", s1: "Staff" });
+      const inv1 = await pendingInvitation(org, org.roles.Staff, people.owner);
+      const inv2 = await pendingInvitation(org, org.roles.Staff, people.owner);
+      const o = people.owner.id;
+      expect((await patchRole(org.id, o, people.s1.id, org.roles.Staff.id)).status).toBe(200);
+      expect((await cancelInvitation(org.id, o, inv1.id)).status).toBe(200);
+      // Invite create + reissue use their OWN quotas — they do not spend memberWrite.
+      const created = await request(app.server())
+        .post(`/orgs/${org.id}/invitations`)
+        .set("Authorization", `Bearer ${token(o)}`)
+        .set("Content-Type", "application/json")
+        .send({ email: `b17-create-${Date.now()}@seed.test`, roleId: org.roles.Staff.id });
+      expect(created.status, created.text).toBe(201);
+      const reissued = await request(app.server())
+        .post(`/orgs/${org.id}/invitations/${inv2.id}/link`)
+        .set("Authorization", `Bearer ${token(o)}`);
+      expect(reissued.status, reissued.text).toBe(200);
+      expect((await remove(org.id, o, people.s1.id)).status).toBe(200); // 3rd memberWrite
+      const fourth = await cancelInvitation(org.id, o, inv2.id);
+      expect(fourth.status).toBe(429);
+      expect(fourth.body.error.code).toBe("RATE_LIMITED");
+      expect(Number(fourth.headers["retry-after"])).toBeGreaterThan(0);
+      expect(await invitationStatusOf(inv2.id)).toBe("pending");
+      // Keyed by user + org: the co-Owner can still cancel it.
+      expect((await cancelInvitation(org.id, people.owner2.id, inv2.id)).status).toBe(200);
     } finally {
       if (before === undefined) delete process.env.ORG_RATE_LIMIT_MEMBER_WRITE_PER_HOUR;
       else process.env.ORG_RATE_LIMIT_MEMBER_WRITE_PER_HOUR = before;

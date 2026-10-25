@@ -26,6 +26,7 @@ import {
 } from "../common/authz";
 import { ORG_RATE_LIMIT_KEY } from "../common/org-rate-limit.decorator";
 import { ROUTE_SCOPE_KEY } from "../tenancy";
+import { InvitationsController } from "./invitations.controller";
 import { MembersController } from "./members.controller";
 import { MembershipController } from "./membership.controller";
 import { RESPONSE_HEADER_POLICY, responseHeaderPolicyFor } from "./response-headers";
@@ -254,5 +255,13 @@ describe("rate limit (architecture §8)", () => {
     expect(declarationOf(handlers.revoke).rateLimit).toBe("memberWrite");
     expect(declarationOf(handlers.list).rateLimit).toBeUndefined();
     expect(declarationOf(handlers.leave).rateLimit).toBeUndefined();
+  });
+
+  it("I3-47 · DELETE /invitations/{id} (cancel) shares memberWrite; invite create/reissue keep their own quotas", () => {
+    const inv = InvitationsController.prototype;
+    expect(declarationOf(inv.cancel).rateLimit).toBe("memberWrite");
+    expect(declarationOf(inv.create).rateLimit).toBe("createInvitation");
+    expect(declarationOf(inv.reissueLink).rateLimit).toBe("reissueInvitationLink");
+    expect(declarationOf(inv.list).rateLimit).toBeUndefined();
   });
 });

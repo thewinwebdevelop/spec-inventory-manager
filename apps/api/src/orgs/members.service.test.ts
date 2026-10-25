@@ -940,6 +940,38 @@ describe("F-003 · decideMemberAuthority on PATCH/DELETE (D-034 · AC-5.4b)", ()
     ctx2.sink.stop();
   });
 
+  it.each([
+    [
+      "updateRole",
+      (s: MembersService) => s.updateRole({ targetUserId: STAFF, roleId: ROLE_STAFF.id }),
+    ],
+    ["revoke", (s: MembersService) => s.revoke({ targetUserId: STAFF })],
+  ] as const)(
+    "★ B18 Low: %s by an actor who lost manage_members between the guard and the tx re-read → FORBIDDEN, nothing written, no event",
+    async (_name, call) => {
+      const ctx = createService({
+        memberships: [
+          member(OWNER, ROLE_OWNER.id),
+          member(ADMIN, ROLE_STAFF.id),
+          member(STAFF, ROLE_STAFF.id),
+        ],
+        actor: ADMIN,
+      });
+      const store = new OrgContextStore();
+      const code = await codeOf(
+        store.run<Promise<unknown>>(
+          { organizationId: ORG_ID, userId: ADMIN, capabilities: ROLE_ADMIN.capabilities },
+          () => call(ctx.service),
+        ),
+      );
+      expect(code).toBe("FORBIDDEN");
+      expect(ctx.tx.membership.update).not.toHaveBeenCalled();
+      expect(ctx.tx.invitation.updateMany).not.toHaveBeenCalled();
+      expect(ctx.sink.types()).toEqual([]);
+      ctx.sink.stop();
+    },
+  );
+
   it("★ floor in the tx: an actor whose role lost manage_members mid-flight → FORBIDDEN, no event", async () => {
     // ALS says Admin (the guard let them in); the DATABASE now says Staff.
     const ctx = createService({

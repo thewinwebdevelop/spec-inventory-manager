@@ -16,7 +16,7 @@ export {
   type OwnerInvariantInput,
 } from "./owner-invariant";
 
-export { canAssignRole, isOwnerRole, type CanAssignRoleInput } from "./member-authz";
+export { isOwnerRole } from "./member-authz";
 
 // T-002-18 ★ — the membership row of api-spec §3.7/§3.8. `isOwner` is computed
 // from `full_access` here so the UI's "may I show the remove button?" and the

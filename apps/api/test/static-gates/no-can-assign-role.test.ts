@@ -1,19 +1,16 @@
-// F-003 · T-003-B17 — gate "no canAssignRole in apps/api/src" (tasks.md
-// "⛔ เงื่อนไข merge" · security review of B05).
+// F-003 · T-003-B17 — gate "no canAssignRole" (tasks.md "⛔ เงื่อนไข merge" ·
+// security review of B05).
 //
-// `canAssignRole` is the F-002 compat wrapper: it hands `decideMemberAuthority`
+// `canAssignRole` was the F-002 compat wrapper: it handed `decideMemberAuthority`
 // Owner MARKERS (`[full_access]` / `[]`) instead of the real capability sets,
-// so a call site that still uses it keeps F-002's answer — and with it the
-// lower → reset → raise impersonation path D-034 exists to close (AC-5.4b).
-// Every member/invitation decision in the API must call `decideMemberAuthority`
-// with the real sets. This gate is red while any production file under
-// `apps/api/src` still REFERENCES the wrapper (call, import, alias — a rename
-// on import would otherwise slip past a `canAssignRole(` match).
-//
-// PENDING: the invitation routes move in T-003-B18 (in flight in parallel).
-// Their file is listed below and the entry must still be TRUE — once B18
-// removes the last reference, the stale entry turns this gate red until the
-// row is deleted, so the allowlist cannot outlive the work it waits for.
+// so a call site using it kept F-002's answer — and with it the lower → reset →
+// raise impersonation path D-034 exists to close (AC-5.4b). B17 (members) and
+// B18 (invitations) moved every call site to `decideMemberAuthority` with the
+// real sets, and B17 deleted the wrapper. This gate keeps it gone: red if any
+// production file (apps/api + the workspace packages it runs — including
+// core-domain, where it was defined) REFERENCES the name — call, import,
+// definition or alias (a rename on import would slip past a `canAssignRole(`
+// match). No allowlist.
 import { describe, it, expect } from "vitest";
 import {
   blankComments,
@@ -25,54 +22,42 @@ import {
   type Violation,
 } from "./scan";
 
-const SCOPE = "apps/api/src/";
-const PENDING: Readonly<Record<string, string>> = Object.freeze({
-  "apps/api/src/orgs/invitations.service.ts": "T-003-B18 moves invite create/reissue/cancel",
-});
 const REFERENCE = /\bcanAssignRole\b/g;
+const DECIDES = /\bdecideMemberAuthority\s*\(/g;
+/** The routes that used to call the wrapper — each must now decide with the real rule. */
+const MOVED_CALL_SITES = [
+  "apps/api/src/orgs/members.service.ts",
+  "apps/api/src/orgs/invitations.service.ts",
+] as const;
 
 function gate(file: string, code: string): Violation[] {
-  if (file in PENDING) return [];
   return [...code.matchAll(REFERENCE)].map((m) => ({
     gate: "no-canAssignRole",
-    rule: "reference-in-api-src",
+    rule: "reference-in-production",
     file,
     line: lineOf(code, m.index!),
     snippet: code.slice(m.index!, m.index! + 80).split("\n")[0]!,
   }));
 }
 
-const files = productionFiles().filter((f) => f.startsWith(SCOPE));
+const files = productionFiles();
 
-describe("gate · apps/api/src never calls the F-002 wrapper canAssignRole (D-034 · AC-5.4b)", () => {
-  it("non-vacuity: the scan reached the member routes, and they decide with decideMemberAuthority", () => {
-    expect(files.length).toBeGreaterThan(50);
-    expect(files).toContain("apps/api/src/orgs/members.service.ts");
-    expect(
-      [
-        ...readCode("apps/api/src/orgs/members.service.ts").matchAll(
-          /\bdecideMemberAuthority\s*\(/g,
-        ),
-      ].length,
-    ).toBeGreaterThanOrEqual(2);
-  });
-
-  it("★ production code under apps/api/src: no reference outside the PENDING list", () => {
-    expect(files.flatMap((f) => gate(f, readCode(f)))).toEqual([]);
-  });
-
-  it("every PENDING entry is still true (a stale entry is red — delete the row)", () => {
-    for (const [file, why] of Object.entries(PENDING)) {
-      expect(files, `${file} (${why}) is gone`).toContain(file);
-      expect(
-        [...readCode(file).matchAll(REFERENCE)].length,
-        `${file} no longer references canAssignRole — remove its PENDING row (${why})`,
-      ).toBeGreaterThan(0);
+describe("gate · canAssignRole (the F-002 wrapper) is referenced nowhere in production (D-034 · AC-5.4b)", () => {
+  it("non-vacuity: the scan reached api + core-domain, and the moved call sites decide with decideMemberAuthority", () => {
+    expect(files.filter((f) => f.startsWith("apps/api/src/")).length).toBeGreaterThan(50);
+    expect(files).toContain("packages/core-domain/src/orgs/member-authz.ts");
+    for (const f of MOVED_CALL_SITES) {
+      expect(files).toContain(f);
+      expect([...readCode(f).matchAll(DECIDES)].length, f).toBeGreaterThanOrEqual(1);
     }
   });
 
+  it("★ production code: no reference at all", () => {
+    expect(files.flatMap((f) => gate(f, readCode(f)))).toEqual([]);
+  });
+
   it.each(["no-car-aliased.fixture", "no-car-direct-call.fixture"])(
-    "FIXTURE %s as members.service.ts turns the gate red",
+    "FIXTURE %s turns the gate red",
     (name) => {
       expect(gate("apps/api/src/orgs/members.service.ts", fixture(name)).length).toBeGreaterThan(0);
     },
@@ -91,6 +76,7 @@ describe("gate · apps/api/src never calls the F-002 wrapper canAssignRole (D-03
       "if (!canAssignRole(input)) throw x;",
       "import { canAssignRole } from '@omnistock/core-domain';",
       "const decide = canAssignRole;",
+      "export function canAssignRole(i: unknown) { return true; }",
     ]) {
       expect(gate(f, code).length, `NOT FLAGGED: ${code}`).toBeGreaterThan(0);
     }

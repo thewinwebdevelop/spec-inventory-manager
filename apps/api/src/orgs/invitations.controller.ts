@@ -147,8 +147,13 @@ export class InvitationsController {
     return this.invitations.reissueLink({ invitationId, now: new Date() });
   }
 
-  /** api-spec §3.13 — cancel. Any link already sent stops working at once. */
+  /**
+   * api-spec §3.13 — cancel. Any link already sent stops working at once.
+   * F-003 arch §10: joins `memberWrite` (shared with PATCH/DELETE member) →
+   * `429 RATE_LIMITED`.
+   */
   @RequireCapability(CAPABILITY_MANAGE_MEMBERS)
+  @OrgRateLimit("memberWrite")
   @Delete(":invitationId")
   async cancel(
     @Param("invitationId") invitationId: string,

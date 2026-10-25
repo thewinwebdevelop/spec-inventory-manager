@@ -1372,6 +1372,16 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/ErrorResponse'
+        '429':
+          description: |
+            `RATE_LIMITED` — F-003 `memberWrite` (shared with PATCH/DELETE `…/members/{userId}`).
+          headers:
+            Retry-After:
+              $ref: '#/components/headers/RetryAfter'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
   /orgs/{orgId}/invitations/{invitationId}/link:
     parameters:
       - $ref: '#/components/parameters/OrgIdParam'
