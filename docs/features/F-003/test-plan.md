@@ -4,6 +4,9 @@ owner: "@qa"
 signoff: approved     # user 2026-09-28
 ---
 # [F-003] Test plan  (เจ้าภาพ: qa — ร่างตอน Gate 2 จาก AC)
+> **amendment 2026-10-25 (build · T-003-QA07 · security review):** §2.4 lemma — (1) invariant เพิ่ม: **ชุดผู้ถือ Owner เท่าเดิมหลังทุก op ของ non-Owner** (set equality · D-030) ใน U-RB-18 และ U-RB-20 · PATCH เป็น role Owner ตั้ง `owner` ในโมเดลเหมือน accept ·
+> (2) control เพิ่ม c5 (ปิด re-check ผู้เชิญ D-035) · o1 · o2 + mutation แถว 05/06/07 (accept/PATCH/DELETE โดย non-Owner) ต้องแดง · (3) U-RB-20 start set เพิ่ม "มีคำเชิญค้าง" (ลึก 2) · BFS หยุดเมื่อเจอตัวอย่างค้านแรก ·
+> (4) **tier:** U-RB-20 (BFS) อยู่ใน `authority-lemma.full.test.ts` — ไม่อยู่ใน unit run ปกติ · รันด้วย `pnpm --filter @omnistock/core-domain test:full` ใน `node-ci` ทุก PR + `assert-tests-ran --require …=10` · U-RB-18/19 อยู่ใน unit run ปกติ
 
 > ที่มา: AC ใน [F-003.md](F-003.md) §2 (G1✓ 2026-09-27) · สัญญาที่ล็อกแล้ว: [architecture.md](architecture.md) (**§13 เป็นแหล่งหลัก**) · [data-model.md](data-model.md) · [api-spec.md](api-spec.md) ·
 > [security-review.md](security-review.md) SR-F003-01..19 · D-032 · D-033 · D-034 (+Addendum, Addendum 2) · D-035 (+Addendum) · D-036 · D-037
