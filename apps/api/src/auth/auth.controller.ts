@@ -99,7 +99,7 @@ export class AuthController {
       this.setRetryAfter(res, ipRetry);
       throttled(ipRetry);
     }
-    const acctRetry = await this.throttle.accountRetryAfter(emailNorm);
+    const acctRetry = await this.throttle.accountRetryAfter(emailNorm, ip);
     if (acctRetry > 0) {
       this.setRetryAfter(res, acctRetry);
       throttled(acctRetry);
@@ -228,7 +228,7 @@ export class AuthController {
 
     // Account throttle on currentPassword (N-2), keyed on userId, its own 429.
     const acctKey = userId;
-    const acctRetry = await this.throttle.accountRetryAfter(acctKey);
+    const acctRetry = await this.throttle.accountRetryAfter(acctKey, clientIp(req));
     if (acctRetry > 0) {
       this.setRetryAfter(res, acctRetry);
       throttled(acctRetry);

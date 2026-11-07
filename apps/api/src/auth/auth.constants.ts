@@ -42,6 +42,20 @@ export const ACCT_COUNTER_TTL_SECONDS = 15 * 60;
 export const DEGRADED_IP_MAX = 20;
 /** Degraded in-process limiter window, ms. */
 export const DEGRADED_IP_WINDOW_MS = 5 * 60 * 1000;
+/**
+ * Max account keys the degraded in-process account backoff holds per instance
+ * while Redis is down. Login keys are attacker-chosen emails, so the map must be
+ * bounded; the least-recently-failed key is evicted first.
+ */
+export const DEGRADED_ACCT_MAX_KEYS = 10_000;
+
+/**
+ * Hard deadline per throttle Redis command (M-7 on a HUNG Redis). Losing the
+ * race counts as a Redis failure → the fail-open path above. 250 ms: well
+ * above a healthy same-region round-trip, short enough to sit in front of
+ * login. Same budget as the F-003 escalation dedupe (T-003-B16).
+ */
+export const THROTTLE_REDIS_TIMEOUT_MS = 250;
 
 // ─── Cookies (api-spec §0) ───────────────────────────────────────────────────
 
