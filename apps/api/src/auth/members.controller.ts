@@ -73,7 +73,8 @@ export class MembersController {
     const callerUserId = req.user!.userId;
     // Own throttle, keyed on the caller (api-spec §2.8), its own 429.
     const acctKey = `${callerUserId}:reset-password`;
-    const retryAfter = await this.throttle.accountRetryAfter(acctKey);
+    // req.ip only feeds the fail-open signal; the bucket stays the caller.
+    const retryAfter = await this.throttle.accountRetryAfter(acctKey, req.ip ?? "unknown");
     if (retryAfter > 0) {
       res.setHeader("Retry-After", String(retryAfter));
       throw new RateLimitedException(retryAfter);

@@ -22,8 +22,29 @@ export function createRedisConnection(env: Pick<Env, "REDIS_URL">): Redis {
   return new Redis(env.REDIS_URL, {
     maxRetriesPerRequest: null,
     enableReadyCheck: true,
-    retryStrategy(times: number) {
-      return Math.min(times * 200, 2000);
-    },
+    retryStrategy,
   });
+}
+
+/**
+ * The auth request-path connection (throttle state). NOT the BullMQ options:
+ * with `maxRetriesPerRequest: null` + the offline queue, a command against a
+ * dead Redis waits forever, so login hangs instead of failing open (M-7), and
+ * every request during an outage adds to an unbounded queue that replays late.
+ * Here a command against a disconnected Redis rejects at once (no offline
+ * queue) and an in-flight one is retried at most once across a reconnect.
+ * Reconnects never stop (same `retryStrategy`), so throttling resumes when
+ * Redis is back. Healthy-Redis behaviour is identical.
+ */
+export function createAuthRedisConnection(env: Pick<Env, "REDIS_URL">): Redis {
+  return new Redis(env.REDIS_URL, {
+    enableOfflineQueue: false,
+    maxRetriesPerRequest: 1,
+    enableReadyCheck: true,
+    retryStrategy,
+  });
+}
+
+function retryStrategy(times: number): number {
+  return Math.min(times * 200, 2000);
 }

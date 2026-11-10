@@ -4,13 +4,14 @@
 // JwtModule is configured from JWT_ACCESS_SECRET (HS256). RefreshTokenService +
 // ThrottleService need runtime values (JWT_REFRESH_SECRET, Redis) so they are
 // wired via factory providers reading the validated env / the shared Redis
-// connection (F-000 redis.provider).
+// connection factory (F-000 redis.provider; the auth variant fails fast
+// instead of queueing, so a Redis outage cannot hang login — M-7).
 import { Module } from "@nestjs/common";
 import { JwtModule } from "@nestjs/jwt";
 import { Redis } from "ioredis";
 import { loadEnv } from "@omnistock/config";
 import { PrismaModule } from "../prisma/prisma.module";
-import { createRedisConnection } from "../health/redis.provider";
+import { createAuthRedisConnection } from "../health/redis.provider";
 import { HashingService } from "./hashing.service";
 import { AccessTokenService } from "./access-token.service";
 import { JwtAuthGuard } from "./jwt-auth.guard";
@@ -22,8 +23,21 @@ import { AuthController } from "./auth.controller";
 import { MembersController } from "./members.controller";
 import { PrismaService } from "../prisma/prisma.service";
 
-/** DI token for the auth Redis connection (throttle state). */
+/** DI token for the auth Redis connection (throttle state, no offline queue). */
 export const AUTH_REDIS = Symbol("AUTH_REDIS");
+
+/**
+ * Exported so a unit test pins the wiring: if this ever went back to the
+ * BullMQ-style `createRedisConnection`, ThrottleService's deadline would mask
+ * the hang and every other test would stay green.
+ */
+export const authRedisProvider = {
+  provide: AUTH_REDIS,
+  useFactory: () => {
+    const env = loadEnv(process.env);
+    return createAuthRedisConnection(env);
+  },
+};
 
 @Module({
   imports: [
@@ -46,13 +60,7 @@ export const AUTH_REDIS = Symbol("AUTH_REDIS");
     AccessTokenService,
     JwtAuthGuard,
     SecurityEventsService,
-    {
-      provide: AUTH_REDIS,
-      useFactory: () => {
-        const env = loadEnv(process.env);
-        return createRedisConnection(env);
-      },
-    },
+    authRedisProvider,
     {
       provide: RefreshTokenService,
       useFactory: (prisma: PrismaService, events: SecurityEventsService) => {
