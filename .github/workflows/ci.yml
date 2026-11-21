@@ -628,6 +628,14 @@ jobs:
           # leg), I3-46 (one roleWrite quota for all three verbs) and the
           # delete ‖ admin-reset lock-order barrier live only in this file.
           # 290 = 276 + its 14; the full local run is 390.
+          #
+          # ★ T-003-B26a/B26b: the D-034 Addendum table D034-R01..R21 + the AC-5.4b
+          # role-edit attack + the SR-17 collusion (31), and every role-write race
+          # with a real barrier in both commit orders, the SR-06 write-skew (red
+          # without FOR SHARE), busy, the 15 escalation cells and the post-commit
+          # event rule (36 — incl. the D-035 role-edit leg and SR-06 over 4 reference
+          # writers, security review B26 fix round 1) live only in these two files.
+          # 357 = 290 + 31 + 36; the full local run is 457.
           node tool/ci/assert-tests-ran.mjs \
             --report /tmp/api-int-tests.json \
             --lane "integration-api · apps/api *.int.test.ts" \
@@ -649,7 +657,9 @@ jobs:
             --require "test/f003-role-create.e2e.int.test.ts=18" \
             --require "test/f003-role-update.e2e.int.test.ts=14" \
             --require "test/f003-role-delete.e2e.int.test.ts=14" \
-            --min-passed 290
+            --require "test/f003-role-writes.int.test.ts=31" \
+            --require "test/f003-concurrency.int.test.ts=36" \
+            --min-passed 357
       - name: dump api log on failure
         if: failure()
         run: cat /tmp/api.log || true

@@ -395,8 +395,9 @@ export const REGRESSION_PACK: readonly RegressionEntry[] = Object.freeze([
         file: "apps/api/test/static-gates/g3-03-role-write-surface.test.ts",
         must: ["G3-03", "NEW-10"],
       },
+      // T-003-B26a — the D-034 Addendum table on the real DB (incl. the §4.4 manage_billing edge).
+      { file: "apps/api/test/f003-role-writes.int.test.ts", must: ["I3-31", "D034-R08"] },
     ],
-    pending: [{ tests: ["I3-31"], task: "T-003-B26a" }],
   },
   {
     finding: "NEW-11",
@@ -432,8 +433,12 @@ export const REGRESSION_PACK: readonly RegressionEntry[] = Object.freeze([
         file: "apps/api/test/members.f003.e2e.int.test.ts",
         must: ["I3-25", "I3-26", "I3-27", "I3-28"],
       },
+      // T-003-B26a — the same attack through the role-edit path (R01/R03–R05/R09 + the sequence).
+      {
+        file: "apps/api/test/f003-role-writes.int.test.ts",
+        must: ["I3-31", "I3-32", "D034-R01", "D034-R03", "D034-R09"],
+      },
     ],
-    pending: [{ tests: ["I3-31", "I3-32"], task: "T-003-B26a" }],
   },
   {
     finding: "SR-F003-02",
@@ -443,8 +448,15 @@ export const REGRESSION_PACK: readonly RegressionEntry[] = Object.freeze([
       { file: "apps/api/test/invitations-redeem.e2e.int.test.ts", must: ["I3-38"] },
       { file: "apps/api/test/invitations.f003.e2e.int.test.ts", must: ["I3-39"] },
       { file: "apps/api/src/orgs/invitations.service.test.ts", must: ["U-API3-08", "U-API3-09"] },
+      // T-003-B26b — the races that can tell a working re-check from a broken one: accept ‖
+      // inviter demotion (c) and accept ‖ the Owner RAISING R above a non-Owner issuer (e),
+      // both commit orders. IC3-06(a)/(b) use an Owner-issued link and prove the holder count
+      // only — they are NOT the SR-F003-02 proof (review B26 M-1).
+      {
+        file: "apps/api/test/f003-concurrency.int.test.ts",
+        must: ["IC3-06", "D-035 (9)", "D-035 role-edit leg", "inviter_exceeds"],
+      },
     ],
-    pending: [{ tests: ["IC3-06"], task: "T-003-B26b" }],
   },
   {
     finding: "SR-F003-03",
@@ -480,7 +492,15 @@ export const REGRESSION_PACK: readonly RegressionEntry[] = Object.freeze([
     finding: "SR-F003-06",
     title: "delete-role ‖ invite-with-role write skew",
     tier: "full",
-    pins: [{ file: "apps/api/test/role-db-guards.int.test.ts", must: ["IC3-07"] }],
+    pins: [
+      { file: "apps/api/test/role-db-guards.int.test.ts", must: ["IC3-07"] },
+      // T-003-B26b — the barrier halves: app level both orders + raw SQL both orders (red
+      // when FOR SHARE is removed from omnistock_role_live_reference_guard).
+      {
+        file: "apps/api/test/f003-concurrency.int.test.ts",
+        must: ["IC3-07", "SR-06", "FOR SHARE"],
+      },
+    ],
   },
   {
     finding: "SR-F003-07",
@@ -495,8 +515,9 @@ export const REGRESSION_PACK: readonly RegressionEntry[] = Object.freeze([
     pins: [
       { file: "packages/core-domain/src/rbac/role-write.test.ts", must: ["U-RB-12"] },
       { file: "apps/api/src/orgs/roles.service.create.test.ts", must: ["U-API3-02"] },
+      // T-003-B26b — passed the guard, not yet locked ‖ manage_roles removed → 403.
+      { file: "apps/api/test/f003-concurrency.int.test.ts", must: ["IC3-03", "SR-08"] },
     ],
-    pending: [{ tests: ["IC3-03"], task: "T-003-B26b" }],
   },
   {
     finding: "SR-F003-09",
@@ -583,18 +604,27 @@ export const REGRESSION_PACK: readonly RegressionEntry[] = Object.freeze([
     pins: [
       { file: "packages/core-domain/src/rbac/role-write.test.ts", must: ["U-RB-12", "R13"] },
       { file: "packages/core-domain/src/rbac/authority-lemma.test.ts", must: ["U-RB-19", "c3"] },
-    ],
-    pending: [
-      { tests: ["I3-31", "I3-33"], task: "T-003-B26a" },
-      { tests: ["IC3-04"], task: "T-003-B26b" },
+      // T-003-B26a — R13–R16/R20 + the two-person sequence on the real DB.
+      {
+        file: "apps/api/test/f003-role-writes.int.test.ts",
+        must: ["I3-31", "I3-33", "D034-R13", "D034-R20"],
+      },
+      // T-003-B26b — the manage_members floor and the holder count read under the lock.
+      { file: "apps/api/test/f003-concurrency.int.test.ts", must: ["IC3-04"] },
     ],
   },
   {
     finding: "SR-F003-18",
     title: "rename-only / no-op edits short-circuiting the held-role rule",
     tier: "full",
-    pins: [{ file: "packages/core-domain/src/rbac/role-write.test.ts", must: ["R04", "R14"] }],
-    pending: [{ tests: ["I3-31"], task: "T-003-B26a" }],
+    pins: [
+      { file: "packages/core-domain/src/rbac/role-write.test.ts", must: ["R04", "R14"] },
+      // T-003-B26a — rename-only / no-op on a held role on the real DB.
+      {
+        file: "apps/api/test/f003-role-writes.int.test.ts",
+        must: ["D034-R04", "D034-R05", "D034-R14"],
+      },
+    ],
   },
   {
     finding: "SR-F003-19",
@@ -608,8 +638,8 @@ export const REGRESSION_PACK: readonly RegressionEntry[] = Object.freeze([
     tier: "smoke",
     pins: [
       { file: "apps/api/test/members.f003.e2e.int.test.ts", must: ["I3-25", "I3-26", "I3-27"] },
+      { file: "apps/api/test/f003-role-writes.int.test.ts", must: ["I3-32", "AC-5.4b"] },
     ],
-    pending: [{ tests: ["I3-32"], task: "T-003-B26a" }],
   },
   {
     finding: "AC-5.5b",
