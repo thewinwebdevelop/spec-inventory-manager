@@ -88,10 +88,10 @@ const WRITER_DEF = "apps/api/src/orgs/role-write-data.ts";
 const WRITER_CALLERS = new Set(["apps/api/src/orgs/roles.service.ts"]);
 const ESCAPE = /\bas\s+(?:never|any|unknown)\b/;
 
-/** The argument text of every `roleCreateData(` / `roleUpdateData(` call — balanced parens. */
+/** The argument text of every `roleCreateData(` / `roleUpdateData(` / `roleDeleteData(` call — balanced parens. */
 function writerCalls(code: string): { index: number; name: string; args: string }[] {
   const out: { index: number; name: string; args: string }[] = [];
-  for (const m of code.matchAll(/\b(roleCreateData|roleUpdateData)\s*\(/g)) {
+  for (const m of code.matchAll(/\b(roleCreateData|roleUpdateData|roleDeleteData)\s*\(/g)) {
     let depth = 1;
     let i = m.index! + m[0].length;
     const start = i;
@@ -134,10 +134,11 @@ export function g302b(file: string, code: string): Violation[] {
 describe("G3-02 (1b) · no escape cast into roleCreateData / roleUpdateData, no caller outside RolesService", () => {
   const files = productionFiles();
 
-  it("non-vacuity: the real call sites of BOTH writers are seen", () => {
+  it("non-vacuity: the real call sites of ALL THREE writers are seen", () => {
     const names = writerCalls(readCode("apps/api/src/orgs/roles.service.ts")).map((c) => c.name);
     expect(names).toContain("roleCreateData");
     expect(names).toContain("roleUpdateData");
+    expect(names).toContain("roleDeleteData"); // T-003-B25
   });
 
   it("★ production code: clean", () => {
@@ -179,7 +180,7 @@ const PROBE = join(REPO, "apps/api/src/orgs/__brand_probe__.ts");
 function typeErrors(body: string): string[] {
   const source =
     `import { validateRoleCapabilities } from "@omnistock/core-domain";\n` +
-    `import { roleCreateData, roleUpdateData } from "./role-write-data";\n` +
+    `import { roleCreateData, roleDeleteData, roleUpdateData } from "./role-write-data";\n` +
     `const base = { organizationId: "o", name: "n", actorUserId: "u", now: new Date() };\n` +
     `const upd = { name: null, actorUserId: "u", now: new Date() };\n` +
     body;
@@ -293,5 +294,37 @@ describe("G3-02 (3) · RolesService.update writes through roleUpdateData (T-003-
     expect(body.match(/\.role\.(create|update|updateMany|upsert|delete|deleteMany)\s*\(/g)).toEqual(
       [".role.updateMany("],
     );
+  });
+});
+
+describe("G3-02 (2) · the DELETE writer can write nothing but the soft-delete columns (T-003-B25)", () => {
+  it("CONTROL: actor + now compile", () => {
+    expect(typeErrors(`roleDeleteData({ actorUserId: "u", now: new Date() });\n`)).toEqual([]);
+  });
+
+  it("★ it has no way to write capabilities / name / isSystem (unknown property does not compile)", () => {
+    for (const extra of [`capabilities: ["manage_members"]`, `name: "x"`, `isSystem: true`]) {
+      expect(
+        typeErrors(`roleDeleteData({ actorUserId: "u", now: new Date(), ${extra} });\n`).length,
+        extra,
+      ).toBeGreaterThan(0);
+    }
+  });
+});
+
+describe("G3-02 (3) · RolesService.delete is a SOFT delete through roleDeleteData (T-003-B25)", () => {
+  it("★ the delete method's only Role write is role.updateMany({ where: {…, ...LIVE_ROLE_WHERE}, data: roleDeleteData(…) }) — never role.delete / deleteMany", () => {
+    const code = readCode("apps/api/src/orgs/roles.service.ts");
+    const del = classMethods(code).find((m) => m.name === "RolesService.delete");
+    expect(del, "RolesService.delete is not declared").toBeDefined();
+    const body = code.slice(del!.start, del!.end);
+    expect(body).toMatch(
+      /\.role\.updateMany\s*\(\s*\{\s*where\s*:\s*\{[^}]*\.\.\.LIVE_ROLE_WHERE\s*\}\s*,\s*data\s*:\s*roleDeleteData\s*\(/,
+    );
+    expect(body.match(/\.role\.(create|update|updateMany|upsert|delete|deleteMany)\s*\(/g)).toEqual(
+      [".role.updateMany("],
+    );
+    // …and no raw SQL path around it.
+    expect(body).not.toMatch(/\$(?:executeRaw|queryRaw)(?:Unsafe)?\s*[(`]/);
   });
 });

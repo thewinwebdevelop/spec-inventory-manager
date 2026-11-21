@@ -530,8 +530,9 @@ export const REGRESSION_PACK: readonly RegressionEntry[] = Object.freeze([
       { file: "apps/api/test/members.f003.e2e.int.test.ts", must: ["I3-47"] },
       { file: "packages/config/src/env.test.ts", must: ["U-CFG3-02", "U-CFG3-03"] },
       { file: "apps/api/test/f003-role-create.e2e.int.test.ts", must: ["I3-05"] },
+      // T-003-B25 — the soft-delete ceiling (I3-11) and ONE roleWrite quota for POST+PATCH+DELETE (I3-46).
+      { file: "apps/api/test/f003-role-delete.e2e.int.test.ts", must: ["I3-11", "I3-46"] },
     ],
-    pending: [{ tests: ["I3-46"], task: "T-003-B25" }],
   },
   {
     finding: "SR-F003-13",

@@ -91,7 +91,7 @@ paths:
     $ref: "./paths/org-member.yaml"
   /orgs/{orgId}/roles:
     $ref: "./paths/org-roles.yaml"
-  # F-003 (T-003-B21) — the role-design reads; POST/PATCH/DELETE join with B23–B25.
+  # F-003 — the role-design reads (B21); POST (B23), PATCH (B24), DELETE (B25).
   /orgs/{orgId}/roles/{roleId}:
     $ref: "./paths/org-role.yaml"
   /orgs/{orgId}/role-details:

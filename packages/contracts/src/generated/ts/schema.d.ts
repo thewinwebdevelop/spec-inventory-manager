@@ -510,7 +510,23 @@ export interface paths {
         get: operations["getOrgRoleDetail"];
         put?: never;
         post?: never;
-        delete?: never;
+        /**
+         * Delete a role (soft)
+         * @description F-003 (api-spec §1, §2, AC-3.8, AC-3.9, AC-3.9b, AC-4.1, AC-5.1, D-034 Addendum + Addendum 2). Requires `manage_roles`. No request body and no `version`.
+         *
+         *     SOFT delete: the role disappears from every live list (`GET /roles`, `GET /role-details`, `GET /roles/{roleId}` → `404`, invite / change-role choices) and its name becomes free again, but history keeps showing it — revoked members and accepted / cancelled invitations still carry its `roleName`.
+         *
+         *     A role can be deleted only when nobody uses it: no ACTIVE member holds it (you included) and no PENDING invitation names it — an expired link that was never accepted or cancelled still counts (`409 ROLE_IN_USE`, with the two counts in `details`; `GET /members?roleId=` and `GET /invitations?roleId=` list the same people and links).
+         *
+         *     A role other ACTIVE members hold is refused BEFORE `ROLE_IN_USE` when the caller could not move them anyway: no `manage_members` (`403 ROLE_HELD_REQUIRES_MANAGE_MEMBERS` — stay on the screen; `viewer.canDelete.reason = "in_use_requires_manage_members"`), or the role holds exactly what the caller holds (`403 TARGET_NOT_BELOW_ACTOR`; reason `equal_permissions_in_use`). The Owner passes both and gets `ROLE_IN_USE`.
+         *
+         *     ⚠️ ROLLOUT FLAG: while `ROLE_WRITES_ENABLED` is off the server answers `503 ROLE_WRITES_DISABLED` to callers who hold `manage_roles` (`viewer.canDelete.reason = "writes_disabled"`). A caller WITHOUT `manage_roles` gets `403 FORBIDDEN` either way.
+         *
+         *     FIXED CHECK ORDER (api-spec §2): `manage_roles` (`403 FORBIDDEN`) → flag (`503`) → rate limit (`429`) → the role exists in this shop and is not deleted (`404`) → `manage_roles` re-read inside the transaction (`403 FORBIDDEN`) → the Owner role (`409 ROLE_LOCKED`) → `ROLE_EXCEEDS_ACTOR` → `ROLE_HELD_REQUIRES_MANAGE_MEMBERS` → `TARGET_NOT_BELOW_ACTOR` → `ROLE_IN_USE` → `ROLE_HISTORY_LIMIT_REACHED` → delete (`200`).
+         *
+         *     Rate limit `roleWrite`: 60 role writes per hour per shop, shared by create / update / delete.
+         */
+        delete: operations["deleteOrgRole"];
         options?: never;
         head?: never;
         /**
@@ -903,7 +919,7 @@ export interface components {
                 code: string;
                 /** @description User-facing Thai message. F-002 copy says "ร้าน" rather than "องค์กร" (D-029); identifiers and enum values stay English. */
                 message: string;
-                /** @description Optional, code-specific context. Documented cases (F-002): `INVITATION_PENDING` → `{ invitationId, expiresAt, roleId, roleName }` (§3.11) · `ORG_LIMIT_REACHED` → `{ limit }` (§3.1) · `INVITATION_EMAIL_MISMATCH` → `{ emailMasked }` (§3.15) · `CONFLICT` → `{ reason: "busy" }` when the request lost the race for the shop's row lock (amend #4 / NEW-4 — retryable, never a 500). F-003 (api-spec §5): `UNKNOWN_CAPABILITY` → `{ capabilities }` (the refused keys, sorted) · `ROLE_LIMIT_REACHED` → `{ limit }`. `ROLE_EXCEEDS_ACTOR` carries NO details. F-003 · PATCH role: `ROLE_CHANGED` → `{ currentVersion }` (re-fetch and show the difference — never resubmit with it automatically); `TARGET_NOT_BELOW_ACTOR` / `ROLE_HELD_REQUIRES_MANAGE_MEMBERS` / `ROLE_LOCKED` carry NO details. (The delete-role codes document theirs with that route.) A client that does not recognise a key MUST still behave correctly. */
+                /** @description Optional, code-specific context. Documented cases (F-002): `INVITATION_PENDING` → `{ invitationId, expiresAt, roleId, roleName }` (§3.11) · `ORG_LIMIT_REACHED` → `{ limit }` (§3.1) · `INVITATION_EMAIL_MISMATCH` → `{ emailMasked }` (§3.15) · `CONFLICT` → `{ reason: "busy" }` when the request lost the race for the shop's row lock (amend #4 / NEW-4 — retryable, never a 500). F-003 (api-spec §5): `UNKNOWN_CAPABILITY` → `{ capabilities }` (the refused keys, sorted) · `ROLE_LIMIT_REACHED` → `{ limit }`. `ROLE_EXCEEDS_ACTOR` carries NO details. F-003 · PATCH role: `ROLE_CHANGED` → `{ currentVersion }` (re-fetch and show the difference — never resubmit with it automatically); `TARGET_NOT_BELOW_ACTOR` / `ROLE_HELD_REQUIRES_MANAGE_MEMBERS` / `ROLE_LOCKED` carry NO details. F-003 · DELETE role: `ROLE_IN_USE` → `{ activeMembers, pendingInvitations }` (counts only — pending includes expired links; never who) · `ROLE_HISTORY_LIMIT_REACHED` → `{ limit }`. A client that does not recognise a key MUST still behave correctly. */
                 details?: {
                     [key: string]: unknown;
                 };
@@ -2895,6 +2911,99 @@ export interface operations {
             };
             /** @description `ORG_MISMATCH` — `X-Organization-Id` disagrees with the path. */
             422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+        };
+    };
+    deleteOrgRole: {
+        parameters: {
+            query?: never;
+            header?: {
+                /** @description Org context (api-spec §1). Optional on routes that already carry `{orgId}` in the path; if both are sent they MUST match, otherwise `422 ORG_MISMATCH`. User-scoped and public routes ignore this header entirely (I-3). */
+                "X-Organization-Id"?: components["parameters"]["OrgIdHeader"];
+            };
+            path: {
+                /** @description Organization id. On F-002 org-scoped routes this is one of the two accepted sources of org context (the other is the `X-Organization-Id` header, D-025); sending both with different values is `422 ORG_MISMATCH`. */
+                orgId: components["parameters"]["OrgIdParam"];
+                /** @description Role id (`RoleDetail.id`). */
+                roleId: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Deleted. The row is kept for history; `deletedAt` is when it left the live lists. */
+            200: {
+                headers: {
+                    "Cache-Control": components["headers"]["CacheControlNoStore"];
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["DeletedRole"];
+                };
+            };
+            /** @description Missing/invalid access token (`UNAUTHENTICATED`) */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description `FORBIDDEN` — missing `manage_roles` (at the guard, or re-read inside the transaction) · `ROLE_EXCEEDS_ACTOR` — the role holds a capability you do not (no `details`) · `ROLE_HELD_REQUIRES_MANAGE_MEMBERS` — other active members hold this role and you do not hold `manage_members` (no `details`) · `TARGET_NOT_BELOW_ACTOR` — other active members hold this role and it holds exactly what you hold (no `details`) · `ORG_ACCESS_DENIED` — not an active member of this shop. */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description `NOT_FOUND` — no live role with this id in this shop. An already-deleted role, another shop's role and an unknown id answer identically. */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description `ROLE_IN_USE` (+`details: { activeMembers, pendingInvitations }` — numbers only; pending includes expired links) — move the members to another role and cancel the invitations first · `ROLE_HISTORY_LIMIT_REACHED` (+`details.limit`) — the shop already keeps the maximum number of deleted roles; the role stays as it is · `ROLE_LOCKED` — the Owner role cannot be deleted, by anybody · `LAST_OWNER` — defensive Owner check, not expected · `CONFLICT` + `details.reason = "busy"` (lock contention, retry). */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description `ORG_MISMATCH` — `X-Organization-Id` disagrees with the path. */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description `RATE_LIMITED` — `roleWrite`: 60 role writes per hour per shop. */
+            429: {
+                headers: {
+                    "Retry-After": components["headers"]["RetryAfter"];
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description `ROLE_WRITES_DISABLED` — role writes are switched off while the release rolls out (`viewer.canDelete.reason = "writes_disabled"`). Only callers holding `manage_roles` see it. */
+            503: {
                 headers: {
                     [name: string]: unknown;
                 };

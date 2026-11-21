@@ -2,6 +2,7 @@
 // F-003 · T-003-B23 ★ — `create` (POST /orgs/{orgId}/roles, incl. clone).
 // F-003 · T-003-B24 ★ — `update` (PATCH /orgs/{orgId}/roles/{roleId}) — its own
 //   transaction diagram is above the method.
+// F-003 · T-003-B25 ★ — `delete` (DELETE /orgs/{orgId}/roles/{roleId}, soft) — likewise.
 //
 // THE CREATE TRANSACTION (api-spec §2 fixed order — every fact read through `tx`
 // under the org lock, the pattern of `MembersService.updateRole`):
@@ -54,7 +55,7 @@ import { OrgOwnershipGuard } from "./org-ownership.guard";
 import { ROLE_CAPACITY_LIMITS, type RoleCapacityLimits } from "./org-config";
 import { RoleReadService, type RoleDetail } from "./role-read.service";
 import { ROLE_WRITE_DECIDER } from "./role-write-decider";
-import { roleCreateData, roleUpdateData } from "./role-write-data";
+import { roleCreateData, roleDeleteData, roleUpdateData } from "./role-write-data";
 
 /** api-spec §7 DTO bounds on `capabilities` (the rest is core-domain's). */
 const CAPABILITIES_MAX_ITEMS = 64;
@@ -201,6 +202,15 @@ interface LoggedRefusal {
   readonly reason: "requires_manage_members" | "role_changed";
   readonly error: ReturnType<typeof domainError>;
 }
+
+/** api-spec §3 `DeletedRole` — the 200 of DELETE. */
+export interface DeletedRole {
+  readonly id: string;
+  readonly deletedAt: string;
+}
+
+/** architecture §8 — warn `role_deleted_rows_high` once a shop's deleted rows reach this share of the cap. */
+const DELETED_ROWS_WARN_RATIO = 0.8;
 
 /** The role as PATCH reads it under the lock. */
 interface RoleForUpdate {
@@ -732,6 +742,189 @@ export class RolesService {
     }
   }
 
+  // ── DELETE /orgs/{orgId}/roles/{roleId} ──────────────────────────────────
+
+  /**
+   * Soft-delete a role (api-spec §1/§2 · architecture §1.3 "DELETE", §2
+   * "RolesService.delete" · data-model §2.2 delete conditions).
+   *
+   *   runInOrgLockTransaction(operation: "deleteRole") ─┐
+   *    1 role (live, org-scoped)                         │  ⇒ 404 NOT_FOUND
+   *    2 actor caps re-read in tx · floor manage_roles   │  ⇒ ORG_ACCESS_DENIED · 403 FORBIDDEN
+   *    3 other active holders (tx) → decideRoleWrite     │  ⇒ ROLE_LOCKED(+event if not the Owner) ·
+   *      (op "delete": floor → role_locked → Owner        │    ROLE_EXCEEDS_ACTOR(+event) ·
+   *       bypass → exceeds → held rules)                 │    ROLE_HELD_REQUIRES_MANAGE_MEMBERS(log) ·
+   *                                                      │    TARGET_NOT_BELOW_ACTOR(+event)
+   *    4 in use: active members (ALL, the actor too) +   │  ⇒ 409 ROLE_IN_USE
+   *      pending links (EXPIRED ones too — AC-3.9)       │    { activeMembers, pendingInvitations }
+   *    5 deleted-row cap (history read)                  │  ⇒ 409 ROLE_HISTORY_LIMIT_REACHED { limit }
+   *    6 assertOwnerRemains(role_delete)                 │  ⇒ 409 LAST_OWNER (defensive)
+   *    7 UPDATE … SET deletedAt/By, version+1            ┘  0 rows ⇒ 404 (a writer that skipped the lock)
+   *      WHERE id AND deletedAt IS NULL
+   *   post-commit: org.role.deleted · or org.role.escalation_denied · or a warn log
+   *
+   * The held-role rules come BEFORE in-use on purpose (arch §1.3): "move the
+   * members out first" would mislead both a designer (who can move nobody) and
+   * an actor at the role's level (who may not move its holders). IN_USE comes
+   * before the history cap (api-spec §2): the cap is only worth hitting for a
+   * role that could otherwise go. No `version` (architecture §4: a delete grants
+   * nothing; in-use is decided under the lock).
+   *
+   * LOCK ORDER (review B20 L-4 · architecture §3): Organization → Role. Steps
+   * 3–5 READ Membership/Invitation before the write (plain reads, no row lock);
+   * after step 7 nothing touches Membership (the soft-delete trigger's check is
+   * a plain read too) — admin-reset takes Membership FOR SHARE → Role FOR SHARE.
+   */
+  async delete(roleId: string): Promise<DeletedRole> {
+    const organizationId = this.requireOrganizationId();
+    const actorUserId = this.requireUserId();
+    const refusal = (
+      reason: EscalationDeniedPayload["reason"],
+      excessCapabilities: readonly string[],
+      error: ReturnType<typeof domainError>,
+    ): CreateRefusal => ({
+      kind: "refused",
+      error,
+      event: {
+        actorUserId,
+        organizationId,
+        roleId,
+        targetUserId: null,
+        operation: "delete_role",
+        reason,
+        excessCapabilities,
+      },
+    });
+    const logged = (
+      reason: LoggedRefusal["reason"],
+      error: LoggedRefusal["error"],
+    ): LoggedRefusal => ({ kind: "logged", reason, error });
+
+    type Deleted = {
+      readonly kind: "deleted";
+      readonly role: { name: string; capabilities: string[] };
+      readonly deletedAt: Date;
+      readonly deletedRows: number;
+    };
+    const outcome: CreateRefusal | LoggedRefusal | Deleted = await runInOrgLockTransaction(
+      this.prisma,
+      async (tx) => {
+        // 1 — the role, live and of THIS shop (ORG_PRISMA): another shop's id, an
+        // unknown id and an already-deleted role are the same 404 (AC-6.3).
+        const role = (await tx.role.findFirst({
+          where: { id: roleId, ...LIVE_ROLE_WHERE },
+          select: { id: true, name: true, isSystem: true, capabilities: true },
+        })) as { id: string; name: string; isSystem: boolean; capabilities: string[] } | null;
+        if (!role) throw domainError("NOT_FOUND");
+
+        // 2 — the actor as they are NOW, under the lock (AC-5.7 · SR-08).
+        const actor = await this.readActor(tx, actorUserId);
+        if (!hasCapability(actor.capabilities, CAPABILITY_MANAGE_ROLES)) {
+          throw domainError("FORBIDDEN");
+        }
+
+        // 3 — other ACTIVE holders, counted under the lock (architecture §1.3).
+        const otherActiveHolders = await tx.membership.count({
+          where: {
+            organizationId,
+            roleId: role.id,
+            status: "active",
+            userId: { not: actorUserId },
+          },
+        });
+        const verdict = this.decide({
+          op: "delete",
+          actorCapabilities: actor.capabilities,
+          role: { isSystem: role.isSystem, capabilities: role.capabilities },
+          otherActiveHolders,
+        });
+        if (!verdict.ok) return this.mapUpdateVerdict(verdict, actor, refusal, logged);
+
+        // 4 — in use (data-model §2.2): EVERY active holder (the actor too — you
+        // cannot delete the role you stand on) and every pending link, expired
+        // ones included (AC-3.9). Numbers only on the wire (AC-3.8).
+        const activeMembers = await tx.membership.count({
+          where: { organizationId, roleId: role.id, status: "active" },
+        });
+        // `organizationId` explicit, matching the membership count above —
+        // ORG_PRISMA scopes it anyway (security review B25 L-3).
+        const pendingInvitations = await tx.invitation.count({
+          where: { organizationId, roleId: role.id, status: "pending" },
+        });
+        if (activeMembers > 0 || pendingInvitations > 0) {
+          throw domainError("ROLE_IN_USE", { details: { activeMembers, pendingInvitations } });
+        }
+
+        // 5 — the soft-delete ceiling (SR-12 · architecture §10): the role stays live.
+        // role-read: history — deleted-row cap (data-model §2.2): counts the rows that are gone
+        const deletedRows = await tx.role.count({ where: { deletedAt: { not: null } } });
+        if (deletedRows >= this.limits.maxDeletedRolesPerOrg) {
+          throw domainError("ROLE_HISTORY_LIMIT_REACHED", {
+            details: { limit: this.limits.maxDeletedRolesPerOrg },
+          });
+        }
+
+        // 6 — defensive, BEFORE the write (AC-4.3 · architecture §2 shape 4).
+        await this.ownership.assertOwnerRemainsInTx(tx, { kind: "role_delete", roleId: role.id });
+
+        // 7 — the SOFT delete (data-model §2.2): the row stays for history (AC-3.9b).
+        const deletedAt = new Date();
+        const written = await tx.role.updateMany({
+          where: { id: role.id, ...LIVE_ROLE_WHERE },
+          data: roleDeleteData({ actorUserId, now: deletedAt }),
+        });
+        // Under the org lock nobody moved it since step 1 — 0 rows means a writer
+        // skipped the lock; answer as if it were already gone.
+        if (written.count === 0) throw domainError("NOT_FOUND");
+
+        return {
+          kind: "deleted" as const,
+          role: { name: role.name, capabilities: [...role.capabilities] },
+          deletedAt,
+          deletedRows: deletedRows + 1,
+        };
+      },
+      { operation: "deleteRole" },
+    );
+
+    switch (outcome.kind) {
+      case "refused":
+        await this.events.emitEscalationDenied(outcome.event);
+        throw outcome.error;
+      case "logged":
+        // architecture §8 — ids + reason only (no role name, no e-mail).
+        this.logger.warn(
+          `role_write_refused ${JSON.stringify({
+            operation: "deleteRole",
+            reason: outcome.reason,
+            organizationId,
+            roleId,
+          })}`,
+        );
+        throw outcome.error;
+      case "deleted":
+        // POST-COMMIT (H-3) — ids + role name + caps only (AC-9.5).
+        this.events.emit("org.role.deleted", {
+          actorUserId,
+          organizationId,
+          roleId,
+          name: outcome.role.name,
+          capabilities: outcome.role.capabilities,
+        });
+        // architecture §8 / §10 — the shop is nearing the ceiling (ids + a count only).
+        if (outcome.deletedRows >= this.limits.maxDeletedRolesPerOrg * DELETED_ROWS_WARN_RATIO) {
+          this.logger.warn(
+            `role_deleted_rows_high ${JSON.stringify({ organizationId, count: outcome.deletedRows })}`,
+          );
+        }
+        return { id: roleId, deletedAt: outcome.deletedAt.toISOString() };
+      default: {
+        const unknown: never = outcome;
+        throw new Error(`RolesService.delete: unmapped outcome ${JSON.stringify(unknown)}`);
+      }
+    }
+  }
+
   /** `ROLE_LOCKED` — an escalation signal only when the actor is not the Owner (SR-13). */
   private lockedRefusal(
     actor: { capabilities: readonly string[] },
@@ -745,7 +938,7 @@ export class RolesService {
     return refusal("role_locked", [], domainError("ROLE_LOCKED"));
   }
 
-  /** The update verdict → its wire answer; `null` when it is not a refusal this route maps. */
+  /** An update / delete verdict → its wire answer (the two routes share the rule set — arch §1.3). */
   private mapUpdateVerdict(
     verdict: Exclude<RoleWriteResult, { ok: true }>,
     actor: { capabilities: readonly string[] },
@@ -774,7 +967,7 @@ export class RolesService {
         );
       default: {
         const unknown: never = verdict;
-        throw new Error(`decideRoleWrite(update) answered ${JSON.stringify(unknown)}`);
+        throw new Error(`decideRoleWrite(update/delete) answered ${JSON.stringify(unknown)}`);
       }
     }
   }

@@ -1,5 +1,5 @@
-// F-003 · T-003-B23/B24 ★ — the ONLY builders of the `data` a role create /
-// update writes (G3-02 (ข) · architecture §13.2 (ข)).
+// F-003 · T-003-B23/B24/B25 ★ — the ONLY builders of the `data` a role create /
+// update / (soft) delete writes (G3-02 (ข) · architecture §13.2 (ข)).
 //
 // It takes `ValidatedCapabilities` — the brand only `validateRoleCapabilities`
 // can mint — so a `string[]` straight off a request body does not compile here
@@ -57,6 +57,26 @@ export function roleUpdateData(input: RoleUpdateDataInput) {
     ...(input.capabilities !== null ? { capabilities: [...input.capabilities] } : {}),
     lastEditedAt: input.now,
     lastEditedByUserId: input.actorUserId,
+    version: { increment: 1 },
+  };
+}
+
+export interface RoleDeleteDataInput {
+  readonly actorUserId: string;
+  readonly now: Date;
+}
+
+/**
+ * T-003-B25 — the `data` of a SOFT delete (data-model §2.2): `deletedAt`,
+ * `deletedByUserId`, `version + 1`. Nothing else — the name stays (history still
+ * shows it, AC-3.9b) and capabilities are not touchable from here (G3-02 (2)
+ * proves an extra property does not compile). The caller puts `id` +
+ * `LIVE_ROLE_WHERE` in `where`; there is no hard-delete builder.
+ */
+export function roleDeleteData(input: RoleDeleteDataInput) {
+  return {
+    deletedAt: input.now,
+    deletedByUserId: input.actorUserId,
     version: { increment: 1 },
   };
 }

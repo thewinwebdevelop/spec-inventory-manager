@@ -131,12 +131,13 @@ d("T-003-B23 POST /orgs/{orgId}/roles (E2E, DB+Redis)", () => {
   // ── G3-01 (int) ────────────────────────────────────────────────────────────
 
   /**
-   * One request per ROLE_WRITE_ROUTES row that reaches the write. B25 adds
-   * a recipe with its route — the set-equality below is red until it does.
+   * One request per ROLE_WRITE_ROUTES row that reaches the write — the
+   * set-equality below is red when a route lands without its recipe.
    */
   interface Recipe {
     path: string;
-    method: "post" | "patch";
+    method: "post" | "patch" | "delete";
+    /** `undefined` = no body and no Content-Type (DELETE). */
     body: unknown;
     as: string;
   }
@@ -161,16 +162,29 @@ d("T-003-B23 POST /orgs/{orgId}/roles (E2E, DB+Redis)", () => {
         as: user("OWN"),
       };
     },
+    // T-003-B25 — a role nobody holds and no link names, so the delete reaches the write.
+    "DELETE /orgs/{orgId}/roles/{roleId}": async () => {
+      const role = await kit.createCustomRole({
+        organizationId: A().org.id,
+        name: `g3-01-d-${unique()}`,
+        capabilities: ["manage_orders"],
+      });
+      return {
+        path: `/orgs/${A().org.id}/roles/${role.id}`,
+        method: "delete",
+        body: undefined,
+        as: user("OWN"),
+      };
+    },
   };
 
   const send = (app: TestApp, r: Recipe) => {
-    // `r.method` widens to "delete" when B25 adds its recipe.
     const agent = request(app.server());
     const open = agent[r.method].bind(agent);
-    return open(r.path)
-      .set("Authorization", `Bearer ${tokenOf(app, r.as)}`)
-      .set("Content-Type", "application/json")
-      .send(r.body as object);
+    const req = open(r.path).set("Authorization", `Bearer ${tokenOf(app, r.as)}`);
+    return r.body === undefined
+      ? req
+      : req.set("Content-Type", "application/json").send(r.body as object);
   };
 
   it("★ G3-01 · the live router's @RoleWrite() routes are exactly ROLE_WRITE_ROUTES (and each has a recipe)", () => {

@@ -106,8 +106,10 @@ ErrorResponse:
             `ROLE_CHANGED` → `{ currentVersion }` (re-fetch and show the
             difference — never resubmit with it automatically);
             `TARGET_NOT_BELOW_ACTOR` / `ROLE_HELD_REQUIRES_MANAGE_MEMBERS` /
-            `ROLE_LOCKED` carry NO details. (The delete-role codes document
-            theirs with that route.)
+            `ROLE_LOCKED` carry NO details. F-003 · DELETE role:
+            `ROLE_IN_USE` → `{ activeMembers, pendingInvitations }` (counts only —
+            pending includes expired links; never who) ·
+            `ROLE_HISTORY_LIMIT_REACHED` → `{ limit }`.
             A client that does not recognise a key MUST still behave correctly.
         fieldErrors:
           type: object

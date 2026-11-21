@@ -51,10 +51,11 @@ describe("G3-01 (ก) · @RoleWrite() routes ↔ ROLE_WRITE_ROUTES (set-equality
     expect(ROLE_WRITE_ROUTES.map(routeKey)).toContain("POST /orgs/{orgId}/roles");
   });
 
-  it("T-003-B24 · PATCH /roles/{roleId} is in the table — exactly POST + PATCH until B25 adds DELETE", () => {
+  it("T-003-B25 · the table is complete — exactly POST + PATCH + DELETE (api-spec §1: the three role writes)", () => {
     expect(ROLE_WRITE_ROUTES.map(routeKey)).toEqual([
       "POST /orgs/{orgId}/roles",
       "PATCH /orgs/{orgId}/roles/{roleId}",
+      "DELETE /orgs/{orgId}/roles/{roleId}",
     ]);
   });
 

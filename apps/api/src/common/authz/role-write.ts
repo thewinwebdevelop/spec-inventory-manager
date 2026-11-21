@@ -33,6 +33,7 @@ export interface RoleWriteRoute {
 export const ROLE_WRITE_ROUTES: readonly RoleWriteRoute[] = Object.freeze([
   Object.freeze({ method: "POST", path: "/orgs/{orgId}/roles" }),
   Object.freeze({ method: "PATCH", path: "/orgs/{orgId}/roles/{roleId}" }),
+  Object.freeze({ method: "DELETE", path: "/orgs/{orgId}/roles/{roleId}" }),
 ]);
 
 export interface RoleWriteAudit {

@@ -622,6 +622,12 @@ jobs:
           # ROLE_LOCKED, the invitation clamp, MUT-07 (update leg) and the
           # role-edit ‖ admin-reset lock-order barrier live only in this file.
           # 276 = 262 + its 14; the full local run is 376.
+          #
+          # ★ T-003-B25: DELETE /roles/{roleId} — soft delete, ROLE_IN_USE (expired
+          # links counted), the history cap, the held-role order, MUT-07 (delete
+          # leg), I3-46 (one roleWrite quota for all three verbs) and the
+          # delete ‖ admin-reset lock-order barrier live only in this file.
+          # 290 = 276 + its 14; the full local run is 390.
           node tool/ci/assert-tests-ran.mjs \
             --report /tmp/api-int-tests.json \
             --lane "integration-api · apps/api *.int.test.ts" \
@@ -642,7 +648,8 @@ jobs:
             --require "test/f003-role-reads.e2e.int.test.ts=13" \
             --require "test/f003-role-create.e2e.int.test.ts=18" \
             --require "test/f003-role-update.e2e.int.test.ts=14" \
-            --min-passed 276
+            --require "test/f003-role-delete.e2e.int.test.ts=14" \
+            --min-passed 290
       - name: dump api log on failure
         if: failure()
         run: cat /tmp/api.log || true

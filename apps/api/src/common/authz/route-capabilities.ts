@@ -126,6 +126,12 @@ export const ROUTE_CAPABILITIES: readonly RouteCapability[] = Object.freeze([
     path: "/orgs/{orgId}/roles/{roleId}",
     capability: CAPABILITY_MANAGE_ROLES,
   }),
+  // T-003-B25 — delete (soft). Also on ROLE_WRITE_ROUTES.
+  row({
+    method: "DELETE",
+    path: "/orgs/{orgId}/roles/{roleId}",
+    capability: CAPABILITY_MANAGE_ROLES,
+  }),
 ]);
 
 /**

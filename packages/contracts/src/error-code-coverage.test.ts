@@ -71,11 +71,8 @@ const BRANCH = /(?:code\s*===?\s*|case\s+)['"]([A-Z][A-Z0-9_]{3,})['"]/g;
  * are documented now; see the header. Do not re-add a code here to make a build
  * pass: writing the response down takes about as long and is the actual fix.
  */
-// F-003: route role ใหม่ยังไม่อยู่ใน contract (Q-T1 — path + code ลงพร้อม route) แต่ copy ฝั่ง client
-// (T-003-W03/M03) พร้อมแล้ว · owner = task ที่ publish response นั้น · เทสต์ "debt list is honest" จะแดงให้ลบเมื่อ document แล้ว
-const UNDOCUMENTED: readonly string[] = Object.freeze([
-  "ROLE_HISTORY_LIMIT_REACHED", // T-003-B25 (DELETE /roles/{id})
-]);
+// F-003: the role-write routes' codes landed with their paths (B23–B25, Q-T1) — the list is empty again.
+const UNDOCUMENTED: readonly string[] = Object.freeze([]);
 
 export interface CodeUse {
   readonly code: string;

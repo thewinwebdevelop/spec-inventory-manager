@@ -14,14 +14,25 @@
 // of their own role.
 //
 // READ-ONLY in F-002. F-003 adds create/update/delete and per-role capability
-// editing — T-003-B23 lands `POST` (create, incl. clone), T-003-B24 `PATCH`;
-// DELETE follows in B25.
-import { Body, Controller, Get, Inject, Param, Patch, Post, Res, UseGuards } from "@nestjs/common";
+// editing — T-003-B23 lands `POST` (create, incl. clone), T-003-B24 `PATCH`,
+// T-003-B25 `DELETE` (soft).
+import {
+  Body,
+  Controller,
+  Delete,
+  Get,
+  Inject,
+  Param,
+  Patch,
+  Post,
+  Res,
+  UseGuards,
+} from "@nestjs/common";
 import type { Response } from "express";
 import { CAPABILITY_MANAGE_ROLES, type CapabilityCatalogView } from "@omnistock/core-domain";
 import { AnyActiveMember, RequireCapability, RoleWrite } from "../common/authz";
 import { JsonOnlyGuard } from "../auth";
-import { RolesService, type RoleListPage } from "./roles.service";
+import { RolesService, type DeletedRole, type RoleListPage } from "./roles.service";
 import { RoleReadService, type RoleDetail, type RoleDetailListPage } from "./role-read.service";
 import { ORG_PROFILE_RESPONSE_HEADERS, applyResponseHeaders } from "./response-headers";
 
@@ -91,6 +102,23 @@ export class RolesController {
   ): Promise<RoleDetail> {
     applyResponseHeaders(res, ORG_PROFILE_RESPONSE_HEADERS);
     return this.roles.update(roleId, body);
+  }
+
+  /**
+   * F-003 · T-003-B25 ★ — soft-delete a role (api-spec §1/§2 · data-model §2.2).
+   * `200` + `DeletedRole { id, deletedAt }`. Same guard chain as create/update
+   * (`manage_roles` → flag → `roleWrite`). No body and no `version` (api-spec §2),
+   * so no JsonOnlyGuard: a client that sends no Content-Type is not a 415.
+   */
+  @RequireCapability(CAPABILITY_MANAGE_ROLES)
+  @RoleWrite()
+  @Delete(":roleId")
+  async remove(
+    @Param("roleId") roleId: string,
+    @Res({ passthrough: true }) res: Response,
+  ): Promise<DeletedRole> {
+    applyResponseHeaders(res, ORG_PROFILE_RESPONSE_HEADERS);
+    return this.roles.delete(roleId);
   }
 
   /**

@@ -38,6 +38,10 @@ export interface RoleReadSite {
   owner: string;
   /** Line where the enclosing statement starts — the label goes right above it. */
   stmt: number;
+  /** The call's argument text (`""` for raw SQL) — what a history allowance is matched on. */
+  args: string;
+  /** The history label's reason (text after `—`), when labelled. */
+  reason: string | null;
 }
 
 /**
@@ -83,9 +87,10 @@ function statementLine(raw: string, pos: number): number {
 export function roleReadSites(file: string, raw: string, code: string): RoleReadSite[] {
   const lines = raw.split("\n");
   const sites: RoleReadSite[] = [];
-  const site = (pos: number, snippet: string, live: boolean) => {
+  const site = (pos: number, snippet: string, live: boolean, args: string) => {
     const stmt = statementLine(raw, pos);
-    const labelled = LABEL.test(lines[stmt - 2] ?? "");
+    const above = lines[stmt - 2] ?? "";
+    const labelled = LABEL.test(above);
     sites.push({
       file,
       line: lineOf(code, pos),
@@ -93,11 +98,15 @@ export function roleReadSites(file: string, raw: string, code: string): RoleRead
       snippet,
       owner: enclosingMethod(code, pos),
       stmt,
+      args,
+      reason: labelled ? above.replace(/^\s*\/\/\s*role-read:\s*history\s+—\s+/, "").trim() : null,
     });
   };
-  for (const m of code.matchAll(CALL))
-    site(m.index!, m[0], liveWhere(balancedArgs(code, m.index! + m[0].length - 1)));
-  for (const m of code.matchAll(RAW)) site(m.index!, m[0], false);
+  for (const m of code.matchAll(CALL)) {
+    const args = balancedArgs(code, m.index! + m[0].length - 1);
+    site(m.index!, m[0], liveWhere(args), args);
+  }
+  for (const m of code.matchAll(RAW)) site(m.index!, m[0], false, "");
   // One label, one read (review L-2): a single history label above a statement
   // holding two non-live reads (`Promise.all([...])`) covers neither.
   for (const s of sites) {
@@ -117,6 +126,74 @@ const g304 = (file: string, raw: string, code: string): Violation[] =>
       line: s.line,
       snippet: s.snippet,
     }));
+
+/**
+ * dm §2.2 live reads, pinned per METHOD (review M-2 · T-003-B25). Every Role
+ * read of a pinned method must be LIVE — a history label there is a dodge —
+ * except the read its `allow` names EXACTLY: the deleted-row cap of
+ * `RolesService.delete` counts soft-deleted rows on
+ * purpose (data-model §2.2 "History reads … นับเพดาน soft-delete"), and that one
+ * call shape, with that label reason, is the only history a pinned method holds.
+ */
+export interface HistoryAllowance {
+  /** The call (whitespace-free) — `.role.count(`. */
+  readonly snippet: string;
+  /** The call's argument text, verbatim. */
+  readonly args: string;
+  /** The label's reason must start with this. */
+  readonly reason: string;
+}
+export interface LivePin {
+  readonly file: string;
+  readonly method: string;
+  readonly allow?: HistoryAllowance;
+}
+const DELETED_ROW_CAP: HistoryAllowance = Object.freeze({
+  snippet: ".role.count(",
+  args: "{ where: { deletedAt: { not: null } } }",
+  reason: "deleted-row cap",
+});
+const ORGS = "apps/api/src/orgs";
+const LIVE_METHODS: readonly LivePin[] = [
+  { file: `${ORGS}/roles.service.ts`, method: "RolesService.list" }, // GET /roles (MUT-10)
+  { file: `${ORGS}/members.service.ts`, method: "MembersService.updateRole" }, // PATCH member new role
+  { file: `${ORGS}/invitations.service.ts`, method: "InvitationsService.accept" }, // accept (B07 L-4)
+  { file: `${ORGS}/invitations.service.ts`, method: "InvitationsService.readRole" }, // invite create
+  { file: `${ORGS}/role-read.service.ts`, method: "RoleReadService.listDetails" }, // GET /role-details (B21)
+  { file: `${ORGS}/role-read.service.ts`, method: "RoleReadService.getDetail" }, // GET /roles/{id} + live count (B21)
+  { file: `${ORGS}/roles.service.ts`, method: "RolesService.create" }, // reserved names + live cap (B23)
+  { file: `${ORGS}/roles.service.ts`, method: "RolesService.update" }, // the edited role (B24)
+  { file: `${ORGS}/roles.service.ts`, method: "RolesService.validateNameInTx" }, // reserved names (B24)
+  // T-003-B25 — the deleted role is looked up LIVE; its deleted-row cap is the one history read
+  { file: `${ORGS}/roles.service.ts`, method: "RolesService.delete", allow: DELETED_ROW_CAP },
+];
+
+/** Each pinned method that has no Role read, or a read that is neither live nor its exact allowance. */
+export function pinViolations(sites: readonly RoleReadSite[], pins: readonly LivePin[]): string[] {
+  const out: string[] = [];
+  for (const pin of pins) {
+    const mine = sites.filter((s) => s.file === pin.file && s.owner === pin.method);
+    if (mine.length === 0) {
+      out.push(`${pin.method}: no Role read found — renamed? update LIVE_METHODS`);
+      continue;
+    }
+    if (!mine.some((s) => s.kind === "live")) out.push(`${pin.method}: no LIVE read`);
+    let allowed = 0;
+    for (const s of mine) {
+      if (s.kind === "live") continue;
+      const a = pin.allow;
+      const matches =
+        a !== undefined &&
+        s.kind === "history" &&
+        s.snippet.replace(/\s+/g, "") === a.snippet &&
+        s.args === a.args &&
+        (s.reason ?? "").startsWith(a.reason);
+      if (matches && allowed === 0) allowed++;
+      else out.push(`${pin.method}: ${s.kind} read at line ${s.line} (${s.snippet.trim()})`);
+    }
+  }
+  return out;
+}
 
 const fixtureSites = (name: string) => {
   // `fixture()` blanks comments; the label check needs the raw text too.
@@ -145,34 +222,53 @@ describe("G3-04 · every Role read is labelled live or history", () => {
     expect(files.flatMap((f) => g304(f, readRaw(f), readCode(f)))).toEqual([]);
   });
 
-  /**
-   * dm §2.2 live reads, pinned per METHOD (review M-2): another method in the
-   * same file may legitimately be history (B25's deleted-row cap count in
-   * roles.service.ts), but these may not — a history label here is a dodge.
-   * B21–B25 add their live methods to this list.
-   */
-  const LIVE_METHODS: readonly (readonly [string, string])[] = [
-    ["apps/api/src/orgs/roles.service.ts", "RolesService.list"], // GET /roles (MUT-10)
-    ["apps/api/src/orgs/members.service.ts", "MembersService.updateRole"], // PATCH member new role
-    ["apps/api/src/orgs/invitations.service.ts", "InvitationsService.accept"], // accept (B07 L-4)
-    ["apps/api/src/orgs/invitations.service.ts", "InvitationsService.readRole"], // invite create
-    ["apps/api/src/orgs/role-read.service.ts", "RoleReadService.listDetails"], // GET /role-details (B21)
-    ["apps/api/src/orgs/role-read.service.ts", "RoleReadService.getDetail"], // GET /roles/{id} + live count (B21)
-    ["apps/api/src/orgs/roles.service.ts", "RolesService.create"], // reserved names + live cap (B23)
-  ];
-
   it("★ the dm §2.2 live reads stay LIVE, per method — a history label cannot be used to dodge (MUT-10)", () => {
-    for (const [file, method] of LIVE_METHODS) {
-      const kinds = sites.filter((s) => s.file === file && s.owner === method).map((s) => s.kind);
-      expect(
-        kinds.length,
-        `${method}: no Role read found — renamed? update LIVE_METHODS`,
-      ).toBeGreaterThan(0);
-      expect(
-        kinds.every((k) => k === "live"),
-        `${method}: ${kinds.join(",")}`,
-      ).toBe(true);
-    }
+    expect(pinViolations(sites, LIVE_METHODS)).toEqual([]);
+  });
+
+  it("★ (B25) the ONE history read a pinned method may hold is the deleted-row cap, exactly as data-model §2.2 writes it", () => {
+    const capReads = sites.filter((s) => s.owner === "RolesService.delete" && s.kind === "history");
+    expect(capReads.map((s) => [s.snippet.replace(/\s+/g, ""), s.args])).toEqual([
+      [".role.count(", "{ where: { deletedAt: { not: null } } }"],
+    ]);
+    expect(capReads[0]!.reason).toMatch(/^deleted-row cap\b/);
+  });
+
+  it("FIXTURE (B25): a pinned method that labels its role LOOKUP as history, or labels a non-cap read 'deleted-row cap' → red; the twin → green", () => {
+    const { raw, code } = fixtureSites("g3-04-pin-history-dodge.fixture");
+    const found = roleReadSites("apps/api/src/orgs/roles.service.ts", raw, code).map((s) => ({
+      ...s,
+      file: "apps/api/src/orgs/roles.service.ts",
+    }));
+    const pins: readonly LivePin[] = [
+      {
+        file: "apps/api/src/orgs/roles.service.ts",
+        method: "RolesService.delete",
+        allow: DELETED_ROW_CAP,
+      },
+      {
+        file: "apps/api/src/orgs/roles.service.ts",
+        method: "RolesService.update",
+        allow: DELETED_ROW_CAP,
+      },
+      {
+        file: "apps/api/src/orgs/roles.service.ts",
+        method: "RolesService.twin",
+        allow: DELETED_ROW_CAP,
+      },
+    ];
+    const v = pinViolations(found, pins);
+    // delete: no live lookup AND a non-allowed history read · update: the dodge wearing the cap label
+    expect(v.filter((x) => x.startsWith("RolesService.delete:"))).toEqual([
+      "RolesService.delete: no LIVE read",
+      expect.stringMatching(
+        /^RolesService\.delete: history read at line \d+ \(\.role\.findFirst\(\)$/,
+      ),
+    ]);
+    expect(v.filter((x) => x.startsWith("RolesService.update:"))).toEqual([
+      expect.stringMatching(/^RolesService\.update: history read at line \d+ \(\.role\.count\(\)$/),
+    ]);
+    expect(v.filter((x) => x.startsWith("RolesService.twin:"))).toEqual([]);
   });
 
   it('FIXTURES: findUniqueOrThrow · groupBy · raw FROM "Role" · label without reason → red', () => {
@@ -221,6 +317,7 @@ describe("G3-04 · every Role read is labelled live or history", () => {
       "g3-04-label-no-reason.fixture",
       "g3-04-labelled.fixture",
       "g3-04-live-not-last.fixture",
+      "g3-04-pin-history-dodge.fixture",
       "g3-04-raw-from-role.fixture",
       "g3-04-shared-label.fixture",
     ]);

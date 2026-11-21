@@ -407,6 +407,24 @@ export const ERROR_CODES = {
     message: "บทบาทนี้มีสมาชิกคนอื่นใช้อยู่ — ต้องมีสิทธิ์จัดการสมาชิกจึงจะแก้ได้",
   },
 
+  // ── F-003 · T-003-B25 — DELETE /orgs/{orgId}/roles/{roleId} (api-spec §5) ──
+  // Active members still hold the role, or a pending invitation (an EXPIRED one
+  // included — AC-3.9) still names it. `details: { activeMembers,
+  // pendingInvitations }` — numbers only, never who (AC-3.8). The DB trigger
+  // `role_soft_delete_guard` refuses the same write if a path ever skips this.
+  ROLE_IN_USE: {
+    code: "ROLE_IN_USE",
+    status: HttpStatus.CONFLICT,
+    message: "ลบบทบาทนี้ไม่ได้ เพราะยังมีสมาชิกหรือคำเชิญที่ใช้บทบาทนี้อยู่",
+  },
+  // The shop already holds MAX_DELETED_ROLES_PER_ORG soft-deleted rows (SR-12 —
+  // default 500). The role stays live; nothing was lost. `details.limit`.
+  ROLE_HISTORY_LIMIT_REACHED: {
+    code: "ROLE_HISTORY_LIMIT_REACHED",
+    status: HttpStatus.CONFLICT,
+    message: "ลบบทบาทเพิ่มไม่ได้ เพราะร้านนี้ลบบทบาทครบจำนวนที่ระบบเก็บประวัติได้แล้ว",
+  },
+
   // ── 500 unknown fallback (filter maps ANY unrecognized error here) ────────
   INTERNAL: {
     code: "INTERNAL",

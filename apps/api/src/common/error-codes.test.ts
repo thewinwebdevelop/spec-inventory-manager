@@ -277,3 +277,40 @@ describe("U-API3-17 (PATCH /roles/{roleId}) · the role-update codes → status"
     }
   });
 });
+
+// F-003 · T-003-B25 — the codes DELETE /orgs/{orgId}/roles/{roleId} adds (api-spec §5,
+// U-API3-17 for this route). ROLE_LOCKED / ROLE_EXCEEDS_ACTOR / ROLE_HELD_… /
+// TARGET_NOT_BELOW_ACTOR are reused unchanged from B02/B24.
+describe("U-API3-17 (DELETE /roles/{roleId}) · the role-delete codes → status", () => {
+  it("pins code → HTTP status", () => {
+    const expected: Record<string, number> = {
+      ROLE_IN_USE: 409,
+      ROLE_HISTORY_LIMIT_REACHED: 409,
+    };
+    for (const [code, status] of Object.entries(expected)) {
+      const def = (ERROR_CODES as Record<string, { code: string; status: number } | undefined>)[
+        code
+      ];
+      expect(def, `missing ${code}`).toBeDefined();
+      expect(def!.code, code).toBe(code);
+      expect(def!.status, code).toBe(status);
+    }
+  });
+
+  it("the two are distinct from each other and from ROLE_LIMIT_REACHED (different fixes for the user)", () => {
+    const messages = [
+      ERROR_CODES.ROLE_IN_USE.message,
+      ERROR_CODES.ROLE_HISTORY_LIMIT_REACHED.message,
+      ERROR_CODES.ROLE_LIMIT_REACHED.message,
+    ];
+    expect(new Set(messages).size).toBe(3);
+  });
+
+  it("the default copy names no capability key and no person (AC-6.4 · AC-3.8: numbers only)", () => {
+    for (const code of ["ROLE_IN_USE", "ROLE_HISTORY_LIMIT_REACHED"]) {
+      const msg = (ERROR_CODES as Record<string, { message: string }>)[code]!.message;
+      expect(msg, code).not.toMatch(/manage_|view_|full_access|access_|@/);
+      expect(msg.length, code).toBeGreaterThan(5);
+    }
+  });
+});
