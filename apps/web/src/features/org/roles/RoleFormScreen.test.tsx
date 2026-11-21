@@ -41,6 +41,7 @@ const updateMutate = vi.fn();
 vi.mock("./api/use-role-mutations", () => ({
   useCreateRole: () => ({ mutateAsync: createMutate, isPending: false }),
   useUpdateRole: () => ({ mutateAsync: updateMutate, isPending: false }),
+  useDeleteRole: () => ({ mutateAsync: vi.fn(), isPending: false }),
 }));
 
 import { RoleFormScreen } from "./RoleFormScreen";

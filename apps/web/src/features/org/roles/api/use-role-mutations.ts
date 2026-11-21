@@ -5,6 +5,7 @@
  *
  *  - `POST  /orgs/{orgId}/roles`            — create (and clone: same request, pre-filled)
  *  - `PATCH /orgs/{orgId}/roles/{roleId}`   — rename and/or replace capabilities, with `version`
+ *  - `DELETE /orgs/{orgId}/roles/{roleId}`  — soft-delete (W09, below)
  *
  * ⛔ Never retried (query-client.ts: mutations `retry: false`) and never
  * resubmitted by this module. On `409 ROLE_CHANGED` the screen re-reads the
@@ -67,5 +68,30 @@ export function useUpdateRole(
         }),
       ) as Promise<RoleDetail>,
     onSuccess: after,
+  });
+}
+
+export type DeletedRole = components["schemas"]["DeletedRole"];
+
+/**
+ * T-003-W09 — `DELETE /orgs/{orgId}/roles/{roleId}` (B25) → `DeletedRole`.
+ * Never retried. On success the live lists forget the role: R1's list and the
+ * pickers' `GET /roles` are invalidated. The role's own detail query is left
+ * alone on purpose — removing it would flash R3's skeleton (and then a 404)
+ * under the screen that is about to navigate to R1.
+ */
+export function useDeleteRole(roleId: string): UseMutationResult<DeletedRole, unknown, void> {
+  const client = useOrgApiClient();
+  const queryClient = useQueryClient();
+  const { orgId } = useActiveOrg();
+  return useMutation({
+    mutationFn: () =>
+      unwrap(
+        client.DELETE("/orgs/{orgId}/roles/{roleId}", { params: { path: { orgId, roleId } } }),
+      ) as Promise<DeletedRole>,
+    onSuccess: () => {
+      void queryClient.invalidateQueries({ queryKey: orgKey(orgId, "role-details") });
+      void queryClient.invalidateQueries({ queryKey: orgKey(orgId, "roles") });
+    },
   });
 }

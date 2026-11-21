@@ -6,7 +6,7 @@
  *  - `/o/{orgId}/settings/roles/new`            → create from blank
  *  - `/o/{orgId}/settings/roles/new?from={id}`  → clone (POST, pre-filled — there is no clone endpoint)
  *  - `/o/{orgId}/settings/roles/{id}`           → edit when `viewer.canEdit.allowed`,
- *                                                  otherwise read-only (R4 — W08 builds it out)
+ *                                                  otherwise read-only (R4 — `RoleReadOnlyView`, W08)
  *
  * ⛔ Write affordances follow the SERVER's verdicts only (`canCreate`,
  * `canEdit`, `canClone`) — never `myMembership.capabilities` (repo lesson
@@ -28,8 +28,10 @@
  *    pre-edit — B24 review) and, if R3a confirmed losing `manage_roles`, the
  *    person is taken to ข้อมูลร้าน (ux R3).
  *
- * Seams left for later tasks: W08 R4 `RoleReadOnlyView` · W09 R5 the delete
- * button in "การจัดการอื่น".
+ * W08: R4 is `RoleReadOnlyView` (CapabilityReadList + RoleReasonBanner).
+ * W09: R5 — `RoleDeleteAction` in "การจัดการอื่น" on both R3 and R4. A refused
+ * delete re-reads the role with a plain refetch (verdicts + usage) rather than
+ * `reread()`, so unsaved edits on R3 survive unless the version moved.
  */
 import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { useRouter } from "next/navigation";
@@ -90,6 +92,8 @@ import {
   type SaveConfirmation,
 } from "./role-change-summary";
 import { SaveConfirmDialog } from "./SaveConfirmDialog";
+import { RoleDeleteAction } from "./RoleDeleteAction";
+import { deleteAffordance } from "./role-actions-model";
 import { createHref } from "./template-options";
 import {
   useCapabilityCatalog,
@@ -376,6 +380,12 @@ function EditRoleScreen({ roleId }: { roleId: string }) {
     selection: ReadonlySet<string>;
   } | null>(null);
   const [writeOutcome, setWriteOutcome] = useState<"forbidden" | "not-found" | null>(null);
+  const refetchOthers = useRefetchers({});
+  /** R5 refusals: verdicts + usage re-read; the form is left alone (see header). */
+  const refetchAfterDelete = (targets: readonly RoleRefetchTarget[]) => {
+    if (targets.includes("role")) void roleQ.refetch();
+    refetchOthers(targets.filter((t) => t !== "role"));
+  };
 
   const loadFailure = roleQ.isError ? toApiFailure(roleQ.error) : null;
   const catalogFailure = catalog.isError ? toApiFailure(catalog.error) : null;
@@ -425,7 +435,14 @@ function EditRoleScreen({ roleId }: { roleId: string }) {
       <Page>
         <BackLink orgId={orgId} />
         {conflictBanner(false)}
-        <RoleReadOnlyView role={current} catalog={catalog.data} isMine={isMine} />
+        <RoleReadOnlyView
+          role={current}
+          catalog={catalog.data}
+          isMine={isMine}
+          onRetryCatalog={() => void catalog.refetch()}
+          onRefetch={refetchAfterDelete}
+          onForbidden={() => setWriteOutcome("forbidden")}
+        />
       </Page>
     );
   }
@@ -439,6 +456,7 @@ function EditRoleScreen({ roleId }: { roleId: string }) {
     !canClone.allowed && canClone.reason === "role_limit_reached"
       ? createOrCloneBlockedReasonCopy(canClone.reason, null)
       : null;
+  const showDelete = deleteAffordance(current.viewer, current.isSystem).kind !== "hidden";
 
   const initialCapabilities = payloadCapabilities(seeded.selection, seeded.passthrough, cat);
   const editBody = (values: FormValues) =>
@@ -502,23 +520,36 @@ function EditRoleScreen({ roleId }: { roleId: string }) {
         </>
       }
       otherActions={(dirty) =>
-        canClone.allowed || cloneBlocked ? (
+        canClone.allowed || cloneBlocked || showDelete ? (
           <SectionCard title={roleFormTh.otherActions}>
-            <div className="flex flex-col items-start gap-2">
-              {canClone.allowed ? (
-                <ButtonLink href={createHref(orgId, base.id)} variant="secondary">
-                  {roleFormTh.clone}
-                </ButtonLink>
-              ) : (
-                <Button variant="secondary" disabled>
-                  {roleFormTh.clone}
-                </Button>
+            <div className="flex flex-col items-start gap-4">
+              {(canClone.allowed || cloneBlocked) && (
+                <div className="flex flex-col items-start gap-2">
+                  {canClone.allowed ? (
+                    <ButtonLink href={createHref(orgId, base.id)} variant="secondary">
+                      {roleFormTh.clone}
+                    </ButtonLink>
+                  ) : (
+                    <Button variant="secondary" disabled>
+                      {roleFormTh.clone}
+                    </Button>
+                  )}
+                  {cloneBlocked && (
+                    <p className="m-0 text-body-sm text-text-muted">{cloneBlocked.body}</p>
+                  )}
+                  {canClone.allowed && dirty && (
+                    <p className="m-0 text-body-sm text-text-muted">{roleFormTh.cloneUsesSaved}</p>
+                  )}
+                </div>
               )}
-              {cloneBlocked && (
-                <p className="m-0 text-body-sm text-text-muted">{cloneBlocked.body}</p>
-              )}
-              {canClone.allowed && dirty && (
-                <p className="m-0 text-body-sm text-text-muted">{roleFormTh.cloneUsesSaved}</p>
+              {showDelete && (
+                <RoleDeleteAction
+                  role={current}
+                  displayName={roleName(current)}
+                  isMine={isMine}
+                  onRefetch={refetchAfterDelete}
+                  onForbidden={() => setWriteOutcome("forbidden")}
+                />
               )}
             </div>
           </SectionCard>

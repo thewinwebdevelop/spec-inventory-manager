@@ -125,9 +125,47 @@ export const roleFormTh = {
     discard: "ทิ้งการแก้ไข",
     keep: "แก้ต่อ",
   },
-  /** R4 (read-only) — interim, until W08's CapabilityReadList. */
-  readOnly: {
-    granted: "ให้",
-    notGranted: "ไม่ได้ให้",
+} as const;
+
+/**
+ * T-003-W08 — static copy of R4 (ดูบทบาทแบบอ่านอย่างเดียว). Verbatim from
+ * docs/features/F-003/ux-wireframe.md R4. The reason banners themselves are
+ * §0.3 (ก) and live in `../role-copy.ts`; the Badge "ล็อก" is `roleBadgeLabel`
+ * there too (one source with R1). Owner: `ux`.
+ */
+export const roleReadOnlyTh = {
+  nameLabel: "ชื่อบทบาท",
+  /** ✓ alone reads "granted" visually; this is its text for a screen reader. */
+  granted: "ให้",
+  /** "–" + this TEXT — colour is not the only signal (ux R4). */
+  notGranted: "ไม่ได้ให้",
+} as const;
+
+/**
+ * T-003-W09 — static copy of R5 (ลบบทบาท) — verbatim from ux-wireframe R5 and
+ * §0.2 (the count line). The two §0.3 delete reasons (`in_use` title,
+ * `history_limit_reached`) and §E codes stay in `../role-copy.ts`. Owner: `ux`.
+ */
+export const roleDeleteTh = {
+  button: "ลบบทบาทนี้",
+  confirm: {
+    title: (name: string) => `ลบบทบาท "${name}"?`,
+    body: "ลบแล้วเอาคืนไม่ได้ ถ้าต้องใช้อีกต้องสร้างใหม่ ประวัติเดิม (สมาชิกที่ถูกถอด คำเชิญเก่า) ยังแสดงชื่อบทบาทนี้ได้ตามเดิม",
+    confirm: "ลบบทบาท",
+    confirming: "กำลังลบ...",
+    cancel: "ไม่ลบ",
   },
+  inUse: {
+    title: "ลบไม่ได้ตอนนี้ — ยังมีคนใช้บทบาทนี้อยู่",
+    members: (n: number, includesMe: boolean) => `สมาชิก ${n} คน${includesMe ? " (รวมคุณ)" : ""}`,
+    invitations: (m: number) => `คำเชิญที่ยังไม่ปิด ${m} ใบ`,
+    instruction: "ย้ายสมาชิกไปบทบาทอื่นและยกเลิกคำเชิญเหล่านี้ก่อน แล้วค่อยลบ",
+    onlyYou: "คนที่ใช้บทบาทนี้คือคุณเอง — ให้เจ้าของร้านย้ายคุณไปบทบาทอื่นก่อน",
+    viewMembers: (n: number) => `ดูสมาชิกที่ใช้บทบาทนี้ (${n})`,
+    viewInvitations: (m: number) => `ดูคำเชิญที่ใช้บทบาทนี้ (${m})`,
+    noManageMembers: "คนที่จัดการสมาชิกได้ (เช่น เจ้าของร้าน) ต้องเป็นคนย้ายสมาชิกหรือยกเลิกคำเชิญ",
+    close: "ปิด",
+  },
+  deletedToast: (name: string) => `ลบบทบาท "${name}" แล้ว`,
+  goneToast: "บทบาทนี้ถูกลบไปแล้ว",
 } as const;

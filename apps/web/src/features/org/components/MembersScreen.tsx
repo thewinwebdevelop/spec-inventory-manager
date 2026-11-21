@@ -238,6 +238,9 @@ export function MembersScreen() {
           a deliberate question with a blank page. */}
       {(pending.length > 0 || roleFilter) && (
         <SectionCard
+          /* R5 (ข) "ดูคำเชิญที่ใช้บทบาทนี้" lands here (`#role-invitations`). */
+          id={roleFilter ? "role-invitations" : undefined}
+          className="scroll-mt-4 p-0 [&>div:first-child]:px-4 [&>div:first-child]:pt-4"
           title={
             roleFilter
               ? roleFilterTh.invitationsSection(pending.length)
@@ -245,9 +248,9 @@ export function MembersScreen() {
                 ? membersTh.allInvitationsSection(pending.length)
                 : membersTh.pendingSection(pending.length)
           }
-          /* `p-0` so the rows reach the card's edges the way the mockup draws
-             them; the header and any non-row children pay their own padding. */
-          className="p-0 [&>div:first-child]:px-4 [&>div:first-child]:pt-4"
+          /* `p-0` (className above) so the rows reach the card's edges the way
+             the mockup draws them; the header and any non-row children pay
+             their own padding. */
         >
           {roleFilter && invitations.isError && (
             <div className="p-4">

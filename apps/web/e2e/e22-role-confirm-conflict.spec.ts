@@ -128,7 +128,18 @@ test.afterAll(async () => {
 test("R3a · the Owner edits 'ผู้ดูแล': diff + impact from the server; แก้ต่อ / Escape send nothing; บันทึก sends ONE PATCH", async () => {
   const page = ownerPage;
   await openRole(page, /^ผู้ดูแล/);
-  await expect(page.getByText("สมาชิก 1 คน · คำเชิญที่ยังไม่ปิด 1 ใบ")).toBeVisible();
+  // The header's usage line. Since W09 the R5 (ข) panel under "ลบบทบาทนี้"
+  // repeats the same count (the role is in use), so the panel is excluded.
+  await expect(
+    page
+      .getByText("สมาชิก 1 คน · คำเชิญที่ยังไม่ปิด 1 ใบ")
+      .and(page.locator(":not([role=group] *)")),
+  ).toBeVisible();
+  await expect(
+    page
+      .getByRole("group", { name: "ลบไม่ได้ตอนนี้ — ยังมีคนใช้บทบาทนี้อยู่" })
+      .getByText("สมาชิก 1 คน · คำเชิญที่ยังไม่ปิด 1 ใบ"),
+  ).toBeVisible();
   const patches = countPatches(page);
 
   await row(page, "เชื่อมต่อช่องทางขาย").click();
@@ -279,7 +290,10 @@ test("R3a · AC-3.10: an Admin loses something from their OWN role (not manage_r
   const page = adminPage;
   await resetIpThrottle();
   await openRole(page, /^ผู้ดูแล/);
-  await expect(page.getByText(/\(รวมคุณ\)/)).toBeVisible();
+  // Header line only — the R5 (ข) panel (W09) repeats the count.
+  await expect(
+    page.getByText(/\(รวมคุณ\)/).and(page.locator(":not([role=group] *)")),
+  ).toBeVisible();
   const patches = countPatches(page);
 
   await row(page, "ดูต้นทุนและกำไร").click();

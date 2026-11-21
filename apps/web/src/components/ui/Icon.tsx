@@ -200,6 +200,9 @@ export function Icon({
       aria-hidden={title ? undefined : true}
       role={title ? "img" : undefined}
       aria-label={title}
+      /* The ROLE (§1.6.2), not the vendor glyph — lets a test say "this banner
+         carries icon.lock" without reading SVG paths. */
+      data-icon={role}
       className={cn("flex-none", SIZE[size], className)}
     >
       {PATHS[role]}
