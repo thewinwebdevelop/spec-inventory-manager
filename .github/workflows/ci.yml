@@ -939,6 +939,15 @@ jobs:
       # hour per address, and the whole lane is ONE address opening invites at
       # three widths (D-038 ②) — "เปิดลิงก์คำเชิญถี่เกินไป" on the phone run.
       ORG_RATE_LIMIT_INVITE_PUBLIC_PER_HOUR: "300"
+      # F-003 · T-003-W06 — the R3 role-form journeys (e20: create / clone /
+      # edit / ROLE_CHANGED …) need the role write routes OPEN on this lane's
+      # API. This is a TEST lane, not an environment rollout (runbook §12
+      # governs real environments). E2E_ROLE_WRITES tells the suite which way
+      # the API was booted: e20 runs, and the writes-OFF specs (e21, e18's R1
+      # writes-off case) skip — writes-off stays covered by the component suite
+      # (RoleFormScreen.test.tsx / RolesScreen.test.tsx). Change BOTH together.
+      ROLE_WRITES_ENABLED: "true"
+      E2E_ROLE_WRITES: "on"
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4

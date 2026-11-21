@@ -9,6 +9,7 @@ import {
   openMembers,
   readShared,
   resetIpThrottle,
+  ROLE_WRITES_ON,
   signUpAndLogin,
   shopNav,
 } from "./helpers";
@@ -62,6 +63,7 @@ test("EW3-11 · the Owner reaches the roles list from the menu and reads the thr
 });
 
 test("R1 · role writes are off in this lane: banner on top and the create button disabled by the verdict", async () => {
+  test.skip(ROLE_WRITES_ON, "the API under test has ROLE_WRITES_ENABLED=true (E2E_ROLE_WRITES=on)");
   await expect(ownerPage.getByText("ยังสร้างหรือแก้บทบาทไม่ได้ในตอนนี้")).toBeVisible();
   await expect(ownerPage.getByRole("button", { name: "สร้างบทบาท" })).toBeDisabled();
 });

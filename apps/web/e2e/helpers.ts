@@ -246,3 +246,12 @@ export async function acceptInvite(page: Page, inviteUrl: string): Promise<void>
   await page.goto(new URL(inviteUrl).pathname + new URL(inviteUrl).search);
   await page.getByRole("button", { name: "เข้าร่วมร้านนี้" }).click();
 }
+
+/**
+ * F-003 role writes are behind `ROLE_WRITES_ENABLED` on the API. The runner
+ * cannot ask the server which way it was booted without a request, so the
+ * lane says so explicitly: `E2E_ROLE_WRITES=on` ⇔ the API under test has the
+ * flag on. Specs for one mode skip in the other; a mismatch fails at the first
+ * assertion on the server's verdict (create enabled / writes_disabled banner).
+ */
+export const ROLE_WRITES_ON = process.env.E2E_ROLE_WRITES === "on";

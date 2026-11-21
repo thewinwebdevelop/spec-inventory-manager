@@ -47,6 +47,16 @@ describe("Checkbox (ui.md §2.1, F-003)", () => {
     expect(onChange).not.toHaveBeenCalled();
   });
 
+  it("a click on a disabled box leaves the INPUT unchecked too (what a screen reader reads) — T-003-W06", async () => {
+    const user = userEvent.setup();
+    render(<Checkbox checked={false} disabled onChange={() => {}} />);
+    const input = screen.getByRole("checkbox") as HTMLInputElement;
+    await user.click(input);
+    expect(input.checked).toBe(false);
+    await user.keyboard(" ");
+    expect(input.checked).toBe(false);
+  });
+
   it("never uses opacity on the visible box to express disabled (⛔ ui.md §2.1 — the reason text next to it must stay fully legible)", () => {
     render(<Checkbox checked disabled onChange={() => {}} />);
     // The decorative box (aria-hidden sibling) carries the visible state —

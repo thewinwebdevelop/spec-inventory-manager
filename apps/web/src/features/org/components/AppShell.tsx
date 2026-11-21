@@ -162,6 +162,7 @@ export function AppShell({ children }: { children: ReactNode }) {
             disabled={signingOut}
             onClick={() => void signOut()}
             icon={<Icon role="sign-out" />}
+            leaveGuard="/login"
           >
             {orgTh.shell.nav.logout}
           </NavAction>

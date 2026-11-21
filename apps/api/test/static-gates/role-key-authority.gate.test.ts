@@ -112,18 +112,13 @@ const PRESENTATION_ALLOWLIST: readonly PresentationAllowance[] = Object.freeze([
     file: "apps/web/src/features/org/role-copy.ts",
     reason:
       "`displayRoleName()` (ux §0.2, T-003-W03): translates a system roleKey to its label unless " +
-      "the shop renamed the role (`nameCustomized`); unknown key falls back to name. Display only.",
+      "the shop renamed the role (`nameCustomized`); unknown key falls back to name. " +
+      "`toLastEdited()` (T-003-W05, moved here from RolesScreen.tsx in T-003-W06 so R1 and R3 share " +
+      "it): adapts the wire `RoleLastEdited.by` to `lastEditedLine` and passes the editor's roleKey " +
+      "straight into `displayRoleName()` for the label. Display only.",
     lines: [
       "const { name, roleKey, nameCustomized } = params;",
       "if (roleKey && roleKey in ROLE_KEY_LABEL) return ROLE_KEY_LABEL[roleKey];",
-    ],
-  },
-  {
-    file: "apps/web/src/features/org/roles/RolesScreen.tsx",
-    reason:
-      "`toLastEdited()` (T-003-W05): adapts the wire `RoleLastEdited.by` to W03's `lastEditedLine` " +
-      "and passes the editor's roleKey straight into `displayRoleName()` for the label. Display only.",
-    lines: [
       "const { kind, roleName, roleKey, roleNameCustomized } = le.by;",
       "? displayRoleName({ name: roleName, roleKey, nameCustomized: roleNameCustomized })",
     ],

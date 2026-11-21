@@ -56,16 +56,20 @@ export function NavAction({
   onClick,
   disabled = false,
   className,
+  leaveGuard,
 }: {
   icon?: ReactNode;
   children: ReactNode;
   onClick: () => void;
   disabled?: boolean;
   className?: string;
+  /** Where this action takes the person — lets an unsaved-changes guard ask first (`useLeaveGuard`). */
+  leaveGuard?: string;
 }) {
   return (
     <button
       type="button"
+      data-leave-guard={leaveGuard}
       onClick={onClick}
       disabled={disabled}
       className={navRowClass(false, cn("text-left disabled:opacity-60", className))}

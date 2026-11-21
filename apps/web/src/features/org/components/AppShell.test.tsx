@@ -157,6 +157,14 @@ describe("AppShell", () => {
     expect(within(bar).getByText("ร้านหอมกรุ่นเบเกอรี่").className).toContain("truncate");
   });
 
+  it("sign-out opts in to the unsaved-changes guard (data-leave-guard, D-038 ③ W06 pass)", () => {
+    // Without it, signing out from the role form dropped unsaved edits silently.
+    renderShell([]);
+    for (const b of screen.getAllByRole("button", { name: orgTh.shell.nav.logout })) {
+      expect(b).toHaveAttribute("data-leave-guard", "/login");
+    }
+  });
+
   it("renders the page content it wraps", () => {
     renderShell([]);
     expect(screen.getByText("เนื้อหา")).toBeInTheDocument();

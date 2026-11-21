@@ -39,33 +39,14 @@ import {
   createOrCloneBlockedReasonCopy,
   displayRoleName,
   lastEditedLine,
-  type LastEdited,
   roleBadgeLabel,
   ROLE_FORBIDDEN_PANEL_COPY,
+  toLastEdited,
   usageLine,
 } from "../role-copy";
 import { rolesTh } from "./i18n";
 import { TemplateDialog } from "./TemplateDialog";
 import { useCapabilityCatalog, useRoleDetails, type RoleDetail } from "./api/use-role-details";
-
-/**
- * The wire's `RoleLastEdited` is `{ at, by: { kind, roleName?, roleKey?, … } }`;
- * `lastEditedLine` (W03) takes `{ kind, at, by?: { roleName } }`. The editor's
- * role name goes through the same §0.2 display rule as every other role name.
- */
-export function toLastEdited(le: RoleDetail["lastEdited"]): LastEdited | null {
-  if (le === null) return null;
-  const { kind, roleName, roleKey, roleNameCustomized } = le.by;
-  return {
-    kind,
-    at: le.at,
-    by: {
-      roleName: roleName
-        ? displayRoleName({ name: roleName, roleKey, nameCustomized: roleNameCustomized })
-        : null,
-    },
-  };
-}
 
 function RoleRowLink({
   role,
