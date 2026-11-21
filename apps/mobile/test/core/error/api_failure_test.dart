@@ -118,4 +118,14 @@ void main() {
       }
     });
   });
+
+  test('★ T-003-M06: a 422 carries error.details (UNKNOWN_CAPABILITY names the keys to untick)', () {
+    final f = mapStatusToApiFailure(
+      422,
+      code: 'UNKNOWN_CAPABILITY',
+      details: const {'capabilities': ['gone_a']},
+    ) as ValidationFailure;
+    expect(f.code, 'UNKNOWN_CAPABILITY');
+    expect(f.details, {'capabilities': ['gone_a']});
+  });
 }

@@ -728,6 +728,11 @@ jobs:
       JWT_REFRESH_SECRET: e2e-refresh-secret-32-chars-different-va!
       INVITATION_TOKEN_SECRET: e2e-invitation-secret-32-chars-distinct!!
       WEB_APP_BASE_URL: http://localhost:3001
+      # F-003 · T-003-M06 — the R3 role-form journey (clone → create, edit,
+      # 409 ROLE_CHANGED) needs the role write routes OPEN on this lane's API.
+      # TEST lane only, same switch as e2e-web; the app is told via
+      # --dart-define=E2E_ROLE_WRITES=on below. Change BOTH together.
+      ROLE_WRITES_ENABLED: "true"
       DEFAULT_ORG_PLAN_KEY: comp_full
       PORT: "3000"
     steps:
@@ -828,7 +833,7 @@ jobs:
           # runner is dash, which has no `pipefail`, so a failing suite piped
           # into `tee` exits 0 and the step would pass.
           script: |
-            flutter test integration_test/org_flow_test.dart --dart-define=API_BASE_URL=http://10.0.2.2:3000 --reporter expanded 2>&1 | tee /tmp/mobile-e2e.log || true
+            flutter test integration_test/org_flow_test.dart --dart-define=API_BASE_URL=http://10.0.2.2:3000 --dart-define=E2E_ROLE_WRITES=on --reporter expanded 2>&1 | tee /tmp/mobile-e2e.log || true
             adb devices > /tmp/adb-devices.txt 2>&1 || true
             free -m > /tmp/mem.txt 2>&1 || true
             adb logcat -d -t 400 > /tmp/logcat.txt 2>&1 || true
@@ -837,7 +842,8 @@ jobs:
             # also what a suite of one prints, so on its own it would stay green
             # after somebody deleted two of E-10's three cases. Flutter's
             # expanded reporter ends with `+N`, so N is the count. Raise the
-            # floor when cases are added (3 → 4 when M-07's round trip landed);
+            # floor when cases are added (3 → 4 when M-07's round trip landed;
+            # 4 → 5 with T-003-M06's role-form journey, flag on in this lane);
             # lowering it is a visible edit.
             #
             # ⚠️ ONE LINE, and this is the SECOND time this action's execution
@@ -847,7 +853,7 @@ jobs:
             # suite that had just passed all three. (The first time was the
             # backslash continuation above.) If a step needs shell state, it
             # has to be one command.
-            passed=$(grep -oE '\+[0-9]+' /tmp/mobile-e2e.log | tail -1 | tr -d '+'); echo "mobile integration: ${passed:-0} passing case(s) (floor 4)"; [ "${passed:-0}" -ge 4 ] || { echo "::error::the mobile lane passed ${passed:-0} case(s), floor is 4 — a case was deleted, renamed or skipped"; exit 1; }
+            passed=$(grep -oE '\+[0-9]+' /tmp/mobile-e2e.log | tail -1 | tr -d '+'); echo "mobile integration: ${passed:-0} passing case(s) (floor 5)"; [ "${passed:-0}" -ge 5 ] || { echo "::error::the mobile lane passed ${passed:-0} case(s), floor is 5 — a case was deleted, renamed or skipped"; exit 1; }
       # ⚠️ Collected BEFORE the emulator is torn down (the lines above run
       # inside the action's script), because the question these answer cannot
       # be asked afterwards: two runs ended with three tests reporting "did not

@@ -106,4 +106,21 @@ void main() {
     expect(rotation.duration, Duration.zero);
     expect(rotation.turns, -0.25);
   });
+
+  testWidgets('content is inset by the header padding (space.4) by default; contentPadding overrides it',
+      (tester) async {
+    const childKey = ValueKey('child');
+    await tester.pumpWidget(wrap(const Disclosure(
+      title: 'ทีมงาน',
+      child: SizedBox(key: childKey, height: 10, width: double.infinity),
+    )));
+    expect(tester.getTopLeft(find.byKey(childKey)).dx, AppSpacing.s4);
+
+    await tester.pumpWidget(wrap(const Disclosure(
+      title: 'ทีมงาน',
+      contentPadding: EdgeInsets.zero,
+      child: SizedBox(key: childKey, height: 10, width: double.infinity),
+    )));
+    expect(tester.getTopLeft(find.byKey(childKey)).dx, 0);
+  });
 }

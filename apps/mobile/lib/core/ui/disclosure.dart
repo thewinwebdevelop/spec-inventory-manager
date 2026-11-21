@@ -22,6 +22,7 @@ class Disclosure extends StatefulWidget {
     required this.title,
     this.countLabel,
     this.initiallyExpanded = true,
+    this.contentPadding = const EdgeInsets.symmetric(horizontal: AppSpacing.s4),
     required this.child,
   });
 
@@ -32,6 +33,12 @@ class Disclosure extends StatefulWidget {
   final String? countLabel;
 
   final bool initiallyExpanded;
+
+  /// Defaults to the header's own side padding (ui.md §2.2: content aligns
+  /// with the header, no extra indent). A child that already carries that
+  /// inset itself — `CheckboxRow` does (T-003-M06 checklist) — passes
+  /// [EdgeInsets.zero], or the content ends up indented twice.
+  final EdgeInsetsGeometry contentPadding;
   final Widget child;
 
   @override
@@ -98,7 +105,7 @@ class _DisclosureState extends State<Disclosure> {
         ),
         if (_expanded)
           Padding(
-            padding: const EdgeInsets.symmetric(horizontal: AppSpacing.s4),
+            padding: widget.contentPadding,
             child: widget.child,
           ),
       ],

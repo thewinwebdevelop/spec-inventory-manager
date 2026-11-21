@@ -23,6 +23,7 @@ RoleDetailView role(
       canEdit: canEdit,
       canDelete: const RoleVerdict(allowed: true),
       canClone: canClone,
+      version: 1,
     );
 
 const catalog = CapabilityCatalogView(items: [

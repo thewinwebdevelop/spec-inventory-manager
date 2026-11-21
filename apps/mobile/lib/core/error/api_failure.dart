@@ -116,8 +116,12 @@ class EntitlementFailure extends ApiFailure {
 /// `details` and `fieldErrors` since. The extraction, not the contract, was
 /// the missing half — see `core/api/error_mapping.dart`.
 class ValidationFailure extends ApiFailure {
-  const ValidationFailure({this.code, this.fieldErrors = const {}});
+  const ValidationFailure({this.code, this.fieldErrors = const {}, this.details = const {}});
   final String? code;
+
+  /// `error.details` (T-003-M06) — `422 UNKNOWN_CAPABILITY` names the keys
+  /// the server refused (`details.capabilities`), which R3 unticks.
+  final Map<String, Object?> details;
 
   /// Keyed by field name (`name`, `email`) — the server's own message for
   /// that field. A screen still decides whether to show it or its own copy;
@@ -213,7 +217,7 @@ ApiFailure mapStatusToApiFailure(
       return ForbiddenFailure(code: code);
     case 400:
     case 422:
-      return ValidationFailure(code: code, fieldErrors: fieldErrors);
+      return ValidationFailure(code: code, fieldErrors: fieldErrors, details: details);
     case 409:
       // ★ Before the generic conflict, per ux-wireframe §1.4's explicit
       // ordering rule.

@@ -56,6 +56,20 @@ abstract interface class OrgScoped {
   /// labels R2 prints (D-037). Requires `manage_roles`.
   Future<CapabilityCatalogView> getCapabilityCatalog();
 
+  /// `GET /orgs/{orgId}/roles/{roleId}` (F-003 R3) — one role in full, with
+  /// its `version` and the caller's verdicts. A deleted / other-shop role is a
+  /// `NotFoundFailure`.
+  Future<RoleDetailView> getRoleDetail(String roleId);
+
+  /// `POST /orgs/{orgId}/roles` (F-003 R3 create / clone — there is no clone
+  /// endpoint). Returns the created role.
+  Future<RoleDetailView> createRole({required String name, required List<String> capabilities});
+
+  /// `PATCH /orgs/{orgId}/roles/{roleId}` (F-003 R3 edit). [body] carries
+  /// `version` always and `name` / `capabilities` only when they changed.
+  /// ⛔ A `409 ROLE_CHANGED` is surfaced, never retried here (SR-14).
+  Future<RoleDetailView> updateRole(String roleId, RoleUpdate body);
+
   /// `GET /orgs/{orgId}` — the shop's profile, for the tax card (§3.4).
   Future<OrgProfileView> getOrganization();
 

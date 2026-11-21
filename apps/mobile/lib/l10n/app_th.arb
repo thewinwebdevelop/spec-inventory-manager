@@ -528,6 +528,11 @@
   "@roleFormCapabilitiesCounter": {
     "placeholders": { "selected": { "type": "int" }, "total": { "type": "int" } }
   },
+  "roleFormGroupCounter": "เลือก {selected} จาก {total}",
+  "@roleFormGroupCounter": {
+    "description": "ux R3 platform (mobile) — the Disclosure group header counter, so a folded group still says what is ticked. Copy verbatim from ux-wireframe R3 (T-003-M06).",
+    "placeholders": { "selected": { "type": "int" }, "total": { "type": "int" } }
+  },
   "roleFormUpcomingNote": "สิทธิ์ที่มีป้าย \"เร็ว ๆ นี้\" คือฟีเจอร์ที่ยังไม่เปิด ติ๊กไว้ก่อนได้ จะมีผลทันทีเมื่อฟีเจอร์เปิด",
   "@roleFormUpcomingNote": {
     "description": "ux §0.4 D-037 client-side copy. Shown once under the checklist header when catalog has at least one status=upcoming item."
@@ -549,6 +554,10 @@
   "roleFormEmptySelectionError": "เลือกสิทธิ์อย่างน้อย 1 อย่าง",
   "@roleFormEmptySelectionError": {
     "description": "ux R3 client-side guard AND the 422 ROLE_EMPTY server error (ux §E) — same copy for both."
+  },
+  "roleFormOtherActionsHeader": "การจัดการอื่น",
+  "@roleFormOtherActionsHeader": {
+    "description": "ux R3 — the edit-mode section holding ทำสำเนา / ลบ. Copy verbatim from ux-wireframe R3 (T-003-M06)."
   },
   "roleFormCloneCta": "ทำสำเนาเป็นบทบาทใหม่",
   "roleFormDeleteCta": "ลบบทบาทนี้",
@@ -581,6 +590,10 @@
   },
   "roleFormLostOwnManageRolesToast": "บันทึกแล้ว — ตอนนี้คุณไม่มีสิทธิ์จัดการบทบาทแล้ว",
   "roleFormTemplateGoneNotice": "ใช้บทบาทนี้เป็นต้นแบบไม่ได้แล้ว เริ่มจากว่างแทน",
+  "roleFormOtherGroupLabel": "อื่น ๆ",
+  "@roleFormOtherGroupLabel": {
+    "description": "ux §0.4 fallback — the last checklist group, for items whose `group` is null or not in `groups[]`. Copy verbatim from ux-wireframe §0.4 (T-003-M06)."
+  },
 
   "roleFormErrorNameInvalidChars": "ชื่อนี้มีอักขระที่ใช้ไม่ได้ (เช่น อักขระที่มองไม่เห็นซึ่งติดมาจากการคัดลอก) ลองพิมพ์ชื่อใหม่เอง",
   "@roleFormErrorNameInvalidChars": {

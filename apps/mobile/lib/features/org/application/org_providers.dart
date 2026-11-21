@@ -74,6 +74,13 @@ final capabilityCatalogProvider = FutureProvider.autoDispose<CapabilityCatalogVi
   return ref.watch(orgScopedRepositoryProvider).getCapabilityCatalog();
 });
 
+/// F-003 R3 (edit) — `GET /roles/{id}`. autoDispose + no cache, for the same
+/// reason as [roleDetailsProvider]: `version` and the verdicts belong to the
+/// CURRENT state of the shop. The form re-reads it on a `409 ROLE_CHANGED`.
+final roleDetailProvider = FutureProvider.autoDispose.family<RoleDetailView, String>((ref, roleId) async {
+  return ref.watch(orgScopedRepositoryProvider).getRoleDetail(roleId);
+});
+
 /// Shops whose backup-owner nudge (D-030) has been dismissed with "ไว้ทีหลัง".
 ///
 /// Deliberately NOT autoDispose and deliberately NOT persisted, which is

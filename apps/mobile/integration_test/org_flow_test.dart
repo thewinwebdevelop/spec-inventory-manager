@@ -10,7 +10,9 @@ import 'package:mobile/core/session/session_state.dart';
 import 'package:mobile/features/auth/application/auth_providers.dart';
 import 'package:mobile/features/org/application/org_providers.dart';
 import 'package:mobile/core/error/api_failure.dart';
+import 'package:mobile/core/ui/checkbox_row.dart';
 import 'package:mobile/features/org/domain/entities/org_entities.dart';
+import 'package:mobile/features/org/domain/entities/role_entities.dart';
 import 'package:mobile/features/org/presentation/screens/create_org_screen.dart';
 import 'package:mobile/features/org/presentation/screens/members_screen.dart';
 
@@ -379,4 +381,148 @@ void main() {
     final theirShops = await staffContainer.read(orgDirectoryProvider).listMyOrganizations();
     expect(theirShops.map((o) => o.id), isNot(contains(org.id)));
   });
+
+  // ── T-003-M06 · R3 ฟอร์มบทบาท on the real API ─────────────────────────────
+  //
+  // Which journey runs depends on how the API was booted, and the suite is
+  // TOLD, never guesses: `--dart-define=E2E_ROLE_WRITES=on` when the API runs
+  // with `ROLE_WRITES_ENABLED=true` (the web e2e lane's setting), absent
+  // otherwise (the mobile lane today). Same contract as web's E2E_ROLE_WRITES.
+  // Each mode's case is skipped — visibly — in the other mode.
+  //
+  // Budget: one account each (signup + login = 2 of the 20 pre-auth requests
+  // per five minutes — see `signUpAndSignIn`), and only one of the two runs.
+  const roleWritesOn = String.fromEnvironment('E2E_ROLE_WRITES') == 'on';
+
+  /// Signs up, creates a shop through the repository and enters it with the
+  /// capabilities the SERVER reports (not a hand-written set).
+  Future<(ProviderContainer, String)> ownerInFreshShop(String prefix) async {
+    final container = bootApp();
+    await signUpAndSignIn(container, freshEmail(prefix));
+    final org = await container.read(orgDirectoryProvider).createOrganization(
+          name: 'ร้านบทบาท ${DateTime.now().millisecondsSinceEpoch}',
+        );
+    container.read(sessionControllerProvider.notifier).switchOrg(
+          ActiveOrg(orgId: org.id, name: org.name, capabilities: const {}),
+        );
+    await learnCapabilitiesWith(
+      session: container.read(sessionControllerProvider.notifier),
+      repository: container.read(orgScopedRepositoryProvider),
+      orgId: org.id,
+    );
+    expect(container.read(activeOrgProvider)!.can('manage_roles'), isTrue,
+        reason: 'the shop creator must hold manage_roles (via full_access)');
+    return (container, org.id);
+  }
+
+  /// Members screen → "จัดการบทบาท" → R1, the way a person gets there.
+  Future<void> openRolesFromMembers(WidgetTester tester, ProviderContainer container) async {
+    await pump(tester, container, const MembersScreen());
+    await pumpUntil(tester, find.byKey(const ValueKey('manage-roles-button')));
+    await tester.tap(find.byKey(const ValueKey('manage-roles-button')));
+    await pumpUntil(tester, find.textContaining('จาก 30 บทบาท'));
+  }
+
+  Future<void> tapRow(WidgetTester tester, String capability) async {
+    final row = find.byKey(ValueKey('cap-row-$capability'));
+    await tester.ensureVisible(row);
+    await tester.pump(const Duration(milliseconds: 300));
+    await tester.tap(row);
+    await tester.pump(const Duration(milliseconds: 100));
+  }
+
+  bool ticked(WidgetTester tester, String capability) =>
+      tester.widget<CheckboxRow>(find.byKey(ValueKey('cap-row-$capability'))).value;
+
+  Future<void> pressSubmit(WidgetTester tester, String label) async {
+    final button = find.widgetWithText(ElevatedButton, label);
+    await tester.ensureVisible(button);
+    await tester.tap(button);
+    await tester.pump(const Duration(milliseconds: 100));
+  }
+
+  testWidgets(
+    'T-003-M06 · EM3-01/06 · R3 clone → create, edit → save, then 409 ROLE_CHANGED is shown and NOT resubmitted',
+    skip: !roleWritesOn,
+    (tester) async {
+      final (container, _) = await ownerInFreshShop('m-r3');
+      final repo = container.read(orgScopedRepositoryProvider);
+      await openRolesFromMembers(tester, container);
+
+      // ── R1 → R2 → R3 (clone of the fewest-capabilities role) ─────────────
+      await tester.tap(find.widgetWithText(ElevatedButton, 'สร้างบทบาท'));
+      await pumpUntil(tester, find.text('ถัดไป'));
+      await tester.tap(find.widgetWithText(ElevatedButton, 'ถัดไป'));
+      await pumpUntil(tester, find.textContaining('เริ่มจากสำเนาของ'));
+
+      final before = await repo.listRoleDetails();
+      final roleName = 'แพ็คของ ${DateTime.now().millisecondsSinceEpoch % 1000000}';
+      await tester.enterText(find.byKey(const ValueKey('role-form-name')), roleName);
+      await tester.pump(const Duration(milliseconds: 300));
+      await pressSubmit(tester, 'สร้างบทบาท');
+
+      // Back on R1 with the toast, and the row is there.
+      await pumpUntil(tester, find.text('สร้างบทบาท "$roleName" แล้ว'));
+      await pumpUntil(tester, find.text(roleName));
+
+      // ── the server, not the screen, is the judge ─────────────────────────
+      final after = await repo.listRoleDetails();
+      expect(after.items, hasLength(before.items.length + 1));
+      final created = after.items.firstWhere((r) => r.name == roleName);
+      final source = before.items
+          .where((r) => r.canClone.allowed)
+          .reduce((a, b) => b.capabilities.length < a.capabilities.length ? b : a);
+      expect(created.capabilities.toSet(), source.capabilities.toSet(),
+          reason: 'a clone carries the source capabilities');
+      expect(created.version, 1);
+
+      // ── R1 row → R3 edit → tick manage_stock → บันทึก ────────────────────
+      await tester.tap(find.byKey(ValueKey('role-row-${created.id}')));
+      await pumpUntil(tester, find.byKey(const ValueKey('cap-row-manage_stock')));
+      final hadStock = ticked(tester, 'manage_stock');
+      await tapRow(tester, 'manage_stock');
+      await pressSubmit(tester, 'บันทึก');
+      await pumpUntil(tester, find.text('บันทึกบทบาท "$roleName" แล้ว'));
+
+      final saved = await repo.getRoleDetail(created.id);
+      expect(saved.version, 2);
+      expect(saved.capabilities.contains('manage_stock'), !hadStock);
+      expect(saved.name, roleName, reason: 'name was not touched, so it was not sent');
+
+      // ── EM3-06: someone else saves first; my save gets 409, NOT resubmitted ─
+      await tapRow(tester, 'manage_orders');
+      await repo.updateRole(created.id, RoleUpdate(version: saved.version, name: '$roleName (อีกคน)'));
+      await pressSubmit(tester, 'บันทึก');
+      await pumpUntil(tester, find.text('มีคนแก้บทบาทนี้ไปก่อนคุณ'));
+      await pumpUntil(tester, find.text('$roleName (อีกคน)'));
+
+      final latest = await repo.getRoleDetail(created.id);
+      expect(latest.version, 3, reason: 'only the other save landed — no silent retry with currentVersion');
+      expect(latest.name, '$roleName (อีกคน)');
+      expect(latest.capabilities.toSet(), saved.capabilities.toSet(),
+          reason: 'my manage_orders tick was not written over theirs');
+    },
+  );
+
+  testWidgets(
+    'T-003-M06 · EM3-03 · writes off: R1 banner, create disabled, a row opens the read-only reason',
+    skip: roleWritesOn,
+    (tester) async {
+      final (container, _) = await ownerInFreshShop('m-r3-off');
+      await openRolesFromMembers(tester, container);
+
+      expect(find.text('ยังสร้างหรือแก้บทบาทไม่ได้ในตอนนี้'), findsOneWidget);
+      final create = find.widgetWithText(ElevatedButton, 'สร้างบทบาท');
+      expect(tester.widget<ElevatedButton>(create).onPressed, isNull);
+
+      final page = await container.read(orgScopedRepositoryProvider).listRoleDetails();
+      final staff = page.items.firstWhere((r) => r.roleKey == 'staff');
+      expect(staff.canEdit.reason, 'writes_disabled', reason: 'the server says why, not the client');
+
+      await tester.tap(find.byKey(ValueKey('role-row-${staff.id}')));
+      await pumpUntil(tester, find.text('ยังสร้างหรือแก้บทบาทไม่ได้ในตอนนี้'));
+      expect(find.byKey(const ValueKey('role-form-name')), findsNothing);
+      expect(find.widgetWithText(ElevatedButton, 'บันทึก'), findsNothing);
+    },
+  );
 }

@@ -3,6 +3,8 @@
 // Both implement the ABSTRACT ports, never the impls — which is the point of
 // there being two ports: a test wires a repository without ever touching Dio,
 // and cannot accidentally hand an org-scoped fake to the user-scoped provider.
+import 'dart:async';
+
 import 'package:mobile/core/error/api_failure.dart';
 import 'package:mobile/features/org/domain/entities/org_entities.dart';
 import 'package:mobile/features/org/domain/entities/role_entities.dart';
@@ -64,7 +66,12 @@ class FakeOrgScoped implements OrgScoped {
     this.roleDetailsFailure,
     this.catalog,
     this.catalogFailure,
-  });
+    List<Object>? roleDetailAnswers,
+    List<Object>? createRoleAnswers,
+    List<Object>? updateRoleAnswers,
+  })  : roleDetailAnswers = roleDetailAnswers ?? <Object>[],
+        createRoleAnswers = createRoleAnswers ?? <Object>[],
+        updateRoleAnswers = updateRoleAnswers ?? <Object>[];
 
   /// One entry per call — so a test can make page 2 fail after page 1 worked.
   final List<PagedResult<MemberRow>> memberPages;
@@ -100,6 +107,19 @@ class FakeOrgScoped implements OrgScoped {
   final ApiFailure? catalogFailure;
   int roleDetailsCalls = 0;
   int catalogCalls = 0;
+
+  // T-003-M06 R3 — each list is consumed one answer per call (the LAST one
+  // repeats), and an answer is either the role or the `ApiFailure` to throw.
+  // That is what lets a test say "v1, then after the 409 the re-read sees v2".
+  final List<Object> roleDetailAnswers;
+  final List<Object> createRoleAnswers;
+  final List<Object> updateRoleAnswers;
+  final List<String> roleDetailIdsSeen = <String>[];
+  final List<({String name, List<String> capabilities})> createdBodies = [];
+  final List<({String roleId, RoleUpdate body})> updates = [];
+
+  /// Held open until the test completes it — for the "submitting" state.
+  Completer<void>? writeGate;
   int profileCalls = 0;
 
   int memberCalls = 0;
@@ -163,6 +183,42 @@ class FakeOrgScoped implements OrgScoped {
     await Future<void>.delayed(delay);
     if (catalogFailure != null) throw catalogFailure!;
     return catalog ?? const CapabilityCatalogView(items: []);
+  }
+
+  Object _answer(List<Object> answers, int call) {
+    if (answers.isEmpty) throw StateError('FakeOrgScoped: no scripted answer');
+    return answers[call < answers.length ? call : answers.length - 1];
+  }
+
+  Future<RoleDetailView> _resolve(Object answer) async {
+    if (answer is ApiFailure) throw answer;
+    return answer as RoleDetailView;
+  }
+
+  @override
+  Future<RoleDetailView> getRoleDetail(String roleId) async {
+    final call = roleDetailIdsSeen.length;
+    roleDetailIdsSeen.add(roleId);
+    await Future<void>.delayed(delay);
+    return _resolve(_answer(roleDetailAnswers, call));
+  }
+
+  @override
+  Future<RoleDetailView> createRole({required String name, required List<String> capabilities}) async {
+    final call = createdBodies.length;
+    createdBodies.add((name: name, capabilities: capabilities));
+    if (writeGate != null) await writeGate!.future;
+    await Future<void>.delayed(delay);
+    return _resolve(_answer(createRoleAnswers, call));
+  }
+
+  @override
+  Future<RoleDetailView> updateRole(String roleId, RoleUpdate body) async {
+    final call = updates.length;
+    updates.add((roleId: roleId, body: body));
+    if (writeGate != null) await writeGate!.future;
+    await Future<void>.delayed(delay);
+    return _resolve(_answer(updateRoleAnswers, call));
   }
 
   @override
