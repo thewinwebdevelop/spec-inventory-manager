@@ -380,6 +380,33 @@ export const ERROR_CODES = {
     message: "ยังแก้ไขบทบาทไม่ได้ในขณะนี้ กรุณาลองใหม่ภายหลัง",
   },
 
+  // ── F-003 · T-003-B24 — PATCH /orgs/{orgId}/roles/{roleId} (api-spec §5) ──
+  // `version` in the body is not the role's current one (AC-3.12) — somebody
+  // else saved first. `details.currentVersion`. The client MUST re-fetch and
+  // show the difference; resubmitting with `currentVersion` automatically is
+  // the last-write-wins AC-3.12 forbids (SR-14).
+  ROLE_CHANGED: {
+    code: "ROLE_CHANGED",
+    status: HttpStatus.CONFLICT,
+    message: "บทบาทนี้ถูกแก้ไขไปแล้ว กรุณาโหลดใหม่แล้วตรวจสอบอีกครั้ง",
+  },
+  // The Owner role cannot be renamed, edited or deleted — by anybody, the Owner
+  // included (AC-4.1). A non-Owner trying leaves `escalation_denied` (SR-13).
+  ROLE_LOCKED: {
+    code: "ROLE_LOCKED",
+    status: HttpStatus.CONFLICT,
+    message: "บทบาทเจ้าของร้านแก้ไขไม่ได้",
+  },
+  // D-034 Addendum 2 — the role is held by other active members and the actor
+  // (re-read in the tx) lacks `manage_members`. Not FORBIDDEN: the actor may
+  // still manage other roles, so the client stays on the screen (architecture
+  // §1.3). No details; no security event (a warn log `role_write_refused`).
+  ROLE_HELD_REQUIRES_MANAGE_MEMBERS: {
+    code: "ROLE_HELD_REQUIRES_MANAGE_MEMBERS",
+    status: HttpStatus.FORBIDDEN,
+    message: "บทบาทนี้มีสมาชิกคนอื่นใช้อยู่ — ต้องมีสิทธิ์จัดการสมาชิกจึงจะแก้ได้",
+  },
+
   // ── 500 unknown fallback (filter maps ANY unrecognized error here) ────────
   INTERNAL: {
     code: "INTERNAL",

@@ -74,8 +74,6 @@ const BRANCH = /(?:code\s*===?\s*|case\s+)['"]([A-Z][A-Z0-9_]{3,})['"]/g;
 // F-003: route role ใหม่ยังไม่อยู่ใน contract (Q-T1 — path + code ลงพร้อม route) แต่ copy ฝั่ง client
 // (T-003-W03/M03) พร้อมแล้ว · owner = task ที่ publish response นั้น · เทสต์ "debt list is honest" จะแดงให้ลบเมื่อ document แล้ว
 const UNDOCUMENTED: readonly string[] = Object.freeze([
-  "ROLE_LOCKED", // T-003-B24 (PATCH /roles/{id})
-  "ROLE_HELD_REQUIRES_MANAGE_MEMBERS", // T-003-B24 (PATCH /roles/{id})
   "ROLE_HISTORY_LIMIT_REACHED", // T-003-B25 (DELETE /roles/{id})
 ]);
 

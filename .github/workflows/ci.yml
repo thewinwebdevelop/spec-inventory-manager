@@ -617,6 +617,11 @@ jobs:
           # order, MUT-07 on a real DB and 403-not-503 for non-holders live only
           # there. The role-reads file had no floor either. 262 = previous 231 +
           # these 31; the full local run is 362, so this is still a floor.
+          #
+          # ★ T-003-B24: PATCH /roles/{roleId} — ROLE_CHANGED, the no-op rule,
+          # ROLE_LOCKED, the invitation clamp, MUT-07 (update leg) and the
+          # role-edit ‖ admin-reset lock-order barrier live only in this file.
+          # 276 = 262 + its 14; the full local run is 376.
           node tool/ci/assert-tests-ran.mjs \
             --report /tmp/api-int-tests.json \
             --lane "integration-api · apps/api *.int.test.ts" \
@@ -636,7 +641,8 @@ jobs:
             --require "test/role-key-authority.int.test.ts=25" \
             --require "test/f003-role-reads.e2e.int.test.ts=13" \
             --require "test/f003-role-create.e2e.int.test.ts=18" \
-            --min-passed 262
+            --require "test/f003-role-update.e2e.int.test.ts=14" \
+            --min-passed 276
       - name: dump api log on failure
         if: failure()
         run: cat /tmp/api.log || true

@@ -14,9 +14,9 @@
 // of their own role.
 //
 // READ-ONLY in F-002. F-003 adds create/update/delete and per-role capability
-// editing — T-003-B23 lands `POST` (create, incl. clone); PATCH/DELETE follow
-// in B24/B25.
-import { Body, Controller, Get, Inject, Param, Post, Res, UseGuards } from "@nestjs/common";
+// editing — T-003-B23 lands `POST` (create, incl. clone), T-003-B24 `PATCH`;
+// DELETE follows in B25.
+import { Body, Controller, Get, Inject, Param, Patch, Post, Res, UseGuards } from "@nestjs/common";
 import type { Response } from "express";
 import { CAPABILITY_MANAGE_ROLES, type CapabilityCatalogView } from "@omnistock/core-domain";
 import { AnyActiveMember, RequireCapability, RoleWrite } from "../common/authz";
@@ -71,6 +71,26 @@ export class RolesController {
   ): Promise<RoleDetail> {
     applyResponseHeaders(res, ORG_PROFILE_RESPONSE_HEADERS);
     return this.roles.create(body);
+  }
+
+  /**
+   * F-003 · T-003-B24 ★ — rename and/or replace the capabilities of a role
+   * (api-spec §1/§2). `200` + the role's `RoleDetail` (the current one on a
+   * no-op). Same guard chain as `create` (`manage_roles` → flag → `roleWrite`);
+   * the body goes to the service RAW for the same reason — its shape is checked
+   * after the in-tx floor and `ROLE_LOCKED`.
+   */
+  @RequireCapability(CAPABILITY_MANAGE_ROLES)
+  @RoleWrite()
+  @Patch(":roleId")
+  @UseGuards(JsonOnlyGuard)
+  async update(
+    @Param("roleId") roleId: string,
+    @Body() body: unknown,
+    @Res({ passthrough: true }) res: Response,
+  ): Promise<RoleDetail> {
+    applyResponseHeaders(res, ORG_PROFILE_RESPONSE_HEADERS);
+    return this.roles.update(roleId, body);
   }
 
   /**

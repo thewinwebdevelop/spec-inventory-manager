@@ -13,7 +13,7 @@ part 'update_role_request.g.dart';
 ///
 /// Properties:
 /// * [version] - The `RoleDetail.version` the user was looking at.
-/// * [name] - Same rules as `CreateRoleRequest.name`.
+/// * [name] - Same rules as `CreateRoleRequest.name`. `maxLength` is the raw cap the server checks before normalising (the 50-code-point rule applies after). 
 /// * [capabilities] - The WHOLE new set (replace, not a diff). Same rules as `CreateRoleRequest.capabilities`. 
 @BuiltValue()
 abstract class UpdateRoleRequest implements Built<UpdateRoleRequest, UpdateRoleRequestBuilder> {
@@ -21,7 +21,7 @@ abstract class UpdateRoleRequest implements Built<UpdateRoleRequest, UpdateRoleR
   @BuiltValueField(wireName: r'version')
   int get version;
 
-  /// Same rules as `CreateRoleRequest.name`.
+  /// Same rules as `CreateRoleRequest.name`. `maxLength` is the raw cap the server checks before normalising (the 50-code-point rule applies after). 
   @BuiltValueField(wireName: r'name')
   String? get name;
 

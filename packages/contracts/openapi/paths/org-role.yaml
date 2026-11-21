@@ -61,3 +61,165 @@ get:
         application/json:
           schema:
             $ref: "../components/common.yaml#/ErrorResponse"
+
+patch:
+  operationId: updateOrgRole
+  summary: Rename a role and/or replace its capabilities
+  description: >
+    F-003 (api-spec §1, §2, AC-3.3, AC-3.10, AC-3.12, AC-4.1, AC-5.1, D-034
+    Addendum + Addendum 2). Requires `manage_roles`. `version` is required — the
+    `RoleDetail.version` the user was looking at. `capabilities` is the WHOLE new
+    set (replace, not a diff); `name` and `capabilities` are each optional, but
+    at least one must be sent.
+
+
+    NO-OP: when the normalised name and the canonical capability set are what is
+    already stored, the answer is `200` with the CURRENT role — `version` is not
+    compared (a stale one is fine), nothing is written and no event fires. The
+    no-op is decided only AFTER every permission rule, so a no-op on a role you
+    may not edit is still refused.
+
+
+    ⚠️ `409 ROLE_CHANGED`: someone saved the role after you loaded it. The client
+    MUST re-fetch `GET /orgs/{orgId}/roles/{roleId}` and show the difference for
+    the user to decide — it must NEVER resubmit automatically with
+    `details.currentVersion` (that is the last-write-wins AC-3.12 forbids).
+
+
+    A role other ACTIVE members hold (counted on the server, the caller
+    excluded): the caller must also hold `manage_members`
+    (`403 ROLE_HELD_REQUIRES_MANAGE_MEMBERS` — stay on the screen and re-fetch;
+    `viewer.canEdit.reason = "in_use_requires_manage_members"`), and the role as
+    it is now must hold strictly less than the caller
+    (`403 TARGET_NOT_BELOW_ACTOR`; reason `equal_permissions_in_use`). This
+    applies to every field, a rename included. The Owner passes both.
+
+
+    Editing your own role is allowed (only within your own capabilities); losing
+    a capability takes effect on your next request (AC-3.10 — the client warns
+    first). Making a role hold `manage_members` / `manage_roles` shortens its
+    pending invitations to 24 hours from issue (never lengthens them).
+
+
+    ⚠️ ROLLOUT FLAG: while `ROLE_WRITES_ENABLED` is off the server answers
+    `503 ROLE_WRITES_DISABLED` to callers who hold `manage_roles`
+    (`viewer.canEdit.reason = "writes_disabled"`). A caller WITHOUT
+    `manage_roles` gets `403 FORBIDDEN` either way.
+
+
+    FIXED CHECK ORDER (api-spec §2): `manage_roles` (`403 FORBIDDEN`) → flag
+    (`503`) → rate limit (`429`) → the role exists in this shop and is not
+    deleted (`404`) → `manage_roles` re-read inside the transaction
+    (`403 FORBIDDEN`) → the Owner role (`409 ROLE_LOCKED`) → body shape
+    (`422 VALIDATION_FAILED`) → name (`422 VALIDATION_FAILED`, then
+    `409 ROLE_NAME_TAKEN` for a reserved label) → `ROLE_EMPTY` →
+    `FULL_ACCESS_RESERVED` → `UNKNOWN_CAPABILITY` → `ROLE_EXCEEDS_ACTOR` →
+    `ROLE_HELD_REQUIRES_MANAGE_MEMBERS` → `TARGET_NOT_BELOW_ACTOR` → no-op
+    (`200`) → write (`409 ROLE_CHANGED`; a live role with the same name →
+    `409 ROLE_NAME_TAKEN`).
+
+
+    Rate limit `roleWrite`: 60 role writes per hour per shop, shared by
+    create / update / delete.
+  tags:
+    - roles
+  security:
+    - bearerAuth: []
+  requestBody:
+    required: true
+    content:
+      application/json:
+        schema:
+          $ref: "../components/roles.yaml#/UpdateRoleRequest"
+  responses:
+    "200":
+      description: >
+        The role as it is now — the same `RoleDetail` `GET /orgs/{orgId}/roles/{roleId}`
+        returns (`version` incremented on a real change, unchanged on a no-op).
+      headers:
+        Cache-Control:
+          $ref: "../components/headers.yaml#/CacheControlNoStore"
+      content:
+        application/json:
+          schema:
+            $ref: "../components/roles.yaml#/RoleDetail"
+    "401":
+      description: Missing/invalid access token (`UNAUTHENTICATED`)
+      content:
+        application/json:
+          schema:
+            $ref: "../components/common.yaml#/ErrorResponse"
+    "403":
+      description: >
+        `FORBIDDEN` — missing `manage_roles` (at the guard, or re-read inside the
+        transaction) · `ROLE_EXCEEDS_ACTOR` — the role (as it is, or as it would
+        be) holds a capability you do not (no `details`) ·
+        `ROLE_HELD_REQUIRES_MANAGE_MEMBERS` — other active members hold this role
+        and you do not hold `manage_members` (no `details`) ·
+        `TARGET_NOT_BELOW_ACTOR` — other active members hold this role and it
+        holds exactly what you hold (no `details`) · `ORG_ACCESS_DENIED` — not an
+        active member of this shop.
+      content:
+        application/json:
+          schema:
+            $ref: "../components/common.yaml#/ErrorResponse"
+    "404":
+      description: >
+        `NOT_FOUND` — no live role with this id in this shop. A deleted role,
+        another shop's role and an unknown id answer identically.
+      content:
+        application/json:
+          schema:
+            $ref: "../components/common.yaml#/ErrorResponse"
+    "409":
+      description: >
+        `ROLE_CHANGED` (+`details.currentVersion`) — `version` is not the
+        current one; re-fetch, never auto-resubmit · `ROLE_LOCKED` — the Owner
+        role cannot be renamed or edited, by anybody · `ROLE_NAME_TAKEN` — a live
+        role of this shop already has this name (normalised, case-insensitive)
+        or the name is a system role's label · `LAST_OWNER` — defensive Owner
+        check, not expected · `CONFLICT` + `details.reason = "busy"` (lock
+        contention, retry).
+      content:
+        application/json:
+          schema:
+            $ref: "../components/common.yaml#/ErrorResponse"
+    "415":
+      description: Non-JSON Content-Type (`UNSUPPORTED_MEDIA_TYPE`)
+      content:
+        application/json:
+          schema:
+            $ref: "../components/common.yaml#/ErrorResponse"
+    "422":
+      description: >
+        `VALIDATION_FAILED` (+`fieldErrors.version` / `fieldErrors.name` /
+        `fieldErrors.capabilities`) — `version` missing or not an integer ≥ 1,
+        neither `name` nor `capabilities` sent, a malformed value, or a name that
+        is empty / over 50 code points / contains invisible or control
+        characters · `ROLE_EMPTY` (+`fieldErrors.capabilities`) ·
+        `FULL_ACCESS_RESERVED` (+`fieldErrors.capabilities`) — `full_access` is
+        the Owner's alone · `UNKNOWN_CAPABILITY` (+`details.capabilities`,
+        `fieldErrors.capabilities`) — not a selectable key of the catalog ·
+        `ORG_MISMATCH` — `X-Organization-Id` disagrees with the path.
+      content:
+        application/json:
+          schema:
+            $ref: "../components/common.yaml#/ErrorResponse"
+    "429":
+      description: "`RATE_LIMITED` — `roleWrite`: 60 role writes per hour per shop."
+      headers:
+        Retry-After:
+          $ref: "../components/headers.yaml#/RetryAfter"
+      content:
+        application/json:
+          schema:
+            $ref: "../components/common.yaml#/ErrorResponse"
+    "503":
+      description: >
+        `ROLE_WRITES_DISABLED` — role writes are switched off while the release
+        rolls out (`viewer.canEdit.reason = "writes_disabled"`). Only callers
+        holding `manage_roles` see it.
+      content:
+        application/json:
+          schema:
+            $ref: "../components/common.yaml#/ErrorResponse"

@@ -49,6 +49,7 @@ export {
 export {
   decideRoleWrite,
   ROLE_WRITE_OPS,
+  UNCHANGED,
   type RoleWriteInput,
   type RoleWriteOp,
   type RoleWriteResult,

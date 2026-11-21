@@ -51,6 +51,13 @@ describe("G3-01 (ก) · @RoleWrite() routes ↔ ROLE_WRITE_ROUTES (set-equality
     expect(ROLE_WRITE_ROUTES.map(routeKey)).toContain("POST /orgs/{orgId}/roles");
   });
 
+  it("T-003-B24 · PATCH /roles/{roleId} is in the table — exactly POST + PATCH until B25 adds DELETE", () => {
+    expect(ROLE_WRITE_ROUTES.map(routeKey)).toEqual([
+      "POST /orgs/{orgId}/roles",
+      "PATCH /orgs/{orgId}/roles/{roleId}",
+    ]);
+  });
+
   it("a router that matches the table is clean", () => {
     expect(auditRoleWriteRoutes(CLEAN)).toEqual({ missingDecorator: [], notInTable: [] });
   });

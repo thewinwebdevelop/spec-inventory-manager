@@ -131,22 +131,40 @@ d("T-003-B23 POST /orgs/{orgId}/roles (E2E, DB+Redis)", () => {
   // ── G3-01 (int) ────────────────────────────────────────────────────────────
 
   /**
-   * One request per ROLE_WRITE_ROUTES row that reaches the write. B24/B25 add
-   * a recipe with their route — the set-equality below is red until they do.
+   * One request per ROLE_WRITE_ROUTES row that reaches the write. B25 adds
+   * a recipe with its route — the set-equality below is red until it does.
    */
-  const RECIPES: Record<string, () => { path: string; method: "post"; body: unknown; as: string }> =
-    {
-      "POST /orgs/{orgId}/roles": () => ({
-        path: `/orgs/${A().org.id}/roles`,
-        method: "post",
-        body: { name: `g3-01-${unique()}`, capabilities: ["manage_orders"] },
+  interface Recipe {
+    path: string;
+    method: "post" | "patch";
+    body: unknown;
+    as: string;
+  }
+  const RECIPES: Record<string, () => Promise<Recipe>> = {
+    "POST /orgs/{orgId}/roles": async () => ({
+      path: `/orgs/${A().org.id}/roles`,
+      method: "post",
+      body: { name: `g3-01-${unique()}`, capabilities: ["manage_orders"] },
+      as: user("OWN"),
+    }),
+    // T-003-B24 — a role nobody holds, so the edit is a real change that reaches the write.
+    "PATCH /orgs/{orgId}/roles/{roleId}": async () => {
+      const role = await kit.createCustomRole({
+        organizationId: A().org.id,
+        name: `g3-01-p-${unique()}`,
+        capabilities: ["manage_orders"],
+      });
+      return {
+        path: `/orgs/${A().org.id}/roles/${role.id}`,
+        method: "patch",
+        body: { version: 1, name: `g3-01-p2-${unique()}` },
         as: user("OWN"),
-      }),
-    };
+      };
+    },
+  };
 
-  type Recipe = ReturnType<(typeof RECIPES)[string]>;
   const send = (app: TestApp, r: Recipe) => {
-    // `r.method` widens to "patch" | "delete" when B24/B25 add their recipes.
+    // `r.method` widens to "delete" when B25 adds its recipe.
     const agent = request(app.server());
     const open = agent[r.method].bind(agent);
     return open(r.path)
@@ -174,7 +192,7 @@ d("T-003-B23 POST /orgs/{orgId}/roles (E2E, DB+Redis)", () => {
     for (const [key, recipe] of Object.entries(RECIPES)) {
       decideSpy.mockClear();
       assertSpy.mockClear();
-      const r = recipe();
+      const r = await recipe();
       const res = await send(spied, r);
       expect(res.status, `${key}: ${JSON.stringify(res.body)}`).toBeLessThan(300);
       expect(decideSpy, `${key} never reached the decider seam`).toHaveBeenCalled();

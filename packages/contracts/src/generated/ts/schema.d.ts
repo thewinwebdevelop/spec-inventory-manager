@@ -513,7 +513,25 @@ export interface paths {
         delete?: never;
         options?: never;
         head?: never;
-        patch?: never;
+        /**
+         * Rename a role and/or replace its capabilities
+         * @description F-003 (api-spec §1, §2, AC-3.3, AC-3.10, AC-3.12, AC-4.1, AC-5.1, D-034 Addendum + Addendum 2). Requires `manage_roles`. `version` is required — the `RoleDetail.version` the user was looking at. `capabilities` is the WHOLE new set (replace, not a diff); `name` and `capabilities` are each optional, but at least one must be sent.
+         *
+         *     NO-OP: when the normalised name and the canonical capability set are what is already stored, the answer is `200` with the CURRENT role — `version` is not compared (a stale one is fine), nothing is written and no event fires. The no-op is decided only AFTER every permission rule, so a no-op on a role you may not edit is still refused.
+         *
+         *     ⚠️ `409 ROLE_CHANGED`: someone saved the role after you loaded it. The client MUST re-fetch `GET /orgs/{orgId}/roles/{roleId}` and show the difference for the user to decide — it must NEVER resubmit automatically with `details.currentVersion` (that is the last-write-wins AC-3.12 forbids).
+         *
+         *     A role other ACTIVE members hold (counted on the server, the caller excluded): the caller must also hold `manage_members` (`403 ROLE_HELD_REQUIRES_MANAGE_MEMBERS` — stay on the screen and re-fetch; `viewer.canEdit.reason = "in_use_requires_manage_members"`), and the role as it is now must hold strictly less than the caller (`403 TARGET_NOT_BELOW_ACTOR`; reason `equal_permissions_in_use`). This applies to every field, a rename included. The Owner passes both.
+         *
+         *     Editing your own role is allowed (only within your own capabilities); losing a capability takes effect on your next request (AC-3.10 — the client warns first). Making a role hold `manage_members` / `manage_roles` shortens its pending invitations to 24 hours from issue (never lengthens them).
+         *
+         *     ⚠️ ROLLOUT FLAG: while `ROLE_WRITES_ENABLED` is off the server answers `503 ROLE_WRITES_DISABLED` to callers who hold `manage_roles` (`viewer.canEdit.reason = "writes_disabled"`). A caller WITHOUT `manage_roles` gets `403 FORBIDDEN` either way.
+         *
+         *     FIXED CHECK ORDER (api-spec §2): `manage_roles` (`403 FORBIDDEN`) → flag (`503`) → rate limit (`429`) → the role exists in this shop and is not deleted (`404`) → `manage_roles` re-read inside the transaction (`403 FORBIDDEN`) → the Owner role (`409 ROLE_LOCKED`) → body shape (`422 VALIDATION_FAILED`) → name (`422 VALIDATION_FAILED`, then `409 ROLE_NAME_TAKEN` for a reserved label) → `ROLE_EMPTY` → `FULL_ACCESS_RESERVED` → `UNKNOWN_CAPABILITY` → `ROLE_EXCEEDS_ACTOR` → `ROLE_HELD_REQUIRES_MANAGE_MEMBERS` → `TARGET_NOT_BELOW_ACTOR` → no-op (`200`) → write (`409 ROLE_CHANGED`; a live role with the same name → `409 ROLE_NAME_TAKEN`).
+         *
+         *     Rate limit `roleWrite`: 60 role writes per hour per shop, shared by create / update / delete.
+         */
+        patch: operations["updateOrgRole"];
         trace?: never;
     };
     "/orgs/{orgId}/role-details": {
@@ -814,7 +832,7 @@ export interface components {
         };
         /** @description Creates a custom role; "clone" is this same request pre-filled from another role. There is no `key`, `isSystem` or `version`: unknown fields are stripped, so a created role always has `key: null` (AC-1.4). */
         CreateRoleRequest: {
-            /** @description 1–50 code points AFTER the server normalises it (NFC, trim, collapse inner whitespace); invisible/control characters (Unicode Cc/Cf) are refused. The response carries the normalised name. */
+            /** @description Raw cap 200 (checked before normalising — security review B23 L-1). 1–50 code points AFTER the server normalises it (NFC, trim, collapse inner whitespace); invisible/control characters (Unicode Cc/Cf) are refused. The response carries the normalised name. */
             name: string;
             /** @description Keys from the capability catalog with `selectable: true`. Stored in canonical form (api-spec §2) — the response may differ from what was sent (duplicates and implied keys removed, sorted). */
             capabilities: string[];
@@ -823,7 +841,7 @@ export interface components {
         UpdateRoleRequest: {
             /** @description The `RoleDetail.version` the user was looking at. */
             version: number;
-            /** @description Same rules as `CreateRoleRequest.name`. */
+            /** @description Same rules as `CreateRoleRequest.name`. `maxLength` is the raw cap the server checks before normalising (the 50-code-point rule applies after). */
             name?: string;
             /** @description The WHOLE new set (replace, not a diff). Same rules as `CreateRoleRequest.capabilities`. */
             capabilities?: string[];
@@ -885,7 +903,7 @@ export interface components {
                 code: string;
                 /** @description User-facing Thai message. F-002 copy says "ร้าน" rather than "องค์กร" (D-029); identifiers and enum values stay English. */
                 message: string;
-                /** @description Optional, code-specific context. Documented cases (F-002): `INVITATION_PENDING` → `{ invitationId, expiresAt, roleId, roleName }` (§3.11) · `ORG_LIMIT_REACHED` → `{ limit }` (§3.1) · `INVITATION_EMAIL_MISMATCH` → `{ emailMasked }` (§3.15) · `CONFLICT` → `{ reason: "busy" }` when the request lost the race for the shop's row lock (amend #4 / NEW-4 — retryable, never a 500). F-003 (api-spec §5): `UNKNOWN_CAPABILITY` → `{ capabilities }` (the refused keys, sorted) · `ROLE_LIMIT_REACHED` → `{ limit }`. `ROLE_EXCEEDS_ACTOR` carries NO details. (The update/delete role codes document theirs with those routes.) A client that does not recognise a key MUST still behave correctly. */
+                /** @description Optional, code-specific context. Documented cases (F-002): `INVITATION_PENDING` → `{ invitationId, expiresAt, roleId, roleName }` (§3.11) · `ORG_LIMIT_REACHED` → `{ limit }` (§3.1) · `INVITATION_EMAIL_MISMATCH` → `{ emailMasked }` (§3.15) · `CONFLICT` → `{ reason: "busy" }` when the request lost the race for the shop's row lock (amend #4 / NEW-4 — retryable, never a 500). F-003 (api-spec §5): `UNKNOWN_CAPABILITY` → `{ capabilities }` (the refused keys, sorted) · `ROLE_LIMIT_REACHED` → `{ limit }`. `ROLE_EXCEEDS_ACTOR` carries NO details. F-003 · PATCH role: `ROLE_CHANGED` → `{ currentVersion }` (re-fetch and show the difference — never resubmit with it automatically); `TARGET_NOT_BELOW_ACTOR` / `ROLE_HELD_REQUIRES_MANAGE_MEMBERS` / `ROLE_LOCKED` carry NO details. (The delete-role codes document theirs with that route.) A client that does not recognise a key MUST still behave correctly. */
                 details?: {
                     [key: string]: unknown;
                 };
@@ -2877,6 +2895,112 @@ export interface operations {
             };
             /** @description `ORG_MISMATCH` — `X-Organization-Id` disagrees with the path. */
             422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+        };
+    };
+    updateOrgRole: {
+        parameters: {
+            query?: never;
+            header?: {
+                /** @description Org context (api-spec §1). Optional on routes that already carry `{orgId}` in the path; if both are sent they MUST match, otherwise `422 ORG_MISMATCH`. User-scoped and public routes ignore this header entirely (I-3). */
+                "X-Organization-Id"?: components["parameters"]["OrgIdHeader"];
+            };
+            path: {
+                /** @description Organization id. On F-002 org-scoped routes this is one of the two accepted sources of org context (the other is the `X-Organization-Id` header, D-025); sending both with different values is `422 ORG_MISMATCH`. */
+                orgId: components["parameters"]["OrgIdParam"];
+                /** @description Role id (`RoleDetail.id`). */
+                roleId: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["UpdateRoleRequest"];
+            };
+        };
+        responses: {
+            /** @description The role as it is now — the same `RoleDetail` `GET /orgs/{orgId}/roles/{roleId}` returns (`version` incremented on a real change, unchanged on a no-op). */
+            200: {
+                headers: {
+                    "Cache-Control": components["headers"]["CacheControlNoStore"];
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["RoleDetail"];
+                };
+            };
+            /** @description Missing/invalid access token (`UNAUTHENTICATED`) */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description `FORBIDDEN` — missing `manage_roles` (at the guard, or re-read inside the transaction) · `ROLE_EXCEEDS_ACTOR` — the role (as it is, or as it would be) holds a capability you do not (no `details`) · `ROLE_HELD_REQUIRES_MANAGE_MEMBERS` — other active members hold this role and you do not hold `manage_members` (no `details`) · `TARGET_NOT_BELOW_ACTOR` — other active members hold this role and it holds exactly what you hold (no `details`) · `ORG_ACCESS_DENIED` — not an active member of this shop. */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description `NOT_FOUND` — no live role with this id in this shop. A deleted role, another shop's role and an unknown id answer identically. */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description `ROLE_CHANGED` (+`details.currentVersion`) — `version` is not the current one; re-fetch, never auto-resubmit · `ROLE_LOCKED` — the Owner role cannot be renamed or edited, by anybody · `ROLE_NAME_TAKEN` — a live role of this shop already has this name (normalised, case-insensitive) or the name is a system role's label · `LAST_OWNER` — defensive Owner check, not expected · `CONFLICT` + `details.reason = "busy"` (lock contention, retry). */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Non-JSON Content-Type (`UNSUPPORTED_MEDIA_TYPE`) */
+            415: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description `VALIDATION_FAILED` (+`fieldErrors.version` / `fieldErrors.name` / `fieldErrors.capabilities`) — `version` missing or not an integer ≥ 1, neither `name` nor `capabilities` sent, a malformed value, or a name that is empty / over 50 code points / contains invisible or control characters · `ROLE_EMPTY` (+`fieldErrors.capabilities`) · `FULL_ACCESS_RESERVED` (+`fieldErrors.capabilities`) — `full_access` is the Owner's alone · `UNKNOWN_CAPABILITY` (+`details.capabilities`, `fieldErrors.capabilities`) — not a selectable key of the catalog · `ORG_MISMATCH` — `X-Organization-Id` disagrees with the path. */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description `RATE_LIMITED` — `roleWrite`: 60 role writes per hour per shop. */
+            429: {
+                headers: {
+                    "Retry-After": components["headers"]["RetryAfter"];
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description `ROLE_WRITES_DISABLED` — role writes are switched off while the release rolls out (`viewer.canEdit.reason = "writes_disabled"`). Only callers holding `manage_roles` see it. */
+            503: {
                 headers: {
                     [name: string]: unknown;
                 };

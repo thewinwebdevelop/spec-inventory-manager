@@ -99,6 +99,7 @@ Class | Method | HTTP request | Description
 [*RolesApi*](doc/RolesApi.md) | [**getOrgCapabilityCatalog**](doc/RolesApi.md#getorgcapabilitycatalog) | **GET** /orgs/{orgId}/capabilities | The capability catalog this shop can see (role checklist)
 [*RolesApi*](doc/RolesApi.md) | [**getOrgRoleDetail**](doc/RolesApi.md#getorgroledetail) | **GET** /orgs/{orgId}/roles/{roleId} | One role of this shop, in full (edit and clone screens)
 [*RolesApi*](doc/RolesApi.md) | [**listOrgRoleDetails**](doc/RolesApi.md#listorgroledetails) | **GET** /orgs/{orgId}/role-details | Every live role of this shop, in full (the role list screen)
+[*RolesApi*](doc/RolesApi.md) | [**updateOrgRole**](doc/RolesApi.md#updateorgrole) | **PATCH** /orgs/{orgId}/roles/{roleId} | Rename a role and/or replace its capabilities
 [*SystemApi*](doc/SystemApi.md) | [**getHealth**](doc/SystemApi.md#gethealth) | **GET** /health | Liveness/readiness probe
 
 

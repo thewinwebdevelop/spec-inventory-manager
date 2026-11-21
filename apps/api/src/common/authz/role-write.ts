@@ -32,6 +32,7 @@ export interface RoleWriteRoute {
 /** Every route that writes `Role` (api-spec dialect, literal rows — never a pattern). */
 export const ROLE_WRITE_ROUTES: readonly RoleWriteRoute[] = Object.freeze([
   Object.freeze({ method: "POST", path: "/orgs/{orgId}/roles" }),
+  Object.freeze({ method: "PATCH", path: "/orgs/{orgId}/roles/{roleId}" }),
 ]);
 
 export interface RoleWriteAudit {

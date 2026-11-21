@@ -28,7 +28,7 @@ import {
 import { CAPABILITY_MANAGE_MEMBERS, CAPABILITY_MANAGE_ROLES } from "@omnistock/core-domain";
 
 describe("ROUTE_CAPABILITIES (api-spec §2 · architecture §3.1)", () => {
-  it("pins the F-002 + F-003 endpoint→capability table exactly (10 + 4 rows)", () => {
+  it("pins the F-002 + F-003 endpoint→capability table exactly (10 + 5 rows)", () => {
     expect(ROUTE_CAPABILITIES.map(routeKey)).toEqual([
       "PATCH /orgs/{orgId}",
       "PUT /orgs/{orgId}/tax-profile",
@@ -46,6 +46,8 @@ describe("ROUTE_CAPABILITIES (api-spec §2 · architecture §3.1)", () => {
       "GET /orgs/{orgId}/roles/{roleId}",
       // T-003-B23 — create (Q-T1: the row lands with its route)
       "POST /orgs/{orgId}/roles",
+      // T-003-B24 — update
+      "PATCH /orgs/{orgId}/roles/{roleId}",
     ]);
   });
 
@@ -60,6 +62,7 @@ describe("ROUTE_CAPABILITIES (api-spec §2 · architecture §3.1)", () => {
       "GET /orgs/{orgId}/role-details",
       "GET /orgs/{orgId}/roles/{roleId}",
       "POST /orgs/{orgId}/roles",
+      "PATCH /orgs/{orgId}/roles/{roleId}",
     ]);
   });
 

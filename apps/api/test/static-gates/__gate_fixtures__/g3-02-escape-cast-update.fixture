@@ -1,0 +1,8 @@
+// G3-02 red fixture (T-003-B24) — the same escape casts into the UPDATE writer.
+// (`as never` in this comment must NOT count)
+await tx.role.updateMany({ where, data: roleUpdateData({ ...base, capabilities: input.capabilities as never }) });
+await tx.role.updateMany({ where, data: roleUpdateData({ ...base, capabilities: raw as any }) });
+await tx.role.updateMany({ where, data: roleUpdateData({ ...base, capabilities: raw } as unknown as RoleUpdateDataInput) });
+// green — a validated value (or null = unchanged), no cast:
+await tx.role.updateMany({ where, data: roleUpdateData({ ...base, capabilities: validated.capabilities }) });
+await tx.role.updateMany({ where, data: roleUpdateData({ ...base, capabilities: null }) });

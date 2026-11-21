@@ -148,6 +148,14 @@ const PRESENTATION_ALLOWLIST: readonly PresentationAllowance[] = Object.freeze([
       "out.add(roleNameComparisonKey(labels[role.key]));",
     ],
   },
+  {
+    file: "apps/api/src/orgs/roles.service.ts",
+    reason:
+      "`RolesService.update` (T-003-B24) hands the edited role's key to `validateRoleName` as " +
+      "`selfKey` — the reserved-label policy above (a system role may take its own translation back). " +
+      "Naming only: the write is decided by decideRoleWrite on capabilities.",
+    lines: [": await this.validateNameInTx(tx, shape.name, role.key);"],
+  },
   // ── display call sites: a role key handed to `roleLabel` to render a label.
   // Exempt ONLY here, line by line; the helper's result used as a condition
   // (TS-10 / DART-6) is red even on a pinned line.

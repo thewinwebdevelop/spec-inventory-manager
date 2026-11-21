@@ -241,3 +241,39 @@ describe("U-API3-17 (POST /roles) · the role-create codes → status", () => {
     }
   });
 });
+
+// F-003 · T-003-B24 — the codes PATCH /orgs/{orgId}/roles/{roleId} adds (api-spec §5,
+// U-API3-17 for this route). TARGET_NOT_BELOW_ACTOR / ROLE_EXCEEDS_ACTOR (B02) and the
+// create codes (B23) are reused unchanged.
+describe("U-API3-17 (PATCH /roles/{roleId}) · the role-update codes → status", () => {
+  it("pins code → HTTP status", () => {
+    const expected: Record<string, number> = {
+      ROLE_CHANGED: 409,
+      ROLE_LOCKED: 409,
+      ROLE_HELD_REQUIRES_MANAGE_MEMBERS: 403,
+    };
+    for (const [code, status] of Object.entries(expected)) {
+      const def = (ERROR_CODES as Record<string, { code: string; status: number } | undefined>)[
+        code
+      ];
+      expect(def, `missing ${code}`).toBeDefined();
+      expect(def!.code, code).toBe(code);
+      expect(def!.status, code).toBe(status);
+    }
+  });
+
+  it("ROLE_HELD_REQUIRES_MANAGE_MEMBERS is not FORBIDDEN (the client stays on the screen — arch §1.3)", () => {
+    expect(ERROR_CODES.ROLE_HELD_REQUIRES_MANAGE_MEMBERS.code).not.toBe(ERROR_CODES.FORBIDDEN.code);
+    expect(ERROR_CODES.ROLE_HELD_REQUIRES_MANAGE_MEMBERS.message).not.toBe(
+      ERROR_CODES.FORBIDDEN.message,
+    );
+  });
+
+  it("the default copy names no capability key (AC-6.4)", () => {
+    for (const code of ["ROLE_CHANGED", "ROLE_LOCKED", "ROLE_HELD_REQUIRES_MANAGE_MEMBERS"]) {
+      const msg = (ERROR_CODES as Record<string, { message: string }>)[code]!.message;
+      expect(msg, code).not.toMatch(/manage_|view_|full_access|access_/);
+      expect(msg.length, code).toBeGreaterThan(5);
+    }
+  });
+});

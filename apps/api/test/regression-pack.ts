@@ -537,8 +537,12 @@ export const REGRESSION_PACK: readonly RegressionEntry[] = Object.freeze([
     finding: "SR-F003-13",
     title: "ROLE_LOCKED by a non-Owner not leaving an escalation trace",
     tier: "full",
-    pins: [{ file: "apps/api/test/f003-role-reads.e2e.int.test.ts", must: ["I3-49"] }],
-    pending: [{ tests: ["I3-14"], task: "T-003-B24" }],
+    pins: [
+      { file: "apps/api/test/f003-role-reads.e2e.int.test.ts", must: ["I3-49"] },
+      // T-003-B24 — PATCH of the Owner role: ROLE_LOCKED for everyone, event only for a non-Owner.
+      { file: "apps/api/test/f003-role-update.e2e.int.test.ts", must: ["I3-14"] },
+      { file: "apps/api/src/orgs/roles.service.update.test.ts", must: ["SR-13"] },
+    ],
   },
   {
     finding: "SR-F003-14",

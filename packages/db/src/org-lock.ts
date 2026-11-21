@@ -122,8 +122,9 @@ export const ORG_LOCK_REQUIRED_OPERATIONS: readonly OrgLockRequiredOperation[] =
   }),
   // F-003 architecture §3 — role writes take the SAME anchor (Organization →
   // Role → Invitation clamp). Timeouts are the shared ORG_TX_TIMEOUTS policy;
-  // operationKey is the new metric label. `createRole` landed in T-003-B23; B24/B25
-  // still carry `pendingTask` until their methods land (delete it in the same commit).
+  // operationKey is the new metric label. `createRole` landed in T-003-B23,
+  // `updateRole` in T-003-B24; B25 still carries `pendingTask` until its method
+  // lands (delete it in the same commit).
   Object.freeze({
     operationKey: "createRole",
     method: "POST",
@@ -135,7 +136,6 @@ export const ORG_LOCK_REQUIRED_OPERATIONS: readonly OrgLockRequiredOperation[] =
     method: "PATCH",
     path: "/orgs/{orgId}/roles/{roleId}",
     serviceMethod: "RolesService.update",
-    pendingTask: "T-003-B24",
   }),
   Object.freeze({
     operationKey: "deleteRole",
