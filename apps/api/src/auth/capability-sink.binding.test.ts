@@ -30,6 +30,20 @@ import { TenancyModule } from "../tenancy/tenancy.module";
 import { ACCESS_TOKEN_VERIFIER, type AccessTokenVerifier } from "../tenancy/access-token-verifier";
 import { SecurityEventsService, collectSecurityEvents } from "./security-events.service";
 import { AppModule } from "../app.module";
+import { loadEnv } from "@omnistock/config";
+
+/** A valid env for building (not booting) AppModule's import list. */
+const BINDING_ENV = {
+  DATABASE_URL: "postgresql://u:p@localhost:5432/db",
+  REDIS_URL: "redis://localhost:6379",
+  JWT_ACCESS_SECRET: "binding-access-secret-32-chars-minimum!!",
+  JWT_REFRESH_SECRET: "binding-refresh-secret-32-chars-minimum!",
+  INVITATION_TOKEN_SECRET: "binding-invitation-secret-32-chars-min!!",
+  WEB_APP_BASE_URL: "http://localhost:3001",
+  DEFAULT_ORG_PLAN_KEY: "comp_full",
+  PORT: "3000",
+  NODE_ENV: "test",
+};
 
 const ORG = "11111111-1111-4111-8111-111111111111";
 const USER = "22222222-2222-4222-8222-222222222222";
@@ -131,7 +145,8 @@ describe("CAPABILITY_EVENT_SINK → SecurityEventsService (T-002-13)", () => {
   });
 
   it("app.module.ts really performs this binding (the mechanism above is not enough on its own)", () => {
-    const imports = (Reflect.getMetadata("imports", AppModule) ?? []) as unknown[];
+    // T-003-B23: AppModule is `forRoot(env)` now (the boot snapshot — DV01).
+    const imports = (AppModule.forRoot(loadEnv(BINDING_ENV)).imports ?? []) as unknown[];
     const dynamic = imports.find(
       (entry): entry is { module: unknown; providers?: Array<{ provide?: unknown }> } =>
         typeof entry === "object" &&

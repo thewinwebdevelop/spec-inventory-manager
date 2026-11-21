@@ -332,6 +332,23 @@ describe("DomainExceptionFilter", () => {
     expect(line).toContain("500");
   });
 
+  it("security review B23 L-4 · 503 ROLE_WRITES_DISABLED logs at WARN — a planned rollout state, not an outage", () => {
+    // Flag-off is the DEFAULT for weeks of rollout (architecture §12). At error
+    // level with a stack it would count toward 5xx alerting the whole time.
+    const error = vi.mocked(Logger.prototype.error);
+    error.mockClear();
+    const { host, res } = mockHost();
+    filter.catch(domainError("ROLE_WRITES_DISABLED"), host);
+    expect(res.statusCode).toBe(503);
+    expect(error).not.toHaveBeenCalled();
+    expect(logLines.some((l) => l.includes("ROLE_WRITES_DISABLED") && l.includes("503"))).toBe(
+      true,
+    );
+    // …and a real 5xx still goes to error.
+    filter.catch(new Error("kaboom"), mockHost().host);
+    expect(error).toHaveBeenCalled();
+  });
+
   it("U-API-20 keeps the client's id as upstreamRequestId in the LOG ONLY", () => {
     const upstream = "gw-7a1c9f2e-0001";
     const { host, res } = mockHost({ "x-request-id": upstream });

@@ -14,12 +14,13 @@
 // of their own role.
 //
 // READ-ONLY in F-002. F-003 adds create/update/delete and per-role capability
-// editing; publishing a write path now would put a shape on the wire that F-003
-// has to change.
-import { Controller, Get, Inject, Param, Res } from "@nestjs/common";
+// editing — T-003-B23 lands `POST` (create, incl. clone); PATCH/DELETE follow
+// in B24/B25.
+import { Body, Controller, Get, Inject, Param, Post, Res, UseGuards } from "@nestjs/common";
 import type { Response } from "express";
 import { CAPABILITY_MANAGE_ROLES, type CapabilityCatalogView } from "@omnistock/core-domain";
-import { AnyActiveMember, RequireCapability } from "../common/authz";
+import { AnyActiveMember, RequireCapability, RoleWrite } from "../common/authz";
+import { JsonOnlyGuard } from "../auth";
 import { RolesService, type RoleListPage } from "./roles.service";
 import { RoleReadService, type RoleDetail, type RoleDetailListPage } from "./role-read.service";
 import { ORG_PROFILE_RESPONSE_HEADERS, applyResponseHeaders } from "./response-headers";
@@ -44,6 +45,32 @@ export class RolesController {
   async list(@Res({ passthrough: true }) res: Response): Promise<RoleListPage> {
     applyResponseHeaders(res, ORG_PROFILE_RESPONSE_HEADERS);
     return this.roles.list();
+  }
+
+  /**
+   * F-003 · T-003-B23 ★ — create a custom role (api-spec §1/§2). `201` + the
+   * same `RoleDetail` `GET /roles/{id}` serves.
+   *
+   * Guard chain (api-spec §2, fixed): `manage_roles` (CapabilityGuard, 403
+   * FORBIDDEN) → `ROLE_WRITES_ENABLED` (RoleWritesEnabledGuard, 503) → the
+   * shared `roleWrite` quota (429) — all three from `@RequireCapability` +
+   * `@RoleWrite()`. Everything after that is decided in the service, under the
+   * org lock, on facts re-read there.
+   *
+   * The body is handed over RAW: its shape is checked after the in-tx
+   * `manage_roles` floor (api-spec §2), and the handler never picks fields off
+   * it — `key`/`isSystem`/`version` cannot reach the write (AC-1.4).
+   */
+  @RequireCapability(CAPABILITY_MANAGE_ROLES)
+  @RoleWrite()
+  @Post()
+  @UseGuards(JsonOnlyGuard)
+  async create(
+    @Body() body: unknown,
+    @Res({ passthrough: true }) res: Response,
+  ): Promise<RoleDetail> {
+    applyResponseHeaders(res, ORG_PROFILE_RESPONSE_HEADERS);
+    return this.roles.create(body);
   }
 
   /**

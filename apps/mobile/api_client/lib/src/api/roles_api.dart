@@ -10,6 +10,7 @@ import 'package:dio/dio.dart';
 
 import 'package:omnistock_api_client/src/api_util.dart';
 import 'package:omnistock_api_client/src/model/capability_catalog.dart';
+import 'package:omnistock_api_client/src/model/create_role_request.dart';
 import 'package:omnistock_api_client/src/model/error_response.dart';
 import 'package:omnistock_api_client/src/model/role_detail.dart';
 import 'package:omnistock_api_client/src/model/role_detail_list_page.dart';
@@ -21,6 +22,112 @@ class RolesApi {
   final Serializers _serializers;
 
   const RolesApi(this._dio, this._serializers);
+
+  /// Create a custom role (also how \&quot;clone\&quot; is done)
+  /// F-003 (api-spec §1, §2, AC-3.1..3.7, AC-4.2, AC-5.1). Requires &#x60;manage_roles&#x60;. There is no clone endpoint: the client pre-fills this request from the source role (&#x60;RoleDetail&#x60;) and sends it like any create.  The created role always has &#x60;key: null&#x60; and &#x60;isSystem: false&#x60;; &#x60;key&#x60;, &#x60;isSystem&#x60; and &#x60;version&#x60; in the body are ignored (AC-1.4). &#x60;name&#x60; comes back normalised (NFC, trimmed, inner whitespace collapsed) and &#x60;capabilities&#x60; in canonical form (deduplicated, implied keys removed, sorted).  ⚠️ ROLLOUT FLAG: while &#x60;ROLE_WRITES_ENABLED&#x60; is off the server answers &#x60;503 ROLE_WRITES_DISABLED&#x60; to callers who hold &#x60;manage_roles&#x60; — the same state &#x60;viewer.canCreate.reason &#x3D; \&quot;writes_disabled\&quot;&#x60; already reports. A caller WITHOUT &#x60;manage_roles&#x60; gets &#x60;403 FORBIDDEN&#x60; either way.  FIXED CHECK ORDER (api-spec §2): &#x60;manage_roles&#x60; (&#x60;403 FORBIDDEN&#x60;) → flag (&#x60;503&#x60;) → rate limit (&#x60;429&#x60;) → &#x60;manage_roles&#x60; re-read inside the transaction (&#x60;403 FORBIDDEN&#x60;) → body shape (&#x60;422 VALIDATION_FAILED&#x60;) → name (&#x60;422 VALIDATION_FAILED&#x60; length / invisible characters, then &#x60;409 ROLE_NAME_TAKEN&#x60; for a reserved system-role label) → &#x60;ROLE_EMPTY&#x60; → &#x60;FULL_ACCESS_RESERVED&#x60; → &#x60;UNKNOWN_CAPABILITY&#x60; → &#x60;ROLE_EXCEEDS_ACTOR&#x60; → &#x60;ROLE_LIMIT_REACHED&#x60; → write (a live role with the same name, ignoring case → &#x60;409 ROLE_NAME_TAKEN&#x60;).  Rate limit &#x60;roleWrite&#x60;: 60 role writes per hour per shop, shared by create / update / delete. 
+  ///
+  /// Parameters:
+  /// * [orgId] - Organization id. On F-002 org-scoped routes this is one of the two accepted sources of org context (the other is the `X-Organization-Id` header, D-025); sending both with different values is `422 ORG_MISMATCH`. 
+  /// * [createRoleRequest] 
+  /// * [xOrganizationId] - Org context (api-spec §1). Optional on routes that already carry `{orgId}` in the path; if both are sent they MUST match, otherwise `422 ORG_MISMATCH`. User-scoped and public routes ignore this header entirely (I-3). 
+  /// * [cancelToken] - A [CancelToken] that can be used to cancel the operation
+  /// * [headers] - Can be used to add additional headers to the request
+  /// * [extras] - Can be used to add flags to the request
+  /// * [validateStatus] - A [ValidateStatus] callback that can be used to determine request success based on the HTTP status of the response
+  /// * [onSendProgress] - A [ProgressCallback] that can be used to get the send progress
+  /// * [onReceiveProgress] - A [ProgressCallback] that can be used to get the receive progress
+  ///
+  /// Returns a [Future] containing a [Response] with a [RoleDetail] as data
+  /// Throws [DioException] if API call or serialization fails
+  Future<Response<RoleDetail>> createOrgRole({ 
+    required String orgId,
+    required CreateRoleRequest createRoleRequest,
+    String? xOrganizationId,
+    CancelToken? cancelToken,
+    Map<String, dynamic>? headers,
+    Map<String, dynamic>? extra,
+    ValidateStatus? validateStatus,
+    ProgressCallback? onSendProgress,
+    ProgressCallback? onReceiveProgress,
+  }) async {
+    final _path = r'/orgs/{orgId}/roles'.replaceAll('{' r'orgId' '}', encodeQueryParameter(_serializers, orgId, const FullType(String)).toString());
+    final _options = Options(
+      method: r'POST',
+      headers: <String, dynamic>{
+        if (xOrganizationId != null) r'X-Organization-Id': xOrganizationId,
+        ...?headers,
+      },
+      extra: <String, dynamic>{
+        'secure': <Map<String, String>>[
+          {
+            'type': 'http',
+            'scheme': 'bearer',
+            'name': 'bearerAuth',
+          },
+        ],
+        ...?extra,
+      },
+      contentType: 'application/json',
+      validateStatus: validateStatus,
+    );
+
+    dynamic _bodyData;
+
+    try {
+      const _type = FullType(CreateRoleRequest);
+      _bodyData = _serializers.serialize(createRoleRequest, specifiedType: _type);
+
+    } catch(error, stackTrace) {
+      throw DioException(
+         requestOptions: _options.compose(
+          _dio.options,
+          _path,
+        ),
+        type: DioExceptionType.unknown,
+        error: error,
+        stackTrace: stackTrace,
+      );
+    }
+
+    final _response = await _dio.request<Object>(
+      _path,
+      data: _bodyData,
+      options: _options,
+      cancelToken: cancelToken,
+      onSendProgress: onSendProgress,
+      onReceiveProgress: onReceiveProgress,
+    );
+
+    RoleDetail? _responseData;
+
+    try {
+      final rawResponse = _response.data;
+      _responseData = rawResponse == null ? null : _serializers.deserialize(
+        rawResponse,
+        specifiedType: const FullType(RoleDetail),
+      ) as RoleDetail;
+
+    } catch (error, stackTrace) {
+      throw DioException(
+        requestOptions: _response.requestOptions,
+        response: _response,
+        type: DioExceptionType.unknown,
+        error: error,
+        stackTrace: stackTrace,
+      );
+    }
+
+    return Response<RoleDetail>(
+      data: _responseData,
+      headers: _response.headers,
+      isRedirect: _response.isRedirect,
+      requestOptions: _response.requestOptions,
+      redirects: _response.redirects,
+      statusCode: _response.statusCode,
+      statusMessage: _response.statusMessage,
+      extra: _response.extra,
+    );
+  }
 
   /// The capability catalog this shop can see (role checklist)
   /// F-003 (api-spec §1, §3 · D-037). The ONE source of capability keys, their Thai labels and descriptions, groups, status and &#x60;implies&#x60; edges — clients render the checklist from this and never hard-code a key (AC-7.1).  Org-scoped and requires &#x60;manage_roles&#x60;: a tier that needs an entitlement is HIDDEN entirely, not flagged (AC-7.4), so the answer can differ per shop — cache it per shop. &#x60;full_access&#x60; is present with &#x60;selectable: false&#x60; and &#x60;group: null&#x60; so a role holding it can be labelled; it is never a checklist item. 

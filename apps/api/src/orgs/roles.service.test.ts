@@ -18,6 +18,19 @@ import { describe, it, expect } from "vitest";
 import { OrgContextStore } from "../tenancy";
 import { RolesService } from "./roles.service";
 
+/**
+ * T-003-B23 — `list()` touches none of the create path's collaborators (events,
+ * Owner guard, decider seam, limits, detail reads); `undefined` makes any
+ * accidental use fail loudly instead of silently working.
+ */
+const LIST_ONLY_COLLABORATORS = [
+  undefined,
+  undefined,
+  undefined,
+  undefined,
+  undefined,
+] as unknown as [never, never, never, never, never];
+
 interface FakeRole {
   id: string;
   name: string;
@@ -43,7 +56,7 @@ function serviceOver(roles: FakeRole[], viewerCapabilities: readonly string[] = 
     },
   };
   const store = new OrgContextStore();
-  const service = new RolesService(prisma as never, store);
+  const service = new RolesService(prisma as never, store, ...LIST_ONLY_COLLABORATORS);
   // The verdict reads the caller from the request's org context (ALS).
   return {
     list: () =>

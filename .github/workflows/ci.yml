@@ -611,6 +611,12 @@ jobs:
           # `--require` is a FLOOR (>= N), so adding cases is free; only losing
           # them is red. Counts are the real ones at the time of writing, taken
           # from the lane's own JSON report rather than guessed.
+          #
+          # ★ T-003-B23 (R3-08 · architecture §14): the first role-WRITE route may
+          # not merge unless CI proves its int suite ran — the flag/capability
+          # order, MUT-07 on a real DB and 403-not-503 for non-holders live only
+          # there. The role-reads file had no floor either. 262 = previous 231 +
+          # these 31; the full local run is 362, so this is still a floor.
           node tool/ci/assert-tests-ran.mjs \
             --report /tmp/api-int-tests.json \
             --lane "integration-api · apps/api *.int.test.ts" \
@@ -628,7 +634,9 @@ jobs:
             --require "test/concurrency-matrix.int.test.ts=14" \
             --require "test/perf-smoke.int.test.ts=5" \
             --require "test/role-key-authority.int.test.ts=25" \
-            --min-passed 231
+            --require "test/f003-role-reads.e2e.int.test.ts=13" \
+            --require "test/f003-role-create.e2e.int.test.ts=18" \
+            --min-passed 262
       - name: dump api log on failure
         if: failure()
         run: cat /tmp/api.log || true

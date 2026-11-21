@@ -80,16 +80,26 @@ export class OrgOwnershipGuard {
       assertOwnerRemains({ owners: input, change });
     } catch (error) {
       if (!(error instanceof LastOwnerError)) throw error;
-      if (change.kind === "role_capabilities_change" || change.kind === "role_delete") {
+      if (
+        change.kind === "role_capabilities_change" ||
+        change.kind === "role_delete" ||
+        change.kind === "role_create"
+      ) {
         // §8: on the role path the earlier layers (ROLE_LOCKED / FULL_ACCESS_RESERVED)
         // should have refused first — reaching this line means one of them did not.
+        // (role_create: the org had no active Owner BEFORE the write — T-003-B23.)
         this.logger.error(
           `role_invariant_violation ${JSON.stringify({
             // the ORG_LOCK operationKey (metric/log label, §8 — review L-4)
-            operation: change.kind === "role_delete" ? "deleteRole" : "updateRole",
+            operation:
+              change.kind === "role_delete"
+                ? "deleteRole"
+                : change.kind === "role_create"
+                  ? "createRole"
+                  : "updateRole",
             change: change.kind,
             organizationId,
-            roleId: change.roleId,
+            roleId: change.kind === "role_create" ? null : change.roleId,
           })}`,
         );
       }

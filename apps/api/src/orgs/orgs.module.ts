@@ -33,6 +33,7 @@ import { InvitationsController } from "./invitations.controller";
 import { RoleDesignController, RolesController } from "./roles.controller";
 import { RoleReadService } from "./role-read.service";
 import { RolesService } from "./roles.service";
+import { roleWriteDeciderProvider } from "./role-write-decider";
 import { InvitationRedemptionController } from "./invitation-redemption.controller";
 import { InvitationsService } from "./invitations.service";
 import { MembershipController } from "./membership.controller";
@@ -87,10 +88,12 @@ import { PlanProvisioningService } from "./system/plan-provisioning.service";
     // transaction shape, one place the Owner ≥ 1 invariant is evaluated.
     MembersService,
     // F-003 (architecture §2) — the Owner ≥ 1 read, shared by MembersService
-    // and (B24/B25) RolesService; one query, no copies.
+    // RolesService (create — B23; update/delete — B24/B25); one query, no copies.
     OrgOwnershipGuard,
     InvitationsService,
+    // T-003-B23 — POST /roles (create). Injects the decider SEAM, not the fn.
     RolesService,
+    roleWriteDeciderProvider,
     // T-003-B21 — the role READ routes (ORG_PRISMA only — architecture §9).
     RoleReadService,
     // `system/` providers are registered here, not exported: nothing outside

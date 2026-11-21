@@ -333,6 +333,53 @@ export const ERROR_CODES = {
     message: "ระบบยังเปิดร้านใหม่ไม่ได้ในขณะนี้ กรุณาติดต่อทีมงาน",
   },
 
+  // ── F-003 · T-003-B23 — POST /orgs/{orgId}/roles (api-spec §5) ───────────
+  // The codes this route answers that no shipped route did. PATCH/DELETE add
+  // theirs with B24/B25 (the error-code audit refuses a code no response names).
+  // ⚠️ No default message names a capability key (AC-6.4) — the refused keys of
+  // UNKNOWN_CAPABILITY travel in `details.capabilities`, never in the sentence.
+  //
+  // A live role already has this name (normalised, case-insensitive — the DB's
+  // `Role_org_name_ci_live_key`), or the name is reserved for a system role.
+  ROLE_NAME_TAKEN: {
+    code: "ROLE_NAME_TAKEN",
+    status: HttpStatus.CONFLICT,
+    message: "มีบทบาทชื่อนี้อยู่แล้ว กรุณาใช้ชื่ออื่น",
+  },
+  // A role must grant at least one capability (AC-3.6). `fieldErrors.capabilities`.
+  ROLE_EMPTY: {
+    code: "ROLE_EMPTY",
+    status: HttpStatus.UNPROCESSABLE_ENTITY,
+    message: "บทบาทต้องมีสิทธิ์อย่างน้อย 1 อย่าง",
+  },
+  // A key not in the registry, tier `full`, or not selectable. `details.capabilities`.
+  UNKNOWN_CAPABILITY: {
+    code: "UNKNOWN_CAPABILITY",
+    status: HttpStatus.UNPROCESSABLE_ENTITY,
+    message: "มีสิทธิ์ที่เลือกไม่ได้ในรายการ",
+  },
+  // `full_access` is the Owner's alone (AC-4.2) — refused for every caller, the
+  // Owner included, and leaves an `escalation_denied` (reason full_access_reserved).
+  FULL_ACCESS_RESERVED: {
+    code: "FULL_ACCESS_RESERVED",
+    status: HttpStatus.UNPROCESSABLE_ENTITY,
+    message: "สิทธิ์ทั้งหมดของร้านสงวนไว้สำหรับเจ้าของร้านเท่านั้น",
+  },
+  // Live roles (system ones included) at the per-shop cap. `details.limit`.
+  ROLE_LIMIT_REACHED: {
+    code: "ROLE_LIMIT_REACHED",
+    status: HttpStatus.CONFLICT,
+    message: "ร้านนี้มีบทบาทครบจำนวนสูงสุดแล้ว",
+  },
+  // The rollout flag is off (architecture §12). Our configuration, not the
+  // caller's input — a 5xx. Only a `manage_roles` holder ever sees it: the flag
+  // guard runs after the capability guard.
+  ROLE_WRITES_DISABLED: {
+    code: "ROLE_WRITES_DISABLED",
+    status: HttpStatus.SERVICE_UNAVAILABLE,
+    message: "ยังแก้ไขบทบาทไม่ได้ในขณะนี้ กรุณาลองใหม่ภายหลัง",
+  },
+
   // ── 500 unknown fallback (filter maps ANY unrecognized error here) ────────
   INTERNAL: {
     code: "INTERNAL",

@@ -437,3 +437,33 @@ describe("U-OI-12 · input contract non-vacuity (type half: owner-invariant.comp
     expect(activeOwnersAfter(input)).toEqual(["u1", "u2"]);
   });
 });
+
+// F-003 · T-003-B23 — shape 5 `role_create` (POST /orgs/{orgId}/roles). A new
+// role has no holder, so it can neither add nor remove an Owner; the shape
+// exists so the create path runs the SAME defensive check as every other role
+// write (architecture §13.2 (ก): every `@RoleWrite()` route calls
+// `assertOwnerRemains`) — and it still refuses on an org that already has 0
+// active Owners (fail-closed, like U-OI-05/09).
+describe("U-OI · shape 5 `role_create`", () => {
+  it("passes when the org has an active Owner — creating a role changes nobody", () => {
+    const input = { owners: [owner("u1")], change: { kind: "role_create" } } as const;
+    expect(activeOwnersAfter(input)).toEqual(["u1"]);
+    expect(() => assertOwnerRemains(input)).not.toThrow();
+  });
+
+  it("throws when the org already has 0 active Owners", () => {
+    const input = {
+      owners: [owner("u1", "revoked")],
+      change: { kind: "role_create" },
+    } as const;
+    expect(() => assertOwnerRemains(input)).toThrow(LastOwnerError);
+  });
+
+  it("does not read roleId at all — every Owner keeps their capabilities", () => {
+    const input = {
+      owners: [owner("u1", "active", "rol_a"), owner("u2", "active", "rol_b")],
+      change: { kind: "role_create" },
+    } as const;
+    expect(activeOwnersAfter(input)).toEqual(["u1", "u2"]);
+  });
+});

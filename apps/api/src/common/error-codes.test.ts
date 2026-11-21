@@ -213,3 +213,31 @@ describe("codeForStatus (foreign-exception fallback)", () => {
     expect(codeForStatus(500)).toBe("INTERNAL");
   });
 });
+
+// F-003 · T-003-B23 — the codes POST /orgs/{orgId}/roles answers (api-spec §5,
+// U-API3-17 for this route; PATCH/DELETE add theirs with B24/B25). Values are
+// contract from the day they ship.
+describe("U-API3-17 (POST /roles) · the role-create codes → status", () => {
+  it("pins code → HTTP status", () => {
+    const expected: Record<string, number> = {
+      ROLE_NAME_TAKEN: 409,
+      ROLE_EMPTY: 422,
+      UNKNOWN_CAPABILITY: 422,
+      FULL_ACCESS_RESERVED: 422,
+      ROLE_LIMIT_REACHED: 409,
+      ROLE_WRITES_DISABLED: 503,
+    };
+    for (const [code, status] of Object.entries(expected)) {
+      const def = (ERROR_CODES as Record<string, { status: number } | undefined>)[code];
+      expect(def, `missing ${code}`).toBeDefined();
+      expect(def!.status, code).toBe(status);
+    }
+  });
+
+  it("the default copy names no capability key (AC-6.4)", () => {
+    for (const code of ["ROLE_EXCEEDS_ACTOR", "UNKNOWN_CAPABILITY", "FULL_ACCESS_RESERVED"]) {
+      const msg = (ERROR_CODES as Record<string, { message: string }>)[code]!.message;
+      expect(msg, code).not.toMatch(/manage_|view_|full_access|access_/);
+    }
+  });
+});

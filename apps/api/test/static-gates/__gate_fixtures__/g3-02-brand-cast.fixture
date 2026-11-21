@@ -1,0 +1,9 @@
+// G3-02 red fixture — three ways to mint the brand without validating.
+// (this comment says `as ValidatedCapabilities` and must NOT count)
+const a = input.capabilities as ValidatedCapabilities;
+const b = input.capabilities as unknown as ValidatedCapabilities;
+const c = <ValidatedCapabilities>input.capabilities;
+export { a, b, c };
+// greens — a generic is not a cast:
+export type List = Array<ValidatedCapabilities>;
+export function f(x: Promise<ValidatedCapabilities>): void { void x; }

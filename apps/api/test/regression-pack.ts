@@ -44,6 +44,13 @@ export interface RegressionEntry {
    * itself. Recorded so nobody reads the row as "closed".
    */
   readonly partial?: string;
+  /**
+   * F-003 · T-003-QA09 — tests test-plan §10 names for this row that do NOT
+   * exist yet, and the task that brings them. Not a promise in prose: the gate
+   * reads `docs/features/F-003/tasks.md` and goes red once `task` is `done`
+   * while the row still lists it — the re-pin cannot be forgotten.
+   */
+  readonly pending?: readonly { readonly tests: readonly string[]; readonly task: string }[];
 }
 
 export const REGRESSION_PACK: readonly RegressionEntry[] = Object.freeze([
@@ -371,15 +378,25 @@ export const REGRESSION_PACK: readonly RegressionEntry[] = Object.freeze([
   {
     finding: "NEW-10",
     title: "canAssignRole does not stop a privilege superset",
-    tier: "full",
-    partial:
-      "Untestable in F-002 and correctly so (§9.1): the three system roles are fixed and there " +
-      "is no role CRUD, so there is no surface to fire at. The pin is the TRIPWIRE (G-15), which " +
-      "fails the moment a write path to Role.capabilities appears — turning 'F-003 should handle " +
-      "this' into 'F-003 cannot merge without handling it'.",
+    // F-003 · T-003-B23/QA09 (R3-02 · G3-12): the G-15 tripwire is retired. The
+    // rule exists now (⊆ on every grant — `decideMemberAuthority`/`decideRoleWrite`)
+    // and so does the surface it guards (POST /roles), so the pins are the real
+    // tests: U-RB-10/12, I3-20 (invite ⊄), G3-01..03 (the three layers that
+    // replace G-15), I3-04/I3-17 (role create on the real DB).
+    tier: "smoke",
     pins: [
-      { file: "apps/api/src/orgs/role-capability-write-tripwire.test.ts", must: ["G-15", "NEW-10"] },
+      { file: "packages/core-domain/src/rbac/member-authority.test.ts", must: ["U-RB-10"] },
+      { file: "packages/core-domain/src/rbac/role-write.test.ts", must: ["U-RB-12"] },
+      { file: "apps/api/test/invitations.f003.e2e.int.test.ts", must: ["I3-20"] },
+      { file: "apps/api/src/common/authz/role-write.test.ts", must: ["G3-01"] },
+      { file: "apps/api/test/f003-role-create.e2e.int.test.ts", must: ["G3-01", "I3-04", "I3-17"] },
+      { file: "apps/api/test/static-gates/g3-02-validated-capabilities.test.ts", must: ["G3-02"] },
+      {
+        file: "apps/api/test/static-gates/g3-03-role-write-surface.test.ts",
+        must: ["G3-03", "NEW-10"],
+      },
     ],
+    pending: [{ tests: ["I3-31"], task: "T-003-B26a" }],
   },
   {
     finding: "NEW-11",
@@ -395,5 +412,210 @@ export const REGRESSION_PACK: readonly RegressionEntry[] = Object.freeze([
       "A documentation nit, already fixed. The layer that would catch it is a link/anchor check " +
       "in a docs lane, which this project does not have — registered as a small request to " +
       "@devops (§19.1 item 12), not a condition of F-002's verdict.",
+  },
+
+  // ── F-003 · T-003-QA09 (G3-12 · test-plan §8/§10) — SR-F003-01..19 + the
+  // three named regressions of route behaviour that already ships. Pins are the
+  // tests that EXIST today; `pending` names the rest and the task that brings
+  // them (the gate turns red when that task is `done` and the row was not
+  // re-pinned). Markers are the test ids in the test names (test-plan §1).
+  {
+    finding: "SR-F003-01",
+    title: "an Admin downgrading an equal Admin, resetting them, then upgrading (SR-01)",
+    tier: "smoke",
+    pins: [
+      {
+        file: "packages/core-domain/src/rbac/member-authority.test.ts",
+        must: ["U-RB-10", "U-RB-21"],
+      },
+      {
+        file: "apps/api/test/members.f003.e2e.int.test.ts",
+        must: ["I3-25", "I3-26", "I3-27", "I3-28"],
+      },
+    ],
+    pending: [{ tests: ["I3-31", "I3-32"], task: "T-003-B26a" }],
+  },
+  {
+    finding: "SR-F003-02",
+    title: "an invitation outliving its issuer's authority (D-035)",
+    tier: "smoke",
+    pins: [
+      { file: "apps/api/test/invitations-redeem.e2e.int.test.ts", must: ["I3-38"] },
+      { file: "apps/api/test/invitations.f003.e2e.int.test.ts", must: ["I3-39"] },
+      { file: "apps/api/src/orgs/invitations.service.test.ts", must: ["U-API3-08", "U-API3-09"] },
+    ],
+    pending: [{ tests: ["IC3-06"], task: "T-003-B26b" }],
+  },
+  {
+    finding: "SR-F003-03",
+    title: "custom roles reaching F-002 instances during the rollout (ROLE_WRITES_ENABLED)",
+    tier: "smoke",
+    pins: [
+      { file: "packages/config/src/env.test.ts", must: ["U-CFG3-01"] },
+      { file: "apps/api/test/f003-role-create.e2e.int.test.ts", must: ["I3-44", "I3-45"] },
+      { file: "apps/api/src/orgs/org-config.boot-env.test.ts", must: ["DV01"] },
+    ],
+    partial:
+      "M3-07 (migration) and MAN3-05 (manual rollout check) are not code in this repo yet; the " +
+      "flag's server half is pinned. The rollout evidence itself is devops' (architecture §12).",
+  },
+  {
+    finding: "SR-F003-04",
+    title: "a role name made of invisible / control characters (Cc/Cf)",
+    tier: "full",
+    pins: [
+      { file: "packages/core-domain/src/rbac/role-validation.test.ts", must: ["U-RB-07"] },
+      { file: "apps/api/test/f003-role-create.e2e.int.test.ts", must: ["I3-02"] },
+      { file: "apps/api/test/role-name-charset-parity.test.ts", must: ["G3-07"] },
+    ],
+    partial: "M3-02 (DB CHECK under migration) is not in the repo yet — G3-07 pins the parity.",
+  },
+  {
+    finding: "SR-F003-05",
+    title: "admin-reset deciding on a roleId a concurrent PATCH is changing",
+    tier: "full",
+    pins: [{ file: "apps/api/test/admin-reset.f003.e2e.int.test.ts", must: ["IC3-02"] }],
+  },
+  {
+    finding: "SR-F003-06",
+    title: "delete-role ‖ invite-with-role write skew",
+    tier: "full",
+    pins: [{ file: "apps/api/test/role-db-guards.int.test.ts", must: ["IC3-07"] }],
+  },
+  {
+    finding: "SR-F003-07",
+    title: "promoting a custom role to isSystem / full_access in the database",
+    tier: "full",
+    pins: [{ file: "apps/api/test/role-db-guards.int.test.ts", must: ["I3-16"] }],
+  },
+  {
+    finding: "SR-F003-08",
+    title: "a role write authorised by the stale ALS snapshot instead of the tx",
+    tier: "smoke",
+    pins: [
+      { file: "packages/core-domain/src/rbac/role-write.test.ts", must: ["U-RB-12"] },
+      { file: "apps/api/src/orgs/roles.service.create.test.ts", must: ["U-API3-02"] },
+    ],
+    pending: [{ tests: ["IC3-03"], task: "T-003-B26b" }],
+  },
+  {
+    finding: "SR-F003-09",
+    title: "lastEdited.by leaking another shop's role",
+    tier: "full",
+    pins: [{ file: "apps/api/test/f003-role-reads.e2e.int.test.ts", must: ["I3-53"] }],
+  },
+  {
+    finding: "SR-F003-10",
+    title: "the admin bridge trigger outliving its removeBy date (G-12 on migrations)",
+    tier: "smoke",
+    pins: [{ file: "apps/api/test/static-gates/role-key-authority.gate.test.ts", must: ["G-12"] }],
+    partial: "M3-05 (migration harness for the bridge) is not in the repo yet.",
+  },
+  {
+    finding: "SR-F003-11",
+    title: "an unknown / removed capability key widening instead of narrowing",
+    tier: "smoke",
+    pins: [
+      { file: "packages/core-domain/src/rbac/registry.test.ts", must: ["U-RB-02"] },
+      { file: "packages/core-domain/src/rbac/expand.test.ts", must: ["U-RB-03"] },
+      { file: "packages/core-domain/src/rbac/member-authority.test.ts", must: ["U-RB-10"] },
+    ],
+  },
+  {
+    finding: "SR-F003-12",
+    title: "unbounded role churn / event floods (caps, rate limits, dedupe)",
+    tier: "full",
+    pins: [
+      { file: "apps/api/src/auth/security-events.service.test.ts", must: ["I3-11", "U-API3-11"] },
+      { file: "apps/api/test/members.f003.e2e.int.test.ts", must: ["I3-47"] },
+      { file: "packages/config/src/env.test.ts", must: ["U-CFG3-02", "U-CFG3-03"] },
+      { file: "apps/api/test/f003-role-create.e2e.int.test.ts", must: ["I3-05"] },
+    ],
+    pending: [{ tests: ["I3-46"], task: "T-003-B25" }],
+  },
+  {
+    finding: "SR-F003-13",
+    title: "ROLE_LOCKED by a non-Owner not leaving an escalation trace",
+    tier: "full",
+    pins: [{ file: "apps/api/test/f003-role-reads.e2e.int.test.ts", must: ["I3-49"] }],
+    pending: [{ tests: ["I3-14"], task: "T-003-B24" }],
+  },
+  {
+    finding: "SR-F003-14",
+    title: "a client auto-resubmitting on 409 ROLE_CHANGED (last-write-wins)",
+    tier: "none",
+    noTest:
+      "No surface yet: 409 ROLE_CHANGED is answered by PATCH /roles/{id} (T-003-B24) and consumed " +
+      "by the role form (W06/M06). CW3-05 · CM3-05 · EW3-08 · EM3-06 land there — see `pending`.",
+    pending: [
+      { tests: ["CW3-05", "EW3-08"], task: "T-003-W06" },
+      { tests: ["CM3-05", "EM3-06"], task: "T-003-M06" },
+    ],
+  },
+  {
+    finding: "SR-F003-15",
+    title: "upcoming capabilities going live silently (manage_billing)",
+    tier: "none",
+    noTest:
+      "Handed to product (architecture §7 last bullet): the surface is the Gate 2 of the feature " +
+      "that flips a capability upcoming → live. F-003 has nothing to fire a test at.",
+  },
+  {
+    finding: "SR-F003-16",
+    title: "multi-actor escalation through a sequence of individually-allowed ops",
+    tier: "smoke",
+    pins: [
+      {
+        file: "packages/core-domain/src/rbac/authority-lemma.test.ts",
+        must: ["U-RB-18", "U-RB-19", "U-RB-20"],
+      },
+    ],
+  },
+  {
+    finding: "SR-F003-17",
+    title: "manage_roles + manage_members insiders colluding through a held role (Addendum 2)",
+    tier: "smoke",
+    pins: [
+      { file: "packages/core-domain/src/rbac/role-write.test.ts", must: ["U-RB-12", "R13"] },
+      { file: "packages/core-domain/src/rbac/authority-lemma.test.ts", must: ["U-RB-19", "c3"] },
+    ],
+    pending: [
+      { tests: ["I3-31", "I3-33"], task: "T-003-B26a" },
+      { tests: ["IC3-04"], task: "T-003-B26b" },
+    ],
+  },
+  {
+    finding: "SR-F003-18",
+    title: "rename-only / no-op edits short-circuiting the held-role rule",
+    tier: "full",
+    pins: [{ file: "packages/core-domain/src/rbac/role-write.test.ts", must: ["R04", "R14"] }],
+    pending: [{ tests: ["I3-31"], task: "T-003-B26a" }],
+  },
+  {
+    finding: "SR-F003-19",
+    title: "a no-op PATCH member leaving no trace either way",
+    tier: "smoke",
+    pins: [{ file: "apps/api/test/members.f003.e2e.int.test.ts", must: ["I3-30"] }],
+  },
+  {
+    finding: "AC-5.4b",
+    title: "demote → reset → promote fails at the FIRST step (named regression)",
+    tier: "smoke",
+    pins: [
+      { file: "apps/api/test/members.f003.e2e.int.test.ts", must: ["I3-25", "I3-26", "I3-27"] },
+    ],
+    pending: [{ tests: ["I3-32"], task: "T-003-B26a" }],
+  },
+  {
+    finding: "AC-5.5b",
+    title: "admin-reset refusal byte-identical to 'not a member' (named regression)",
+    tier: "smoke",
+    pins: [{ file: "apps/api/test/admin-reset.f003.e2e.int.test.ts", must: ["I3-35", "I3-36"] }],
+  },
+  {
+    finding: "D-035",
+    title: "accept re-checks the last issuer's authority (named regression)",
+    tier: "smoke",
+    pins: [{ file: "apps/api/test/invitations-redeem.e2e.int.test.ts", must: ["I3-38"] }],
   },
 ]);

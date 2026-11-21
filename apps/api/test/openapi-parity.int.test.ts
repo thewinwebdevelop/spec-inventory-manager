@@ -16,6 +16,7 @@
 import { describe, it, expect, beforeAll, afterAll } from "vitest";
 import { Test } from "@nestjs/testing";
 import type { INestApplication } from "@nestjs/common";
+import { loadEnv } from "@omnistock/config";
 import { AppModule } from "../src/app.module";
 import { INT_LANE_ENABLED, applyTestEnv } from "./app.kit";
 import {
@@ -48,7 +49,9 @@ d("★ the live router and packages/contracts/openapi/openapi.yaml agree", () =>
 
   beforeAll(async () => {
     applyTestEnv();
-    const moduleRef = await Test.createTestingModule({ imports: [AppModule] }).compile();
+    const moduleRef = await Test.createTestingModule({
+      imports: [AppModule.forRoot(loadEnv(process.env))],
+    }).compile();
     app = moduleRef.createNestApplication();
     await app.init();
     report = auditAppAgainstSpec(app);
@@ -97,7 +100,9 @@ d("★ the live router and packages/contracts/openapi/openapi.yaml agree", () =>
       (o) => !(o.method === "DELETE" && o.path === "/orgs/{orgId}/membership"),
     );
     const injured = auditOpenApiParity(report.routes, operations);
-    expect(injured.missingFromSpec.map((f) => f.route)).toEqual(["DELETE /orgs/{orgId}/membership"]);
+    expect(injured.missingFromSpec.map((f) => f.route)).toEqual([
+      "DELETE /orgs/{orgId}/membership",
+    ]);
     expect(() => assertOpenApiParity(injured)).toThrowError(/missing-from-spec/);
   });
 });

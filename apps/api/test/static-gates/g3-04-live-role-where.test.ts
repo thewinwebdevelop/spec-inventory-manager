@@ -158,6 +158,7 @@ describe("G3-04 · every Role read is labelled live or history", () => {
     ["apps/api/src/orgs/invitations.service.ts", "InvitationsService.readRole"], // invite create
     ["apps/api/src/orgs/role-read.service.ts", "RoleReadService.listDetails"], // GET /role-details (B21)
     ["apps/api/src/orgs/role-read.service.ts", "RoleReadService.getDetail"], // GET /roles/{id} + live count (B21)
+    ["apps/api/src/orgs/roles.service.ts", "RolesService.create"], // reserved names + live cap (B23)
   ];
 
   it("★ the dm §2.2 live reads stay LIVE, per method — a history label cannot be used to dodge (MUT-10)", () => {

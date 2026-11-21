@@ -9,10 +9,58 @@ All URIs are relative to *http://localhost:3000*
 
 Method | HTTP request | Description
 ------------- | ------------- | -------------
+[**createOrgRole**](RolesApi.md#createorgrole) | **POST** /orgs/{orgId}/roles | Create a custom role (also how \&quot;clone\&quot; is done)
 [**getOrgCapabilityCatalog**](RolesApi.md#getorgcapabilitycatalog) | **GET** /orgs/{orgId}/capabilities | The capability catalog this shop can see (role checklist)
 [**getOrgRoleDetail**](RolesApi.md#getorgroledetail) | **GET** /orgs/{orgId}/roles/{roleId} | One role of this shop, in full (edit and clone screens)
 [**listOrgRoleDetails**](RolesApi.md#listorgroledetails) | **GET** /orgs/{orgId}/role-details | Every live role of this shop, in full (the role list screen)
 
+
+# **createOrgRole**
+> RoleDetail createOrgRole(orgId, createRoleRequest, xOrganizationId)
+
+Create a custom role (also how \"clone\" is done)
+
+F-003 (api-spec §1, §2, AC-3.1..3.7, AC-4.2, AC-5.1). Requires `manage_roles`. There is no clone endpoint: the client pre-fills this request from the source role (`RoleDetail`) and sends it like any create.  The created role always has `key: null` and `isSystem: false`; `key`, `isSystem` and `version` in the body are ignored (AC-1.4). `name` comes back normalised (NFC, trimmed, inner whitespace collapsed) and `capabilities` in canonical form (deduplicated, implied keys removed, sorted).  ⚠️ ROLLOUT FLAG: while `ROLE_WRITES_ENABLED` is off the server answers `503 ROLE_WRITES_DISABLED` to callers who hold `manage_roles` — the same state `viewer.canCreate.reason = \"writes_disabled\"` already reports. A caller WITHOUT `manage_roles` gets `403 FORBIDDEN` either way.  FIXED CHECK ORDER (api-spec §2): `manage_roles` (`403 FORBIDDEN`) → flag (`503`) → rate limit (`429`) → `manage_roles` re-read inside the transaction (`403 FORBIDDEN`) → body shape (`422 VALIDATION_FAILED`) → name (`422 VALIDATION_FAILED` length / invisible characters, then `409 ROLE_NAME_TAKEN` for a reserved system-role label) → `ROLE_EMPTY` → `FULL_ACCESS_RESERVED` → `UNKNOWN_CAPABILITY` → `ROLE_EXCEEDS_ACTOR` → `ROLE_LIMIT_REACHED` → write (a live role with the same name, ignoring case → `409 ROLE_NAME_TAKEN`).  Rate limit `roleWrite`: 60 role writes per hour per shop, shared by create / update / delete. 
+
+### Example
+```dart
+import 'package:omnistock_api_client/api.dart';
+
+final api = OmnistockApiClient().getRolesApi();
+final String orgId = orgId_example; // String | Organization id. On F-002 org-scoped routes this is one of the two accepted sources of org context (the other is the `X-Organization-Id` header, D-025); sending both with different values is `422 ORG_MISMATCH`. 
+final CreateRoleRequest createRoleRequest = ; // CreateRoleRequest | 
+final String xOrganizationId = xOrganizationId_example; // String | Org context (api-spec §1). Optional on routes that already carry `{orgId}` in the path; if both are sent they MUST match, otherwise `422 ORG_MISMATCH`. User-scoped and public routes ignore this header entirely (I-3). 
+
+try {
+    final response = api.createOrgRole(orgId, createRoleRequest, xOrganizationId);
+    print(response);
+} on DioException catch (e) {
+    print('Exception when calling RolesApi->createOrgRole: $e\n');
+}
+```
+
+### Parameters
+
+Name | Type | Description  | Notes
+------------- | ------------- | ------------- | -------------
+ **orgId** | **String**| Organization id. On F-002 org-scoped routes this is one of the two accepted sources of org context (the other is the `X-Organization-Id` header, D-025); sending both with different values is `422 ORG_MISMATCH`.  | 
+ **createRoleRequest** | [**CreateRoleRequest**](CreateRoleRequest.md)|  | 
+ **xOrganizationId** | **String**| Org context (api-spec §1). Optional on routes that already carry `{orgId}` in the path; if both are sent they MUST match, otherwise `422 ORG_MISMATCH`. User-scoped and public routes ignore this header entirely (I-3).  | [optional] 
+
+### Return type
+
+[**RoleDetail**](RoleDetail.md)
+
+### Authorization
+
+[bearerAuth](../README.md#bearerAuth)
+
+### HTTP request headers
+
+ - **Content-Type**: application/json
+ - **Accept**: application/json
+
+[[Back to top]](#) [[Back to API list]](../README.md#documentation-for-api-endpoints) [[Back to Model list]](../README.md#documentation-for-models) [[Back to README]](../README.md)
 
 # **getOrgCapabilityCatalog**
 > CapabilityCatalog getOrgCapabilityCatalog(orgId, xOrganizationId)

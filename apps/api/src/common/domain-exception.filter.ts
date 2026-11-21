@@ -132,7 +132,9 @@ export class DomainExceptionFilter implements ExceptionFilter {
     const busy = describeOrgBusy(exception);
     if (busy) {
       if (busy.alert) {
-        this.logger.error(`${busy.summary} — off-policy lock order? ${JSON.stringify(busy.diagnostic)}`);
+        this.logger.error(
+          `${busy.summary} — off-policy lock order? ${JSON.stringify(busy.diagnostic)}`,
+        );
       } else {
         this.logger.warn(busy.summary);
       }
@@ -186,10 +188,7 @@ export class DomainExceptionFilter implements ExceptionFilter {
    * message, ... } }` → reused verbatim. A foreign exception (Nest default
    * `{ statusCode, message, error }`) is mapped by status so nothing leaks.
    */
-  private fromHttpException(
-    body: unknown,
-    status: number,
-  ): DomainErrorBody {
+  private fromHttpException(body: unknown, status: number): DomainErrorBody {
     if (isEnvelope(body)) {
       const e = body.error;
       const out: DomainErrorBody = { code: e.code, message: e.message };
@@ -202,7 +201,7 @@ export class DomainExceptionFilter implements ExceptionFilter {
       message:
         status >= 500
           ? ERROR_CODES.INTERNAL.message
-          : extractPlainMessage(body) ?? ERROR_CODES.INTERNAL.message,
+          : (extractPlainMessage(body) ?? ERROR_CODES.INTERNAL.message),
     };
   }
 
@@ -246,7 +245,10 @@ export class DomainExceptionFilter implements ExceptionFilter {
     const line =
       `error status=${status} code=${error.code} traceId=${error.traceId}` +
       (upstreamRequestId ? ` upstreamRequestId=${upstreamRequestId}` : "");
-    if (status >= 500) {
+    // Security review B23 L-4: the role-write flag being off is a PLANNED state
+    // for the whole rollout (F-003 architecture §12), not an outage — warn, so
+    // it does not count toward 5xx alerting.
+    if (status >= 500 && !PLANNED_5XX_CODES.has(error.code)) {
       // 5xx keeps the full server-side detail (stack), still never on the wire.
       this.logger.error(line, stack);
       return;
@@ -254,6 +256,9 @@ export class DomainExceptionFilter implements ExceptionFilter {
     this.logger.warn(line);
   }
 }
+
+/** 5xx codes that are deliberate states, logged at warn without a stack. */
+const PLANNED_5XX_CODES: ReadonlySet<string> = new Set(["ROLE_WRITES_DISABLED"]);
 
 /** Type guard: is `x` our `{ error: { code, message } }` envelope? */
 function isEnvelope(x: unknown): x is { error: DomainErrorBody } {

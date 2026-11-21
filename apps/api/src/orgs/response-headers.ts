@@ -164,6 +164,8 @@ export const RESPONSE_HEADER_POLICY: readonly ResponseHeaderPolicyRow[] = Object
   policyRow("GET", "/orgs/{orgId}/role-details", ORG_PROFILE_RESPONSE_HEADERS, ["membership"]),
   policyRow("GET", "/orgs/{orgId}/roles/{roleId}", ORG_PROFILE_RESPONSE_HEADERS, ["membership"]),
   policyRow("GET", "/orgs/{orgId}/capabilities", ORG_PROFILE_RESPONSE_HEADERS, ["membership"]),
+  // T-003-B23 — the 201 is the same `RoleDetail` as the read above.
+  policyRow("POST", "/orgs/{orgId}/roles", ORG_PROFILE_RESPONSE_HEADERS, ["membership"]),
   // F-001's admin reset. The body is `{ ok: true }`, but the REQUEST is an act
   // performed on a named person in a named shop, and the response confirms it
   // happened — a shared cache holding that is a disclosure of its own.

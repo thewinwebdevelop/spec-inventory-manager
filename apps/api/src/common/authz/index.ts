@@ -44,3 +44,13 @@ export {
   type RouteDeclaration,
   type RouteDeclarationKind,
 } from "./route-declarations";
+// F-003 · T-003-B23 — Role writes: the decorator, the G3-01 table, the flag guard.
+export {
+  RoleWrite,
+  ROLE_WRITE_KEY,
+  ROLE_WRITE_ROUTES,
+  auditRoleWriteRoutes,
+  type RoleWriteRoute,
+  type RoleWriteAudit,
+} from "./role-write";
+export { RoleWritesEnabledGuard } from "./role-writes-enabled.guard";

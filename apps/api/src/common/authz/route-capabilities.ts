@@ -118,6 +118,8 @@ export const ROUTE_CAPABILITIES: readonly RouteCapability[] = Object.freeze([
   row({ method: "GET", path: "/orgs/{orgId}/capabilities", capability: CAPABILITY_MANAGE_ROLES }),
   row({ method: "GET", path: "/orgs/{orgId}/role-details", capability: CAPABILITY_MANAGE_ROLES }),
   row({ method: "GET", path: "/orgs/{orgId}/roles/{roleId}", capability: CAPABILITY_MANAGE_ROLES }),
+  // T-003-B23 — create (incl. clone). Also on ROLE_WRITE_ROUTES (flag + roleWrite quota).
+  row({ method: "POST", path: "/orgs/{orgId}/roles", capability: CAPABILITY_MANAGE_ROLES }),
 ]);
 
 /**
