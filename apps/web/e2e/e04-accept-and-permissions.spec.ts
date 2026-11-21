@@ -95,8 +95,19 @@ test("E-04 · an invited person with an account joins, and appears in the list",
   // quietly behind a full page load.
   await reopenMembers(ownerPage, orgId);
 
-  const row = ownerPage.locator("li", { hasText: staffEmail });
+  // Scoped to the MEMBERS section. The screen renders from cache first and
+  // refetches (`staleTime: 0`, B-7), so for a moment the invitation can still
+  // sit under "รอตอบรับ" — an unscoped `li` matched both rows on a fast CI
+  // runner (strict-mode violation, PR #16 run on a99b5c4). What B-7 actually
+  // promises is asserted explicitly below: the pending row goes away.
+  const section = (heading: RegExp) =>
+    ownerPage.locator("section", { has: ownerPage.getByRole("heading", { name: heading }) });
+  const row = section(/^สมาชิกในร้าน/).locator("li", { hasText: staffEmail });
   await expect(row).toBeVisible();
+  await expect(
+    ownerPage.locator("li", { hasText: staffEmail }).filter({ hasText: "รอตอบรับ" }),
+    "the accepted invitation is still listed as pending after the refetch",
+  ).toHaveCount(0);
   await expect(row.getByText("พนักงาน")).toBeVisible();
   await expect(row.getByText("ใช้งานอยู่")).toBeVisible();
 });
