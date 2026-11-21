@@ -361,7 +361,11 @@ jobs:
       - uses: actions/checkout@v4
       - uses: subosito/flutter-action@v2
         with:
-          flutter-version-file: apps/mobile/.flutter-version
+          # fvm_config.json, NOT .flutter-version: flutter-action reads any other
+          # file as YAML `.environment.flutter`, gets null for a bare "3.44.6" and
+          # silently installs latest stable (3.47.9, then 3.50.1 — which broke
+          # analyze + the Android build). D-024's pin never applied until this.
+          flutter-version-file: apps/mobile/.fvm/fvm_config.json
       - name: build_runner — generate api_client .g.dart (built_value companions)
         working-directory: apps/mobile/api_client
         run: |
@@ -404,7 +408,11 @@ jobs:
       - uses: pnpm/action-setup@v4
       - uses: subosito/flutter-action@v2
         with:
-          flutter-version-file: apps/mobile/.flutter-version
+          # fvm_config.json, NOT .flutter-version: flutter-action reads any other
+          # file as YAML `.environment.flutter`, gets null for a bare "3.44.6" and
+          # silently installs latest stable (3.47.9, then 3.50.1 — which broke
+          # analyze + the Android build). D-024's pin never applied until this.
+          flutter-version-file: apps/mobile/.fvm/fvm_config.json
       - run: pnpm install --frozen-lockfile
       - name: regenerate Prisma client
         run: pnpm --filter @omnistock/db exec prisma generate
@@ -730,7 +738,11 @@ jobs:
           exit 1
       - uses: subosito/flutter-action@v2
         with:
-          flutter-version-file: apps/mobile/.flutter-version
+          # fvm_config.json, NOT .flutter-version: flutter-action reads any other
+          # file as YAML `.environment.flutter`, gets null for a bare "3.44.6" and
+          # silently installs latest stable (3.47.9, then 3.50.1 — which broke
+          # analyze + the Android build). D-024's pin never applied until this.
+          flutter-version-file: apps/mobile/.fvm/fvm_config.json
       - name: build_runner — generate api_client .g.dart (built_value companions)
         working-directory: apps/mobile/api_client
         run: |
