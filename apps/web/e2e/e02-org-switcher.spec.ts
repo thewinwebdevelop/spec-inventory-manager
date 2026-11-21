@@ -1,4 +1,5 @@
-import { expect, test, type Page } from "@playwright/test";
+import { type Page } from "@playwright/test";
+import { expect, test } from "./fixtures";
 import { createShop, login, openSwitcher, readShared, resetIpThrottle } from "./helpers";
 
 /**
@@ -92,5 +93,5 @@ test("E-02b · the switcher lists both shops and marks the current one in WORDS"
   await expect(page.getByRole("link", { name: new RegExp(nameB) })).toBeVisible();
   // The current shop carries the words, next to the name — not a tick, not a
   // colour (§14).
-  await expect(page.getByText("(ร้านที่ใช้อยู่)")).toBeVisible();
+  await expect(page.getByText("(ร้านที่ใช้อยู่)").filter({ visible: true })).toBeVisible();
 });

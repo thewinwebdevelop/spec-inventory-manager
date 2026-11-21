@@ -1,7 +1,8 @@
 // T-002-W3 — the shell's menu is built from capabilities (ux-wireframe §4,
 // answering Q13: HIDE, do not disable).
 import { describe, it, expect, vi } from "vitest";
-import { render, screen } from "@testing-library/react";
+import { render, screen, within } from "@testing-library/react";
+import userEvent from "@testing-library/user-event";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 
 vi.mock("next/navigation", () => ({
@@ -102,6 +103,58 @@ describe("AppShell", () => {
     // must never be a guess.
     renderShell([]);
     expect(screen.getAllByText("ร้านหอมกรุ่นเบเกอรี่").length).toBeGreaterThan(0);
+  });
+
+  it("★ choosing the menu item of the page you are ON still closes the drawer (§8.2)", async () => {
+    // design-system §8.2: the drawer "ปิดเองเมื่อเลือกเมนู". It closed on a
+    // pathname CHANGE only — so tapping the current page's entry (landed on
+    // `/o/org_1`, tap ข้อมูลร้าน) left the scrim over the page you asked for,
+    // and every click on it hit the scrim instead. Found by the D-038 ② tablet
+    // run (e03: "<div … bg-overlay> intercepts pointer events").
+    renderShell([]);
+    await userEvent.click(screen.getByRole("button", { name: orgTh.shell.nav.showMenu }));
+    const drawer = screen
+      .getAllByRole("navigation", { name: orgTh.shell.nav.menuLabel })
+      .find((n) => n.querySelector(`[aria-label="${orgTh.shell.nav.hideMenu}"]`))!;
+    await userEvent.click(within(drawer).getByRole("link", { name: orgTh.shell.nav.orgProfile }));
+    expect(screen.queryByRole("button", { name: orgTh.shell.nav.hideMenu })).toBeNull();
+  });
+
+  it("D5 · every sidebar row carries an icon, so the labels line up (D-038 ③)", () => {
+    // Only บทบาทและสิทธิ์ had one: its label sat 28px right of every other
+    // row's, which read as an indent — as if roles were a child of members.
+    renderShell(["full_access"]);
+    const sidebar = screen.getAllByRole("navigation", { name: orgTh.shell.nav.menuLabel })[0];
+    const rows = [
+      ...within(sidebar).getAllByRole("link"),
+      within(sidebar).getByRole("button", { name: orgTh.shell.nav.logout }),
+    ].filter((el) => el.closest("ul"));
+    expect(rows.map((r) => r.textContent)).toEqual([
+      orgTh.shell.nav.orgProfile,
+      orgTh.shell.nav.members,
+      orgTh.shell.nav.roles,
+      orgTh.shell.nav.security,
+      orgTh.shell.nav.logout,
+    ]);
+    for (const row of rows) {
+      const svg = row.querySelector("svg");
+      expect(svg, `${row.textContent} has no icon`).not.toBeNull();
+      expect(svg).toHaveAttribute("aria-hidden", "true");
+    }
+    // …and no two rows share one: an icon that means two things means neither.
+    const shapes = rows.map((r) => r.querySelector("svg")!.innerHTML);
+    expect(new Set(shapes).size).toBe(shapes.length);
+  });
+
+  it("D6 · the top bar below lg names the SHOP, not just the product", () => {
+    // At tablet width the sidebar (and the switcher in it) is in the drawer,
+    // so the 56px bar was the only chrome on screen and said "OmniStock" —
+    // which shop you were in was a guess until you opened the menu.
+    renderShell([]);
+    const bar = screen.getByTestId("shell-top-bar");
+    expect(bar).toHaveTextContent("ร้านหอมกรุ่นเบเกอรี่");
+    // Long Thai shop names must not push the bar wider than the screen.
+    expect(within(bar).getByText("ร้านหอมกรุ่นเบเกอรี่").className).toContain("truncate");
   });
 
   it("renders the page content it wraps", () => {

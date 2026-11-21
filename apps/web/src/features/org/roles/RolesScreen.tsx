@@ -28,6 +28,7 @@ import { CAPABILITY_MANAGE_MEMBERS } from "../../../lib/org/capability";
 import { Badge } from "../../../components/ui/Badge";
 import { Banner } from "../../../components/ui/Banner";
 import { Button } from "../../../components/ui/Button";
+import { ButtonLink } from "../../../components/ui/ButtonLink";
 import { ForbiddenPanel } from "../../../components/ui/ForbiddenPanel";
 import { Icon } from "../../../components/ui/Icon";
 import { ListRow } from "../../../components/ui/ListRow";
@@ -159,7 +160,7 @@ export function RolesScreen() {
       : null;
 
   return (
-    <main className="mx-auto flex w-full max-w-[var(--size-content-narrow-max-w)] flex-col gap-4 p-card-padding">
+    <main className="mx-auto flex w-full max-w-[var(--size-content-narrow-max-w)] flex-col gap-4 p-4 lg:p-card-padding">
       <div className="flex flex-wrap items-start justify-between gap-3">
         <h1 className="m-0 text-heading-md">{rolesTh.title}</h1>
         {/* Disabled until BOTH reads are in (ux R2: "ถ้า R1 ยังไม่มีข้อมูล → ปุ่มสร้างยัง disabled"). */}
@@ -185,9 +186,13 @@ export function RolesScreen() {
         <p className="m-0 flex flex-wrap items-center gap-2">
           {rolesTh.introMembers}
           {canSeeMembers && (
-            <Link href={`/o/${orgId}/settings/members`} className="no-underline">
-              <Button variant="tertiary">{rolesTh.goMembers}</Button>
-            </Link>
+            <ButtonLink
+              href={`/o/${orgId}/settings/members`}
+              className="no-underline"
+              variant="tertiary"
+            >
+              {rolesTh.goMembers}
+            </ButtonLink>
           )}
         </p>
       </div>

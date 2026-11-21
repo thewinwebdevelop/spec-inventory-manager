@@ -1,4 +1,5 @@
-import { expect, test, type Page } from "@playwright/test";
+import { type Page } from "@playwright/test";
+import { expect, test } from "./fixtures";
 import {
   acceptInvite,
   createShop,
@@ -8,7 +9,9 @@ import {
   openMembers,
   readShared,
   reopenMembers,
-  signUpAndLogin,  resetIpThrottle,
+  signUpAndLogin,
+  resetIpThrottle,
+  shopNav,
 } from "./helpers";
 
 /**
@@ -102,10 +105,8 @@ test("E-08 · a Staff member is not offered the members screen, and is not throw
   // ux Q13: HIDE the entry rather than disable it — a disabled item raises a
   // question the person cannot answer.
   await staffPage.goto(`/o/${orgId}/settings/org`);
-  await expect(staffPage.getByRole("navigation", { name: "เมนูของร้าน" })).toBeVisible();
-  await expect(
-    staffPage.getByRole("navigation", { name: "เมนูของร้าน" }).getByRole("link", { name: "สมาชิก" }),
-  ).toHaveCount(0);
+  await expect(await shopNav(staffPage)).toBeVisible();
+  await expect((await shopNav(staffPage)).getByRole("link", { name: "สมาชิก" })).toHaveCount(0);
 
   // ★ And the part that matters more: typing the URL anyway must NOT evict
   // them. `403 FORBIDDEN` and `403 ORG_ACCESS_DENIED` are different answers
@@ -124,9 +125,7 @@ test("E-08b · the Owner, unlike the Staff member, IS offered the members entry"
   // who cannot see it would mean the client lost capabilities the server still
   // honours — the kind of mismatch that looks like a permissions bug to the
   // person and like nothing at all to the API.
-  await expect(
-    ownerPage.getByRole("navigation", { name: "เมนูของร้าน" }).getByRole("link", { name: "สมาชิก" }),
-  ).toBeVisible();
+  await expect((await shopNav(ownerPage)).getByRole("link", { name: "สมาชิก" })).toBeVisible();
 });
 
 test("E-13 · the last Owner cannot leave, and is told what to do instead", async () => {
@@ -134,10 +133,7 @@ test("E-13 · the last Owner cannot leave, and is told what to do instead", asyn
   // to arrive as a sentence that names the way out, because F-002 has no
   // "delete shop" — an Owner who cannot leave and cannot delete is stuck with
   // a shop forever if the message just says "conflict".
-  await ownerPage
-    .getByRole("navigation", { name: "เมนูของร้าน" })
-    .getByRole("link", { name: "ข้อมูลร้าน" })
-    .click();
+  await (await shopNav(ownerPage)).getByRole("link", { name: "ข้อมูลร้าน" }).click();
   await ownerPage.getByRole("button", { name: "ออกจากร้านนี้" }).click();
 
   // `alertdialog`, not `dialog` — LeaveOrgDialog uses the assertive role
@@ -148,9 +144,7 @@ test("E-13 · the last Owner cannot leave, and is told what to do instead", asyn
 
   // The dialog STAYS OPEN with the reason inside it — closing it would leave
   // the person on a screen that looks like nothing happened.
-  await expect(
-    dialog.getByText(/คุณเป็นเจ้าของร้านคนเดียวของร้านนี้/),
-  ).toBeVisible();
+  await expect(dialog.getByText(/คุณเป็นเจ้าของร้านคนเดียวของร้านนี้/)).toBeVisible();
   await expect(dialog.getByText(/ตั้งคนอื่นเป็นเจ้าของร้านก่อน/)).toBeVisible();
 
   // Still in the shop, still the Owner.
@@ -161,10 +155,7 @@ test("E-13b · a Staff member CAN leave, and the shop disappears from their list
   // The other side of D-029: leaving needs no capability, and Staff cannot even
   // open the members screen — which is why the affordance lives on the shop's
   // own page and not there.
-  await staffPage
-    .getByRole("navigation", { name: "เมนูของร้าน" })
-    .getByRole("link", { name: "ข้อมูลร้าน" })
-    .click();
+  await (await shopNav(staffPage)).getByRole("link", { name: "ข้อมูลร้าน" }).click();
   await staffPage.getByRole("button", { name: "ออกจากร้านนี้" }).click();
 
   const dialog = staffPage.getByRole("alertdialog", { name: new RegExp(`ออกจาก${shopName}`) });

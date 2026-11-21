@@ -1,6 +1,5 @@
-import Link from "next/link";
 import { AuthCard } from "../../../components/ui/AuthCard";
-import { Button } from "../../../components/ui/Button";
+import { ButtonLink } from "../../../components/ui/ButtonLink";
 import { authTh } from "../../../features/auth/i18n";
 
 /**
@@ -17,9 +16,9 @@ export default function LoginHelpPage() {
       <p className="mb-6 text-body-md">{authTh.help.body}</p>
       <hr className="my-6 border-0 border-t border-border-default" />
       <p className="mb-6 text-body-sm text-text-muted">{authTh.help.bodySoloOwner}</p>
-      <Link href="/login">
-        <Button fullWidth>{authTh.help.backToLogin}</Button>
-      </Link>
+      <ButtonLink href="/login" fullWidth>
+        {authTh.help.backToLogin}
+      </ButtonLink>
     </AuthCard>
   );
 }

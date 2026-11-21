@@ -381,7 +381,7 @@ describe("R1 — states", () => {
       screen.getByRole("heading", { name: ROLE_FORBIDDEN_PANEL_COPY.title }),
     ).toBeInTheDocument();
     expect(screen.getByText(ROLE_FORBIDDEN_PANEL_COPY.body)).toBeInTheDocument();
-    expect(screen.getByRole("button", { name: "กลับไปหน้าข้อมูลร้าน" })).toBeInTheDocument();
+    expect(screen.getByRole("link", { name: "กลับไปหน้าข้อมูลร้าน" })).toBeInTheDocument();
     expect(screen.queryByRole("button", { name: "สร้างบทบาท" })).toBeNull();
   });
 });

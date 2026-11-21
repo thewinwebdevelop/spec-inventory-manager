@@ -1,4 +1,4 @@
-import { expect, test } from "@playwright/test";
+import { expect, test } from "./fixtures";
 import { resetIpThrottle } from "./helpers";
 
 /**
@@ -77,7 +77,7 @@ test("E-01 · signs up, creates a shop, and is inside it", async ({ page }) => {
 
   // ── THE ASSERTION: inside the new shop, by URL and by what is on screen ──
   await expect(page).toHaveURL(/\/o\/[A-Za-z0-9_-]+/, { timeout: 20_000 });
-  await expect(page.getByText(shopName).first()).toBeVisible();
+  await expect(page.getByText(shopName).filter({ visible: true }).first()).toBeVisible();
 });
 
 test("E-01b · the shop persists across a reload — the session survives", async ({ page }) => {
@@ -108,5 +108,5 @@ test("E-01b · the shop persists across a reload — the session survives", asyn
   // Still inside, not bounced to /login: the access token is gone from memory
   // and has to be rebuilt from the refresh cookie.
   await expect(page).toHaveURL(insideTheShop, { timeout: 20_000 });
-  await expect(page.getByText(shopName).first()).toBeVisible();
+  await expect(page.getByText(shopName).filter({ visible: true }).first()).toBeVisible();
 });

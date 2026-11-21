@@ -16,16 +16,14 @@
  */
 import type { ReactNode } from "react";
 import { useEffect, useState } from "react";
-import { usePathname, useRouter } from "next/navigation";
+import { usePathname } from "next/navigation";
 import { useActiveOrg, useCan } from "../../../lib/org/org-context";
 import { NavAction, NavItem } from "../../../components/ui/NavItem";
-import { logoutDevice } from "../../../lib/auth-client";
-import { useSession } from "../../../lib/session/session-context";
 import { IconButton } from "../../../components/ui/IconButton";
 import { Icon } from "../../../components/ui/Icon";
 import { orgTh } from "../i18n";
 import { OrgSwitcher } from "./OrgSwitcher";
-import { useToast } from "../../../components/providers/ToastProvider";
+import { useSignOut } from "../use-sign-out";
 
 /** api-spec §3.3 — the capability the members screen requires. */
 import { CAPABILITY_MANAGE_MEMBERS, CAPABILITY_MANAGE_ROLES } from "../../../lib/org/capability";
@@ -49,12 +47,11 @@ export { CAPABILITY_MANAGE_MEMBERS };
 export const SECURITY_PATH = "/settings/security";
 
 export function AppShell({ children }: { children: ReactNode }) {
-  const { orgId } = useActiveOrg();
+  const { orgId, name: orgName } = useActiveOrg();
   const pathname = usePathname();
-  const router = useRouter();
-  const toast = useToast();
-  const session = useSession();
-  const [signingOut, setSigningOut] = useState(false);
+  // B-16 — sign out of this device; the logic (and why a failure stays put)
+  // lives in `useSignOut`, shared with S1's header bar.
+  const { signOut, signingOut } = useSignOut();
   // §4 answers Q13 explicitly: HIDE it, do not disable it — a disabled entry
   // just raises a question the user cannot resolve.
   const canManageMembers = useCan(CAPABILITY_MANAGE_MEMBERS);
@@ -109,39 +106,6 @@ export function AppShell({ children }: { children: ReactNode }) {
   // route people actually land on after entering a shop.
   const onOrgProfile = pathname === orgProfilePath || pathname === `/o/${orgId}`;
 
-  /**
-   * `logoutDevice()` with no `familyId` ends THIS session only — the refresh
-   * cookie and the in-memory access token — which is what a sidebar "sign
-   * out" means. `logoutAll()` is the deliberate, confirmed action that stays
-   * on the security page.
-   *
-   * ⛔ On failure it STAYS and says so, rather than routing to `/login`
-   * optimistically. `logoutDevice` clears the access token only after the
-   * server has answered `204`, so a failed call leaves both the token and the
-   * refresh cookie alive — sending the person to a login page while their
-   * session is still valid would show them a sign-out that did not happen.
-   * Same shape as `SessionList`'s logout-all error, which is the pattern ux
-   * already specified for this failure.
-   */
-  async function signOut() {
-    setSigningOut(true);
-    try {
-      await logoutDevice();
-      // B-19 (security review, Medium): `endSession` had no caller in the
-      // app. Without it the provider still said "signed in" after this
-      // sign-out, and an invitation token held for a login nobody finished
-      // survived the soft navigation below — the next person to sign in at
-      // this tab would have been routed to it. `OrgGuard` sends `none` to
-      // `/login` too, so both agree on where this ends.
-      session.endSession();
-      router.replace("/login");
-    } catch {
-      toast.error(orgTh.shell.nav.logoutFailed);
-    } finally {
-      setSigningOut(false);
-    }
-  }
-
   const nav = (
     <>
       <OrgSwitcher />
@@ -150,13 +114,17 @@ export function AppShell({ children }: { children: ReactNode }) {
           you are — which is the sidebar's entire job. */}
       <ul className="m-0 mt-2 flex list-none flex-col gap-1 p-0">
         <li>
-          <NavItem href={orgProfilePath} active={onOrgProfile}>
+          <NavItem href={orgProfilePath} active={onOrgProfile} icon={<Icon role="store" />}>
             {orgTh.shell.nav.orgProfile}
           </NavItem>
         </li>
         {canManageMembers && (
           <li>
-            <NavItem href={membersPath} active={pathname === membersPath}>
+            <NavItem
+              href={membersPath}
+              active={pathname === membersPath}
+              icon={<Icon role="users" />}
+            >
               {orgTh.shell.nav.members}
             </NavItem>
           </li>
@@ -174,7 +142,11 @@ export function AppShell({ children }: { children: ReactNode }) {
           </li>
         )}
         <li>
-          <NavItem href={SECURITY_PATH} active={pathname === SECURITY_PATH}>
+          <NavItem
+            href={SECURITY_PATH}
+            active={pathname === SECURITY_PATH}
+            icon={<Icon role="security" />}
+          >
             {orgTh.shell.nav.security}
           </NavItem>
         </li>
@@ -186,7 +158,11 @@ export function AppShell({ children }: { children: ReactNode }) {
             Found by the §12.2 manual pass, when signing out to switch accounts
             turned out to be impossible without it. */}
         <li className="mt-1 border-t border-border-default pt-1">
-          <NavAction disabled={signingOut} onClick={signOut}>
+          <NavAction
+            disabled={signingOut}
+            onClick={() => void signOut()}
+            icon={<Icon role="sign-out" />}
+          >
             {orgTh.shell.nav.logout}
           </NavAction>
         </li>
@@ -197,7 +173,13 @@ export function AppShell({ children }: { children: ReactNode }) {
   return (
     <div className="flex min-h-screen flex-col bg-bg lg:flex-row">
       {/* `.tbar` — 56px, and only below lg where the sidebar is not permanent. */}
-      <div className="flex h-14 items-center gap-1 border-b border-border-default bg-surface px-2 lg:hidden">
+      {/* D6 (D-038 ③): below lg the switcher is inside the drawer, so this bar
+          is the only chrome on screen — it names the SHOP. The product name
+          stays in the drawer and the permanent sidebar. */}
+      <div
+        data-testid="shell-top-bar"
+        className="flex h-14 min-w-0 items-center gap-1 border-b border-border-default bg-surface px-2 lg:hidden"
+      >
         <IconButton
           aria-label={orgTh.shell.nav.showMenu}
           aria-expanded={drawerOpen}
@@ -205,7 +187,7 @@ export function AppShell({ children }: { children: ReactNode }) {
         >
           <Icon role="menu" size="lg" />
         </IconButton>
-        <span className="text-heading-sm">OmniStock</span>
+        <span className="min-w-0 truncate text-heading-sm">{orgName}</span>
       </div>
 
       {drawerOpen && (
@@ -221,9 +203,15 @@ export function AppShell({ children }: { children: ReactNode }) {
               ⚠️ 280px is the mockup's drawer width and is NOT `size.sidebar.w`
               (240px); design-system.md §1.2 has no token for it, so per §6 it
               stays a literal here and goes on the list for ux. */}
+          {/* Any link chosen in here closes the drawer — including the entry
+              for the page you are already on, where the pathname effect above
+              never fires and the scrim would stay over the page (§8.2). */}
           <nav
             aria-label={orgTh.shell.nav.menuLabel}
             className="absolute inset-y-0 left-0 flex w-[280px] max-w-[85%] flex-col gap-2 overflow-y-auto border-r border-border-default bg-surface p-card-padding shadow-dialog"
+            onClick={(e) => {
+              if ((e.target as HTMLElement).closest("a[href]")) setDrawerOpen(false);
+            }}
           >
             <div className="mb-2 flex items-center justify-between gap-2">
               <span className="text-heading-sm">OmniStock</span>

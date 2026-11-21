@@ -7,7 +7,14 @@
 // may say anything about it, and if the list can't be finished, the screen
 // must not claim it is empty.
 import { describe, it, expect, vi, beforeEach } from "vitest";
-import { render, screen, waitFor } from "@testing-library/react";
+import { render, screen, waitFor, configure } from "@testing-library/react";
+
+// Every case here waits for the hooks to walk SEVERAL pages in sequence (2 rows
+// a page, a re-render after each), not one render. Testing Library's default
+// 1s wait is sized for one render: under turbo's parallel run this file went
+// red at 2.5s while passing 3/3 alone. Size the wait to the work, here only
+// (vitest isolates files, so this does not loosen any other suite).
+configure({ asyncUtilTimeout: 5000 });
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 
 vi.mock("next/navigation", () => ({

@@ -1,5 +1,5 @@
 import { readFileSync } from "node:fs";
-import { expect, type Page } from "@playwright/test";
+import { expect, test, type Locator, type Page } from "@playwright/test";
 import Redis from "ioredis";
 
 /**
@@ -47,9 +47,14 @@ export async function resetIpThrottle(): Promise<void> {
   }
 }
 
-/** The Owner + shop `auth.setup.ts` created for the whole lane. */
+/**
+ * The Owner + shop `auth.setup.ts` created for THIS viewport project (one per
+ * project — see auth.setup.ts for the per-user shop-creation limit). Must be
+ * called inside a test or hook, where `test.info()` knows the project.
+ */
 export function readShared(): { email: string; orgId: string; shopName: string } {
-  return JSON.parse(readFileSync("e2e/.auth/shared.json", "utf8"));
+  const project = test.info().project.name;
+  return JSON.parse(readFileSync(`e2e/.auth/shared-${project}.json`, "utf8"));
 }
 
 /** Unique per call — one database serves the whole run. */
@@ -131,17 +136,52 @@ export async function createShop(page: Page, name: string): Promise<string> {
  * (web.md §3.2), so the list inside is links, and it is collapsed until asked
  * for. Mobile's tap-the-AppBar bottom sheet is the other shape (§13).
  */
+/**
+ * Below lg (1024px) the shell's nav — shop switcher, menu, sign-out — lives in
+ * a drawer behind "เปิดเมนู" (design-system §8.2); at ≥lg it is the permanent
+ * sidebar. Opens the drawer when there is one, the way a person on a tablet
+ * would, and is a no-op on desktop. D-038 ② runs every journey at both.
+ */
+export async function openNav(page: Page): Promise<void> {
+  // `exact`: role names match by SUBSTRING by default, and "เปิดเมนู" contains
+  // "ปิดเมนู" — the open button would also answer to the close button's name.
+  const show = page.getByRole("button", { name: "เปิดเมนู", exact: true });
+  const sidebar = page.getByRole("navigation", { name: "เมนูของร้าน" }).filter({ visible: true });
+  // Wait for the SHELL first: `isVisible()` does not wait, and asked during the
+  // first render it answers "no toggle" on a tablet and leaves the drawer shut.
+  await expect(show.or(sidebar).first()).toBeVisible();
+  const hide = page.getByRole("button", { name: "ปิดเมนู", exact: true });
+  // Already open: the toggle is still "visible" UNDER the scrim, and clicking
+  // it would land on the drawer instead.
+  if (await hide.isVisible()) return;
+  if (await show.isVisible()) {
+    await show.click();
+    await expect(hide).toBeVisible();
+  }
+}
+
+/**
+ * The shop's nav ("เมนูของร้าน") as a person can reach it at the current width:
+ * opens the drawer below lg first, then returns the VISIBLE nav — at tablet
+ * width the permanent sidebar is still in the DOM, just hidden.
+ */
+export async function shopNav(page: Page): Promise<Locator> {
+  await openNav(page);
+  return page.getByRole("navigation", { name: "เมนูของร้าน" }).filter({ visible: true });
+}
+
 export async function openSwitcher(page: Page): Promise<void> {
-  const summary = page.locator("details > summary").first();
+  await openNav(page);
+  const summary = page.locator("details > summary").filter({ visible: true }).first();
   if (!(await page.locator("details[open]").count())) {
     await summary.click();
   }
-  await expect(page.getByText("สลับร้าน")).toBeVisible();
+  await expect(page.getByText("สลับร้าน").filter({ visible: true })).toBeVisible();
 }
 
 export async function openMembers(page: Page, orgId: string): Promise<void> {
   // Same reason as `createShop`: follow the nav entry when it is on screen.
-  const nav = page.getByRole("navigation", { name: "เมนูของร้าน" });
+  const nav = await shopNav(page);
   const entry = nav.getByRole("link", { name: "สมาชิก" });
   if (await entry.count()) {
     await entry.click();
@@ -177,7 +217,7 @@ export async function openMembers(page: Page, orgId: string): Promise<void> {
  * was already on, but the 30s freshness used to swallow it.
  */
 export async function reopenMembers(page: Page, orgId: string): Promise<void> {
-  const nav = page.getByRole("navigation", { name: "เมนูของร้าน" });
+  const nav = await shopNav(page);
   await nav.getByRole("link", { name: "ข้อมูลร้าน" }).click();
   await expect(page.getByRole("heading", { name: "ข้อมูลร้าน" })).toBeVisible({ timeout: 20_000 });
   await openMembers(page, orgId);

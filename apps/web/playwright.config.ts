@@ -59,10 +59,27 @@ export default defineConfig({
     // Creates the shared Owner + shop once (see auth.setup.ts for why the
     // lane's real budget is pre-auth requests per five minutes, not time).
     { name: "setup", testMatch: /auth\.setup\.ts/ },
+    // D-038 ② — every journey at the two widths the web is designed for
+    // (design-system §8.1: desktop-first, tablet supported). `chromium` keeps
+    // its name so CI's existing invocation is unchanged; it is the 1280 run.
     {
       name: "chromium",
       dependencies: ["setup"],
-      use: { ...devices["Desktop Chrome"] },
+      use: { ...devices["Desktop Chrome"], viewport: { width: 1280, height: 800 } },
+    },
+    {
+      name: "tablet",
+      dependencies: ["setup"],
+      use: { ...devices["Desktop Chrome"], viewport: { width: 768, height: 1024 } },
+    },
+    // Phone browsers are out of scope for logged-in routes (§8.1); only the
+    // public routes people open from a LINE link (§8.3, e.g. /invite) must
+    // work there — those specs carry the `@public` tag.
+    {
+      name: "phone",
+      dependencies: ["setup"],
+      grep: /@public/,
+      use: { ...devices["Desktop Chrome"], viewport: { width: 390, height: 844 } },
     },
   ],
 });

@@ -10,7 +10,7 @@
  * Destination decided by the user, 2026-09-01: mirror login and go to the
  * picker. `web.md` had said `/o/[defaultOrg]`, and no such field exists.
  */
-import { expect, test } from "@playwright/test";
+import { expect, test } from "./fixtures";
 import { login, readShared, resetIpThrottle } from "./helpers";
 
 test.beforeEach(async () => {

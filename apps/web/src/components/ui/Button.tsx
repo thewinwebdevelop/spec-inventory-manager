@@ -11,7 +11,7 @@ import { cn } from "./utils";
  * (docs/design-system.md §1: `color.primary*`, `radius.button`,
  * `type.button.md`, `size.tap-target.min`) instead of inline `style`.
  */
-const buttonVariants = cva(
+export const buttonVariants = cva(
   "inline-flex items-center justify-center gap-2 rounded-button min-h-[var(--size-tap-target-min)] border transition-colors disabled:opacity-60",
   {
     variants: {
@@ -21,8 +21,7 @@ const buttonVariants = cva(
            solid. `shadow-btn` is `none` in light and the lift in dark. */
         primary:
           "bg-btn-bg text-btn-fg border-btn-bg shadow-btn hover:bg-btn-hover disabled:hover:bg-btn-bg",
-        secondary:
-          "bg-surface text-text border-border-default hover:bg-surface-muted",
+        secondary: "bg-surface text-text border-border-default hover:bg-surface-muted",
         destructive:
           "bg-btn-danger-bg text-btn-fg border-btn-danger-bg shadow-btn hover:bg-btn-danger-hover",
         /**
@@ -32,8 +31,7 @@ const buttonVariants = cva(
          * would make a real action look disabled. Hover is a `surface.muted`
          * fill and never an underline.
          */
-        tertiary:
-          "bg-transparent text-primary border-transparent hover:bg-surface-muted",
+        tertiary: "bg-transparent text-primary border-transparent hover:bg-surface-muted",
       },
       /**
        * "ตัวอักษรเล็กลง ปุ่มไม่เตี้ยลง" — `sm` shrinks the type and the
@@ -68,8 +66,7 @@ const buttonVariants = cva(
 );
 
 export interface ButtonProps
-  extends ButtonHTMLAttributes<HTMLButtonElement>,
-    VariantProps<typeof buttonVariants> {
+  extends ButtonHTMLAttributes<HTMLButtonElement>, VariantProps<typeof buttonVariants> {
   loading?: boolean;
   loadingLabel?: string;
   fullWidth?: boolean;

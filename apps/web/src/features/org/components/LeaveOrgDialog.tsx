@@ -13,7 +13,6 @@
  */
 import { useState } from "react";
 import { useRouter } from "next/navigation";
-import Link from "next/link";
 import { useLeaveOrganization } from "../api/use-member-mutations";
 import { toLeaveOrgOutcome } from "../leave-org";
 import { useActiveOrg } from "../../../lib/org/org-context";
@@ -21,6 +20,7 @@ import { can } from "../../../lib/org/capability";
 import { CAPABILITY_MANAGE_MEMBERS } from "../member-actions";
 import { useToast } from "../../../components/providers/ToastProvider";
 import { Button } from "../../../components/ui/Button";
+import { ButtonLink } from "../../../components/ui/ButtonLink";
 import { DialogShell } from "../../../components/ui/DialogShell";
 import { ErrorBanner } from "../../../components/ui/ErrorBanner";
 import { membersTh } from "../i18n";
@@ -93,35 +93,40 @@ export function LeaveOrgDialog({
 
   return (
     <DialogShell label={LEAVE_ORG_DIALOG_COPY.title(org.name)} onClose={onClose} role="alertdialog">
-        <h3 className="text-heading-sm">{LEAVE_ORG_DIALOG_COPY.title(org.name)}</h3>
-        <p className="text-body-sm">{LEAVE_ORG_DIALOG_COPY.body}</p>
+      <h3 className="text-heading-sm">{LEAVE_ORG_DIALOG_COPY.title(org.name)}</h3>
+      <p className="text-body-sm">{LEAVE_ORG_DIALOG_COPY.body}</p>
 
-        {message && <ErrorBanner message={message} />}
-        {offerMembersLink &&
-          (origin === "members" ? (
-            <p className="text-body-sm">{membersTh.leaveLastOwnerHere}</p>
-          ) : (
-            <Link href={`/o/${org.orgId}/settings/members`}>
-              {membersTh.leaveLastOwnerCta}
-            </Link>
-          ))}
-
-        {/* `.dialog .acts` — one right-aligned row, `space.3` between. */}
-        <div className="flex flex-wrap justify-end gap-3 pt-2">
-          <Button variant="secondary" onClick={onClose} disabled={leave.isPending}>
-            {LEAVE_ORG_DIALOG_COPY.cancel}
-          </Button>
-          <Button
-            variant="destructive"
-            onClick={submit}
-            disabled={leave.isPending}
-            loading={leave.isPending}
-            loadingLabel={membersTh.leaveOrg}
+      {message && <ErrorBanner message={message} />}
+      {offerMembersLink &&
+        (origin === "members" ? (
+          <p className="text-body-sm">{membersTh.leaveLastOwnerHere}</p>
+        ) : (
+          // `tertiary` = reads as a text link, but carries the 44px target
+          // (D-038 ② measured the bare <Link> at 18px tall).
+          <ButtonLink
+            href={`/o/${org.orgId}/settings/members`}
+            variant="tertiary"
+            className="self-start"
           >
-            {LEAVE_ORG_DIALOG_COPY.confirm}
-          </Button>
-        </div>
-    
+            {membersTh.leaveLastOwnerCta}
+          </ButtonLink>
+        ))}
+
+      {/* `.dialog .acts` — one right-aligned row, `space.3` between. */}
+      <div className="flex flex-wrap justify-end gap-3 pt-2">
+        <Button variant="secondary" onClick={onClose} disabled={leave.isPending}>
+          {LEAVE_ORG_DIALOG_COPY.cancel}
+        </Button>
+        <Button
+          variant="destructive"
+          onClick={submit}
+          disabled={leave.isPending}
+          loading={leave.isPending}
+          loadingLabel={membersTh.leaveOrg}
+        >
+          {LEAVE_ORG_DIALOG_COPY.confirm}
+        </Button>
+      </div>
     </DialogShell>
   );
 }

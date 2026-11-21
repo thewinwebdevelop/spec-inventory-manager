@@ -18,7 +18,6 @@
  *    documented outcomes their own copy and their own way out.
  */
 import { useEffect, useState } from "react";
-import Link from "next/link";
 import { useInviteToken } from "../use-invite-token";
 import {
   useAcceptInvitation,
@@ -32,11 +31,16 @@ import { roleLabel } from "../../org/i18n";
 import { useSession } from "../../../lib/session/session-context";
 import { isSignedIn } from "../../../lib/session/session-state";
 import { Button } from "../../../components/ui/Button";
+import { ButtonLink } from "../../../components/ui/ButtonLink";
 import { SkeletonRow } from "../../../components/ui/Skeleton";
 import { ThrottleBanner } from "../../../components/ui/ThrottleBanner";
 import { useThrottleCountdown } from "../../../hooks/use-throttle-countdown";
 import { holdInviteToken } from "../../../lib/session/pending-invite";
 
+// Every card below is `w-[calc(100%-3rem)]`, not `w-full`: on a phone (the
+// width this public route is designed for, design-system §8.3) `w-full` put the
+// card's border and rounded corners against the screen edge. 3rem = the 24px
+// gutter each side that `AuthCard`'s `p-6` gives login/signup. D-038 ③.
 export function InviteScreen() {
   const { token, ready } = useInviteToken();
   // ★ B-19 — every door from here to an auth screen takes the token along
@@ -63,8 +67,7 @@ export function InviteScreen() {
     setError(mapped);
   };
 
-  const load = (value: string) =>
-    preview.mutate(value, { onSuccess: setPreviewed, onError: fail });
+  const load = (value: string) => preview.mutate(value, { onSuccess: setPreviewed, onError: fail });
 
   useEffect(() => {
     if (!ready) return;
@@ -86,12 +89,12 @@ export function InviteScreen() {
 
   if (joined) {
     return (
-      <main className="mx-auto my-8 flex w-full max-w-[var(--size-dialog-max-w)] flex-col gap-3 rounded-card border border-border-default bg-surface p-card-padding shadow-card">
+      <main className="mx-auto my-8 flex w-[calc(100%-3rem)] max-w-[var(--size-dialog-max-w)] flex-col gap-3 rounded-card border border-border-default bg-surface p-card-padding shadow-card">
         <h1 className="m-0 text-heading-md">{inviteScreenTh.joinedTitle(joined.orgName)}</h1>
-        <p className="m-0 text-body-sm text-text-muted">{inviteScreenTh.joinedRole(joined.roleName)}</p>
-        <Link href={`/o/${joined.orgId}`}>
-          <Button>{inviteScreenTh.enterOrg}</Button>
-        </Link>
+        <p className="m-0 text-body-sm text-text-muted">
+          {inviteScreenTh.joinedRole(joined.roleName)}
+        </p>
+        <ButtonLink href={`/o/${joined.orgId}`}>{inviteScreenTh.enterOrg}</ButtonLink>
         <p className="m-0 text-body-sm text-text-muted">{inviteScreenTh.mobileHint}</p>
       </main>
     );
@@ -99,7 +102,7 @@ export function InviteScreen() {
 
   if (error) {
     return (
-      <main className="mx-auto my-8 flex w-full max-w-[var(--size-dialog-max-w)] flex-col gap-3 rounded-card border border-border-default bg-surface p-card-padding shadow-card">
+      <main className="mx-auto my-8 flex w-[calc(100%-3rem)] max-w-[var(--size-dialog-max-w)] flex-col gap-3 rounded-card border border-border-default bg-surface p-card-padding shadow-card">
         {throttle.isActive && <ThrottleBanner remainingSeconds={throttle.remainingSeconds} />}
         <h1 className="m-0 text-heading-md">{error.title}</h1>
         <p className="m-0 text-body-sm text-text-muted">{error.body}</p>
@@ -117,7 +120,11 @@ export function InviteScreen() {
 
   if (!ready || preview.isPending || !previewed) {
     return (
-      <main className="mx-auto my-8 flex w-full max-w-[var(--size-dialog-max-w)] flex-col gap-3 rounded-card border border-border-default bg-surface p-card-padding shadow-card" role="status" aria-label="กำลังโหลด">
+      <main
+        className="mx-auto my-8 flex w-[calc(100%-3rem)] max-w-[var(--size-dialog-max-w)] flex-col gap-3 rounded-card border border-border-default bg-surface p-card-padding shadow-card"
+        role="status"
+        aria-label="กำลังโหลด"
+      >
         <SkeletonRow />
         <SkeletonRow />
         <SkeletonRow />
@@ -126,13 +133,15 @@ export function InviteScreen() {
   }
 
   return (
-    <main className="mx-auto my-8 flex w-full max-w-[var(--size-dialog-max-w)] flex-col gap-3 rounded-card border border-border-default bg-surface p-card-padding shadow-card">
+    <main className="mx-auto my-8 flex w-[calc(100%-3rem)] max-w-[var(--size-dialog-max-w)] flex-col gap-3 rounded-card border border-border-default bg-surface p-card-padding shadow-card">
       <h1 className="m-0 text-heading-md">{inviteScreenTh.title}</h1>
       <p className="m-0 text-heading-sm">{previewed.organizationName}</p>
       <p>{inviteScreenTh.invitedAs(roleLabel(previewed.roleKey, previewed.roleName))}</p>
       {/* Masked, never the address: this page is reachable by anyone holding
           the link, account or not (api-spec §3.14). */}
-      <p className="m-0 text-body-sm text-text-muted">{inviteScreenTh.issuedTo(previewed.emailMasked)}</p>
+      <p className="m-0 text-body-sm text-text-muted">
+        {inviteScreenTh.issuedTo(previewed.emailMasked)}
+      </p>
       <p className="m-0 text-body-sm text-text-muted">{formatExpiry(previewed.expiresAt)}</p>
 
       {isSignedIn(state) ? (
@@ -157,12 +166,12 @@ export function InviteScreen() {
         </Button>
       ) : (
         <>
-          <Link href="/login" onClick={holdForReturn}>
-            <Button>{inviteScreenTh.loginToAccept}</Button>
-          </Link>
-          <Link href="/signup" onClick={holdForReturn}>
-            <Button variant="secondary">{inviteScreenTh.signup}</Button>
-          </Link>
+          <ButtonLink href="/login" onClick={holdForReturn}>
+            {inviteScreenTh.loginToAccept}
+          </ButtonLink>
+          <ButtonLink href="/signup" onClick={holdForReturn} variant="secondary">
+            {inviteScreenTh.signup}
+          </ButtonLink>
           <p className="m-0 text-body-sm text-text-muted">{inviteScreenTh.sameEmailOnly}</p>
         </>
       )}
@@ -184,31 +193,27 @@ function InviteNextStepButton({
       return <Button onClick={onRetry}>{inviteScreenTh.retry}</Button>;
     case "login":
       return (
-        <Link href="/login" onClick={onLeaveForAuth}>
-          <Button>{inviteScreenTh.login}</Button>
-        </Link>
+        <ButtonLink href="/login" onClick={onLeaveForAuth}>
+          {inviteScreenTh.login}
+        </ButtonLink>
       );
     case "switch-account":
       // §11.2: "คงลิงก์เดิมไว้ให้" — the other account is signing in to THIS
       // invitation, so it comes back here too.
       return (
-        <Link href="/login" onClick={onLeaveForAuth}>
-          <Button>{inviteScreenTh.switchAccount}</Button>
-        </Link>
+        <ButtonLink href="/login" onClick={onLeaveForAuth}>
+          {inviteScreenTh.switchAccount}
+        </ButtonLink>
       );
     case "enter-org":
       // The refusal carries no org id, so the shop picker is the honest
       // destination — it lists exactly the shops this person is in.
-      return (
-        <Link href="/select-org">
-          <Button>{inviteScreenTh.enterOrg}</Button>
-        </Link>
-      );
+      return <ButtonLink href="/select-org">{inviteScreenTh.enterOrg}</ButtonLink>;
     default:
       return (
-        <Link href="/">
-          <Button variant="secondary">{inviteScreenTh.home}</Button>
-        </Link>
+        <ButtonLink href="/" variant="secondary">
+          {inviteScreenTh.home}
+        </ButtonLink>
       );
   }
 }

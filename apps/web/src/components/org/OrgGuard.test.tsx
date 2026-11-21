@@ -45,11 +45,12 @@ const PROFILE = {
 };
 
 function stubFetch(status: number, body: unknown) {
-  const impl = vi.fn(async () =>
-    new Response(JSON.stringify(body), {
-      status,
-      headers: { "Content-Type": "application/json" },
-    }),
+  const impl = vi.fn(
+    async () =>
+      new Response(JSON.stringify(body), {
+        status,
+        headers: { "Content-Type": "application/json" },
+      }),
   );
   vi.stubGlobal("fetch", impl);
   return impl;
@@ -96,6 +97,24 @@ describe("OrgGuard", () => {
 
     expect(screen.getByRole("status")).toBeInTheDocument();
     expect(screen.queryByText("เนื้อหาของร้าน")).not.toBeInTheDocument();
+  });
+
+  it("D9 · the loading skeleton has the shell's shape, so nothing jumps when it resolves", () => {
+    // It was three bars in a `p-6` box: on resolve the top bar / sidebar
+    // appeared from nowhere and the page content moved down 56px (tablet) or
+    // right 240px (desktop). D-038 ③.
+    stubFetch(200, PROFILE);
+    renderGuard(freshClient());
+    const status = screen.getByRole("status");
+    expect(status.querySelector("[data-skeleton='top-bar']")?.className).toContain("h-14");
+    expect(status.querySelector("[data-skeleton='sidebar']")?.className).toContain(
+      "lg:w-[var(--size-sidebar-w)]",
+    );
+    // ★ and still NOT the shell: no shop name, no menu built from
+    // capabilities nobody has verified yet.
+    expect(screen.queryByText(PROFILE.name)).toBeNull();
+    expect(screen.queryByRole("navigation")).toBeNull();
+    expect(screen.queryByRole("link")).toBeNull();
   });
 
   it("★ 403 ORG_ACCESS_DENIED goes to the shop picker and refetches the shop list", async () => {

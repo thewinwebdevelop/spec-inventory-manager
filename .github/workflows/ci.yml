@@ -897,6 +897,17 @@ jobs:
       # apps/web's rewrite target — the same-origin `/auth/*` proxy that makes
       # the `Path=/auth` refresh cookie work (infra/gateway/README.md).
       API_ORIGIN: http://localhost:3000
+      # The per-user shop-creation limit (10/h, F-002 §8) is abuse control this
+      # lane does not test; every journey creates shops as its project's shared
+      # Owner, and the 11th hit it — e19 went red on 2026-10-25 for exactly that
+      # (`/orgs/new` + "ลองเข้าสู่ระบบถี่เกินไป"). The env var exists to set this
+      # quota per environment; the limiter itself stays covered by
+      # integration-api.
+      ORG_RATE_LIMIT_CREATE_ORG_PER_HOUR: "100"
+      # Same reasoning, keyed per IP: the public invite page allows 30 opens an
+      # hour per address, and the whole lane is ONE address opening invites at
+      # three widths (D-038 ②) — "เปิดลิงก์คำเชิญถี่เกินไป" on the phone run.
+      ORG_RATE_LIMIT_INVITE_PUBLIC_PER_HOUR: "300"
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4

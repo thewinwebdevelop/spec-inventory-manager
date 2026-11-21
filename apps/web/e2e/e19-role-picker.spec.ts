@@ -1,4 +1,5 @@
-import { expect, test, type Page } from "@playwright/test";
+import { type Page } from "@playwright/test";
+import { expect, test } from "./fixtures";
 import {
   acceptInvite,
   createShop,
@@ -103,5 +104,5 @@ test("EW3 R9 - accepting after the inviter lost standing shows the cancelled sta
     inviteePage.getByText("ถ้าคุณยังต้องการเข้าร่วม ให้ขอลิงก์คำเชิญใหม่จากเจ้าของร้าน"),
   ).toBeVisible();
   await expect(inviteePage.getByText(/ผู้เชิญ|สิทธิ์|ขออภัย/)).toHaveCount(0);
-  await expect(inviteePage.getByRole("button", { name: /กลับหน้าแรก/ })).toBeVisible();
+  await expect(inviteePage.getByRole("link", { name: /กลับหน้าแรก/ })).toBeVisible();
 });

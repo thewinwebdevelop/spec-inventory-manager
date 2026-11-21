@@ -1,4 +1,4 @@
-import { expect, test } from "@playwright/test";
+import { expect, test } from "./fixtures";
 
 /**
  * N-2 (qa, 2026-09-20) — the `Referrer-Policy` on `/invite`, proven by a server
@@ -20,7 +20,9 @@ import { expect, test } from "@playwright/test";
  * `/invite?token=…` in `location.href` — so anything requested during that
  * paint could put a bearer credential for shop membership into a `Referer`.
  */
-test("N-2 ★ · the server really sends Referrer-Policy: no-referrer on /invite", async ({ page }) => {
+test("N-2 ★ · the server really sends Referrer-Policy: no-referrer on /invite", async ({
+  page,
+}) => {
   const response = await page.goto("/invite?token=probe-not-a-real-token");
 
   expect(response, "no response for /invite").not.toBeNull();

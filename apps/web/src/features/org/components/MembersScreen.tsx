@@ -200,7 +200,7 @@ export function MembersScreen() {
   };
 
   return (
-    <main className="flex flex-col gap-4 p-card-padding">
+    <main className="flex flex-col gap-4 p-4 lg:p-card-padding">
       <div className="flex flex-wrap items-center justify-between gap-3">
         <h1 className="m-0 text-heading-md">{membersTh.title}</h1>
         <Button onClick={() => setInviting(true)}>{membersTh.invite}</Button>

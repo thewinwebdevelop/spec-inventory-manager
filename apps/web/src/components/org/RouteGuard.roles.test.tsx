@@ -54,7 +54,7 @@ describe("★ roles route guard", () => {
       screen.getByRole("heading", { name: ROLE_FORBIDDEN_PANEL_COPY.title }),
     ).toBeInTheDocument();
     expect(screen.getByText(ROLE_FORBIDDEN_PANEL_COPY.body)).toBeInTheDocument();
-    expect(screen.getByRole("button", { name: "กลับไปหน้าข้อมูลร้าน" })).toBeInTheDocument();
+    expect(screen.getByRole("link", { name: "กลับไปหน้าข้อมูลร้าน" })).toBeInTheDocument();
     expect(mounted).not.toHaveBeenCalled();
   });
   it.each([["manage_roles"], ["full_access"]])("%s ⇒ screen renders", (cap) => {
