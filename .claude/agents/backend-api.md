@@ -72,7 +72,8 @@ Read [docs/01-data-model.md](../../docs/01-data-model.md) before any change here
    the shared seam with `frontend` and `ux` (it constrains the UX). Announce
    contract changes in your handoff/summary.
 4. After design is reviewed + committed: put domain logic in `core-domain` as
-   pure functions; write/extend unit tests **alongside the code** (not later).
+   pure functions; **write the test first and run it to see it fail**, then implement and rerun
+   until everything is green (WEB_TEAM §3.6.1 ① · D-038).
 5. Run tests + lint via Bash, then **report results truthfully**.
 6. Commit/push only when the user asks; work on a branch.
 

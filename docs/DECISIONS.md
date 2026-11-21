@@ -415,3 +415,18 @@ Rationale: เปลี่ยน preset ย้อนหลัง = เปลี�
 Affects: Gate 1 ของ feature แรกที่มีช่องต้นทุน (คาด F-010) ต้องมี AC + test ว่า Staff preset ไม่เห็น · F-011 · รายงาน/dashboard (F-030) · forward-commitments
 Status: decided
 
+
+---
+
+### D-038 · 2026-11-21 · process (ทุก feature)
+
+Q: ลำดับการ build/test ต่อ feature ควรเป็นอย่างไร ก่อนส่งให้ user ลองใช้?
+Asked by: @user Owner: @user (Type 1 — เปลี่ยน workflow ทั้งทีม)
+Decision: ทุกงานที่มีโค้ดเดิน **test loop 4 ขั้น** (WEB_TEAM §3.6.1):
+**① TDD** — เขียน test ก่อน รันให้เห็นแดง แล้วค่อย implement วนจนเขียวทั้งหมด (ทุก task ไม่ใช่แค่ ★)
+**② E2E Playwright** ครบทุก use case ตามการใช้งานจริง (happy/alt/error/role/เข้าจาก entry point) กับ API+DB จริง **ทั้ง desktop 1280 + tablet 768** (+ phone 390 สำหรับ route สาธารณะ) assert ไม่มี scroll แนวนอน + tap target ≥ 44px วนจนเขียว
+**③ Manual** — PM คลิกเองบน browser ทุก use case + ตรวจ UI (padding/ระยะ/alignment/light+dark) + **responsive ด้วยมือ 1440/1280/1024/900/768/390** ตาม design-system §8 เจอปัญหาแก้แล้ววน ①→③ ใหม่
+**④ ส่ง user test** ด้วย handoff report — เฉพาะเมื่อ ①②③ ผ่านหมด · อาการเดิมแก้ไม่หายใน 3 รอบ = BLOCKED แจ้ง user
+Rationale: test ที่เขียนหลังโค้ดมักเกิดมาเขียวและพิสูจน์อะไรไม่ได้ · บั๊ก F-002 (B-14/B-16/B-18) เจอโดยคนเปิดแอปด้วยมือ ไม่ใช่โดยเลน automated ⇒ ต้องมีทั้ง E2E ครบ use case และ manual pass ก่อนถึงมือ user
+Affects: design-system §8 (ใช้ breakpoint/scope เดิม ไม่เปลี่ยน) · WEB_TEAM §3 (ลำดับ per-feature) · §3.6 ข้อ 2 · §3.6.1 (ใหม่) · Gate D/E/F · CLAUDE.md (วิธีทำงาน + เมื่อจะลงมือ) · SKILL_MAP Build · ต่อยอด D-014 (ไม่ supersede)
+Status: decided

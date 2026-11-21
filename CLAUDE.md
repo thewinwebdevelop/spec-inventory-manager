@@ -3,7 +3,7 @@
 แนวทางสำหรับ AI agent ที่ทำงานในโปรเจกต์นี้ อ่านก่อนเริ่มทุกครั้ง
 
 > **กติกาการทำงานของทีม AI อยู่ใน [WEB_TEAM.md](WEB_TEAM.md)** — mission, agent roles,
-> workflow (Brief→UX→Build→QA→Release) และ quality gate ก่อนถือว่างานเสร็จ
+> workflow (Spec→Build(TDD)→E2E→Manual→User test→Release) และ quality gate ก่อนถือว่างานเสร็จ
 > รายละเอียดแต่ละ agent: [.claude/agents/README.md](.claude/agents/README.md)
 
 ## โปรเจกต์นี้คืออะไร
@@ -43,16 +43,16 @@ roadmap: [docs/00-overview.md](docs/00-overview.md)
 
 ## วิธีทำงาน: feature-driven
 
-ทีมและ workflow เต็ม (Brief→UX→Build→QA→Release + quality gate) อยู่ใน [WEB_TEAM.md](WEB_TEAM.md)
+ทีมและ workflow เต็ม (Spec→Build(TDD)→E2E→Manual→User test→Release + quality gate) อยู่ใน [WEB_TEAM.md](WEB_TEAM.md)
 งานแตกเป็น feature (F-XXX) ดู backlog + workflow ที่ [docs/features/README.md](docs/features/README.md)
 เริ่มงาน: **/gate1 \<F-XXX\>** (req+AC+advisory) → **/gate2 \<F-XXX\>** (เอกสารต่อทีม+task) · decision → [docs/DECISIONS.md](docs/DECISIONS.md) · skill ต่อ step → [docs/SKILL_MAP.md](docs/SKILL_MAP.md)
-ต่อ 1 feature (2 gates): **Gate 1** req/use-case/user-story/AC → ✋ user เคาะ → **Gate 2** architecture(ถ้าแตะ external/money-stock) → data-model → API → UX/UI → test plan → review เจาะจงเจ้าของ → ✋ user อนุมัติ + commit เอกสาร → build (unit test ไปพร้อมโค้ด) → QA → release
+ต่อ 1 feature (2 gates): **Gate 1** req/use-case/user-story/AC → ✋ user เคาะ → **Gate 2** architecture(ถ้าแตะ external/money-stock) → data-model → API → UX/UI → test plan → review เจาะจงเจ้าของ → ✋ user อนุมัติ + commit เอกสาร → build **TDD** (test แดงก่อน→implement→วนจนเขียว) → **E2E Playwright ครบ use case** ⟳ → **manual คลิกเอง + ตรวจ UI** ⟳ → ✋ ส่ง user test → release (WEB_TEAM §3.6.1 · D-038)
 spec แต่ละตัวใช้ [docs/features/_TEMPLATE.md](docs/features/_TEMPLATE.md) · right-size: full vs light · 1 feature tag platform (web/mobile/both)
 
 ## เมื่อจะลงมือ
 
 1. อ่าน docs ที่เกี่ยว (เสมอ: 01 data-model) + spec ของ feature นั้น
 2. เช็คว่าไม่ละเมิดกฎทอง
-3. เขียน/อัปเดต test ของ business logic
-4. รัน test + lint แล้ว **รายงานผลตามจริง**
+3. **เขียน test ก่อน → รันให้เห็นแดง** แล้วค่อย implement
+4. รัน test + typecheck + lint วนจนเขียว แล้ว **รายงานผลตามจริง** (ต่อด้วย E2E → manual ตาม WEB_TEAM §3.6.1)
 5. commit/push เมื่อผู้ใช้สั่งเท่านั้น, ทำบน branch

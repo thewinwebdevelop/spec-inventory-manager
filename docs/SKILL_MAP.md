@@ -41,7 +41,10 @@
 ### Build
 | step | owner | skill |
 |------|-------|-------|
-| logic + unit test (test-first) | BE | `superpowers:test-driven-development` · `money-stock` |
+| ① logic + unit test — **test แดงก่อนโค้ดเสมอ** (WEB_TEAM §3.6.1) | BE·FE | `superpowers:test-driven-development` (**core**) · `money-stock` |
+| ② E2E ครบทุก use case × viewport desktop 1280 + tablet 768 (+390 route สาธารณะ) (Playwright `apps/web/e2e/` · Flutter `integration_test`) วนจนเขียว | qa·FE | `superpowers:test-driven-development` · `superpowers:systematic-debugging` (sit: flaky/แดง) |
+| ③ manual คลิกเอง + ตรวจ UI (padding/alignment/dark) + responsive 1440/1280/1024/900/768/390 วนแก้ | PM | `run` · `mcp__Claude_Browser__*` (`resize_window`) · iOS Simulator (mobile) · `thai-ux` |
+| ④ ส่ง user test (หลัง ①②③ ผ่านหมด) | PM | `superpowers:verification-before-completion` (**core**) · handoff report §3.6.1 |
 | connector impl | BE | `connector-design` |
 | แก้ contract ที่ ship แล้ว | BE | `contract-evolution` (**core** หลัง client แรก ship) |
 | migration บนข้อมูลจริง | BE | `prisma-migration` (**core** หลังมีข้อมูล) |
