@@ -17,12 +17,19 @@
  * ⛔ SR-14: on `409 ROLE_CHANGED` the role is re-read and shown; nothing is
  * resubmitted. Saving again is a new press of the button by the person.
  *
- * Seams left for later tasks (each is the ONLY place that task needs to touch):
- *  - W07 R3a: `EditRoleScreen.submit` — insert the confirm/diff dialog before
- *    calling the mutation when `capabilities` is in the body.
- *  - W07 R3b: `roleConflict` — holds the user's draft (`draft`) and the version
- *    they started from; W07 renders the diff + "ใส่การแก้ของฉันกลับเข้าไป".
- *  - W08 R4: `RoleReadOnlyView`. W09 R5: the delete button in "การจัดการอื่น".
+ * W07:
+ *  - R3a: `EditRoleScreen.confirmation` → `RoleForm` opens `SaveConfirmDialog`
+ *    before the mutation whenever the PATCH body carries `capabilities`
+ *    (a rename alone is sent straight away). One confirmation = one PATCH.
+ *  - R3b: `roleConflict` holds the person's own diff against the version they
+ *    started from; "ใส่การแก้ของฉันกลับเข้าไป" only refills the form on the
+ *    latest version (re-mount with a new seed) — it never sends.
+ *  - after editing MY OWN role the role is re-read (the PATCH's `viewer.*` is
+ *    pre-edit — B24 review) and, if R3a confirmed losing `manage_roles`, the
+ *    person is taken to ข้อมูลร้าน (ux R3).
+ *
+ * Seams left for later tasks: W08 R4 `RoleReadOnlyView` · W09 R5 the delete
+ * button in "การจัดการอื่น".
  */
 import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { useRouter } from "next/navigation";
@@ -74,6 +81,15 @@ import {
   validateRoleNameInput,
 } from "./role-form-model";
 import { classifyRoleWriteFailure, type RoleRefetchTarget } from "./role-write-failure";
+import {
+  buildSaveConfirmation,
+  draftDiff,
+  reapplyDraft,
+  type CapabilityLines,
+  type DraftDiff,
+  type SaveConfirmation,
+} from "./role-change-summary";
+import { SaveConfirmDialog } from "./SaveConfirmDialog";
 import { createHref } from "./template-options";
 import {
   useCapabilityCatalog,
@@ -338,7 +354,8 @@ function ForbiddenAndRefresh({ orgId }: { orgId: string }) {
 // ── edit ───────────────────────────────────────────────────────────────────
 
 function EditRoleScreen({ roleId }: { roleId: string }) {
-  const { orgId, profile } = useActiveOrg();
+  const { orgId, profile, capabilities: viewerCaps } = useActiveOrg();
+  const router = useRouter();
   const toast = useToast();
   const invalidateProfile = useInvalidateProfile();
   const roleQ = useRoleDetail(roleId);
@@ -347,7 +364,17 @@ function EditRoleScreen({ roleId }: { roleId: string }) {
   /** The version the form is built on — changes only on load, save, or a ROLE_CHANGED re-read. */
   const [snapshot, setSnapshot] = useState<RoleDetail | null>(null);
   const [nonce, setNonce] = useState(0);
-  const [roleConflict, setRoleConflict] = useState<{ startedFromVersion: number } | null>(null);
+  /** R3b — the person's own edits against the version they started from. */
+  const [roleConflict, setRoleConflict] = useState<{
+    diff: DraftDiff;
+    reapplied: boolean;
+    skipped: boolean;
+  } | null>(null);
+  /** R3b re-apply: the latest version with the person's diff laid over it (form seed only). */
+  const [seedOverride, setSeedOverride] = useState<{
+    name: string;
+    selection: ReadonlySet<string>;
+  } | null>(null);
   const [writeOutcome, setWriteOutcome] = useState<"forbidden" | "not-found" | null>(null);
 
   const loadFailure = roleQ.isError ? toApiFailure(roleQ.error) : null;
@@ -380,12 +407,15 @@ function EditRoleScreen({ roleId }: { roleId: string }) {
   if (!current || (!catalog.data && !catalog.isError)) return <LoadingState orgId={orgId} />;
 
   const isMine = current.id === profile.myMembership.roleId;
-  const conflictBanner = roleConflict && (
-    <Banner tone="warning" icon={<Icon role="warn" />} role="status">
-      <strong className="block">{roleFormTh.roleChanged.title}</strong>
-      {roleFormTh.roleChanged.body}
-    </Banner>
-  );
+  const conflictBanner = (canReapply: boolean, onReapply?: () => void) =>
+    roleConflict && (
+      <RoleChangedBanner
+        diff={roleConflict.diff}
+        onReapply={canReapply && !roleConflict.reapplied ? onReapply : undefined}
+        skipped={roleConflict.skipped}
+        onDismiss={() => setRoleConflict(null)}
+      />
+    );
 
   // The server's CURRENT verdict decides between R3 and R4 — a refusal that
   // re-read the role (TARGET_NOT_BELOW_ACTOR, ROLE_HELD_…, ROLE_LOCKED,
@@ -394,7 +424,7 @@ function EditRoleScreen({ roleId }: { roleId: string }) {
     return (
       <Page>
         <BackLink orgId={orgId} />
-        {conflictBanner}
+        {conflictBanner(false)}
         <RoleReadOnlyView role={current} catalog={catalog.data} isMine={isMine} />
       </Page>
     );
@@ -424,6 +454,7 @@ function EditRoleScreen({ roleId }: { roleId: string }) {
     const fresh = await roleQ.refetch();
     if (fresh.data) {
       setSnapshot(fresh.data);
+      setSeedOverride(null);
       setNonce((n) => n + 1);
     } else if (fresh.error && toApiFailure(fresh.error).kind === "not-found") {
       setWriteOutcome("not-found");
@@ -437,9 +468,24 @@ function EditRoleScreen({ roleId }: { roleId: string }) {
       isClone={false}
       catalog={catalog.data}
       onRetryCatalog={() => void catalog.refetch()}
-      seed={{ name: initialName, selection: seeded.selection, passthrough: seeded.passthrough }}
+      seed={{
+        name: seedOverride?.name ?? initialName,
+        selection: seedOverride?.selection ?? seeded.selection,
+        passthrough: seeded.passthrough,
+      }}
       canSubmit
-      topBanner={conflictBanner}
+      topBanner={conflictBanner(true, () => {
+        if (!roleConflict) return;
+        const r = reapplyDraft(
+          { name: initialName, selection: seeded.selection },
+          roleConflict.diff,
+          cat,
+          (key) => can(viewerCaps, key),
+        );
+        setSeedOverride({ name: r.name, selection: r.selection });
+        setRoleConflict({ ...roleConflict, reapplied: true, skipped: r.skipped });
+        setNonce((n) => n + 1);
+      })}
       header={
         <>
           <h1 className="m-0 text-heading-md">{roleName(base)}</h1>
@@ -479,22 +525,51 @@ function EditRoleScreen({ roleId }: { roleId: string }) {
         ) : null
       }
       buildBody={editBody}
-      // W07 (R3a) inserts its confirm dialog here when the body carries `capabilities`.
+      // R3a: only a capability change asks first; a rename alone is sent at once.
+      confirmation={(values) => {
+        const body = editBody(values);
+        if (!body?.capabilities || !catalog.data) return null;
+        return buildSaveConfirmation({
+          roleName: roleName(base),
+          before: base.capabilities,
+          after: body.capabilities,
+          catalog: catalog.data,
+          usage: current.usage,
+          isMine,
+        });
+      }}
       submit={(values) => {
         const body = editBody(values);
         if (body === null) return Promise.resolve(base);
         return update.mutateAsync(body);
       }}
-      onSaved={(saved) => {
+      onSaved={(saved, confirmed) => {
+        setRoleConflict(null);
+        setSeedOverride(null);
+        if (confirmed?.selfLoss?.losesManageRoles) {
+          // ux R3: I just gave up designing roles — leave for ข้อมูลร้าน first,
+          // then re-read who I am (doing it the other way round flashes the
+          // forbidden panel on this page).
+          toast.success(roleFormTh.lostManageRolesToast);
+          router.push(`/o/${orgId}/settings/org`);
+          invalidateProfile();
+          return;
+        }
         // Own role or not, re-read who I am: PATCH's viewer.* is pre-edit (B24 review).
         invalidateProfile();
-        setRoleConflict(null);
         setSnapshot(saved);
         setNonce((n) => n + 1);
         toast.success(roleFormTh.savedToast(roleName(saved)));
+        // My own role: the verdicts in `saved.viewer` were computed with my
+        // PRE-edit capabilities — read the role again instead of trusting them.
+        if (isMine) void reread();
       }}
-      onRoleChanged={async () => {
-        setRoleConflict({ startedFromVersion: base.version });
+      onRoleChanged={async (values) => {
+        setRoleConflict({
+          diff: draftDiff({ name: initialName, capabilities: initialCapabilities }, values, cat),
+          reapplied: false,
+          skipped: false,
+        });
         await reread();
       }}
       onRefetch={{
@@ -504,6 +579,76 @@ function EditRoleScreen({ roleId }: { roleId: string }) {
       onForbidden={() => setWriteOutcome("forbidden")}
       onNotFound={() => setWriteOutcome("not-found")}
     />
+  );
+}
+
+function linesText(lines: CapabilityLines): string {
+  return [
+    ...lines.labels,
+    ...(lines.otherCount > 0 ? [roleFormTh.checklist.unknownExtra(lines.otherCount)] : []),
+  ].join(", ");
+}
+
+/** R3b — "มีคนแก้บทบาทนี้ไปก่อนคุณ" + the person's own diff (never resubmits — SR-14). */
+function RoleChangedBanner({
+  diff,
+  skipped,
+  onReapply,
+  onDismiss,
+}: {
+  diff: DraftDiff;
+  skipped: boolean;
+  /** Absent → no re-apply button (already re-applied, or the latest version is read-only). */
+  onReapply?: () => void;
+  onDismiss: () => void;
+}) {
+  const T = roleFormTh.roleChanged;
+  const boxRef = useRef<HTMLDivElement>(null);
+  // The save button sits at the bottom of a long form; the banner is at the
+  // top. Bring it into view so the "reset" form is never unexplained.
+  useEffect(() => {
+    boxRef.current?.scrollIntoView?.({ block: "start" });
+  }, []);
+  const items = [
+    ...(diff.name ? [T.nameLine(diff.name.from, diff.name.to)] : []),
+    ...(diff.added.labels.length + diff.added.otherCount > 0
+      ? [T.addedLine(linesText(diff.added))]
+      : []),
+    ...(diff.removed.labels.length + diff.removed.otherCount > 0
+      ? [T.removedLine(linesText(diff.removed))]
+      : []),
+  ];
+  return (
+    <div ref={boxRef} className="scroll-mt-4">
+      <Banner
+        tone="warning"
+        icon={<Icon role="warn" />}
+        role="status"
+        actions={
+          <>
+            {onReapply && (
+              <Button variant="secondary" size="sm" onClick={onReapply}>
+                {T.reapply}
+              </Button>
+            )}
+            <Button variant="secondary" size="sm" onClick={onDismiss}>
+              {T.dismiss}
+            </Button>
+          </>
+        }
+      >
+        <strong className="block">{T.title}</strong>
+        {T.body}
+        {items.length > 0 && (
+          <ul className="m-0 mt-1 list-disc space-y-1 pl-6">
+            {items.map((t) => (
+              <li key={t}>{t}</li>
+            ))}
+          </ul>
+        )}
+        {skipped && <p className="m-0 mt-2">{T.reapplySkipped}</p>}
+      </Banner>
+    </div>
   );
 }
 
@@ -529,9 +674,13 @@ interface RoleFormProps {
   otherActions?: (dirty: boolean) => ReactNode;
   /** Edit: the PATCH body (`null` = nothing to save). Create: absent. */
   buildBody?: (values: FormValues) => object | null;
+  /** Edit (R3a): the confirmation to show before sending, or `null` to send at once. */
+  confirmation?: (values: FormValues) => SaveConfirmation | null;
   submit: (values: FormValues) => Promise<RoleDetail>;
-  onSaved: (saved: RoleDetail) => void;
-  onRoleChanged?: () => Promise<void>;
+  /** `confirmed` = what the person agreed to in R3a (`null` when nothing was asked). */
+  onSaved: (saved: RoleDetail, confirmed: SaveConfirmation | null) => void;
+  /** Gets the person's draft — what they were trying to save (R3b diff). */
+  onRoleChanged?: (draft: FormValues) => Promise<void>;
   onRefetch: Partial<Record<RoleRefetchTarget, () => void>>;
   onForbidden: () => void;
   /** Absent (create) → a 404 shows the generic save failure. */
@@ -552,9 +701,16 @@ function RoleForm(props: RoleFormProps) {
   const [capsError, setCapsError] = useState<string | null>(null);
   const [banner, setBanner] = useState<string | null>(null);
   const [submitting, setSubmitting] = useState(false);
+  /** R3a — the dialog is open on exactly these values. */
+  const [pendingConfirm, setPendingConfirm] = useState<{
+    values: FormValues;
+    confirmation: SaveConfirmation;
+  } | null>(null);
   const nameRef = useRef<HTMLInputElement>(null);
   const checklistRef = useRef<HTMLElement>(null);
   const selectedOnFocus = useRef(false);
+  /** Synchronous in-flight latch — a double press lands before React re-renders. */
+  const submittingRef = useRef(false);
 
   const view = useMemo(
     () => buildChecklist(cat, selection, (key) => can(viewerCaps, key)),
@@ -608,18 +764,34 @@ function RoleForm(props: RoleFormProps) {
       showChecklist();
       return;
     }
+    const confirmation = props.confirmation?.(values) ?? null;
+    if (confirmation) {
+      setPendingConfirm({ values, confirmation });
+      return;
+    }
+    await send(values, null);
+  };
+
+  const send = async (toSend: FormValues, confirmed: SaveConfirmation | null) => {
+    if (submittingRef.current) return;
+    submittingRef.current = true;
     setSubmitting(true);
     try {
-      const saved = await props.submit(values);
+      const saved = await props.submit(toSend);
+      submittingRef.current = false;
       setSubmitting(false);
-      props.onSaved(saved);
+      setPendingConfirm(null);
+      props.onSaved(saved, confirmed);
     } catch (err) {
+      submittingRef.current = false;
       setSubmitting(false);
+      // R3a: an error closes the dialog and is shown on the form (§E).
+      setPendingConfirm(null);
       const f = classifyRoleWriteFailure(err);
       switch (f.kind) {
         case "role-changed":
           // SR-14: re-read and show — the person decides whether to save again.
-          await props.onRoleChanged?.();
+          await props.onRoleChanged?.(toSend);
           return;
         case "field":
           if (f.field === "name") {
@@ -750,6 +922,15 @@ function RoleForm(props: RoleFormProps) {
           </Button>
         </StickyActionBar>
       </form>
+
+      {pendingConfirm && (
+        <SaveConfirmDialog
+          confirmation={pendingConfirm.confirmation}
+          submitting={submitting}
+          onCancel={() => setPendingConfirm(null)}
+          onConfirm={() => void send(pendingConfirm.values, pendingConfirm.confirmation)}
+        />
+      )}
 
       <ConfirmDialog
         open={guard.pendingHref !== null}

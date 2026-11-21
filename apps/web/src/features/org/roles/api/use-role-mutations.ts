@@ -45,7 +45,9 @@ export function useCreateRole(): UseMutationResult<RoleDetail, unknown, CreateRo
   const after = useAfterRoleWrite();
   return useMutation({
     mutationFn: (body) =>
-      unwrap(client.POST("/orgs/{orgId}/roles", { params: { path: { orgId } }, body })) as Promise<RoleDetail>,
+      unwrap(
+        client.POST("/orgs/{orgId}/roles", { params: { path: { orgId } }, body }),
+      ) as Promise<RoleDetail>,
     onSuccess: after,
   });
 }

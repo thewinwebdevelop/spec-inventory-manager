@@ -90,11 +90,35 @@ export const roleFormTh = {
     retry: "ลองใหม่",
   },
   backToList: "กลับไปหน้ารายการบทบาท",
-  /** R3b — W06 shows the heading + lead; W07 adds the user's diff and "ใส่การแก้ของฉันกลับเข้าไป". */
+  /** R3b (ux-wireframe R3b) — heading, lead, the person's own diff, re-apply. */
   roleChanged: {
     title: "มีคนแก้บทบาทนี้ไปก่อนคุณ",
-    body: "หน้านี้แสดงฉบับล่าสุดแล้ว สิ่งที่คุณแก้ไว้ยังไม่ถูกบันทึก",
+    body: "หน้านี้แสดงฉบับล่าสุดแล้ว สิ่งที่คุณแก้ไว้ยังไม่ถูกบันทึก:",
+    nameLine: (from: string, to: string) => `ชื่อ: "${from}" → "${to}"`,
+    addedLine: (items: string) => `เพิ่ม: ${items}`,
+    removedLine: (items: string) => `เอาออก: ${items}`,
+    reapply: "ใส่การแก้ของฉันกลับเข้าไป",
+    dismiss: "ปิด",
+    reapplySkipped: "บางรายการใส่กลับไม่ได้ เพราะตอนนี้คุณไม่มีสิทธิ์นั้น",
   },
+  /** R3a (ux-wireframe R3a) — confirm before saving a capability change. */
+  confirm: {
+    title: (name: string) => `บันทึกการเปลี่ยนสิทธิ์ของ "${name}"?`,
+    added: "เพิ่ม",
+    removed: "เอาออก",
+    impactMembers: (n: number) => `มีผลกับสมาชิก ${n} คนทันที ไม่ต้องออกจากระบบ`,
+    impactNone: "ยังไม่มีสมาชิกใช้บทบาทนี้",
+    impactInvitations: (m: number) => `คำเชิญที่ยังไม่ปิด ${m} ใบ จะได้สิทธิ์ชุดใหม่เมื่อกดรับ`,
+    selfLossTitle: "คุณจะเสียสิทธิ์เหล่านี้ทันที",
+    selfLossManageRoles: "บันทึกแล้วคุณจะกลับมาแก้เองไม่ได้ ต้องให้เจ้าของร้านแก้คืน",
+    selfLossOther: "ถ้าต้องการคืน ให้เจ้าของร้านแก้ให้",
+    save: "บันทึก",
+    saveAndLose: "บันทึก และยอมเสียสิทธิ์",
+    saving: "กำลังบันทึก...",
+    keepEditing: "แก้ต่อ",
+  },
+  /** ux R3 "หลังบันทึกแล้วเสียสิทธิ์จัดการบทบาทของตัวเอง". */
+  lostManageRolesToast: "บันทึกแล้ว — ตอนนี้คุณไม่มีสิทธิ์จัดการบทบาทแล้ว",
   leave: {
     title: "ทิ้งการแก้ไขนี้?",
     body: "สิ่งที่แก้ไว้ยังไม่ได้บันทึก ออกจากหน้านี้แล้วจะหายไป",

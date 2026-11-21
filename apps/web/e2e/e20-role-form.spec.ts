@@ -121,6 +121,11 @@ async function openRole(page: Page, name: RegExp): Promise<void> {
 }
 
 const nameBox = (page: Page) => page.getByRole("textbox", { name: "ชื่อบทบาท" });
+/** R3a (W07): the confirm dialog's own save button. */
+async function confirmSave(page: Page): Promise<void> {
+  const dialog = page.getByRole("alertdialog", { name: /^บันทึกการเปลี่ยนสิทธิ์ของ/ });
+  await dialog.getByRole("button", { name: /^บันทึก/ }).click();
+}
 const row = (page: Page, label: string) =>
   page.getByRole("checkbox", { name: new RegExp(`^${label}`) });
 
@@ -236,6 +241,8 @@ test("R3 edit · capabilities only on 'ผู้ดูแล' — the translated
   // (used by the Admin test below).
   await row(page, "เชื่อมต่อช่องทางขาย").click();
   await page.getByRole("button", { name: "บันทึก", exact: true }).click();
+  // R3a (W07) asks first for a capability change — e22 covers the dialog itself.
+  await confirmSave(page);
   await expect(page.getByText('บันทึกบทบาท "ผู้ดูแล" แล้ว')).toBeVisible({ timeout: 20_000 });
   const body = (await lastRoleWrite(page, "PATCH")).body!;
   expect(Object.keys(body).sort()).toEqual(["capabilities", "version"]);
@@ -357,6 +364,7 @@ test("R3 · 409 ROLE_CHANGED: someone saved first → latest version + banner, t
   });
   await row(page, "ดูต้นทุนและกำไร").click();
   await page.getByRole("button", { name: "บันทึก", exact: true }).click();
+  await confirmSave(page);
 
   await expect(page.getByText("มีคนแก้บทบาทนี้ไปก่อนคุณ")).toBeVisible({ timeout: 20_000 });
   await expect(nameBox(page)).toHaveValue("แพ็คของรอบเช้า");
