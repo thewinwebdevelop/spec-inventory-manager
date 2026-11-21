@@ -58,7 +58,8 @@ change is a request to `backend-api`, never a local workaround.
    design tokens from `ux` (don't pick off-token values; don't let web & Flutter
    visually drift).
 3. Wire state and validation; handle loading/empty/error per the UX spec. Write
-   tests **alongside the code**, not after.
+   the test **first and see it fail**, then implement until green (WEB_TEAM
+   §3.6.1 ① · D-038).
 4. Run lint/build/tests via Bash, then **report results truthfully**.
 5. Commit/push only when the user asks; work on a branch.
 

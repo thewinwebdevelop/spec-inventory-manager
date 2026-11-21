@@ -90,7 +90,7 @@ options ส่ง user เคาะ** (ไม่ประนีประนอ�
 
 ---
 
-## 3. Workflow — Portfolio → Spec (2 gates) → Build → QA → Release
+## 3. Workflow — Portfolio → Spec (2 gates) → Build (TDD) → E2E → Manual → User test → Release
 
 งานไหล 2 ระดับ: **Portfolio** (วางแผนรวม ทำเป็นรอบ) แล้วจึง **per-feature**
 (หยิบทีละตัวจาก backlog) แต่ละด่านมี "ของที่ส่งต่อ" (handoff artifact)
@@ -106,9 +106,11 @@ options ส่ง user เคาะ** (ไม่ประนีประนอ�
 ### Per-feature — หยิบจากบนสุดของ backlog
 
 ```
-Gate 1 ──► Gate 2 ──► ✋commit ──► Build ──► QA ──► Release
-(req)      (design)    (คุณ)      (impl)
+Gate 1 ──► Gate 2 ──► ✋commit ──► Build ──► E2E ──► Manual ──► ✋คุณ test ──► Release
+(req)      (design)    (คุณ)      (TDD ⟳)   (⟳)     (+UI ⟳)    (handoff)
 ```
+
+⟳ = วนจนเขียว/เรียบร้อยก่อนไปด่านถัดไป — รายละเอียด §3.6.1 (D-038)
 
 1. **Gate 1 — Requirement** (`product`) — _ถูก เปลี่ยนง่าย_
    เริ่มด้วย **requirement elicitation (grill)** — ถาม user เป็นชุดจนเข้าใจครบ (ground กับ docs)
@@ -132,16 +134,20 @@ Gate 1 ──► Gate 2 ──► ✋commit ──► Build ──► QA ──�
    เอกสารผ่าน review ครบ → **คุณเคาะ → commit เอกสารทั้งหมดบน branch**
    = human gate ก่อนเขียนโค้ด
 
-4. **Build** — `backend-api` → `frontend` (+ `devops`)
-   `backend-api` ทำ contract/core-domain ตาม design + **unit test ไปพร้อมโค้ด**
-   (กฎทองข้อ 4 ไม่ดองไว้ทีหลัง) → `frontend` consume client + build UI
+4. **Build (TDD)** — `backend-api` → `frontend` (+ `devops`)
+   **เขียน test ก่อน → รันให้เห็นแดง → implement → รันซ้ำ วนจนเขียวทั้งหมด** (§3.6.1 ขั้น ①)
+   `backend-api` ทำ contract/core-domain ตาม design → `frontend` consume client + build UI
    (ห้าม reshape data เอง — ขอ backend-api) → `devops` pipeline/env/queue
 
-5. **QA** — `qa`
-   automated (unit + integration + E2E) **+ manual** → verify vs AC + quality
-   gate → ออก **verdict + defect list** route กลับเจ้าของโค้ด (รายงานตามจริง)
+5. **QA** — `qa` + PM
+   **E2E Playwright ครบทุก use case ตามการใช้งานจริง วนจนเขียว** (ขั้น ②) →
+   **manual test คลิกเองบน browser + ตรวจ UI (padding/ระยะ/การจัดวาง) วนแก้จนเรียบร้อย** (ขั้น ③)
+   → verify vs AC + quality gate → **verdict + defect list** (รายงานตามจริง)
 
-6. **Release** — `release`
+6. **✋ ส่งคุณ test** — PM ส่ง handoff report (§3.6.1 ขั้น ④) **เฉพาะเมื่อ ①②③ ผ่านหมดแล้ว**
+   คุณเจอปัญหา = loopback กลับขั้นที่เกี่ยว แล้ววน ①→③ ใหม่ก่อนส่งรอบถัดไป
+
+7. **Release** — `release`
    version · changelog · rollout (**dogfood ก่อน**) · **rollback plan** → go/no-go
 
 > **Right-size:** feature ที่แตะ external/money-stock/cross-cutting = ทำเอกสารเต็ม;
@@ -234,7 +240,64 @@ section ที่ระบุ + Grep เพิ่มเมื่อจำเป�
 ### 3.6 Build execution — ตำแหน่งเขียนดู [workspace-map.md](docs/workspace-map.md)
 
 `backend-api` (`apps/api`+`packages/*`, TDD+money-stock) ∥ `devops` → `frontend` (`apps/web`/`apps/mobile`, consume client, /design-sync)
-→ ทุกทีม review ก่อน merge + ปิด T-ID ของตัวเอง · FE ห้าม reshape data เอง · **ทุก task ส่ง unit test ประกบโค้ดเสมอ** (D-014; money/stock = ขั้นต่ำห้ามแหก) เขียวก่อน merge
+→ ทุกทีม review ก่อน merge + ปิด T-ID ของตัวเอง · FE ห้าม reshape data เอง · **ทุก task เขียน test ก่อนโค้ด (แดง→เขียว)** (D-014 + D-038; money/stock = ขั้นต่ำห้ามแหก) เขียวก่อน merge
+
+### 3.6.1 Test loop — TDD → E2E → Manual → ส่งคุณ (บังคับทุกงานที่มีโค้ด · D-038)
+
+```
+① TDD ⟳ ──► ② E2E ⟳ ──► ③ Manual + UI ⟳ ──► ④ ✋ ส่งคุณ test
+   แก้โค้ดตอน ②/③ = กลับไปรัน ① ใหม่เสมอ (unit ต้องยังเขียว)
+```
+
+**① TDD (builder ทุก task)**
+- เขียน test จาก AC/spec **ก่อนแตะโค้ด** → รัน → **ต้องเห็นแดงด้วยเหตุผลที่ถูก** (assert ไม่ผ่าน ไม่ใช่ import พัง)
+- implement ให้น้อยที่สุดที่ทำให้เขียว → รัน test ทั้ง workspace + typecheck + lint → **วนจนเขียวทั้งหมด**
+- แก้บั๊ก = เขียน test ที่จำลองบั๊กให้แดงก่อนเสมอ · task report แนบ output ทั้งตอนแดงและตอนเขียว
+
+**② E2E Playwright (`apps/web/e2e/` · mobile = Flutter `integration_test` ด้วยกติกาเดียวกัน)**
+- **ครบทุก use case ของ Gate 1** ตามการใช้งานจริง: happy path · ทางเลือก (alt flow) ·
+  error ที่ผู้ใช้เจอได้จริง (กรอกผิด/ไม่มีสิทธิ์/ข้อมูลว่าง/ซ้ำ/หมดเวลา session) · แต่ละ role ที่เกี่ยว ·
+  เข้าจาก entry point ของแอปจริง (reachability, Gate D) — ห้ามเปิดจอด้วย URL ตรงอย่างเดียว
+- รันกับ API + DB จริง (ไม่ mock backend) · 1 use case ↔ ≥1 spec ระบุ ID use case ในชื่อเทสต์
+- **responsive อัตโนมัติ:** ทุก use case รันใน Playwright project **desktop 1280 + tablet 768**
+  (route สาธารณะ §8.3 เช่น `/invite` เพิ่ม **phone 390**) และทุกจอที่เดินผ่าน assert
+  **ไม่มี body scroll แนวนอน** + **tap target ≥ 44px** · ที่ tablet ต้องใช้ nav แบบ drawer ทำงานครบ
+  (เปิด/ปิด · scrim · Escape · ปิดเมื่อเลือกเมนู)
+- **วนจนเขียวทั้งหมด** · flaky = บั๊ก ต้องหาสาเหตุ ห้าม retry ซ่อน
+
+**③ Manual + UI (PM คลิกเองใน browser pane — mobile ใช้ iOS Simulator)**
+- เดินทุก use case ด้วยมือเหมือนผู้ใช้จริง ไม่ใช่แค่เปิดจอ
+- ตรวจ UI ทุกจอที่แตะ: padding/margin/ระยะห่างตรง token · การจัดแนว (alignment) · ข้อความไทยตัดบรรทัด/ล้น ·
+  ปุ่ม/ฟอร์มสม่ำเสมอ · state empty/loading/error · light + dark
+- **responsive ด้วยมือ** (ตาม [design-system §8](docs/design-system.md)) — ปรับขนาดหน้าจอแล้วดูทุกจอที่แตะ:
+
+  | ความกว้าง | เป้า | ดูอะไร |
+  | --- | --- | --- |
+  | 1440 · 1280 | desktop (xl) | เนื้อหา cap 1280 กึ่งกลาง · ไม่มีช่องว่างยืดผิดสัดส่วน |
+  | 1024 | desktop (lg) | sidebar ถาวร · page padding 24px · form 1–2 คอลัมน์ |
+  | 900 | ระหว่าง breakpoint | จุดที่มักพัง: ปุ่ม/หัวตารางเบียด · ข้อความไทยดันจนล้น |
+  | 768 | tablet (md) | nav ยุบเป็น top bar + drawer · padding 16px · form 1 คอลัมน์ · table เลื่อนในกรอบ |
+  | 390 | phone | route สาธารณะ (§8.3) ต้องใช้ได้ดี · route ที่ล็อกอิน = แค่ **ไม่พังยับ** (ไม่ scroll แนวนอน · กดถึงทุกปุ่ม) |
+
+  ลากปรับขนาดสด ๆ ข้าม breakpoint ด้วย (layout กระตุก/ซ้อนทับ) · mobile app: iPhone จอเล็ก (SE) + จอใหญ่ (Pro Max)
+- เจอปัญหา = จด defect → แก้ (TDD ถ้าเป็น logic) → กลับ ① → ② → ③ **วนจนไม่เหลือ**
+- เก็บ screenshot หลักฐานจอสุดท้ายของแต่ละ use case
+
+**④ ✋ ส่งคุณ test** — ส่งได้เมื่อ ①②③ ผ่านหมด (ห้ามส่งของที่รู้ว่ายังแดง) · handoff report:
+
+```
+พร้อมให้ test — <F-XXX / งาน>
+① Unit:   <คำสั่ง + ผล N passed / 0 failed>
+② E2E:    <คำสั่ง + ผล> — use case ที่ครอบ: UC-1..UC-n
+③ Manual: เดินแล้ว <UC list> · UI ที่แก้ไป: <list> · screenshot: <path>
+   Responsive: E2E desktop/tablet(/phone) <ผล> · ดูมือ 1440/1280/1024/900/768/390 — จุดที่แก้: <list>
+วิธีเปิดลองเอง: <URL + บัญชีทดสอบ (อ้างไฟล์ ไม่พิมพ์รหัสในแชท)>
+ยังค้าง/รู้อยู่: <ระบุ — หรือ "ไม่มี">
+```
+
+**กติกาการวน:** วนจนเขียวคือเป้า แต่ **อาการเดิมแก้ไม่หายใน 3 รอบ = หยุด 🚧 BLOCKED รายงานคุณ**
+(ห้ามลด/skip/ลบ test เพื่อให้เขียว — §3.6 ข้อ 2) · test ที่ต้องพึ่ง infra ที่รันไม่ได้ (เช่น DB ไม่ขึ้น) =
+แจ้งว่ายังไม่ได้รัน ห้ามนับว่าผ่าน
 
 **Model ต่อ task (opus คิด → sonnet ทำ → คนละ model review):**
 
@@ -258,8 +321,8 @@ section ที่ระบุ + Grep เพิ่มเมื่อจำเป�
 1. **Verify-don't-trust:** builder รายงาน "done" ต้องแปะ **คำสั่ง + output จริง** (test/lint) มาด้วย
    และ **PM รัน test+lint ซ้ำเอง** ก่อนปิด task — done ที่ไม่มี runnable proof = ไม่ done
 2. **Test integrity:** diff ของ test ถูก review เข้มเท่าโค้ด · **ห้าม skip/ลบ/ลดความเข้ม** test ที่
-   fail เพื่อให้ผ่าน (ทำได้เฉพาะมีเหตุผลใน PR + reviewer เห็นชอบ) · task ★ ต้องแสดงหลักฐาน
-   **red→green** (test fail เมื่อไม่มี fix) ไม่ใช่ส่ง test ที่เกิดมาเขียว
+   fail เพื่อให้ผ่าน (ทำได้เฉพาะมีเหตุผลใน PR + reviewer เห็นชอบ) · **ทุก task** (ไม่ใช่แค่ ★) ต้องแสดงหลักฐาน
+   **red→green** (test fail เมื่อไม่มี fix) ไม่ใช่ส่ง test ที่เกิดมาเขียว (§3.6.1 ①)
 3. **Fail-loud บน money/stock:** error บนเส้นทางเงิน/สต๊อก = โยนต่อ/ล้ม transaction เสมอ —
    **ห้าม catch-all กลืน error / คืนค่า default เงียบๆ** (พบ = review fail ทันที)
 4. **Dependency ใหม่ = ขอ PM:** เพิ่ม package ต้องระบุเหตุผลใน task report ให้ PM อนุมัติ ·
@@ -352,6 +415,10 @@ PM แนบ format นี้ในทุก dispatch — รายงาน fre
 - [ ] UI ไม่บิดความจริงของโมเดล (เช่น ไม่ทำให้ SellableSku ดูเหมือนมีสต๊อกเอง)
 - [ ] frontend ไม่มี money math บน float — แสดงค่าที่ server คำนวณมา
 - [ ] ผ่าน **Friendliness checklist** (skill `thai-ux`) + ไม่มี jargon ดิบบนจอ + reuse design system กลาง (target: SME ไทยไม่สาย tech)
+- [ ] **manual UI pass (§3.6.1 ③)** — คลิกเองทุก use case บน browser จริง · padding/ระยะ/alignment ตรง token ·
+      ไทยไม่ล้น/ไม่ตัดผิด · light + dark · defect ที่เจอแก้แล้วและมี screenshot หลักฐาน
+- [ ] **responsive (§3.6.1 ②③ · design-system §8)** — E2E เขียวทั้ง desktop 1280 + tablet 768 (+ phone 390 ถ้า route สาธารณะ) ·
+      ไม่มี body scroll แนวนอนทุกความกว้าง · tap target ≥ 44px · ดูด้วยมือครบ 1440/1280/1024/900/768/390 มี screenshot ต่อจุด
 - [ ] **เข้าถึงได้จริง (reachability)** — ทุกจอที่ feature อ้างว่า ship **ต้องมีเส้นทางจาก entry point ของแอปไปถึง และมีเทสต์เดินเส้นนั้น**
   · เช็คถูก ๆ ก่อน: `grep` ชื่อจอ/route ใน production tree — **0 อ้างอิงนอกไฟล์ตัวเอง = ไม่มีใครเปิดได้**
   · ⛔ เทสต์ที่ **สร้างจอขึ้นมาเอง** พิสูจน์ได้แค่ว่าจอทำงานเมื่อมีคนพามันขึ้นมา ไม่เคยพิสูจน์ว่ามีใครไปถึง
@@ -362,7 +429,10 @@ PM แนบ format นี้ในทุก dispatch — รายงาน fre
 
 - [ ] **ทุก task ที่ implement มี unit test ประกบและผ่านทั้งหมดก่อน merge** (กฎทองข้อ 4 / D-014) — เงิน/สต๊อกคือขั้นต่ำห้ามแหก
 - [ ] **test script ทุก workspace เป็นตัวจริง** — ห้าม `echo ok`; workspace ที่ยังไม่มี test ใช้ `vitest run --passWithNoTests` (โครงพร้อมเขียน ไม่หลอกเขียว) · โค้ดใหม่ต้องออกแบบ testable (pure fn/DI/seam)
+- [ ] **TDD:** ทุก task มีหลักฐาน test แดงก่อนโค้ด แล้วเขียว (§3.6.1 ①)
+- [ ] **E2E ครบทุก use case** (happy + alt + error + role + เข้าจาก entry point จริง) รันกับ API+DB จริง (§3.6.1 ②)
 - [ ] unit + E2E เขียวทั้งหมด, lint ผ่าน — รายงานผลตามจริง (fail ก็บอกว่า fail)
+- [ ] ✋ **ส่ง user test หลัง ①②③ ผ่านหมดเท่านั้น** พร้อม handoff report (§3.6.1 ④)
 - [ ] **runnable proof:** รายงาน "done" มีคำสั่ง+output จริงแนบ และ **PM รันซ้ำแล้วผลตรง** (§3.6 ข้อ 1)
 - [ ] **test integrity:** ไม่มี test ถูก skip/ลบ/ลดความเข้มเพื่อให้ผ่าน (มี = ต้องมีเหตุผล+reviewer เห็นชอบ) ·
       task ★ มีหลักฐาน red→green · diff ไม่แตะ protected paths (§3.6 ข้อ 2/6)
@@ -375,7 +445,7 @@ PM แนบ format นี้ในทุก dispatch — รายงาน fre
 - [ ] version bump + changelog
 - [ ] merge/branch ตามนโยบาย, ทำบน branch (commit/push เมื่อ user สั่งเท่านั้น)
 - [ ] มี rollback plan ชัดเจนก่อน go
-- [ ] go/no-go อ้างอิงจาก qa เขียว + devops env พร้อม (ไม่ override fail เพื่อ ship)
+- [ ] go/no-go อ้างอิงจาก qa เขียว + **user test ผ่าน** + devops env พร้อม (ไม่ override fail เพื่อ ship)
 - [ ] **micro-retro 5 บรรทัด** ลง [docs/RETRO.md](docs/RETRO.md) (PM) — pattern ซ้ำ 2 feature
       = เสนอแก้ workflow เข้า team-upgrade-plan
 

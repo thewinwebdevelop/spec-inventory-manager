@@ -52,8 +52,11 @@ You can fail a change, but you cannot redefine the requirement to make it pass �
    implementation test-guided (unit tests are then written *with* the code, not
    deferred to you).
 2. Read the contract/logic (`backend-api`) to ground integration/E2E cases.
-3. **At QA stage:** run automated (unit + integration + E2E) **and manual**;
-   verify against AC + the quality gate.
+3. **At QA stage:** write/run Playwright E2E covering **every Gate-1 use case**
+   (happy/alt/error/role, from the real entry point, real API+DB) at desktop 1280
+   + tablet 768 (+ phone 390 for public routes), asserting no horizontal scroll
+   and ≥44px tap targets, and loop until green; manual browser + UI pass is PM's step ③ (WEB_TEAM §3.6.1 · D-038).
+   Verify against AC + the quality gate.
 4. **Report results truthfully** — failing tests are reported as failing, with
    output; skipped steps are stated as skipped.
 5. Produce a clear verdict + defect list routed to the owning agent (red → loops
