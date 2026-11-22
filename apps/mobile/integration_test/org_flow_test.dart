@@ -15,6 +15,7 @@ import 'package:mobile/features/org/domain/entities/org_entities.dart';
 import 'package:mobile/features/org/domain/entities/role_entities.dart';
 import 'package:mobile/features/org/presentation/screens/create_org_screen.dart';
 import 'package:mobile/features/org/presentation/screens/members_screen.dart';
+import 'package:mobile/features/org/presentation/screens/org_profile_screen.dart';
 
 /// E-10 (test-plan §12.1) — the mobile half, on a real device against a real
 /// API and a real Postgres.
@@ -423,16 +424,58 @@ void main() {
     await pumpUntil(tester, find.textContaining('จาก 30 บทบาท'));
   }
 
-  Future<void> tapRow(WidgetTester tester, String capability) async {
-    final row = find.byKey(ValueKey('cap-row-$capability'));
+  // ⚠️ The R3 checklist is a LAZILY-built ListView. On a short screen (CI's
+  // api-34 default profile) a row below the fold is never built, so waiting
+  // for `cap-row-…` with `pumpUntil` waits forever (CI run on 61148de: 20 s
+  // timeout on `cap-row-manage_stock`). Wait for the form's top instead, then
+  // SCROLL the row into existence before reading or tapping it.
+  final formName = find.byKey(const ValueKey('role-form-name'));
+
+  /// The top screen's own scroll view (its ListView's Scrollable — not a
+  /// TextField's internal one, which sits deeper in the tree). Routes below
+  /// are offstage, so `find` does not see their lists.
+  Finder screenScrollable() =>
+      find.descendant(of: find.byType(ListView).first, matching: find.byType(Scrollable)).first;
+
+  /// Builds + shows [row] (R1 role row, R3 checklist row) wherever the list
+  /// is scrolled now.
+  Future<Finder> reveal(WidgetTester tester, Finder row) async {
+    if (row.evaluate().isEmpty) {
+      try {
+        await tester.scrollUntilVisible(row, 200, scrollable: screenScrollable());
+      } on StateError {
+        // Not below the fold — above it (the list was scrolled past it).
+        await tester.scrollUntilVisible(row, -200, scrollable: screenScrollable());
+      }
+    }
     await tester.ensureVisible(row);
     await tester.pump(const Duration(milliseconds: 300));
+    return row;
+  }
+
+  Future<void> tapRow(WidgetTester tester, String capability) async {
+    final row = await reveal(tester, find.byKey(ValueKey('cap-row-$capability')));
     await tester.tap(row);
     await tester.pump(const Duration(milliseconds: 100));
   }
 
-  bool ticked(WidgetTester tester, String capability) =>
-      tester.widget<CheckboxRow>(find.byKey(ValueKey('cap-row-$capability'))).value;
+  Future<bool> ticked(WidgetTester tester, String capability) async =>
+      tester.widget<CheckboxRow>(await reveal(tester, find.byKey(ValueKey('cap-row-$capability')))).value;
+
+  /// R1 → one role's R3 (the role list is lazy too).
+  Future<void> openRoleRow(WidgetTester tester, String roleId) async {
+    await tester.tap(await reveal(tester, find.byKey(ValueKey('role-row-$roleId'))));
+    await pumpUntil(tester, formName);
+  }
+
+  /// A short phone, on purpose and on every device: the lazy fold must always
+  /// be in play, so a finder that skips the scroll fails HERE and not only on
+  /// whichever CI emulator happens to be short (D-038 — the case that went red
+  /// on CI was green on a Pixel 5).
+  void shortPhone(WidgetTester tester) {
+    tester.view.physicalSize = const Size(360, 600) * tester.view.devicePixelRatio;
+    addTearDown(tester.view.resetPhysicalSize);
+  }
 
   Future<void> pressSubmit(WidgetTester tester, String label) async {
     final button = find.widgetWithText(ElevatedButton, label);
@@ -441,10 +484,29 @@ void main() {
     await tester.pump(const Duration(milliseconds: 100));
   }
 
+  // T-003-M07 · R3a — the confirm sheet a capability change opens.
+  final confirmSheet = find.byKey(const ValueKey('role-confirm-sheet'));
+  Finder inSheet(String text) => find.descendant(of: confirmSheet, matching: find.text(text));
+
+  /// Waits for R3a, checks the label on its primary, and presses it.
+  Future<void> confirmInSheet(WidgetTester tester, {String label = 'บันทึก'}) async {
+    await pumpUntil(tester, confirmSheet);
+    final submit = find.byKey(const ValueKey('role-confirm-submit'));
+    expect(find.descendant(of: submit, matching: find.text(label)), findsOneWidget);
+    await tester.tap(submit);
+    await tester.pump(const Duration(milliseconds: 100));
+  }
+
+  // R3b — the 409 banner.
+  final conflictBanner = find.byKey(const ValueKey('role-conflict-banner'));
+  Finder inBanner(String text) => find.descendant(of: conflictBanner, matching: find.text(text));
+
   testWidgets(
-    'T-003-M06 · EM3-01/06 · R3 clone → create, edit → save, then 409 ROLE_CHANGED is shown and NOT resubmitted',
+    'T-003-M06/M07 · EM3-01/06 · R3 clone → create, edit → R3a → save, then a real 409 → R3b diff, '
+    're-apply sends nothing, saving again = one more PATCH',
     skip: !roleWritesOn,
     (tester) async {
+      shortPhone(tester);
       final (container, _) = await ownerInFreshShop('m-r3');
       final repo = container.read(orgScopedRepositoryProvider);
       await openRolesFromMembers(tester, container);
@@ -461,9 +523,8 @@ void main() {
       await tester.pump(const Duration(milliseconds: 300));
       await pressSubmit(tester, 'สร้างบทบาท');
 
-      // Back on R1 with the toast, and the row is there.
+      // Back on R1 with the toast.
       await pumpUntil(tester, find.text('สร้างบทบาท "$roleName" แล้ว'));
-      await pumpUntil(tester, find.text(roleName));
 
       // ── the server, not the screen, is the judge ─────────────────────────
       final after = await repo.listRoleDetails();
@@ -477,11 +538,29 @@ void main() {
       expect(created.version, 1);
 
       // ── R1 row → R3 edit → tick manage_stock → บันทึก ────────────────────
-      await tester.tap(find.byKey(ValueKey('role-row-${created.id}')));
-      await pumpUntil(tester, find.byKey(const ValueKey('cap-row-manage_stock')));
-      final hadStock = ticked(tester, 'manage_stock');
+      // R1 has re-read the list (the count says so), and the row is there —
+      // scrolled to: R1 is a lazy list and the new role is last.
+      await pumpUntil(tester, find.textContaining('ใช้ไป ${after.items.length} จาก'));
+      await openRoleRow(tester, created.id);
+      final hadStock = await ticked(tester, 'manage_stock');
       await tapRow(tester, 'manage_stock');
       await pressSubmit(tester, 'บันทึก');
+
+      // ── R3a: the change is described first, impact from the server ───────
+      await pumpUntil(tester, confirmSheet);
+      expect(inSheet('บันทึกการเปลี่ยนสิทธิ์ของ "$roleName"?'), findsOneWidget);
+      expect(inSheet(hadStock ? 'เอาออก' : 'เพิ่ม'), findsOneWidget);
+      expect(inSheet('จัดการสต๊อก'), findsOneWidget);
+      expect(inSheet('ยังไม่มีสมาชิกใช้บทบาทนี้'), findsOneWidget,
+          reason: 'usage.activeMembers = 0 on the server for a role nobody holds');
+      // "แก้ต่อ" sends nothing — the server still has version 1.
+      await tester.tap(find.byKey(const ValueKey('role-confirm-cancel')));
+      await tester.pump(const Duration(milliseconds: 500));
+      expect(confirmSheet, findsNothing);
+      expect((await repo.getRoleDetail(created.id)).version, 1);
+
+      await pressSubmit(tester, 'บันทึก');
+      await confirmInSheet(tester);
       await pumpUntil(tester, find.text('บันทึกบทบาท "$roleName" แล้ว'));
 
       final saved = await repo.getRoleDetail(created.id);
@@ -490,9 +569,11 @@ void main() {
       expect(saved.name, roleName, reason: 'name was not touched, so it was not sent');
 
       // ── EM3-06: someone else saves first; my save gets 409, NOT resubmitted ─
+      final hadOrders = await ticked(tester, 'manage_orders');
       await tapRow(tester, 'manage_orders');
       await repo.updateRole(created.id, RoleUpdate(version: saved.version, name: '$roleName (อีกคน)'));
       await pressSubmit(tester, 'บันทึก');
+      await confirmInSheet(tester);
       await pumpUntil(tester, find.text('มีคนแก้บทบาทนี้ไปก่อนคุณ'));
       await pumpUntil(tester, find.text('$roleName (อีกคน)'));
 
@@ -500,7 +581,132 @@ void main() {
       expect(latest.version, 3, reason: 'only the other save landed — no silent retry with currentVersion');
       expect(latest.name, '$roleName (อีกคน)');
       expect(latest.capabilities.toSet(), saved.capabilities.toSet(),
-          reason: 'my manage_orders tick was not written over theirs');
+          reason: 'my manage_orders change was not written over theirs');
+
+      // ── R3b (M07): MY diff, re-apply fills the latest and sends NOTHING ──
+      // The direction depends on the cloned source (Staff already has it).
+      expect(inBanner('${hadOrders ? 'เอาออก' : 'เพิ่ม'}: จัดการออเดอร์และการแพ็ค'), findsOneWidget);
+      expect(await ticked(tester, 'manage_orders'), hadOrders, reason: 'the form shows the latest version');
+      // The banner is at the TOP of the same lazy list — scroll back to it.
+      await tester.tap(await reveal(tester, inBanner('ใส่การแก้ของฉันกลับเข้าไป')));
+      await tester.pump(const Duration(milliseconds: 500));
+      await pumpUntil(tester, formName);
+      expect(await ticked(tester, 'manage_orders'), !hadOrders, reason: 'my edit is back in the form');
+      expect(inBanner('ใส่การแก้ของฉันกลับเข้าไป'), findsNothing);
+      await tester.pump(const Duration(seconds: 1));
+      expect((await repo.getRoleDetail(created.id)).version, 3, reason: 'SR-14: re-apply never sends');
+
+      // Saving again is a new press, through R3a, on version 3.
+      await pressSubmit(tester, 'บันทึก');
+      await confirmInSheet(tester);
+      await pumpUntil(tester, find.text('บันทึกบทบาท "$roleName (อีกคน)" แล้ว'));
+      final resaved = await repo.getRoleDetail(created.id);
+      expect(resaved.version, 4);
+      expect(resaved.name, '$roleName (อีกคน)', reason: 'the other person\'s rename is kept');
+      expect(resaved.capabilities.contains('manage_orders'), !hadOrders);
+    },
+  );
+
+  testWidgets(
+    'T-003-M07 · EM3-04 · AC-3.10 · an Admin edits their OWN role: lose another capability → warning, stays; '
+    'lose manage_roles → warning → ข้อมูลร้าน + toast, entry gone',
+    skip: !roleWritesOn,
+    (tester) async {
+      // Budget: owner (signup + login) + admin (signup + login + one raw login
+      // for the accept, which mobile has no screen for — see E-10 removal) =
+      // 5 pre-auth requests.
+      shortPhone(tester);
+      final (ownerContainer, orgId) = await ownerInFreshShop('m-r3a-owner');
+      final ownerRepo = ownerContainer.read(orgScopedRepositoryProvider);
+      final adminRole = (await ownerRepo.listRoleDetails()).items.firstWhere((r) => r.roleKey == 'admin');
+
+      final adminEmail = freshEmail('m-r3a-admin');
+      final issued = await ownerRepo.createInvitation(email: adminEmail, roleId: adminRole.id);
+      final adminContainer = bootApp();
+      await signUpAndSignIn(adminContainer, adminEmail);
+      final api = Dio(BaseOptions(baseUrl: baseUrl, validateStatus: (_) => true));
+      final login = await api.post<Map<String, dynamic>>(
+        '/auth/login',
+        data: {'email': adminEmail, 'password': password, 'tokenTransport': 'body'},
+      );
+      expect(login.statusCode, 200, reason: 'the API refused a login: ${login.data}');
+      final accepted = await api.post<Map<String, dynamic>>(
+        '/invitations/accept',
+        data: {'token': Uri.parse(issued.inviteUrl).queryParameters['token']},
+        options: Options(headers: {'Authorization': 'Bearer ${login.data!['accessToken']}'}),
+      );
+      expect(accepted.statusCode, 200, reason: 'accept failed: ${accepted.data}');
+      adminContainer.read(sessionControllerProvider.notifier).switchOrg(
+            ActiveOrg(orgId: orgId, name: 'ร้าน', capabilities: const {}),
+          );
+      await learnCapabilitiesWith(
+        session: adminContainer.read(sessionControllerProvider.notifier),
+        repository: adminContainer.read(orgScopedRepositoryProvider),
+        orgId: orgId,
+      );
+      expect(adminContainer.read(activeOrgProvider)!.can('manage_roles'), isTrue);
+
+      final adminRepo = adminContainer.read(orgScopedRepositoryProvider);
+      final mine = await adminRepo.getRoleDetail(adminRole.id);
+      expect(mine.canEdit.allowed, isTrue, reason: 'the server lets an Admin edit their own role');
+      // Something to give up that is neither manage_roles nor manage_members.
+      final other = mine.capabilities.firstWhere(
+        (k) => k != 'manage_roles' && k != 'manage_members',
+        orElse: () => fail('the Admin role has nothing else to give up: ${mine.capabilities}'),
+      );
+      final catalog = await adminRepo.getCapabilityCatalog();
+      final otherLabel = catalog.items.firstWhere((i) => i.key == other).labelTh;
+
+      // ── ข้อมูลร้าน → "บทบาทและสิทธิ์" → R1 → my role ──────────────────────
+      await pump(tester, adminContainer, const OrgProfileScreen());
+      await pumpUntil(tester, find.byKey(const ValueKey('roles-entry-row')));
+      await tester.tap(find.byKey(const ValueKey('roles-entry-row')));
+      await pumpUntil(tester, find.textContaining('จาก 30 บทบาท'));
+      await openRoleRow(tester, adminRole.id);
+
+      // ── lose something else → warning + "ถ้าต้องการคืน…", stays ──────────
+      await tapRow(tester, other);
+      await pressSubmit(tester, 'บันทึก');
+      await pumpUntil(tester, confirmSheet);
+      expect(inSheet('คุณจะเสียสิทธิ์เหล่านี้ทันที'), findsOneWidget);
+      expect(inSheet('ถ้าต้องการคืน ให้เจ้าของร้านแก้ให้'), findsOneWidget);
+      expect(inSheet(otherLabel), findsNWidgets(2), reason: 'under "เอาออก" and in the warning');
+      expect(inSheet('มีผลกับสมาชิก 1 คนทันที ไม่ต้องออกจากระบบ'), findsOneWidget,
+          reason: 'N = the server\'s usage.activeMembers (me)');
+      expect(FocusManager.instance.primaryFocus?.debugLabel, 'role-confirm-cancel');
+      await confirmInSheet(tester, label: 'บันทึก และยอมเสียสิทธิ์');
+      await pumpUntil(tester, find.text('บันทึกบทบาท "ผู้ดูแล" แล้ว'));
+      expect(find.byKey(const ValueKey('role-form-name')), findsOneWidget, reason: 'stays on the form');
+      final afterOther = await ownerRepo.getRoleDetail(adminRole.id);
+      expect(afterOther.capabilities, isNot(contains(other)));
+      expect(afterOther.version, mine.version + 1, reason: 'one PATCH');
+
+      // ── lose manage_roles → "กลับมาแก้เองไม่ได้" → ข้อมูลร้าน + toast ──────
+      await pumpUntil(tester, formName);
+      await tapRow(tester, 'manage_roles');
+      await pressSubmit(tester, 'บันทึก');
+      await pumpUntil(tester, confirmSheet);
+      expect(inSheet('บันทึกแล้วคุณจะกลับมาแก้เองไม่ได้ ต้องให้เจ้าของร้านแก้คืน'), findsOneWidget);
+      await confirmInSheet(tester, label: 'บันทึก และยอมเสียสิทธิ์');
+      await pumpUntil(tester, find.text('บันทึกแล้ว — ตอนนี้คุณไม่มีสิทธิ์จัดการบทบาทแล้ว'));
+      // Back on ข้อมูลร้าน — the root this test composed (the shell's first
+      // tab in the app): the form and R1 are gone, and so is the entry once
+      // the server's answer about me lands.
+      Future<void> pumpUntilGone(Finder f) async {
+        final deadline = DateTime.now().add(const Duration(seconds: 20));
+        while (f.evaluate().isNotEmpty && DateTime.now().isBefore(deadline)) {
+          await tester.pump(const Duration(milliseconds: 100));
+        }
+        expect(f, findsNothing);
+      }
+
+      await pumpUntilGone(find.byKey(const ValueKey('role-form-name')));
+      await pumpUntilGone(find.byKey(ValueKey('role-row-${adminRole.id}')));
+      expect(find.byType(OrgProfileScreen), findsOneWidget);
+      await pumpUntilGone(find.byKey(const ValueKey('roles-entry-row')));
+      final afterRoles = await ownerRepo.getRoleDetail(adminRole.id);
+      expect(afterRoles.capabilities, isNot(contains('manage_roles')));
+      expect(afterRoles.version, mine.version + 2);
     },
   );
 

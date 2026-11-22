@@ -2,7 +2,11 @@
 // edit, the Disclosure checklist, the leave guard, and every write refusal.
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'dart:async';
+
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:mobile/core/error/api_failure.dart';
+import 'package:mobile/core/session/session_controller.dart';
 import 'package:mobile/core/session/session_state.dart';
 import 'package:mobile/core/ui/disclosure.dart';
 import 'package:mobile/features/org/application/org_providers.dart';
@@ -58,6 +62,7 @@ RoleDetailView _role(
   bool customized = true,
   List<String> caps = const ['manage_products'],
   int members = 0,
+  int invites = 0,
   int version = 1,
   RoleVerdict canEdit = _ok,
   RoleVerdict canClone = _ok,
@@ -70,7 +75,7 @@ RoleDetailView _role(
       nameCustomized: customized,
       isSystem: key == 'owner',
       capabilities: caps,
-      usage: RoleUsage(activeMembers: members, pendingInvitations: 0),
+      usage: RoleUsage(activeMembers: members, pendingInvitations: invites),
       lastEdited: lastEdited,
       canEdit: canEdit,
       canDelete: _ok,
@@ -104,6 +109,7 @@ FakeOrgScoped _repo({
   List<Object>? createRoleAnswers,
   List<Object>? updateRoleAnswers,
   Duration delay = Duration.zero,
+  String myRoleId = 'rol_staff',
 }) =>
     FakeOrgScoped(
       roleDetails: roleDetails,
@@ -117,10 +123,13 @@ FakeOrgScoped _repo({
         id: 'org_1',
         name: 'ร้านหอมกรุ่นเบเกอรี่',
         taxProfileComplete: true,
-        myRoleId: 'rol_staff',
+        myRoleId: myRoleId,
         capabilities: _viewer.capabilities,
       ),
     );
+
+/// The container of the last [_open] — for a test that changes the session.
+late ProviderContainer _container;
 
 /// A host screen with one button that opens R3 — so a pop, a guarded back
 /// and "back to R1" all have somewhere real to go.
@@ -131,7 +140,7 @@ Future<FakeOrgScoped> _open(
   ActiveOrg org = _viewer,
 }) async {
   final repo = scoped ?? _repo(roleDetails: _page(), catalog: _catalog);
-  await pumpScreen(
+  _container = await pumpScreen(
     tester,
     Builder(
       builder: (context) => Scaffold(
@@ -181,6 +190,18 @@ Future<void> _back(WidgetTester tester) async {
 
 Future<void> _press(WidgetTester tester, String label) async {
   await tester.tap(_submit(label));
+  await tester.pumpAndSettle();
+}
+
+/// R3a — the confirm sheet and its two buttons.
+Finder _sheet() => find.byKey(const ValueKey('role-confirm-sheet'));
+Finder _sheetSubmit() => find.byKey(const ValueKey('role-confirm-submit'));
+Finder _sheetCancel() => find.byKey(const ValueKey('role-confirm-cancel'));
+
+/// Presses "บันทึก" inside the R3a sheet.
+Future<void> _confirm(WidgetTester tester) async {
+  expect(_sheet(), findsOneWidget, reason: 'a capability change asks first (R3a)');
+  await tester.tap(_sheetSubmit());
   await tester.pumpAndSettle();
 }
 
@@ -428,6 +449,7 @@ void main() {
       await _tapRow(tester, 'manage_products');
       expect(_enabled(tester, 'บันทึก'), isTrue);
       await _press(tester, 'บันทึก');
+      await _confirm(tester);
 
       final body = repo.updates.single.body;
       expect(repo.updates.single.roleId, 'rol_admin');
@@ -449,6 +471,7 @@ void main() {
       await _typeName(tester, 'แอดมินร้าน ');
       await _press(tester, 'บันทึก');
 
+      expect(_sheet(), findsNothing, reason: 'a rename alone is sent straight away (R3a)');
       expect(repo.updates.single.body.name, 'แอดมินร้าน');
       expect(repo.updates.single.body.capabilities, isNull);
       await _drainToast(tester);
@@ -465,6 +488,7 @@ void main() {
 
       await _tapRow(tester, 'manage_products');
       await _press(tester, 'บันทึก');
+      await _confirm(tester);
 
       expect(repo.updates, hasLength(1));
       expect(repo.roleDetailIdsSeen, ['rol_admin', 'rol_admin']);
@@ -478,6 +502,7 @@ void main() {
       expect(repo.updates, hasLength(1), reason: 'never resubmitted on its own');
       await _tapRow(tester, 'manage_org_settings');
       await _press(tester, 'บันทึก');
+      await _confirm(tester);
       expect(repo.updates, hasLength(2));
       expect(repo.updates.last.body.version, 4);
     });
@@ -554,6 +579,7 @@ void main() {
       expect(find.text('และสิทธิ์อื่นอีก 1 รายการที่แสดงในหน้านี้ไม่ได้'), findsOneWidget);
       await _tapRow(tester, 'manage_roles');
       await _press(tester, 'บันทึก');
+      await _confirm(tester);
       expect(repo.updates.single.body.capabilities, ['manage_members', 'manage_roles', 'secret_future_cap']);
       await _drainToast(tester);
     });
@@ -660,10 +686,274 @@ void main() {
       );
       await _tapRow(tester, 'manage_products');
       await _press(tester, 'บันทึก');
+      await _confirm(tester);
 
       expect(repo.roleDetailIdsSeen, hasLength(2));
       expect(find.text('ดูได้อย่างเดียว — มีคนที่สิทธิ์เท่าคุณใช้บทบาทนี้อยู่'), findsOneWidget);
       expect(find.text('หน้านี้สำหรับคนที่จัดการบทบาทได้'), findsNothing);
+      expect(repo.updates, hasLength(1));
+    });
+  });
+
+  group('R3a confirm before saving (M07 · AC-3.10/3.11)', () {
+    FakeOrgScoped editRepo({
+      List<Object>? detail,
+      List<Object>? update,
+      String myRoleId = 'rol_staff',
+    }) =>
+        _repo(
+          roleDetails: _page(),
+          catalog: _catalog,
+          roleDetailAnswers: detail ?? [_admin],
+          updateRoleAnswers: update ?? [_admin],
+          myRoleId: myRoleId,
+        );
+
+    Finder inSheet(String text) => find.descendant(of: _sheet(), matching: find.text(text));
+
+    testWidgets('a capability change asks first: title, added (expanded), impact from usage — nothing sent yet',
+        (tester) async {
+      final repo = await _open(tester, (c) => openRoleEditScreen(c, 'rol_admin'), scoped: editRepo());
+
+      await _tapRow(tester, 'manage_products'); // brings view_products with it
+      await _press(tester, 'บันทึก');
+
+      expect(_sheet(), findsOneWidget);
+      expect(inSheet('บันทึกการเปลี่ยนสิทธิ์ของ "ผู้ดูแล"?'), findsOneWidget);
+      expect(inSheet('เพิ่ม'), findsOneWidget);
+      expect(inSheet('จัดการสินค้า'), findsOneWidget);
+      expect(inSheet('ดูสินค้า'), findsOneWidget);
+      expect(inSheet('เอาออก'), findsNothing, reason: 'an empty section is not shown');
+      expect(inSheet('มีผลกับสมาชิก 2 คนทันที ไม่ต้องออกจากระบบ'), findsOneWidget);
+      expect(inSheet('คุณจะเสียสิทธิ์เหล่านี้ทันที'), findsNothing, reason: 'not my role');
+      expect(find.descendant(of: _sheetSubmit(), matching: find.text('บันทึก')), findsOneWidget);
+      expect(repo.updates, isEmpty, reason: 'nothing is sent before "บันทึก" in the sheet');
+    });
+
+    testWidgets('"แก้ต่อ" sends nothing and keeps the edits', (tester) async {
+      final repo = await _open(tester, (c) => openRoleEditScreen(c, 'rol_admin'), scoped: editRepo());
+      await _tapRow(tester, 'manage_products');
+      await _press(tester, 'บันทึก');
+
+      await tester.tap(_sheetCancel());
+      await tester.pumpAndSettle();
+
+      expect(_sheet(), findsNothing);
+      expect(repo.updates, isEmpty);
+      expect(find.text('เลือกแล้ว 5 จาก 6'), findsOneWidget);
+      expect(_enabled(tester, 'บันทึก'), isTrue);
+    });
+
+    testWidgets('confirm → exactly ONE PATCH, even pressed twice; in flight the sheet cannot be dismissed',
+        (tester) async {
+      final repo = await _open(tester, (c) => openRoleEditScreen(c, 'rol_admin'), scoped: editRepo());
+      repo.writeGate = Completer<void>();
+      await _tapRow(tester, 'manage_products');
+      await _press(tester, 'บันทึก');
+
+      await tester.tap(_sheetSubmit());
+      await tester.pump();
+      expect(inSheet('กำลังบันทึก...'), findsOneWidget);
+      await tester.tap(_sheetSubmit(), warnIfMissed: false);
+      await tester.tapAt(const Offset(10, 10)); // the barrier
+      await tester.pump();
+      expect(_sheet(), findsOneWidget, reason: 'not dismissible while the PATCH is in flight');
+      expect(tester.widget<OutlinedButton>(_sheetCancel()).onPressed, isNull);
+
+      repo.writeGate!.complete();
+      await tester.pumpAndSettle();
+      expect(_sheet(), findsNothing);
+      expect(repo.updates, hasLength(1));
+      expect(find.text('บันทึกบทบาท "ผู้ดูแล" แล้ว'), findsOneWidget);
+      await _drainToast(tester);
+    });
+
+    testWidgets('no members yet + open invitations → the two other impact lines; a removal is listed',
+        (tester) async {
+      final quiet = _role('rol_q', 'แพ็คของ', members: 0, invites: 1, caps: const ['manage_members', 'manage_roles']);
+      await _open(tester, (c) => openRoleEditScreen(c, 'rol_q'), scoped: editRepo(detail: [quiet]));
+      await _tapRow(tester, 'manage_members');
+      await _press(tester, 'บันทึก');
+
+      expect(inSheet('ยังไม่มีสมาชิกใช้บทบาทนี้'), findsOneWidget);
+      expect(inSheet('คำเชิญที่ยังไม่ปิด 1 ใบ จะได้สิทธิ์ชุดใหม่เมื่อกดรับ'), findsOneWidget);
+      expect(inSheet('เอาออก'), findsOneWidget);
+      expect(inSheet('จัดการสมาชิกและคำเชิญ'), findsOneWidget);
+      expect(inSheet('เพิ่ม'), findsNothing);
+    });
+
+    testWidgets('★ MY role, losing manage_roles → destructive confirm, focus on "แก้ต่อ"; then ข้อมูลร้าน + toast',
+        (tester) async {
+      final saved = _role('rol_admin', 'Admin', key: 'admin', customized: false, members: 2, version: 4,
+          caps: const ['manage_members', 'manage_org_settings']);
+      final repo = await _open(tester, (c) => openRoleEditScreen(c, 'rol_admin'),
+          scoped: editRepo(update: [saved], myRoleId: 'rol_admin'));
+
+      await _tapRow(tester, 'manage_roles');
+      await _press(tester, 'บันทึก');
+
+      expect(inSheet('คุณจะเสียสิทธิ์เหล่านี้ทันที'), findsOneWidget);
+      expect(inSheet('บันทึกแล้วคุณจะกลับมาแก้เองไม่ได้ ต้องให้เจ้าของร้านแก้คืน'), findsOneWidget);
+      expect(inSheet('ถ้าต้องการคืน ให้เจ้าของร้านแก้ให้'), findsNothing);
+      // Listed twice: under "เอาออก" and in the warning.
+      expect(inSheet('จัดการบทบาทและสิทธิ์'), findsNWidgets(2));
+      expect(find.descendant(of: _sheetSubmit(), matching: find.text('บันทึก และยอมเสียสิทธิ์')), findsOneWidget);
+      expect(FocusManager.instance.primaryFocus?.debugLabel, 'role-confirm-cancel',
+          reason: 'ux R3a focusCancel with the self-loss warning');
+      expect(repo.updates, isEmpty);
+
+      await _confirm(tester);
+      expect(repo.updates, hasLength(1));
+      expect(find.text('บันทึกแล้ว — ตอนนี้คุณไม่มีสิทธิ์จัดการบทบาทแล้ว'), findsOneWidget);
+      expect(find.text('host'), findsOneWidget, reason: 'back to the shop root (ข้อมูลร้าน)');
+      expect(_nameField(), findsNothing);
+      await _drainToast(tester);
+    });
+
+    testWidgets('MY role, losing something else → the other note; stays, toast, and the role is read again',
+        (tester) async {
+      final saved = _role('rol_admin', 'Admin', key: 'admin', customized: false, members: 2, version: 4,
+          caps: const ['manage_org_settings', 'manage_roles']);
+      final repo = await _open(tester, (c) => openRoleEditScreen(c, 'rol_admin'),
+          scoped: editRepo(detail: [_admin, saved], update: [saved], myRoleId: 'rol_admin'));
+
+      await _tapRow(tester, 'manage_members');
+      await _press(tester, 'บันทึก');
+      expect(inSheet('ถ้าต้องการคืน ให้เจ้าของร้านแก้ให้'), findsOneWidget);
+      expect(find.descendant(of: _sheetSubmit(), matching: find.text('บันทึก และยอมเสียสิทธิ์')), findsOneWidget);
+
+      await _confirm(tester);
+      expect(repo.updates, hasLength(1));
+      expect(find.text('บันทึกบทบาท "ผู้ดูแล" แล้ว'), findsOneWidget);
+      expect(_nameField(), findsOneWidget, reason: 'stays on the form');
+      expect(repo.roleDetailIdsSeen, hasLength(2),
+          reason: 'my own role: the PATCH answer carries PRE-edit verdicts — read it again');
+      await _drainToast(tester);
+    });
+
+    testWidgets('MY role, gains only → the plain confirm (no warning, primary button)', (tester) async {
+      await _open(tester, (c) => openRoleEditScreen(c, 'rol_admin'), scoped: editRepo(myRoleId: 'rol_admin'));
+      await _tapRow(tester, 'manage_products');
+      await _press(tester, 'บันทึก');
+      expect(inSheet('คุณจะเสียสิทธิ์เหล่านี้ทันที'), findsNothing);
+      expect(find.descendant(of: _sheetSubmit(), matching: find.text('บันทึก')), findsOneWidget);
+    });
+
+    testWidgets('an error closes the sheet and shows on the form (§E)', (tester) async {
+      final repo = await _open(tester, (c) => openRoleEditScreen(c, 'rol_admin'),
+          scoped: editRepo(update: [const ServerFailure()]));
+      await _tapRow(tester, 'manage_products');
+      await _press(tester, 'บันทึก');
+      await _confirm(tester);
+
+      expect(_sheet(), findsNothing);
+      expect(find.text('บันทึกบทบาทไม่สำเร็จ กรุณาลองใหม่อีกครั้ง'), findsOneWidget);
+      expect(repo.updates, hasLength(1));
+    });
+  });
+
+  group('R3b 409 ROLE_CHANGED — my edits, re-apply never sends (M07 · AC-3.12 · SR-14)', () {
+    final v4 = _role('rol_admin', 'ผู้ช่วยเจ้าของร้าน', members: 2, version: 4,
+        caps: const ['manage_members', 'manage_roles']);
+    const conflict = ConflictFailure(code: 'ROLE_CHANGED', details: {'currentVersion': 4});
+
+    Future<FakeOrgScoped> conflictOnce(WidgetTester tester, {List<Object>? detail}) async {
+      final repo = await _open(
+        tester,
+        (c) => openRoleEditScreen(c, 'rol_admin'),
+        scoped: _repo(
+          roleDetails: _page(),
+          catalog: _catalog,
+          roleDetailAnswers: detail ?? [_admin, v4],
+          updateRoleAnswers: [conflict, v4],
+        ),
+      );
+      await _typeName(tester, 'ผู้จัดการ');
+      await _tapRow(tester, 'manage_products');
+      await _press(tester, 'บันทึก');
+      await _confirm(tester);
+      return repo;
+    }
+
+    Finder banner() => find.byKey(const ValueKey('role-conflict-banner'));
+    Finder inBanner(String text) => find.descendant(of: banner(), matching: find.text(text));
+
+    testWidgets('the banner lists MY edits against the version I started from; form = latest', (tester) async {
+      final repo = await conflictOnce(tester);
+
+      expect(repo.updates, hasLength(1));
+      expect(inBanner('มีคนแก้บทบาทนี้ไปก่อนคุณ'), findsOneWidget);
+      expect(inBanner('ชื่อ: "ผู้ดูแล" → "ผู้จัดการ"'), findsOneWidget);
+      expect(inBanner('เพิ่ม: จัดการสินค้า, ดูสินค้า'), findsOneWidget);
+      expect(inBanner('ใส่การแก้ของฉันกลับเข้าไป'), findsOneWidget);
+      expect(inBanner('ปิด'), findsOneWidget);
+      expect(tester.widget<TextField>(_nameField()).controller!.text, 'ผู้ช่วยเจ้าของร้าน');
+      expect(find.text('เลือกแล้ว 2 จาก 6'), findsOneWidget);
+    });
+
+    testWidgets('★ re-apply fills the LATEST version and sends nothing; saving again goes through R3a on v4',
+        (tester) async {
+      final repo = await conflictOnce(tester);
+
+      await tester.tap(inBanner('ใส่การแก้ของฉันกลับเข้าไป'));
+      await tester.pumpAndSettle();
+      await tester.pump(const Duration(seconds: 1));
+
+      expect(repo.updates, hasLength(1), reason: 'SR-14: re-apply never sends');
+      expect(tester.widget<TextField>(_nameField()).controller!.text, 'ผู้จัดการ');
+      expect(find.text('เลือกแล้ว 4 จาก 6'), findsOneWidget);
+      expect(inBanner('ใส่การแก้ของฉันกลับเข้าไป'), findsNothing, reason: 'once only');
+      expect(inBanner('มีคนแก้บทบาทนี้ไปก่อนคุณ'), findsOneWidget, reason: 'the banner still explains');
+
+      await _press(tester, 'บันทึก');
+      await _confirm(tester);
+      expect(repo.updates, hasLength(2));
+      final body = repo.updates.last.body;
+      expect(body.version, 4);
+      expect(body.name, 'ผู้จัดการ');
+      expect(body.capabilities, ['manage_members', 'manage_products', 'manage_roles']);
+      await _drainToast(tester);
+    });
+
+    testWidgets('re-apply skips what I can no longer grant, and says so', (tester) async {
+      final repo = await conflictOnce(tester);
+      _container.read(sessionControllerProvider.notifier).capabilitiesLearned(
+        orgId: 'org_1',
+        capabilities: {'manage_roles', 'manage_members', 'manage_org_settings'},
+      );
+      await tester.pumpAndSettle();
+
+      await tester.tap(inBanner('ใส่การแก้ของฉันกลับเข้าไป'));
+      await tester.pumpAndSettle();
+
+      expect(inBanner('บางรายการใส่กลับไม่ได้ เพราะตอนนี้คุณไม่มีสิทธิ์นั้น'), findsOneWidget);
+      expect(tester.widget<TextField>(_nameField()).controller!.text, 'ผู้จัดการ');
+      // The longer banner pushes the checklist below the lazily-built fold.
+      await tester.dragUntilVisible(
+          find.text('เลือกแล้ว 2 จาก 6'), find.byType(ListView).last, const Offset(0, -200));
+      expect(find.text('เลือกแล้ว 2 จาก 6'), findsOneWidget, reason: 'manage_products was skipped');
+      expect(repo.updates, hasLength(1));
+    });
+
+    testWidgets('"ปิด" keeps the latest version as it is', (tester) async {
+      final repo = await conflictOnce(tester);
+      await tester.tap(inBanner('ปิด'));
+      await tester.pumpAndSettle();
+
+      expect(banner(), findsNothing);
+      expect(tester.widget<TextField>(_nameField()).controller!.text, 'ผู้ช่วยเจ้าของร้าน');
+      expect(repo.updates, hasLength(1));
+    });
+
+    testWidgets('latest version is read-only → R4 keeps the banner, without re-apply', (tester) async {
+      final locked = _role('rol_admin', 'ผู้ช่วยเจ้าของร้าน', version: 4,
+          canEdit: const RoleVerdict(allowed: false, reason: 'equal_permissions_in_use'));
+      final repo = await conflictOnce(tester, detail: [_admin, locked]);
+
+      expect(inBanner('มีคนแก้บทบาทนี้ไปก่อนคุณ'), findsOneWidget);
+      expect(inBanner('เพิ่ม: จัดการสินค้า, ดูสินค้า'), findsOneWidget);
+      expect(inBanner('ใส่การแก้ของฉันกลับเข้าไป'), findsNothing);
+      expect(_nameField(), findsNothing);
       expect(repo.updates, hasLength(1));
     });
   });

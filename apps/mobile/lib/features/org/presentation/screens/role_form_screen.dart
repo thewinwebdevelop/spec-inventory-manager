@@ -17,11 +17,13 @@ import '../../application/org_providers.dart';
 import '../../application/role_write_controller.dart';
 import '../../application/role_write_error.dart';
 import '../../domain/entities/role_entities.dart';
+import '../../domain/role_change_summary.dart';
 import '../../domain/role_form_model.dart';
 import '../copy/role_display_copy.dart';
 import '../copy/role_list_copy.dart';
 import '../copy/role_viewer_reason_copy.dart';
 import '../widgets/capability_checklist.dart';
+import '../widgets/role_change_parts.dart';
 import '../widgets/role_screen_parts.dart';
 
 /// R3 create / clone. [fromRoleId] = clone (POST, pre-filled — there is no
@@ -52,14 +54,19 @@ Future<void> openRoleEditScreen(BuildContext context, String roleId) => Navigato
 /// ⛔ SR-14: on `409 ROLE_CHANGED` the role is re-read and shown; nothing is
 /// resubmitted. Saving again is a new press of the button by the person.
 ///
-/// Seams left for later tasks (each the ONLY place that task touches):
-///  - M07 R3a: [_RoleFormState._confirmCapabilityChange] — the confirm dialog
-///    (added/removed + impact + lost-own-capabilities) before a PATCH that
-///    carries `capabilities`.
-///  - M07 R3b: [_RoleConflict] holds the user's draft and the version they
-///    started from; M07 renders the diff + "ใส่การแก้ของฉันกลับเข้าไป".
-///  - M08 R4 / R5: [_ReadOnlyState] (full read list + clone/delete) and the
-///    delete button in "การจัดการอื่น".
+/// M07:
+///  - R3a: [_RoleForm.confirmation] → `showRoleSaveConfirmSheet` before a
+///    PATCH that carries `capabilities` (a rename alone is sent at once). The
+///    PATCH runs inside the sheet; one confirmation = one PATCH.
+///  - R3b: [_RoleConflict] holds the person's own diff against the version
+///    they started from; "ใส่การแก้ของฉันกลับเข้าไป" only re-seeds the form on
+///    the latest version — it never sends (SR-14).
+///  - after editing MY OWN role the role is re-read (the PATCH's `viewer.*` is
+///    pre-edit); if R3a confirmed losing `manage_roles` → toast + back to the
+///    shop root (ข้อมูลร้าน) (ux R3).
+///
+/// Seams left for later tasks: M08 R4 / R5: [_ReadOnlyState] (full read list
+/// + clone/delete) and the delete button in "การจัดการอื่น".
 class RoleFormScreen extends ConsumerWidget {
   const RoleFormScreen.create({super.key, this.fromRoleId}) : roleId = null;
   const RoleFormScreen.edit({super.key, required String this.roleId}) : fromRoleId = null;
@@ -308,7 +315,7 @@ class _CreateBodyState extends ConsumerState<_CreateBody> {
       submit: (name, caps) => ref
           .read(roleWriteControllerProvider.notifier)
           .create(name: name.trim(), capabilities: caps),
-      onSaved: (saved) {
+      onSaved: (saved, _) {
         showAppToast(context, t.roleFormCreateSuccessToast(roleRowName(t, saved)));
         // R1 + toast (ux R3 โหมด). `pop`, not `maybePop`: the form is dirty
         // by definition and its own guard must not ask "ทิ้งการแก้ไข?" here.
@@ -322,13 +329,14 @@ class _CreateBodyState extends ConsumerState<_CreateBody> {
 
 // ── edit ──────────────────────────────────────────────────────────────────
 
-/// R3b seam (M07): what the person had when the 409 came back.
+/// R3b: the person's own edits (against the version they started from) when
+/// the 409 came back, and what "ใส่การแก้ของฉันกลับเข้าไป" did with them.
 class _RoleConflict {
-  const _RoleConflict({required this.startedFromVersion, required this.draftName, required this.draftCapabilities});
+  const _RoleConflict({required this.diff, this.reapplied = false, this.skipped = false});
 
-  final int startedFromVersion;
-  final String draftName;
-  final List<String> draftCapabilities;
+  final DraftDiff diff;
+  final bool reapplied;
+  final bool skipped;
 }
 
 enum _WriteOutcome { forbidden, notFound }
@@ -347,6 +355,10 @@ class _EditBodyState extends ConsumerState<_EditBody> {
   RoleDetailView? _snapshot;
   int _nonce = 0;
   _RoleConflict? _conflict;
+
+  /// R3b re-apply: the latest version with the person's diff laid over it
+  /// (a form seed only — nothing is sent).
+  ({String name, Set<String> selection})? _seedOverride;
   _WriteOutcome? _outcome;
 
   void _retry() {
@@ -360,6 +372,7 @@ class _EditBodyState extends ConsumerState<_EditBody> {
       if (!mounted) return;
       setState(() {
         _snapshot = fresh;
+        _seedOverride = null;
         _nonce++;
       });
     } on NotFoundFailure {
@@ -406,15 +419,22 @@ class _EditBodyState extends ConsumerState<_EditBody> {
       Text(roleRowUsageLine(t, base, isMine: isMine), style: muted),
       Text(roleLastEditedLine(t, roleLastEditedFrom(t, base.lastEdited)), style: muted),
     ];
-    final conflictBanner = _conflict == null
-        ? null
-        : RoleWarningBanner(title: t.roleConflictTitle, body: t.roleConflictBody);
+    Widget? conflictBanner({VoidCallback? onReapply}) {
+      final conflict = _conflict;
+      if (conflict == null) return null;
+      return RoleConflictBanner(
+        diff: conflict.diff,
+        skipped: conflict.skipped,
+        onReapply: conflict.reapplied ? null : onReapply,
+        onDismiss: () => setState(() => _conflict = null),
+      );
+    }
 
     // The server's CURRENT verdict decides between R3 and R4 — a refusal that
     // re-read the role (TARGET_NOT_BELOW_ACTOR, ROLE_HELD_…, ROLE_LOCKED,
     // ROLE_WRITES_DISABLED) lands here.
     if (!base.canEdit.allowed) {
-      return _ReadOnlyState(role: base, header: header, conflictBanner: conflictBanner);
+      return _ReadOnlyState(role: base, header: header, conflictBanner: conflictBanner());
     }
 
     final cat = catalogData ?? _emptyCatalog;
@@ -430,6 +450,25 @@ class _EditBodyState extends ConsumerState<_EditBody> {
           capabilities: caps,
         );
 
+    void reapply() {
+      final conflict = _conflict;
+      if (conflict == null) return;
+      final viewerCaps = ref.read(activeOrgProvider)?.capabilities ?? const <String>{};
+      final r = reapplyDraft(
+        latestName: initialName,
+        latestSelection: seeded.selection,
+        diff: conflict.diff,
+        catalog: cat,
+        viewerCan: (k) => viewerCanGrant(viewerCaps, k, cat),
+      );
+      setState(() {
+        _seedOverride = (name: r.name, selection: r.selection);
+        _conflict = _RoleConflict(diff: conflict.diff, reapplied: true, skipped: r.skipped);
+        _nonce++;
+      });
+    }
+
+    final banner = conflictBanner(onReapply: reapply);
     final canClone = base.canClone;
     final cloneBlocked = !canClone.allowed && canClone.reason == 'role_limit_reached'
         ? roleCreateOrCloneBlockedCopy(t, 'role_limit_reached')
@@ -442,13 +481,27 @@ class _EditBodyState extends ConsumerState<_EditBody> {
       appBarTitle: roleRowName(t, base),
       catalog: catalogData,
       onRetryCatalog: () => ref.invalidate(capabilityCatalogProvider),
-      seedName: initialName,
-      seedSelection: seeded.selection,
+      seedName: _seedOverride?.name ?? initialName,
+      seedSelection: _seedOverride?.selection ?? seeded.selection,
       seedPassthrough: seeded.passthrough,
       canSubmit: true,
-      topBanners: [if (conflictBanner != null) conflictBanner],
+      topBanners: [if (banner != null) banner],
       header: header,
       buildUpdate: bodyFor,
+      // R3a: only a capability change asks first; a rename alone is sent at once.
+      confirmation: (name, caps) {
+        final body = bodyFor(name, caps);
+        final after = body?.capabilities;
+        if (after == null || catalogData == null) return null;
+        return buildSaveConfirmation(
+          roleName: roleRowName(t, base),
+          before: base.capabilities,
+          after: after,
+          catalog: catalogData,
+          usage: base.usage,
+          isMine: isMine,
+        );
+      },
       otherActions: canClone.allowed || cloneBlocked != null
           ? (dirty) => _OtherActions(
                 onClone: canClone.allowed ? () => openRoleCreateScreen(context, fromRoleId: base.id) : null,
@@ -461,20 +514,38 @@ class _EditBodyState extends ConsumerState<_EditBody> {
         if (body == null) return Future.value(RoleWriteSaved(base));
         return ref.read(roleWriteControllerProvider.notifier).update(base.id, body);
       },
-      onSaved: (saved) {
+      onSaved: (saved, confirmed) {
+        if (confirmed?.selfLoss?.losesManageRoles ?? false) {
+          // ux R3: I just gave up designing roles — leave for ข้อมูลร้าน (the
+          // shop root) with the toast. `pop`, not `maybePop`: no guard may ask
+          // "ทิ้งการแก้ไข?" here. The controller is already re-learning my
+          // capabilities, and the roles screens' guards agree once it lands.
+          showAppToast(context, t.roleFormLostOwnManageRolesToast);
+          Navigator.of(context).popUntil((r) => r.isFirst);
+          return;
+        }
         setState(() {
           _conflict = null;
+          _seedOverride = null;
           _snapshot = saved;
           _nonce++;
         });
         showAppToast(context, t.roleFormSaveSuccessToast(roleRowName(t, saved)));
+        // My own role: the verdicts in the PATCH answer were computed with my
+        // PRE-edit capabilities — read the role again instead of trusting them.
+        if (isMine) unawaited(_reread());
       },
       onRoleChanged: (draftName, draftCaps) async {
-        setState(() => _conflict = _RoleConflict(
-              startedFromVersion: base.version,
-              draftName: draftName,
-              draftCapabilities: draftCaps,
-            ));
+        setState(() {
+          _seedOverride = null;
+          _conflict = _RoleConflict(
+            diff: draftDiff(
+              (name: initialName, capabilities: initialCapabilities),
+              (name: draftName, capabilities: draftCaps),
+              cat,
+            ),
+          );
+        });
         await _reread();
       },
       onRefetchRole: _reread,
@@ -566,6 +637,7 @@ class _RoleForm extends ConsumerStatefulWidget {
     this.topBanners = const [],
     this.header = const [],
     this.buildUpdate,
+    this.confirmation,
     this.otherActions,
     required this.submit,
     required this.onSaved,
@@ -594,9 +666,14 @@ class _RoleForm extends ConsumerStatefulWidget {
 
   /// Edit: the PATCH body (`null` = nothing to save).
   final RoleUpdate? Function(String name, List<String> capabilities)? buildUpdate;
+
+  /// Edit (R3a): what to confirm before sending, or `null` to send at once.
+  final SaveConfirmation? Function(String name, List<String> capabilities)? confirmation;
   final Widget Function(bool dirty)? otherActions;
   final Future<RoleWriteResult?> Function(String name, List<String> capabilities) submit;
-  final void Function(RoleDetailView saved) onSaved;
+
+  /// [confirmed] = what the person agreed to in R3a (`null` when nothing was asked).
+  final void Function(RoleDetailView saved, SaveConfirmation? confirmed) onSaved;
   final Future<void> Function(String draftName, List<String> draftCapabilities)? onRoleChanged;
   final VoidCallback onRefetchRole;
   final VoidCallback onForbidden;
@@ -703,11 +780,6 @@ class _RoleFormState extends ConsumerState<_RoleForm> {
     });
   }
 
-  /// M07 (R3a) inserts the confirm dialog here — added / removed, "มีผลกับ
-  /// สมาชิก N คน", and the lost-own-capabilities warning. Until then every
-  /// change goes straight through.
-  Future<bool> _confirmCapabilityChange(RoleUpdate body) async => true;
-
   Future<void> _onSubmit() async {
     final t = AppLocalizations.of(context);
     if (ref.read(roleWriteControllerProvider) || _throttleLeft > 0) return;
@@ -726,15 +798,15 @@ class _RoleFormState extends ConsumerState<_RoleForm> {
     if (empty) return _showChecklist();
 
     final caps = _capabilities;
-    if (widget.isEdit) {
-      final body = widget.buildUpdate?.call(_name.text, caps);
-      if (body != null && body.capabilities != null && !await _confirmCapabilityChange(body)) return;
-    }
-    final result = await widget.submit(_name.text, caps);
+    final name = _name.text;
+    final confirmation = widget.isEdit ? widget.confirmation?.call(name, caps) : null;
+    final result = confirmation != null
+        ? await showRoleSaveConfirmSheet(context, confirmation: confirmation, send: () => widget.submit(name, caps))
+        : await widget.submit(name, caps);
     if (!mounted || result == null) return;
     switch (result) {
       case RoleWriteSaved(:final role):
-        widget.onSaved(role);
+        widget.onSaved(role, confirmation);
       case RoleWriteFailed(:final error):
         _handleFailure(t, error, caps);
     }

@@ -52,20 +52,22 @@ class RoleInfoBanner extends StatelessWidget {
 }
 
 /// Banner warning (`icon.warn`) — R3b's "มีคนแก้บทบาทนี้ไปก่อนคุณ" and the
-/// role-form throttle countdown. [actions] sit under the text (M07 adds
-/// "ใส่การแก้ของฉันกลับเข้าไป" / "ปิด" here).
+/// role-form throttle countdown. [children] sit under the text (R3b's diff +
+/// "ใส่การแก้ของฉันกลับเข้าไป" / "ปิด"; R3a's self-loss list).
 class RoleWarningBanner extends StatelessWidget {
   const RoleWarningBanner({
     super.key,
     this.title,
-    required this.body,
+    this.body,
     this.icon = Icons.warning_amber_outlined,
     this.children = const [],
     this.tabularFigures = false,
   });
 
   final String? title;
-  final String body;
+
+  /// `null` = title + [children] only (R3a's self-loss box: title, list, note).
+  final String? body;
   final IconData icon;
   final List<Widget> children;
 
@@ -106,7 +108,7 @@ class RoleWarningBanner extends StatelessWidget {
                         fontWeight: FontWeight.w700,
                       ),
                     ),
-                  Text(body, style: bodyStyle),
+                  if (body != null) Text(body!, style: bodyStyle),
                   ...children,
                 ],
               ),
