@@ -2,6 +2,8 @@
 //
 //   I3-06   rename / caps of Admin · Staff · custom → 200, version+1, event before/after ·
 //           `nameCustomized` stays true after renaming back · self-lockout (AC-3.10) is allowed.
+//   I3-21   (T-003-QA10) ONE access token reused: a role edit and a member move take effect on the
+//           very next request — no membership/permission cache keyed by token (AC-6.5 · MUT-13).
 //   I3-07   stale `version` + a real change → 409 ROLE_CHANGED `details.currentVersion`, no write, no event.
 //   I3-08   no-op → 200, version / lastEdited unchanged, 0 role events — a STALE version on a no-op
 //           is not compared (MUT-18) · controls: no-op on a role the rules refuse → 403;
@@ -312,6 +314,57 @@ d("T-003-B24 PATCH /orgs/{orgId}/roles/{roleId} (E2E, DB+Redis)", () => {
     // AC-6.5: no cached permission — the very next request sees the new role.
     const next = await get(on, `/orgs/${org.id}/role-details`, u.adm!.id);
     expect([next.status, next.body.error?.code]).toEqual([403, "FORBIDDEN"]);
+  });
+
+  // ── I3-21 (T-003-QA10 · MUT-13) ───────────────────────────────────────────
+
+  it("★ I3-21 · AC-2.4 / AC-6.5 — ONE access token reused throughout: an edit of the holder's role, and a move to another role, take effect on the very next request (no cache, no re-login)", async () => {
+    const { org, u } = await shop({ own: "Owner" });
+    const stf = await kit.createUser();
+    const packer = await kit.createCustomRole({
+      organizationId: org.id,
+      name: `Packer ${unique()}`,
+      capabilities: ["manage_products"],
+    });
+    await kit.addMember({ organizationId: org.id, userId: stf.id, roleId: packer.id });
+    // Signed ONCE. Every request below carries this exact string — a membership
+    // memoised per token (MUT-13) would keep answering from the first lookup.
+    const stfToken = tokenOf(on, stf.id);
+    const asStf = () =>
+      request(on.server())
+        .get(`/orgs/${org.id}/capabilities`) // @RequireCapability(manage_roles), read-only
+        .set("Authorization", `Bearer ${stfToken}`);
+    const codeOf = (res: request.Response) => [res.status, res.body.error?.code ?? null];
+
+    expect(codeOf(await asStf())).toEqual([403, "FORBIDDEN"]); // Packer lacks manage_roles
+
+    // the Owner GIVES the role manage_roles → the same token is let in
+    const give = await patch(on, org.id, packer.id, u.own!.id, {
+      version: 1,
+      capabilities: ["manage_products", "manage_roles"],
+    });
+    expect(give.status, JSON.stringify(give.body)).toBe(200);
+    expect(codeOf(await asStf())).toEqual([200, null]);
+
+    // …TAKES it back → refused again on the next request
+    const take = await patch(on, org.id, packer.id, u.own!.id, {
+      version: 2,
+      capabilities: ["manage_products"],
+    });
+    expect(take.status, JSON.stringify(take.body)).toBe(200);
+    expect(codeOf(await asStf())).toEqual([403, "FORBIDDEN"]);
+
+    // …MOVES the member to Admin (holds manage_roles) → in; back to Packer → out
+    const move = (roleId: string) =>
+      request(on.server())
+        .patch(`/orgs/${org.id}/members/${stf.id}`)
+        .set("Authorization", `Bearer ${tokenOf(on, u.own!.id)}`)
+        .set("Content-Type", "application/json")
+        .send({ roleId });
+    expect((await move(org.roles.Admin!.id)).status).toBe(200);
+    expect(codeOf(await asStf())).toEqual([200, null]);
+    expect((await move(packer.id)).status).toBe(200);
+    expect(codeOf(await asStf())).toEqual([403, "FORBIDDEN"]);
   });
 
   // ── I3-07 ──────────────────────────────────────────────────────────────────
