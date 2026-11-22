@@ -647,6 +647,11 @@ jobs:
           # manage_roles route enumerated from ROUTE_CAPABILITIES + the roleId axis),
           # the I3-57 write control and I3-50 (no email / person key in any event
           # payload) live only in this file (5). 362 = 357 + 5; full local run 462.
+          #
+          # ★ T-003-M09 / D-039: RoleRow.inviteTtlHours — present iff viewerCanAssign,
+          # = invitationTtlHours(caps) == the expiry a real invite stores, and the
+          # key-swap proof (value comes from capabilities, not key) live only in
+          # f003-viewer-verdicts (+3 → 13). --min-passed 466 = 463 + 3.
           node tool/ci/assert-tests-ran.mjs \
             --report /tmp/api-int-tests.json \
             --lane "integration-api · apps/api *.int.test.ts" \
@@ -673,12 +678,12 @@ jobs:
             --require "test/f003-sweeps.int.test.ts=5" \
             --require "test/members.f003.e2e.int.test.ts=15" \
             --require "test/admin-reset.f003.e2e.int.test.ts=13" \
-            --require "test/f003-viewer-verdicts.e2e.int.test.ts=10" \
+            --require "test/f003-viewer-verdicts.e2e.int.test.ts=13" \
             --require "test/f003-live-role-ownership.int.test.ts=7" \
             --require "test/invitations.f003.e2e.int.test.ts=6" \
             --require "test/role-db-guards.int.test.ts=12" \
             --require "test/f003-seed.kit.int.test.ts=16" \
-            --min-passed 463
+            --min-passed 466
       - name: dump api log on failure
         if: failure()
         run: cat /tmp/api.log || true

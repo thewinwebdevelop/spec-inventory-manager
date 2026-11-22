@@ -31,6 +31,7 @@ import {
   clampedInvitationExpiry,
   decideRoleAssignVisible,
   hasCapability,
+  invitationTtlHours,
   isElevatedRole,
   isOwnerRole,
   validateRoleCapabilities,
@@ -283,6 +284,17 @@ export interface RoleRow {
    */
   readonly viewerCanAssign?: boolean;
   readonly assignBlockedReason?: GrantBlockedReason | null;
+  /**
+   * F-003 · D-039 (api-spec §4.1 · AC-10.3) — hours an invitation with this
+   * role would live: `invitationTtlHours(capabilities)`, the SAME function that
+   * sets `expiresAt` on create/reissue, so the warning and the link cannot
+   * disagree. Never derived from `key`/name.
+   *
+   * Present ONLY when `viewerCanAssign === true`: the viewer could learn this
+   * number anyway by inviting with that role (`expiresAt`), so it reveals
+   * nothing about capabilities they could not already see (AC-6.4).
+   */
+  readonly inviteTtlHours?: number;
 }
 
 export interface RoleListPage {
@@ -1102,7 +1114,7 @@ export class RolesService {
       // LIVE (data-model §2.2): a deleted role is not a choice in the dropdown.
       where: { ...LIVE_ROLE_WHERE },
       // `capabilities` is selected and NEVER published — it is read here only
-      // to derive `grantsOwnership` and `viewerCanAssign` below. The projection
+      // to derive `grantsOwnership`, `viewerCanAssign` and `inviteTtlHours` below. The projection
       // at the end is what keeps it off the wire.
       select: {
         id: true,
@@ -1141,6 +1153,11 @@ export class RolesService {
           nameCustomized: wireNameCustomized(row),
           ...(verdict
             ? { viewerCanAssign: verdict.allowed, assignBlockedReason: verdict.reason }
+            : {}),
+          // D-039 — only where the viewer may invite with it (AC-6.4). From the
+          // capabilities, through the one TTL function — never from `key`.
+          ...(verdict?.allowed === true
+            ? { inviteTtlHours: invitationTtlHours(row.capabilities) }
             : {}),
         };
       }),

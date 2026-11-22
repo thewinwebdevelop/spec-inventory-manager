@@ -1117,6 +1117,29 @@ RoleRow:
         `owner_only` · `exceeds_your_permissions`. Never names the missing
         permission (`capabilities` stays unpublished here). Any other value →
         generic copy.
+    inviteTtlHours:
+      type: integer
+      minimum: 1
+      description: >
+        F-003 (D-039 · AC-10.3) — how many hours an invitation with this role
+        would stay valid, computed from the role's CAPABILITIES by the same
+        rule that sets `Invitation.expiresAt` (today `24` for a role holding
+        `full_access`, `manage_members` or `manage_roles`; `168` otherwise —
+        treat it as a number, not an enum). Never derived from `key` or
+        `name`.
+
+
+        Present ONLY on rows where `viewerCanAssign` is `true` — the caller
+        holds `manage_members` AND may invite with this role, so the number
+        reveals nothing they could not learn by inviting (AC-6.4). Absent
+        everywhere else (no `manage_members`, a role the caller may not
+        assign, the Owner role for a non-Owner) and on older servers.
+
+
+        The client decides the "short-lived link" warning from this field
+        ONLY — never from `key`, `name` or `grantsOwnership`. Absent = show no
+        warning. A UX input, never enforcement: the server sets the real
+        expiry regardless.
 
 RoleListPage:
   type: object

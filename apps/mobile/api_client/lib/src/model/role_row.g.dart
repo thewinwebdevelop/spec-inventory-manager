@@ -23,6 +23,8 @@ class _$RoleRow extends RoleRow {
   final bool? viewerCanAssign;
   @override
   final String? assignBlockedReason;
+  @override
+  final int? inviteTtlHours;
 
   factory _$RoleRow([void Function(RoleRowBuilder)? updates]) =>
       (RoleRowBuilder()..update(updates))._build();
@@ -35,7 +37,8 @@ class _$RoleRow extends RoleRow {
       required this.isSystem,
       this.nameCustomized,
       this.viewerCanAssign,
-      this.assignBlockedReason})
+      this.assignBlockedReason,
+      this.inviteTtlHours})
       : super._();
   @override
   RoleRow rebuild(void Function(RoleRowBuilder) updates) =>
@@ -55,7 +58,8 @@ class _$RoleRow extends RoleRow {
         isSystem == other.isSystem &&
         nameCustomized == other.nameCustomized &&
         viewerCanAssign == other.viewerCanAssign &&
-        assignBlockedReason == other.assignBlockedReason;
+        assignBlockedReason == other.assignBlockedReason &&
+        inviteTtlHours == other.inviteTtlHours;
   }
 
   @override
@@ -69,6 +73,7 @@ class _$RoleRow extends RoleRow {
     _$hash = $jc(_$hash, nameCustomized.hashCode);
     _$hash = $jc(_$hash, viewerCanAssign.hashCode);
     _$hash = $jc(_$hash, assignBlockedReason.hashCode);
+    _$hash = $jc(_$hash, inviteTtlHours.hashCode);
     _$hash = $jf(_$hash);
     return _$hash;
   }
@@ -83,7 +88,8 @@ class _$RoleRow extends RoleRow {
           ..add('isSystem', isSystem)
           ..add('nameCustomized', nameCustomized)
           ..add('viewerCanAssign', viewerCanAssign)
-          ..add('assignBlockedReason', assignBlockedReason))
+          ..add('assignBlockedReason', assignBlockedReason)
+          ..add('inviteTtlHours', inviteTtlHours))
         .toString();
   }
 }
@@ -127,6 +133,11 @@ class RoleRowBuilder implements Builder<RoleRow, RoleRowBuilder> {
   set assignBlockedReason(String? assignBlockedReason) =>
       _$this._assignBlockedReason = assignBlockedReason;
 
+  int? _inviteTtlHours;
+  int? get inviteTtlHours => _$this._inviteTtlHours;
+  set inviteTtlHours(int? inviteTtlHours) =>
+      _$this._inviteTtlHours = inviteTtlHours;
+
   RoleRowBuilder() {
     RoleRow._defaults(this);
   }
@@ -142,6 +153,7 @@ class RoleRowBuilder implements Builder<RoleRow, RoleRowBuilder> {
       _nameCustomized = $v.nameCustomized;
       _viewerCanAssign = $v.viewerCanAssign;
       _assignBlockedReason = $v.assignBlockedReason;
+      _inviteTtlHours = $v.inviteTtlHours;
       _$v = null;
     }
     return this;
@@ -172,6 +184,7 @@ class RoleRowBuilder implements Builder<RoleRow, RoleRowBuilder> {
           nameCustomized: nameCustomized,
           viewerCanAssign: viewerCanAssign,
           assignBlockedReason: assignBlockedReason,
+          inviteTtlHours: inviteTtlHours,
         );
     replace(_$result);
     return _$result;

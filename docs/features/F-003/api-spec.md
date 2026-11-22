@@ -15,7 +15,7 @@ signoff: approved     # user 2026-09-27 (+ รับ D-036/D-037)
 ## Contract summary (≤20 บรรทัด — ทีม consumer อ่านแค่ส่วนนี้)
 - **route ใหม่ 6 เส้น gate `manage_roles` (org-scoped ทุกเส้น):** `GET /capabilities` · `GET /role-details` · `GET|PATCH|DELETE /roles/{roleId}` · `POST /roles` · ไม่มี endpoint clone
 - **route เขียน role 3 เส้นปิดด้วย flag จน rollout ครบ:** `503 ROLE_WRITES_DISABLED` + `viewer.*.reason = "writes_disabled"` — client ต้องรองรับตั้งแต่วันแรก
-- **`GET /roles` (ship แล้ว) ยังไม่ส่ง `capabilities`** · +optional `nameCustomized` · `viewerCanAssign`/`assignBlockedReason` (ผู้ถือ `manage_members`)
+- **`GET /roles` (ship แล้ว) ยังไม่ส่ง `capabilities`** · +optional `nameCustomized` · `viewerCanAssign`/`assignBlockedReason` (ผู้ถือ `manage_members`) · `inviteTtlHours` (เฉพาะแถว `viewerCanAssign = true` — คำเตือนลิงก์อายุสั้นตัดสินจาก field นี้เท่านั้น, D-039)
 - **กติกาแสดงชื่อ role (AC-1.5):** `nameCustomized ? name : (แปล key ?? name)` · `roleNameCustomized?` ใน 6 schema ที่มี roleKey
 - **verdict ต่อแถว (additive):** `MemberRow.viewerCanManage`/`viewerCanResetPassword` **เฉพาะผู้ดูที่ถือ `manage_members` ∧ `manage_roles`** · `Invitation.viewerCanManage` เฉพาะผู้ถือ `manage_members` · reason ใหม่ `equal_permissions` — §3.1
 - **กรองตาม role:** `GET /members?roleId=` · `GET /invitations?roleId=`
@@ -141,7 +141,7 @@ CapabilityCatalog:            # GET /capabilities
 | `viewerCanResetPassword?` / `resetBlockedReason?` | `decideAdminResetVisible(viewer, row)` | `self` → `owner_only` → `equal_permissions` → `exceeds_your_permissions` |
 
 - **ทำไมจำกัดผู้ดู (AC-6.4 — architecture §1.2):** ผู้ดูที่มีแค่ `manage_members` รู้ `role ⊆ ฉัน` จาก `viewerCanAssign` อยู่แล้ว · ถ้าได้ verdict แกน ⊊ ด้วย ⇒ `⊆ ∧ ¬⊊` = **capabilities ของ role นั้นเท่ากับของฉันทุกตัว** = อ่าน capabilities ผ่านช่องข้าง · ผู้ดูที่ได้ field อ่าน capabilities ของทุก role ได้จาก `/role-details` อยู่แล้ว ⇒ แยก `equal_permissions` ได้โดยไม่รั่ว
-- **ผู้ดูที่มีแค่ `manage_members`:** field absent → client ใช้พฤติกรรม F-002 (แสดงปุ่มกับแถว active ที่ไม่ใช่ Owner/ตัวเอง) · เมื่อได้ `403 TARGET_NOT_BELOW_ACTOR` / 404 ของ reset → copy กลาง ("คุณจัดการสมาชิกคนนี้ไม่ได้ — ให้เจ้าของร้านช่วย") · การลองเขียนจริงเผยบิต "เท่ากัน" ได้โดยธรรมชาติของ D-034 แต่ทิ้ง event ทุกครั้ง (architecture §1.2)
+- **ผู้ดูที่มีแค่ `manage_members`:** field absent → client แสดงปุ่มกับแถว active ที่ไม่ใช่ Owner — **รวมแถวของตัวเอง** (R10 + ยืนยัน R10a, server ตัดสิน — D-040) · เมื่อได้ `403 TARGET_NOT_BELOW_ACTOR` / 404 ของ reset → copy กลาง ("คุณจัดการสมาชิกคนนี้ไม่ได้ — ให้เจ้าของร้านช่วย") · การลองเขียนจริงเผยบิต "เท่ากัน" ได้โดยธรรมชาติของ D-034 แต่ทิ้ง event ทุกครั้ง (architecture §1.2)
 - **แถวของตัวเอง:** `viewerCanManage=true` (แกน target ยกเว้นตัวเอง — ลดตัวเอง/ถอดตัวเองได้ตาม D-029; LAST_OWNER ไม่อยู่ใน verdict) · `viewerCanResetPassword=false, reason=self`
 - **ไม่รวม** `target_active_in_other_org` (C-2) และสถานะ `User` ใน verdict reset (ข้อเท็จจริงข้ามร้าน) ⇒ `true` = "ไม่มีกฎที่คุณมองเห็นขวางอยู่" server ยังอาจตอบ 404
 - `LAST_OWNER` เป็นสถานะของร้าน ไม่ใช่สิทธิ์ ⇒ ไม่อยู่ใน verdict
@@ -162,6 +162,7 @@ CapabilityCatalog:            # GET /capabilities
 | + `nameCustomized?: boolean` | optional | `key === null \|\| Role.nameCustomized` |
 | + `viewerCanAssign?: boolean` | optional | มี **เฉพาะเมื่อผู้เรียกถือ `manage_members`** · `decideMemberAuthority` แกน grant (AC-2.2) |
 | + `assignBlockedReason?: string \| null` | optional, open set | `owner_only` · `exceeds_your_permissions` · ไม่มี reason ที่บอก capability |
+| + `inviteTtlHours?: integer` | optional (D-039) | = `invitationTtlHours(role.capabilities)` — ฟังก์ชันเดียวกับที่ตั้ง `expiresAt` (24 = role ถือ `full_access`/`manage_members`/`manage_roles` · 168 = อื่น ๆ) · **ห้าม derive จาก `key`/ชื่อ** · มี **เฉพาะแถวที่ `viewerCanAssign = true`** (ผู้ดูรู้ค่านี้ได้อยู่แล้วจาก `expiresAt` หลังเชิญ — AC-6.4) · ไม่มี = ไม่เตือน · client ตัดสินคำเตือน "ลิงก์อายุสั้น" จาก field นี้เท่านั้น |
 | description ของ `name` | doc | → "ใช้กติกา: `nameCustomized ? name : แปล key`" · client เก่าแสดงคำแปลแทนชื่อที่ร้านตั้ง (cosmetic) |
 | description ของ `isSystem`, `nextCursor`, `listOrgRoles` | doc | สถานะจริง |
 | `capabilities` | **ไม่เพิ่ม** | AC-6.4 |

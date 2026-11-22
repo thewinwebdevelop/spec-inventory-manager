@@ -462,3 +462,21 @@ Decision: อยู่ใน `packages/core-domain/src/rbac/registry.ts` แล�
 Rationale: ชุดเดียวทั้ง web + mobile (AC-7.1) · key "เร็ว ๆ นี้" เปลี่ยนเป็น live ได้โดยไม่ต้องออก app ใหม่ · locale เดียว (th) ไม่มีต้นทุน sync
 Affects: core-domain registry · `GET /capabilities` · web + mobile (ไม่ hardcode ป้าย) · ux copy-lint · [F-003 api-spec](features/F-003/api-spec.md)
 Status: decided
+
+### D-039 · 2026-11-22 · F-003 (T-003-M09 — คำเตือนลิงก์เชิญอายุสั้น)
+
+Q: จอเชิญบนมือถือเตือน "ลิงก์อายุสั้น" ด้วย `key == 'admin'` ⇒ custom role ที่สิทธิ์สูงไม่มีคำเตือน — contract ไม่มีข้อเท็จจริงจาก server ว่า role ไหนได้ TTL สั้นก่อน submit · ทางเลือก (ก) field บน `RoleRow` (ข) เตือนหลัง submit จาก `expiresAt` (ค) คงไว้
+Asked by: @frontend (QA03 F1) Owner: @user — **มอบให้ lead เลือกตามความเหมาะสม (2026-11-22)**
+Decision: **(ก)** — `RoleRow.inviteTtlHours?: integer` = `invitationTtlHours(role.capabilities)` (ฟังก์ชันเดียวกับที่ server ใช้ตั้ง `expiresAt`) · ส่ง**เฉพาะแถวที่ `viewerCanAssign = true`** (ผู้ดูถือ `manage_members` และเชิญ role นั้นได้อยู่แล้ว) · client ตัดสินคำเตือนจาก field นี้เท่านั้น — ห้ามดู `key`/ชื่อ role · additive (oasdiff เขียว)
+Rationale: คำเตือนมีค่าเฉพาะ**ก่อน**ส่งลิงก์ (ข) มาช้าเกินไป · server เป็นเจ้าของกฎ TTL (golden rule #1 / AC-10.3) client ไม่ควรเดา · จำกัดเฉพาะ role ที่เชิญได้ ⇒ ผู้ดูรู้ค่านี้ได้อยู่แล้วจาก `expiresAt` หลังเชิญ ไม่รั่วข้อมูล capabilities เพิ่ม (AC-6.4)
+Affects: `GET /orgs/{orgId}/roles` (contract + `RolesService.list`) · mobile `invite_member_screen` · G-12 allowlist (ถอดแถว `key == 'admin'`) · [F-003 api-spec §4.1](features/F-003/api-spec.md)
+Status: decided
+
+### D-040 · 2026-11-22 · F-003 (T-003-M11 — แถวของตัวเอง เมื่อผู้ดูไม่มี verdict)
+
+Q: ผู้ดูถือ `manage_members` แต่ไม่ถือ `manage_roles` ⇒ server ไม่ส่ง `viewerCanManage` (โดยตั้งใจ — api-spec §3.1) · แถวของ**ตัวเอง**แตะเปลี่ยนบทบาทได้ไหม: api-spec §3.1 "พฤติกรรม F-002 = ไม่ใช่ Owner/ตัวเอง" vs ux R10 แตะได้
+Asked by: @frontend (review M10) Owner: @user — **มอบให้ lead เลือกตามความเหมาะสม (2026-11-22)**
+Decision: **แตะได้ ตาม ux R10** — แถวตัวเอง (active, ไม่ใช่ Owner) เปิด R10 ได้ + ยืนยัน R10a ก่อนเปลี่ยนตัวเอง · server ตัดสินเหมือนแถวอื่น (D-029 ลด/ถอดตัวเองได้ · `LAST_OWNER` ถ้าเป็นเจ้าของคนสุดท้าย) · แก้ api-spec §3.1 (doc-only, wire ไม่เปลี่ยน)
+Rationale: ตรงกับ verdict ที่ server ส่งเมื่อมีครบ (`viewerCanManage=true` บนแถวตัวเอง) และพฤติกรรมเว็บ W10 ⇒ สองแพลตฟอร์มเหมือนกัน · การล็อกแถวตัวเองบนมือถืออย่างเดียวคือ client ตัดสินเกิน server
+Affects: mobile members screen (M11) · [F-003 api-spec §3.1](features/F-003/api-spec.md)
+Status: decided
