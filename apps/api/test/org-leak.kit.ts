@@ -313,6 +313,14 @@ export interface SweepRequest {
   readonly body?: unknown;
   /** Targets to fire at. Default: A, B and a non-existent org. */
   readonly targets?: readonly TargetOrg[];
+  /**
+   * T-003-QA08 (I3-52) — values for the OTHER path parameters, per target
+   * (`{ A: { roleId: "<a role of A>" }, B: { roleId: "<a role of B>" } }`), so a
+   * route like `/orgs/{orgId}/roles/{roleId}` is swept with a row that really
+   * exists in the org it addresses. A parameter left unfilled throws — a sweep
+   * that sent the literal `{roleId}` would "pass" on a 404 nobody meant.
+   */
+  readonly params?: Partial<Record<TargetOrg, Readonly<Record<string, string>>>>;
 }
 
 export interface OrgLeakKit {
@@ -460,7 +468,16 @@ export async function createOrgLeakKit(
 
     for (const target of targets) {
       const orgId = orgIdFor(target);
-      const path = req.path.replace("{orgId}", encodeURIComponent(orgId));
+      const values = req.params?.[target] ?? {};
+      const path = req.path
+        .replace("{orgId}", encodeURIComponent(orgId))
+        .replace(/\{(\w+)\}/g, (_m, name: string) => {
+          const value = values[name];
+          if (value === undefined) {
+            throw new Error(`sweep ${req.path}: no value for {${name}} on target ${target}`);
+          }
+          return encodeURIComponent(value);
+        });
       for (const p of personas) {
         // `activeInBoth` calling B is a legitimate success, not a sweep subject:
         // the sweep asks "may THIS caller reach THIS org", and it must, so it

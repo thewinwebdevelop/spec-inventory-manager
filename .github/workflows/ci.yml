@@ -636,6 +636,11 @@ jobs:
           # event rule (36 — incl. the D-035 role-edit leg and SR-06 over 4 reference
           # writers, security review B26 fix round 1) live only in these two files.
           # 357 = 290 + 31 + 36; the full local run is 457.
+          #
+          # ★ T-003-QA08: the cross-route sweeps — I3-52 (leak kit over every
+          # manage_roles route enumerated from ROUTE_CAPABILITIES + the roleId axis),
+          # the I3-57 write control and I3-50 (no email / person key in any event
+          # payload) live only in this file (5). 362 = 357 + 5; full local run 462.
           node tool/ci/assert-tests-ran.mjs \
             --report /tmp/api-int-tests.json \
             --lane "integration-api · apps/api *.int.test.ts" \
@@ -659,7 +664,8 @@ jobs:
             --require "test/f003-role-delete.e2e.int.test.ts=14" \
             --require "test/f003-role-writes.int.test.ts=31" \
             --require "test/f003-concurrency.int.test.ts=36" \
-            --min-passed 357
+            --require "test/f003-sweeps.int.test.ts=5" \
+            --min-passed 362
       - name: dump api log on failure
         if: failure()
         run: cat /tmp/api.log || true
