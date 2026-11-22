@@ -8,6 +8,7 @@ import 'package:mobile/core/error/api_failure.dart';
 import 'package:mobile/core/session/session_controller.dart';
 import 'package:mobile/core/session/session_state.dart';
 import 'package:mobile/features/org/application/org_providers.dart';
+import 'package:mobile/features/org/application/role_delete_error.dart';
 import 'package:mobile/features/org/application/role_write_controller.dart';
 import 'package:mobile/features/org/application/role_write_error.dart';
 import 'package:mobile/features/org/domain/entities/org_entities.dart';
@@ -24,6 +25,7 @@ RoleDetailView _role(String id, {int version = 1, List<String> caps = const ['ma
       roleKey: null,
       nameCustomized: true,
       isSystem: false,
+      grantsOwnership: false,
       capabilities: caps,
       usage: const RoleUsage(activeMembers: 0, pendingInvitations: 0),
       lastEdited: null,
@@ -145,5 +147,71 @@ void main() {
     gate.complete();
     expect(await first, isA<RoleWriteSaved>());
     expect(scoped.createdBodies, hasLength(1));
+  });
+
+  group('delete (T-003-M08 · R5)', () {
+    test('★ success: ONE DELETE, R1 underneath is re-read', () async {
+      final scoped = FakeOrgScoped(deleteRoleAnswers: [roleDeleted]);
+      final container = _container(scoped);
+      final list = container.listen(roleDetailsProvider, (_, __) {});
+      addTearDown(list.close);
+      await container.read(roleDetailsProvider.future);
+      expect(scoped.roleDetailsCalls, 1);
+
+      final result = await container.read(roleWriteControllerProvider.notifier).delete('rol_1');
+
+      expect(result, isA<RoleDeleteDone>());
+      expect(scoped.deletedRoleIds, ['rol_1']);
+      await container.read(roleDetailsProvider.future);
+      expect(scoped.roleDetailsCalls, 2, reason: 'R1 must not show the deleted row');
+      expect(container.read(roleWriteControllerProvider), isFalse);
+    });
+
+    test('a second press while the DELETE is in flight is ignored (exactly one DELETE)', () async {
+      final gate = Completer<void>();
+      final scoped = FakeOrgScoped(deleteRoleAnswers: [roleDeleted])..writeGate = gate;
+      final container = _container(scoped);
+      final notifier = container.read(roleWriteControllerProvider.notifier);
+
+      final first = notifier.delete('rol_1');
+      expect(container.read(roleWriteControllerProvider), isTrue);
+      expect(await notifier.delete('rol_1'), isNull);
+
+      gate.complete();
+      expect(await first, isA<RoleDeleteDone>());
+      expect(scoped.deletedRoleIds, hasLength(1));
+    });
+
+    test('409 ROLE_IN_USE → failed(in-use, server numbers), R1 re-read, never retried', () async {
+      final scoped = FakeOrgScoped(deleteRoleAnswers: [
+        const ConflictFailure(code: 'ROLE_IN_USE', details: {'activeMembers': 1, 'pendingInvitations': 2}),
+      ]);
+      final container = _container(scoped);
+      final list = container.listen(roleDetailsProvider, (_, __) {});
+      addTearDown(list.close);
+      await container.read(roleDetailsProvider.future);
+
+      final result = await container.read(roleWriteControllerProvider.notifier).delete('rol_1');
+
+      final error = (result as RoleDeleteFailed).error as RoleDeleteInUse;
+      expect(error.usage!.pendingInvitations, 2);
+      await container.read(roleDetailsProvider.future);
+      expect(scoped.roleDetailsCalls, 2);
+      expect(scoped.deletedRoleIds, hasLength(1));
+    });
+
+    test('404 → failed(gone), and R1 is re-read so the row disappears there too', () async {
+      final scoped = FakeOrgScoped(deleteRoleAnswers: [const NotFoundFailure()]);
+      final container = _container(scoped);
+      final list = container.listen(roleDetailsProvider, (_, __) {});
+      addTearDown(list.close);
+      await container.read(roleDetailsProvider.future);
+
+      final result = await container.read(roleWriteControllerProvider.notifier).delete('rol_1');
+
+      expect((result as RoleDeleteFailed).error, isA<RoleDeleteGone>());
+      await container.read(roleDetailsProvider.future);
+      expect(scoped.roleDetailsCalls, 2);
+    });
   });
 }

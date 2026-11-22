@@ -49,6 +49,7 @@ class RoleDetailView {
     required this.roleKey,
     required this.nameCustomized,
     required this.isSystem,
+    required this.grantsOwnership,
     required this.capabilities,
     required this.usage,
     required this.lastEdited,
@@ -65,6 +66,10 @@ class RoleDetailView {
   final String? roleKey;
   final bool nameCustomized;
   final bool isSystem;
+
+  /// T-003-M08 — derived by the SERVER from `capabilities` (`full_access`),
+  /// never from [roleKey]. R4 reads it to show the single full-access card.
+  final bool grantsOwnership;
   final List<String> capabilities;
   final RoleUsage usage;
   final RoleLastEditedInfo? lastEdited;

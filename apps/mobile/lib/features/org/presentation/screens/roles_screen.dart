@@ -280,7 +280,7 @@ class _RoleRow extends StatelessWidget {
                     crossAxisAlignment: WrapCrossAlignment.center,
                     children: [
                       Text(roleRowName(t, role), style: AppTypography.bodyMd),
-                      if (badge != null) _Badge(label: badge),
+                      if (badge != null) RoleBadgeChip(label: badge),
                     ],
                   ),
                   Text(roleRowUsageLine(t, role, isMine: isMine), style: muted),
@@ -300,28 +300,6 @@ class _RoleRow extends StatelessWidget {
     );
 
     return onTap == null ? content : InkWell(onTap: onTap, child: content);
-  }
-}
-
-/// Neutral, text always (never colour alone).
-class _Badge extends StatelessWidget {
-  const _Badge({required this.label});
-
-  final String label;
-
-  @override
-  Widget build(BuildContext context) {
-    final colors = context.appColors;
-    return DecoratedBox(
-      decoration: BoxDecoration(
-        color: colors.surfaceMuted,
-        borderRadius: BorderRadius.circular(AppRadius.badge),
-      ),
-      child: Padding(
-        padding: const EdgeInsets.symmetric(horizontal: AppSpacing.s2, vertical: 2),
-        child: Text(label, style: AppTypography.labelSm.copyWith(color: colors.text)),
-      ),
-    );
   }
 }
 

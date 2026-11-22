@@ -69,9 +69,11 @@ class FakeOrgScoped implements OrgScoped {
     List<Object>? roleDetailAnswers,
     List<Object>? createRoleAnswers,
     List<Object>? updateRoleAnswers,
+    List<Object>? deleteRoleAnswers,
   })  : roleDetailAnswers = roleDetailAnswers ?? <Object>[],
         createRoleAnswers = createRoleAnswers ?? <Object>[],
-        updateRoleAnswers = updateRoleAnswers ?? <Object>[];
+        updateRoleAnswers = updateRoleAnswers ?? <Object>[],
+        deleteRoleAnswers = deleteRoleAnswers ?? <Object>[];
 
   /// One entry per call — so a test can make page 2 fail after page 1 worked.
   final List<PagedResult<MemberRow>> memberPages;
@@ -117,6 +119,11 @@ class FakeOrgScoped implements OrgScoped {
   final List<String> roleDetailIdsSeen = <String>[];
   final List<({String name, List<String> capabilities})> createdBodies = [];
   final List<({String roleId, RoleUpdate body})> updates = [];
+
+  /// T-003-M08 R5 — one answer per DELETE: [roleDeleted] or the `ApiFailure`
+  /// to throw (the LAST one repeats). Every DELETE is recorded.
+  final List<Object> deleteRoleAnswers;
+  final List<String> deletedRoleIds = <String>[];
 
   /// Held open until the test completes it — for the "submitting" state.
   Completer<void>? writeGate;
@@ -222,6 +229,16 @@ class FakeOrgScoped implements OrgScoped {
   }
 
   @override
+  Future<void> deleteRole(String roleId) async {
+    final call = deletedRoleIds.length;
+    deletedRoleIds.add(roleId);
+    if (writeGate != null) await writeGate!.future;
+    await Future<void>.delayed(delay);
+    final answer = _answer(deleteRoleAnswers, call);
+    if (answer is ApiFailure) throw answer;
+  }
+
+  @override
   Future<IssuedInvite> createInvitation({required String email, required String roleId}) async {
     invitedRoleIds.add(roleId);
     await Future<void>.delayed(delay);
@@ -261,6 +278,9 @@ class FakeOrgScoped implements OrgScoped {
   }
 
 }
+
+/// A scripted successful DELETE (see [FakeOrgScoped.deleteRoleAnswers]).
+const Object roleDeleted = 'deleted';
 
 const threeRoles = [
   // ★ B-9 — `grantsOwnership` is what the screens read; `key` is translation

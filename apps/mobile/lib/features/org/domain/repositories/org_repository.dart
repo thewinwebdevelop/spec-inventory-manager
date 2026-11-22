@@ -70,6 +70,12 @@ abstract interface class OrgScoped {
   /// ⛔ A `409 ROLE_CHANGED` is surfaced, never retried here (SR-14).
   Future<RoleDetailView> updateRole(String roleId, RoleUpdate body);
 
+  /// `DELETE /orgs/{orgId}/roles/{roleId}` (F-003 R5) — soft delete, no body,
+  /// no `version`. A refusal (`409 ROLE_IN_USE` with `details` counts,
+  /// `ROLE_HISTORY_LIMIT_REACHED`, 404, …) arrives as an `ApiFailure`; nothing
+  /// is retried here.
+  Future<void> deleteRole(String roleId);
+
   /// `GET /orgs/{orgId}` — the shop's profile, for the tax card (§3.4).
   Future<OrgProfileView> getOrganization();
 

@@ -10,11 +10,21 @@ import '../../../../core/theme/app_theme.dart';
 /// ux §0.3 reason banner — neutral (`surfaceMuted`), text always, never colour
 /// alone. [icon] defaults to `icon.info`; the R4-style reasons use `icon.lock`.
 class RoleInfoBanner extends StatelessWidget {
-  const RoleInfoBanner({super.key, this.title, required this.body, this.icon = Icons.info_outline});
+  const RoleInfoBanner({
+    super.key,
+    this.title,
+    required this.body,
+    this.icon = Icons.info_outline,
+    this.children = const [],
+  });
 
   final String? title;
   final String body;
   final IconData icon;
+
+  /// Under the text — R4's single in-banner action (clone, ui.md §1 "มีได้
+  /// 1 ปุ่ม") and its reason line when disabled.
+  final List<Widget> children;
 
   @override
   Widget build(BuildContext context) {
@@ -41,11 +51,35 @@ class RoleInfoBanner extends StatelessWidget {
                   if (title != null)
                     Text(title!, style: AppTypography.bodySm.copyWith(fontWeight: FontWeight.w700)),
                   Text(body, style: AppTypography.bodySm),
+                  ...children,
                 ],
               ),
             ),
           ],
         ),
+      ),
+    );
+  }
+}
+
+/// Neutral pill badge, text always (never colour alone) — R1's row badge and
+/// R4's "ล็อก" next to the Owner role's name.
+class RoleBadgeChip extends StatelessWidget {
+  const RoleBadgeChip({super.key, required this.label});
+
+  final String label;
+
+  @override
+  Widget build(BuildContext context) {
+    final colors = context.appColors;
+    return DecoratedBox(
+      decoration: BoxDecoration(
+        color: colors.surfaceMuted,
+        borderRadius: BorderRadius.circular(AppRadius.badge),
+      ),
+      child: Padding(
+        padding: const EdgeInsets.symmetric(horizontal: AppSpacing.s2, vertical: 2),
+        child: Text(label, style: AppTypography.labelSm.copyWith(color: colors.text)),
       ),
     );
   }

@@ -50,6 +50,7 @@ RoleDetailView _role(
       roleKey: key,
       nameCustomized: customized,
       isSystem: isSystem,
+      grantsOwnership: isSystem,
       capabilities: caps,
       usage: RoleUsage(activeMembers: members, pendingInvitations: pending),
       lastEdited: lastEdited,

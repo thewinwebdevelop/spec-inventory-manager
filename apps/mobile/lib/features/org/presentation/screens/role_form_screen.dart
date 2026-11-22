@@ -22,8 +22,11 @@ import '../../domain/role_form_model.dart';
 import '../copy/role_display_copy.dart';
 import '../copy/role_list_copy.dart';
 import '../copy/role_viewer_reason_copy.dart';
+import '../copy/role_write_error_copy.dart';
 import '../widgets/capability_checklist.dart';
 import '../widgets/role_change_parts.dart';
+import '../widgets/role_delete_action.dart';
+import '../widgets/role_read_only_view.dart';
 import '../widgets/role_screen_parts.dart';
 
 /// R3 create / clone. [fromRoleId] = clone (POST, pre-filled — there is no
@@ -35,7 +38,7 @@ Future<void> openRoleCreateScreen(BuildContext context, {String? fromRoleId, boo
   return replace ? nav.pushReplacement(route) : nav.push(route);
 }
 
-/// R3 edit (or, when the server's `canEdit` says no, the read-only state).
+/// R3 edit (or, when the server's `canEdit` says no, R4 — read-only).
 Future<void> openRoleEditScreen(BuildContext context, String roleId) => Navigator.of(context).push(
       MaterialPageRoute<void>(builder: (_) => RoleFormScreen.edit(roleId: roleId)),
     );
@@ -65,8 +68,10 @@ Future<void> openRoleEditScreen(BuildContext context, String roleId) => Navigato
 ///    pre-edit); if R3a confirmed losing `manage_roles` → toast + back to the
 ///    shop root (ข้อมูลร้าน) (ux R3).
 ///
-/// Seams left for later tasks: M08 R4 / R5: [_ReadOnlyState] (full read list
-/// + clone/delete) and the delete button in "การจัดการอื่น".
+/// M08:
+///  - R4: `canEdit` refused (any reason) → [_ReadOnlyState] / `RoleReadOnlyView`
+///    — the capability read list, one reason banner, clone/delete per §0.3 (ก).
+///  - R5: "ลบบทบาทนี้" in "การจัดการอื่น" on R3 and R4 (`RoleDeleteAction`).
 class RoleFormScreen extends ConsumerWidget {
   const RoleFormScreen.create({super.key, this.fromRoleId}) : roleId = null;
   const RoleFormScreen.edit({super.key, required String this.roleId}) : fromRoleId = null;
@@ -434,7 +439,16 @@ class _EditBodyState extends ConsumerState<_EditBody> {
     // re-read the role (TARGET_NOT_BELOW_ACTOR, ROLE_HELD_…, ROLE_LOCKED,
     // ROLE_WRITES_DISABLED) lands here.
     if (!base.canEdit.allowed) {
-      return _ReadOnlyState(role: base, header: header, conflictBanner: conflictBanner());
+      return _ReadOnlyState(
+        role: base,
+        catalog: catalogData,
+        isMine: isMine,
+        header: header,
+        conflictBanner: conflictBanner(),
+        onRetryCatalog: () => ref.invalidate(capabilityCatalogProvider),
+        onRefetchRole: _reread,
+        onForbidden: () => setState(() => _outcome = _WriteOutcome.forbidden),
+      );
     }
 
     final cat = catalogData ?? _emptyCatalog;
@@ -502,11 +516,21 @@ class _EditBodyState extends ConsumerState<_EditBody> {
           isMine: isMine,
         );
       },
-      otherActions: canClone.allowed || cloneBlocked != null
+      otherActions: canClone.allowed || cloneBlocked != null || RoleDeleteAction.isShown(base)
           ? (dirty) => _OtherActions(
+                showClone: canClone.allowed || cloneBlocked != null,
                 onClone: canClone.allowed ? () => openRoleCreateScreen(context, fromRoleId: base.id) : null,
                 cloneBlockedNote: cloneBlocked,
                 showUnsavedNote: canClone.allowed && dirty,
+                delete: RoleDeleteAction.isShown(base)
+                    ? RoleDeleteAction(
+                        role: base,
+                        displayName: initialName,
+                        isMine: isMine,
+                        onRefetchRole: _reread,
+                        onForbidden: () => setState(() => _outcome = _WriteOutcome.forbidden),
+                      )
+                    : null,
               )
           : null,
       submit: (name, caps) {
@@ -555,46 +579,76 @@ class _EditBodyState extends ConsumerState<_EditBody> {
   }
 }
 
-/// The interim read-only state (M06): header + the server's reason, no form.
-/// M08 replaces the body with the full R4 (capability read list, clone and
-/// delete per §0.3 (ก) ordering).
+/// R4 (M08): the read view in its frame — the AppBar carries the name and,
+/// for the Owner role, the "ล็อก" badge (no bottom bar: nothing to submit).
 class _ReadOnlyState extends StatelessWidget {
-  const _ReadOnlyState({required this.role, required this.header, required this.conflictBanner});
+  const _ReadOnlyState({
+    required this.role,
+    required this.catalog,
+    required this.isMine,
+    required this.header,
+    required this.conflictBanner,
+    required this.onRetryCatalog,
+    required this.onRefetchRole,
+    required this.onForbidden,
+  });
 
   final RoleDetailView role;
+  final CapabilityCatalogView? catalog;
+  final bool isMine;
   final List<Widget> header;
   final Widget? conflictBanner;
+  final VoidCallback onRetryCatalog;
+  final VoidCallback onRefetchRole;
+  final VoidCallback onForbidden;
 
   @override
   Widget build(BuildContext context) {
     final t = AppLocalizations.of(context);
-    final reason = role.canEdit.reason ?? '';
-    final banner = roleEditOrDeleteReasonBanner(t, reason);
-    return _FrameScaffold(
-      title: roleRowName(t, role),
-      child: ListView(
-        padding: const EdgeInsets.all(AppSpacing.screenPadding),
-        children: [
-          if (conflictBanner != null) ...[conflictBanner!, const SizedBox(height: AppSpacing.s3)],
-          ...header,
-          const SizedBox(height: AppSpacing.s4),
-          RoleInfoBanner(
-            title: banner.title,
-            body: banner.body,
-            icon: reason == 'writes_disabled' ? Icons.info_outline : Icons.lock_outline,
-          ),
-        ],
+    return Scaffold(
+      appBar: AppBar(
+        title: Wrap(
+          spacing: AppSpacing.s2,
+          crossAxisAlignment: WrapCrossAlignment.center,
+          children: [
+            Text(roleRowName(t, role)),
+            if (role.isSystem) RoleBadgeChip(label: t.rolesListBadgeLocked),
+          ],
+        ),
+      ),
+      body: SafeArea(
+        child: RoleReadOnlyView(
+          role: role,
+          catalog: catalog,
+          isMine: isMine,
+          header: header,
+          conflictBanner: conflictBanner,
+          onRetryCatalog: onRetryCatalog,
+          onClone: () => openRoleCreateScreen(context, fromRoleId: role.id),
+          onRefetchRole: onRefetchRole,
+          onForbidden: onForbidden,
+        ),
       ),
     );
   }
 }
 
 class _OtherActions extends StatelessWidget {
-  const _OtherActions({required this.onClone, required this.cloneBlockedNote, required this.showUnsavedNote});
+  const _OtherActions({
+    required this.showClone,
+    required this.onClone,
+    required this.cloneBlockedNote,
+    required this.showUnsavedNote,
+    required this.delete,
+  });
 
+  final bool showClone;
   final VoidCallback? onClone;
   final String? cloneBlockedNote;
   final bool showUnsavedNote;
+
+  /// R5 (M08) — present when the server's verdicts say it shows at all.
+  final Widget? delete;
 
   @override
   Widget build(BuildContext context) {
@@ -605,15 +659,20 @@ class _OtherActions extends StatelessWidget {
       children: [
         Text(t.roleFormOtherActionsHeader, style: AppTypography.headingSm),
         const SizedBox(height: AppSpacing.s2),
-        OutlinedButton(
-          key: const ValueKey('role-form-clone'),
-          style: OutlinedButton.styleFrom(minimumSize: const Size(0, AppSizes.tapTargetMin)),
-          onPressed: onClone,
-          child: Text(t.roleFormCloneCta),
-        ),
-        if (cloneBlockedNote != null) Text(cloneBlockedNote!, style: muted),
-        if (showUnsavedNote) Text(t.roleFormCloneUnsavedNote, style: muted),
-        // M08 (R5): "ลบบทบาทนี้" goes here, by `canDelete`.
+        if (showClone) ...[
+          OutlinedButton(
+            key: const ValueKey('role-form-clone'),
+            style: OutlinedButton.styleFrom(minimumSize: const Size(0, AppSizes.tapTargetMin)),
+            onPressed: onClone,
+            child: Text(t.roleFormCloneCta),
+          ),
+          if (cloneBlockedNote != null) Text(cloneBlockedNote!, style: muted),
+          if (showUnsavedNote) Text(t.roleFormCloneUnsavedNote, style: muted),
+        ],
+        if (delete != null) ...[
+          if (showClone) const SizedBox(height: AppSpacing.s3),
+          delete!,
+        ],
       ],
     );
   }
@@ -855,19 +914,8 @@ class _RoleFormState extends ConsumerState<_RoleForm> {
     }
   }
 
-  String _bannerCopy(AppLocalizations t, RoleBannerError e) => switch (e.problem) {
-        RoleBannerProblem.unknownCapability => t.roleFormErrorUnknownCapability,
-        RoleBannerProblem.fullAccessReserved => t.roleFormErrorFullAccessReserved,
-        RoleBannerProblem.roleLimitReached =>
-          e.limit != null ? t.roleLimitReachedWithLimitBody(e.limit!) : t.roleLimitReachedUnknownLimitBody,
-        RoleBannerProblem.roleLocked => t.roleReasonRoleLockedBody,
-        RoleBannerProblem.exceedsActor => t.roleFormErrorExceedsActor,
-        RoleBannerProblem.targetNotBelowActor => t.roleReasonEqualPermissionsInUseBody,
-        RoleBannerProblem.heldRequiresManageMembers => t.roleReasonInUseRequiresManageMembersBody,
-        RoleBannerProblem.writesDisabled => t.roleReasonWritesDisabledBody,
-        RoleBannerProblem.busy => t.roleFormErrorBusy,
-        RoleBannerProblem.generic => t.roleFormErrorGeneric,
-      };
+  String _bannerCopy(AppLocalizations t, RoleBannerError e) =>
+      roleBannerProblemCopy(t, e.problem, limit: e.limit);
 
   Future<void> _confirmLeave() async {
     final t = AppLocalizations.of(context);

@@ -704,6 +704,11 @@
   "@roleDeleteSuccessToast": {
     "placeholders": { "name": { "type": "String" } }
   },
+  "roleDeleteInUseInvitationsCount": "คำเชิญที่ยังไม่ปิด {m} ใบ",
+  "@roleDeleteInUseInvitationsCount": {
+    "description": "ux R5 (ข) count line — the §0.2 'คำเชิญค้าง' text WITHOUT the leading ' · ' (rolePendingInvitationsSuffix), for when it stands alone or is joined after the members part; zero parts are dropped. Same text as web roleDeleteTh.inUse.invitations.",
+    "placeholders": { "m": { "type": "int" } }
+  },
   "roleDeleteInUseSelfNote": "คนที่ใช้บทบาทนี้คือคุณเอง — ให้เจ้าของร้านย้ายคุณไปบทบาทอื่นก่อน",
   "roleDeleteViewMembersCta": "ดูสมาชิกที่ใช้บทบาทนี้ ({count})",
   "@roleDeleteViewMembersCta": {

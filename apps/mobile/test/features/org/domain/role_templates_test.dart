@@ -17,6 +17,7 @@ RoleDetailView role(
       roleKey: null,
       nameCustomized: true,
       isSystem: isSystem,
+      grantsOwnership: isSystem,
       capabilities: caps,
       usage: const RoleUsage(activeMembers: 0, pendingInvitations: 0),
       lastEdited: null,

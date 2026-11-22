@@ -74,6 +74,7 @@ RoleDetailView _role(
       roleKey: key,
       nameCustomized: customized,
       isSystem: key == 'owner',
+      grantsOwnership: caps.contains('full_access'),
       capabilities: caps,
       usage: RoleUsage(activeMembers: members, pendingInvitations: invites),
       lastEdited: lastEdited,

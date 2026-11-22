@@ -232,6 +232,7 @@ class OrgScopedImpl implements OrgScoped {
         roleKey: r.key,
         nameCustomized: r.nameCustomized,
         isSystem: r.isSystem,
+        grantsOwnership: r.grantsOwnership,
         capabilities: r.capabilities.toList(growable: false),
         usage: RoleUsage(
           activeMembers: r.usage.activeMembers,
@@ -317,6 +318,17 @@ class OrgScopedImpl implements OrgScoped {
       final saved = res.data;
       if (saved == null) throw const ServerFailure();
       return _roleDetail(saved);
+    } on DioException catch (e) {
+      throw _asFailure(e);
+    }
+  }
+
+  @override
+  Future<void> deleteRole(String roleId) async {
+    try {
+      // `DeletedRole` (id, deletedAt) carries nothing R5 shows — success is
+      // "it is gone"; the caller re-reads R1.
+      await _roles.deleteOrgRole(orgId: _orgId, roleId: roleId);
     } on DioException catch (e) {
       throw _asFailure(e);
     }

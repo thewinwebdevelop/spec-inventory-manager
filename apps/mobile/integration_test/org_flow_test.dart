@@ -4,6 +4,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:integration_test/integration_test.dart';
 import 'package:mobile/app/bootstrap.dart';
+import 'package:mobile/core/api/api_providers.dart';
 import 'package:mobile/core/l10n/l10n.dart';
 import 'package:mobile/core/session/session_controller.dart';
 import 'package:mobile/core/session/session_state.dart';
@@ -16,6 +17,7 @@ import 'package:mobile/features/org/domain/entities/role_entities.dart';
 import 'package:mobile/features/org/presentation/screens/create_org_screen.dart';
 import 'package:mobile/features/org/presentation/screens/members_screen.dart';
 import 'package:mobile/features/org/presentation/screens/org_profile_screen.dart';
+import 'package:mobile/features/org/presentation/screens/roles_screen.dart';
 
 /// E-10 (test-plan §12.1) — the mobile half, on a real device against a real
 /// API and a real Postgres.
@@ -104,11 +106,20 @@ void main() {
   /// the session where the router would have.
   ///
   /// ⚠️ BUDGET. F-001 throttles pre-auth requests per IP — `IP_WINDOW_MAX = 20`
-  /// per five minutes — and every signup and every login spends one. This file
-  /// spends ten (four accounts, two extra API logins), so it fits with room to
-  /// spare and needs no counter reset. A fifth account, or a retry loop around
-  /// one of these, puts it near the wall; the web lane had to add a Redis reset
-  /// for exactly that reason, and that reset is a bypass of a real control
+  /// per five minutes, a FIXED window from the first request — and every
+  /// signup and every login spends one (`/auth/refresh` too). The whole file
+  /// runs in well under a minute, so every case shares ONE window.
+  ///
+  /// Writes-on (CI) spend, T-003-M08: E-10 2 · list 2 · tax 2 · removal 5 ·
+  /// M06/M07 R3 2 · M07 self-edit 4 · M08 R4/R5 2 = 19 of 20. To get there
+  /// M08 stopped three raw `/auth/login`s whose token the app already held:
+  /// a call the person's own session makes goes through THAT container's
+  /// authenticated Dio ([asMe]). The one raw login left (removal) is there
+  /// because "another session" is what that case is about.
+  ///
+  /// A new account is 2 more; past 20 the next signup is a 429 and the case
+  /// fails at its first line. The web lane had to add a Redis reset for
+  /// exactly that reason, and that reset is a bypass of a real control
   /// rather than something to reach for casually.
   Future<void> signUpAndSignIn(ProviderContainer container, String email) async {
     final auth = container.read(authRepositoryProvider);
@@ -116,6 +127,14 @@ void main() {
     await auth.login(email: email, password: password);
     container.read(sessionControllerProvider.notifier).signedIn(orgs: const []);
   }
+
+  /// What the generated client marks an authenticated call with — the auth
+  /// interceptor attaches the container's in-memory access token to it.
+  final asMe = Options(extra: <String, dynamic>{
+    'secure': [
+      {'type': 'http', 'scheme': 'bearer', 'name': 'bearerAuth'},
+    ],
+  });
 
   testWidgets('E-10 · creates a shop on a real API and lands inside it', (tester) async {
     final container = bootApp();
@@ -187,7 +206,6 @@ void main() {
     // thumbnail, and whether thirteen digits are readable and copyable in
     // somebody's hand.
     const validTaxId = '0105560123454'; // mod-11 checksum, weights 13…2
-    final api = Dio(BaseOptions(baseUrl: baseUrl, validateStatus: (_) => true));
 
     final container = bootApp();
     final email = freshEmail('m-tax');
@@ -219,24 +237,16 @@ void main() {
     // Mobile has no tax form (§13 item 3, and M-07's screen is read-only), so
     // the declaration goes the way it goes in real life: somebody does it on
     // the web. Saying so beats pretending the phone can.
-    final auth = await api.post<Map<String, dynamic>>(
-      '/auth/login',
-      data: {'email': email, 'password': password, 'tokenTransport': 'body'},
-    );
-    expect(auth.statusCode, 200, reason: 'the API refused the login: ${auth.data}');
-    final headers = {
-      'Authorization': 'Bearer ${(auth.data!['accessToken'] as String)}',
-      'X-Organization-Id': org.id,
-    };
-
-    final declared = await api.put<Map<String, dynamic>>(
+    // The owner's own session (no second login — see the BUDGET note), the
+    // way the web form would send it: org-scoped, bearer, raw body.
+    final declared = await container.read(orgDioProvider).put<Map<String, dynamic>>(
       '/orgs/${org.id}/tax-profile',
       data: {
         'entityType': 'personal', // the case where the TIN IS a national ID
         'taxId': validTaxId,
         'vatRegistered': false,
       },
-      options: Options(headers: headers),
+      options: asMe.copyWith(validateStatus: (_) => true),
     );
     expect(declared.statusCode, 200, reason: 'declaring the profile failed: ${declared.data}');
     // ★ Even the WRITE does not echo it back (contract §3.3).
@@ -319,11 +329,11 @@ void main() {
     final staffContainer = bootApp();
     await signUpAndSignIn(staffContainer, staffEmail);
 
-    final staffToken = await apiLogin(staffEmail);
-    final accepted = await api.post<Map<String, dynamic>>(
+    // Their own session accepts (user-scoped: the base Dio, no org header).
+    final accepted = await staffContainer.read(baseDioProvider).post<Map<String, dynamic>>(
       '/invitations/accept',
       data: {'token': Uri.parse(issued.inviteUrl).queryParameters['token']},
-      options: Options(headers: {'Authorization': 'Bearer $staffToken'}),
+      options: asMe.copyWith(validateStatus: (_) => true),
     );
     expect(accepted.statusCode, 200, reason: 'accept failed: ${accepted.data}');
 
@@ -612,9 +622,9 @@ void main() {
     'lose manage_roles → warning → ข้อมูลร้าน + toast, entry gone',
     skip: !roleWritesOn,
     (tester) async {
-      // Budget: owner (signup + login) + admin (signup + login + one raw login
-      // for the accept, which mobile has no screen for — see E-10 removal) =
-      // 5 pre-auth requests.
+      // Budget: owner (signup + login) + admin (signup + login) = 4 pre-auth
+      // requests; the accept (no mobile screen — see E-10 removal) goes
+      // through the admin's own session.
       shortPhone(tester);
       final (ownerContainer, orgId) = await ownerInFreshShop('m-r3a-owner');
       final ownerRepo = ownerContainer.read(orgScopedRepositoryProvider);
@@ -624,16 +634,10 @@ void main() {
       final issued = await ownerRepo.createInvitation(email: adminEmail, roleId: adminRole.id);
       final adminContainer = bootApp();
       await signUpAndSignIn(adminContainer, adminEmail);
-      final api = Dio(BaseOptions(baseUrl: baseUrl, validateStatus: (_) => true));
-      final login = await api.post<Map<String, dynamic>>(
-        '/auth/login',
-        data: {'email': adminEmail, 'password': password, 'tokenTransport': 'body'},
-      );
-      expect(login.statusCode, 200, reason: 'the API refused a login: ${login.data}');
-      final accepted = await api.post<Map<String, dynamic>>(
+      final accepted = await adminContainer.read(baseDioProvider).post<Map<String, dynamic>>(
         '/invitations/accept',
         data: {'token': Uri.parse(issued.inviteUrl).queryParameters['token']},
-        options: Options(headers: {'Authorization': 'Bearer ${login.data!['accessToken']}'}),
+        options: asMe.copyWith(validateStatus: (_) => true),
       );
       expect(accepted.statusCode, 200, reason: 'accept failed: ${accepted.data}');
       adminContainer.read(sessionControllerProvider.notifier).switchOrg(
@@ -707,6 +711,149 @@ void main() {
       final afterRoles = await ownerRepo.getRoleDetail(adminRole.id);
       expect(afterRoles.capabilities, isNot(contains('manage_roles')));
       expect(afterRoles.version, mine.version + 2);
+    },
+  );
+
+  // ── T-003-M08 · R4 read-only + R5 delete on the real API ─────────────────
+  final deleteButton = find.byKey(const ValueKey('role-delete-button'));
+  final deleteDialog = find.byKey(const ValueKey('role-delete-dialog'));
+  final inUseDialog = find.byKey(const ValueKey('role-delete-in-use-dialog'));
+  final inUsePanel = find.byKey(const ValueKey('role-in-use-panel'));
+  Finder within(Finder parent, String text) => find.descendant(of: parent, matching: find.text(text));
+
+  Future<void> pumpUntilGone(WidgetTester tester, Finder f) async {
+    final deadline = DateTime.now().add(const Duration(seconds: 20));
+    while (f.evaluate().isNotEmpty && DateTime.now().isBefore(deadline)) {
+      await tester.pump(const Duration(milliseconds: 100));
+    }
+    expect(f, findsNothing);
+  }
+
+  /// R1 row → R3/R4, waiting for [ready] (R4 has no name field).
+  Future<void> openRow(WidgetTester tester, String roleId, Finder ready) async {
+    await tester.tap(await reveal(tester, find.byKey(ValueKey('role-row-$roleId'))));
+    await pumpUntil(tester, ready);
+  }
+
+  /// The AppBar ← of the top route. A pop/push transition still running
+  /// shows TWO (the route leaving and the one under it), and the screen under
+  /// it is already findable then — so wait for the transition to end first.
+  Future<void> back(WidgetTester tester) async {
+    final buttons = find.byType(BackButton);
+    final deadline = DateTime.now().add(const Duration(seconds: 10));
+    while (buttons.evaluate().length > 1 && DateTime.now().isBefore(deadline)) {
+      await tester.pump(const Duration(milliseconds: 100));
+    }
+    await tester.tap(buttons);
+    await tester.pump(const Duration(milliseconds: 500));
+  }
+
+  testWidgets(
+    'T-003-M08 · EM3-02/05 · R4 Owner = locked read view · R5: in use from usage → R6, '
+    'a real 409 ROLE_IN_USE switches the dialog, delete → R1 without the row, 404 → toast + R1',
+    skip: !roleWritesOn,
+    (tester) async {
+      shortPhone(tester);
+      final (container, _) = await ownerInFreshShop('m-r45');
+      final repo = container.read(orgScopedRepositoryProvider);
+      final stamp = DateTime.now().millisecondsSinceEpoch % 1000000;
+
+      // ── fixtures, through the app's own repository (no auth budget) ──────
+      Future<RoleDetailView> role(String name) =>
+          repo.createRole(name: '$name $stamp', capabilities: const ['manage_orders']);
+      final withInvite = await role('มีคำเชิญ');
+      final race = await role('แข่งกัน');
+      final doomed = await role('ลบได้');
+      final vanishing = await role('หายไปก่อน');
+      final invitee = freshEmail('m-r5-invitee');
+      await repo.createInvitation(email: invitee, roleId: withInvite.id);
+      final owner = (await repo.listRoleDetails()).items.firstWhere((r) => r.isSystem);
+      expect(owner.grantsOwnership, isTrue, reason: 'the server derives it from full_access');
+
+      await openRolesFromMembers(tester, container);
+
+      // ── R4 · the Owner role: locked, one card, nothing to clone or delete ─
+      final readOnly = find.byKey(const ValueKey('role-readonly'));
+      await openRow(tester, owner.id, readOnly);
+      expect(find.text('ล็อก'), findsWidgets);
+      expect(find.text('บทบาทเจ้าของร้านถูกล็อกไว้'), findsOneWidget);
+      expect(await reveal(tester, find.byKey(const ValueKey('cap-read-full-access'))), findsOneWidget);
+      expect(find.text('ไม่ได้ให้'), findsNothing, reason: 'a card, not a list');
+      expect(formName, findsNothing);
+      expect(find.byKey(const ValueKey('role-readonly-clone')), findsNothing);
+      expect(deleteButton, findsNothing);
+      expect(find.text('การจัดการอื่น'), findsNothing);
+      await back(tester);
+      await pumpUntilGone(tester, readOnly);
+
+      // ── R5 (ข) from usage: the server says in_use → disabled + panel → R6 ─
+      expect((await repo.getRoleDetail(withInvite.id)).canDelete.reason, 'in_use');
+      await openRow(tester, withInvite.id, formName);
+      await reveal(tester, inUsePanel);
+      expect(tester.widget<OutlinedButton>(await reveal(tester, deleteButton)).onPressed, isNull);
+      expect(within(inUsePanel, 'คำเชิญที่ยังไม่ปิด 1 ใบ'), findsOneWidget,
+          reason: 'usage.pendingInvitations = 1 on the server');
+      await tester.tap(await reveal(tester, find.byKey(const ValueKey('role-in-use-invitations'))));
+      await pumpUntil(tester, find.text('คนที่ใช้บทบาท "มีคำเชิญ $stamp"'));
+      await pumpUntil(tester, find.text(invitee));
+      await back(tester);
+      await pumpUntil(tester, formName);
+      await back(tester);
+      await pumpUntilGone(tester, formName); // R1 again
+
+      // ── R5 (ข) by a real 409: someone invites between open and confirm ───
+      await openRow(tester, race.id, formName);
+      await tester.tap(await reveal(tester, deleteButton));
+      await pumpUntil(tester, deleteDialog);
+      expect(FocusManager.instance.primaryFocus?.debugLabel, 'role-delete-cancel');
+      await repo.createInvitation(email: freshEmail('m-r5-race'), roleId: race.id);
+      await tester.tap(find.byKey(const ValueKey('role-delete-confirm')));
+      await pumpUntil(tester, inUseDialog);
+      expect(within(inUseDialog, 'คำเชิญที่ยังไม่ปิด 1 ใบ'), findsOneWidget, reason: 'numbers from details');
+      final stillThere = await repo.getRoleDetail(race.id);
+      expect(stillThere.canDelete.reason, 'in_use', reason: 'the 409 left the role alone');
+      await tester.tap(find.byKey(const ValueKey('role-delete-close')));
+      await pumpUntilGone(tester, inUseDialog);
+      // Re-read: the page now shows the panel under a disabled button.
+      await pumpUntil(tester, formName);
+      expect(within(await reveal(tester, inUsePanel), 'คำเชิญที่ยังไม่ปิด 1 ใบ'), findsOneWidget);
+      await back(tester);
+      await pumpUntilGone(tester, formName);
+
+      // ── R5 (ก) success: one DELETE → toast → R1 without the row ──────────
+      await openRow(tester, doomed.id, formName);
+      await tester.tap(await reveal(tester, deleteButton));
+      await pumpUntil(tester, deleteDialog);
+      expect(within(deleteDialog, 'ลบบทบาท "ลบได้ $stamp"?'), findsOneWidget);
+      await tester.tap(find.byKey(const ValueKey('role-delete-confirm')));
+      await pumpUntil(tester, find.text('ลบบทบาท "ลบได้ $stamp" แล้ว'));
+      await pumpUntilGone(tester, formName);
+      expect(find.byType(RolesScreen), findsOneWidget);
+      await pumpUntilGone(tester, find.byKey(ValueKey('role-row-${doomed.id}'), skipOffstage: false));
+      Object? gone;
+      try {
+        await repo.getRoleDetail(doomed.id);
+      } catch (e) {
+        gone = e;
+      }
+      expect(gone, isA<NotFoundFailure>(), reason: 'the server, not the screen, says it is gone');
+      expect((await repo.listRoleDetails()).items.map((r) => r.id), isNot(contains(doomed.id)));
+
+      // ── 404: deleted elsewhere while open → toast + R1 ───────────────────
+      // The success toast floats over the bottom of a short screen for 4 s —
+      // right where "ลบบทบาทนี้" lands once scrolled to. Wait it out first.
+      await pumpUntilGone(tester, find.text('ลบบทบาท "ลบได้ $stamp" แล้ว'));
+      await openRow(tester, vanishing.id, formName);
+      await tester.tap(await reveal(tester, deleteButton));
+      await pumpUntil(tester, deleteDialog);
+      await repo.deleteRole(vanishing.id); // "another tab"
+      await tester.tap(find.byKey(const ValueKey('role-delete-confirm')));
+      await pumpUntil(tester, find.text('บทบาทนี้ถูกลบไปแล้ว'));
+      await pumpUntilGone(tester, formName);
+      await pumpUntilGone(tester, find.byKey(ValueKey('role-row-${vanishing.id}'), skipOffstage: false));
+      // The roles that were never deleted are all still there.
+      final left = (await repo.listRoleDetails()).items.map((r) => r.id).toSet();
+      expect(left, containsAll([withInvite.id, race.id, owner.id]));
     },
   );
 

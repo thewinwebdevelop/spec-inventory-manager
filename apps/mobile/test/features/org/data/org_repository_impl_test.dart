@@ -459,6 +459,36 @@ void main() {
       expect(adapter.seen[1].data, {'version': 4, 'name': 'แอดมิน'});
     });
 
+    test('★ T-003-M08: grantsOwnership is carried from the wire (the R4 Owner card reads it, never `key`)',
+        () async {
+      final owner = {...roleDetailJson(), 'key': 'staff', 'grantsOwnership': true, 'isSystem': true};
+      final notOwner = {...roleDetailJson(), 'key': 'owner', 'grantsOwnership': false};
+
+      expect((await repoOn(_FakeAdapter(200, owner)).getRoleDetail('rol_1')).grantsOwnership, isTrue);
+      expect((await repoOn(_FakeAdapter(200, notOwner)).getRoleDetail('rol_1')).grantsOwnership, isFalse);
+    });
+
+    test('★ T-003-M08: DELETE /roles/{id} — no body, one request', () async {
+      final adapter = _FakeAdapter(200, {'id': 'rol_1', 'deletedAt': '2026-11-22T00:00:00.000Z'});
+
+      await repoOn(adapter).deleteRole('rol_1');
+
+      expect(adapter.seen.single.method, 'DELETE');
+      expect(adapter.seen.single.path, '/orgs/org_1/roles/rol_1');
+      expect(adapter.seen.single.data, isNull);
+    });
+
+    // The code → ConflictFailure(details) mapping is the interceptor's (tested
+    // in core/api); this Dio has none, so all that is claimed here is "an
+    // ApiFailure, never a raw DioException".
+    test('★ T-003-M08: a refused DELETE surfaces as an ApiFailure, not a DioException', () async {
+      final adapter = _FakeAdapter(409, {
+        'error': {'code': 'ROLE_IN_USE', 'message': 'in use'},
+      });
+
+      await expectLater(repoOn(adapter).deleteRole('rol_1'), throwsA(isA<ApiFailure>()));
+    });
+
     test('★ T-003-M06: catalog carries groups, description, status and implies for R3', () async {
       final adapter = _FakeAdapter(200, {
         'groups': [

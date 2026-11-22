@@ -5,6 +5,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../../core/error/api_failure.dart';
 import '../domain/entities/role_entities.dart';
 import 'org_providers.dart';
+import 'role_delete_error.dart';
 import 'role_write_error.dart';
 
 /// The outcome of one press of R3's submit button.
@@ -22,6 +23,21 @@ class RoleWriteFailed extends RoleWriteResult {
   const RoleWriteFailed(this.error);
 
   final RoleWriteError error;
+}
+
+/// The outcome of one confirmed R5 delete (T-003-M08).
+sealed class RoleDeleteResult {
+  const RoleDeleteResult();
+}
+
+class RoleDeleteDone extends RoleDeleteResult {
+  const RoleDeleteDone();
+}
+
+class RoleDeleteFailed extends RoleDeleteResult {
+  const RoleDeleteFailed(this.error);
+
+  final RoleDeleteError error;
 }
 
 /// T-003-M06 — R3's submit (`POST` / `PATCH /roles`). State = "a write is in
@@ -54,6 +70,39 @@ class RoleWriteController extends AutoDisposeNotifier<bool> {
   /// `null` = ignored (a write is already in flight).
   Future<RoleWriteResult?> update(String roleId, RoleUpdate body) =>
       _run(() => ref.read(orgScopedRepositoryProvider).updateRole(roleId, body));
+
+  /// T-003-M08 R5 — ONE `DELETE` per confirmation; `null` = ignored (a write
+  /// is already in flight). Pessimistic: R1 is re-read after the answer, it
+  /// never drops the row on its own. Nothing is retried — least of all a
+  /// `409 ROLE_IN_USE` (the screen shows the server's numbers instead).
+  Future<RoleDeleteResult?> delete(String roleId) async {
+    if (state) return null;
+    state = true;
+    try {
+      await ref.read(orgScopedRepositoryProvider).deleteRole(roleId);
+      if (_disposed) return const RoleDeleteDone();
+      state = false;
+      ref.invalidate(roleDetailsProvider);
+      return const RoleDeleteDone();
+    } on ApiFailure catch (failure) {
+      final error = toRoleDeleteError(failure);
+      if (_disposed) return RoleDeleteFailed(error);
+      state = false;
+      switch (error) {
+        case RoleDeleteInUse() || RoleDeleteGone() || RoleDeleteHistoryLimit():
+          // The list's counts / the row itself are stale; `role` is the
+          // screen's to re-read (it owns the version it shows).
+          ref.invalidate(roleDetailsProvider);
+        case RoleDeleteRefused(:final refetch):
+          _refetch(refetch);
+        case RoleDeleteForbidden():
+          _relearnMe();
+        case RoleDeleteThrottled():
+          break;
+      }
+      return RoleDeleteFailed(error);
+    }
+  }
 
   Future<RoleWriteResult?> _run(Future<RoleDetailView> Function() write) async {
     if (state) return null;
