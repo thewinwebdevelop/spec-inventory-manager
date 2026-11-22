@@ -183,8 +183,21 @@ export async function openMembers(page: Page, orgId: string): Promise<void> {
   // Same reason as `createShop`: follow the nav entry when it is on screen.
   const nav = await shopNav(page);
   const entry = nav.getByRole("link", { name: "สมาชิก" });
-  if (await entry.count()) {
+  // WAIT for the entry, never sample it: `count()` right after opening the
+  // tablet drawer could read 0 before the drawer rendered and fall back to a
+  // full `goto` — a different code path (and a second session bootstrap). CI
+  // run on b779675 (e20, tablet) ended with the page still on R3 and no clue
+  // which path ran; now each step fails on its own line.
+  const reachable = await entry
+    .waitFor({ state: "visible", timeout: 5_000 })
+    .then(() => true)
+    .catch(() => false);
+  if (reachable) {
     await entry.click();
+    await expect(page, "clicking the สมาชิก menu entry did not navigate").toHaveURL(
+      new RegExp(`/o/${orgId}/settings/members`),
+      { timeout: 20_000 },
+    );
   } else {
     await page.goto(`/o/${orgId}/settings/members`);
   }
