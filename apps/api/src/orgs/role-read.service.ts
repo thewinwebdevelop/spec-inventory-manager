@@ -21,7 +21,12 @@ import {
   type RoleWriteVerdict,
 } from "@omnistock/core-domain";
 import { LIVE_ROLE_WHERE, domainError } from "../common";
-import { ORG_PRISMA, OrgContextStore, type OrgScopedPrismaClient } from "../tenancy";
+import {
+  ORG_PRISMA,
+  OrgContextStore,
+  type OrgLockTx,
+  type OrgScopedPrismaClient,
+} from "../tenancy";
 import { ROLE_CAPACITY_LIMITS, ROLE_WRITES_ENABLED, type RoleCapacityLimits } from "./org-config";
 
 /** api-spec §3 `RoleDetail`. */
@@ -72,10 +77,24 @@ interface RoleRowDb {
   createdAt: Date;
 }
 
-interface Viewer {
+export interface RoleDetailViewerContext {
   readonly userId: string;
   readonly roleId: string;
   readonly capabilities: readonly string[];
+}
+type Viewer = RoleDetailViewerContext;
+
+/** The client the reads go through — `ORG_PRISMA`, or a write route's locked `tx`. */
+type RoleReadClient = OrgScopedPrismaClient | OrgLockTx;
+
+/**
+ * T-003-B23 — a write route answers its `RoleDetail` from INSIDE its locked
+ * transaction: same snapshot as the write, and `viewer.*` from the actor's caps
+ * as re-read in that tx (api-spec §4.2b) instead of the request's ALS snapshot.
+ */
+export interface RoleDetailVia {
+  readonly client: RoleReadClient;
+  readonly viewer: RoleDetailViewerContext;
 }
 
 @Injectable()
@@ -113,15 +132,18 @@ export class RoleReadService {
   }
 
   /** `GET /roles/{roleId}` — one live role of THIS shop, or `404` (other shop / deleted / unknown alike). */
-  async getDetail(roleId: string): Promise<RoleDetail> {
-    const viewer = this.viewer();
-    const role = (await this.prisma.role.findFirst({
+  async getDetail(roleId: string, via?: RoleDetailVia): Promise<RoleDetail> {
+    const viewer = via?.viewer ?? this.viewer();
+    // Both are the org-scoped client (the tx is its locked transaction); the cast
+    // only papers over Prisma's extended-client typing, which cannot unify them.
+    const db = (via?.client ?? this.prisma) as OrgScopedPrismaClient;
+    const role = (await db.role.findFirst({
       where: { id: roleId, ...LIVE_ROLE_WHERE },
       select: ROLE_SELECT,
     })) as RoleRowDb | null;
     if (!role) throw domainError("NOT_FOUND");
-    const liveRoleCount = await this.prisma.role.count({ where: { ...LIVE_ROLE_WHERE } });
-    const [item] = await this.project([role], liveRoleCount, viewer);
+    const liveRoleCount = await db.role.count({ where: { ...LIVE_ROLE_WHERE } });
+    const [item] = await this.project([role], liveRoleCount, viewer, db);
     return item!;
   }
 
@@ -129,21 +151,22 @@ export class RoleReadService {
     roles: readonly RoleRowDb[],
     liveRoleCount: number,
     viewer: Viewer,
+    db: OrgScopedPrismaClient = this.prisma,
   ): Promise<RoleDetail[]> {
     const roleIds = roles.map((r) => r.id);
     const editorIds = [
       ...new Set(roles.map((r) => r.lastEditedByUserId).filter((id): id is string => id !== null)),
     ];
     // role-read: history — deleted-row cap (data-model §2.2), for `history_limit_reached`
-    const deletedRoleCount = await this.prisma.role.count({ where: { deletedAt: { not: null } } });
+    const deletedRoleCount = await db.role.count({ where: { deletedAt: { not: null } } });
     const [active, pending, editors] = await Promise.all([
-      this.prisma.membership.groupBy({
+      db.membership.groupBy({
         by: ["roleId"],
         where: { roleId: { in: roleIds }, status: "active" },
         _count: { _all: true },
       }),
       // AC-3.9: pending INCLUDING expired links — both block deletion.
-      this.prisma.invitation.groupBy({
+      db.invitation.groupBy({
         by: ["roleId"],
         where: { roleId: { in: roleIds }, status: "pending" },
         _count: { _all: true },
@@ -151,7 +174,7 @@ export class RoleReadService {
       // SR-09: the editor's ACTIVE membership in THIS shop, through ORG_PRISMA.
       editorIds.length === 0
         ? Promise.resolve([])
-        : this.prisma.membership.findMany({
+        : db.membership.findMany({
             where: { userId: { in: editorIds }, status: "active" },
             select: {
               userId: true,

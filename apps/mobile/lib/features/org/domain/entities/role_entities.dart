@@ -49,12 +49,14 @@ class RoleDetailView {
     required this.roleKey,
     required this.nameCustomized,
     required this.isSystem,
+    required this.grantsOwnership,
     required this.capabilities,
     required this.usage,
     required this.lastEdited,
     required this.canEdit,
     required this.canDelete,
     required this.canClone,
+    required this.version,
   });
 
   final String id;
@@ -64,12 +66,21 @@ class RoleDetailView {
   final String? roleKey;
   final bool nameCustomized;
   final bool isSystem;
+
+  /// T-003-M08 — derived by the SERVER from `capabilities` (`full_access`),
+  /// never from [roleKey]. R4 reads it to show the single full-access card.
+  final bool grantsOwnership;
   final List<String> capabilities;
   final RoleUsage usage;
   final RoleLastEditedInfo? lastEdited;
   final RoleVerdict canEdit;
   final RoleVerdict canDelete;
   final RoleVerdict canClone;
+
+  /// `RoleDetail.version` — what a PATCH must echo (T-003-M06). Only ever the
+  /// server's number; the client never bumps it (409 `ROLE_CHANGED` means
+  /// re-read, never retry with `details.currentVersion` — SR-14).
+  final int version;
 }
 
 class RoleDetailsPage {
@@ -86,17 +97,55 @@ class CapabilityCatalogEntry {
     required this.key,
     required this.labelTh,
     required this.selectable,
+    this.descriptionTh = '',
+    this.group,
+    this.status = 'active',
+    this.implies = const [],
   });
 
   final String key;
   final String labelTh;
   final bool selectable;
+
+  /// T-003-M06 (R3 checklist) — server text (D-037), never typed here.
+  final String descriptionTh;
+
+  /// A key into [CapabilityCatalogView.groups], or anything else (an OPEN
+  /// value) — an unknown or `null` group lands in "อื่น ๆ" (ux §0.4).
+  final String? group;
+
+  /// OPEN set; only `upcoming` changes what the row looks like.
+  final String status;
+
+  /// `manage_X → view_X` edges (AC-7.3) — the imply-lock reads these.
+  final List<String> implies;
+}
+
+class CapabilityGroupEntry {
+  const CapabilityGroupEntry({required this.key, required this.labelTh});
+
+  final String key;
+  final String labelTh;
 }
 
 /// `GET /orgs/{orgId}/capabilities` — labels come from the server (D-037),
 /// never typed on the client. Catalog order is preserved.
 class CapabilityCatalogView {
-  const CapabilityCatalogView({required this.items});
+  const CapabilityCatalogView({required this.items, this.groups = const []});
 
   final List<CapabilityCatalogEntry> items;
+
+  /// Server order = display order of the R3 checklist groups.
+  final List<CapabilityGroupEntry> groups;
+}
+
+/// T-003-M06 — a `PATCH /roles/{id}` body. `name` / `capabilities` are each
+/// present ONLY when they changed (ux R3 ⚠️: sending the shown translation of
+/// an un-renamed system role back would rename it); `version` always.
+class RoleUpdate {
+  const RoleUpdate({required this.version, this.name, this.capabilities});
+
+  final int version;
+  final String? name;
+  final List<String>? capabilities;
 }

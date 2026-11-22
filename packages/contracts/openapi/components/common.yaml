@@ -100,6 +100,16 @@ ErrorResponse:
             `INVITATION_EMAIL_MISMATCH` → `{ emailMasked }` (§3.15) ·
             `CONFLICT` → `{ reason: "busy" }` when the request lost the race for
             the shop's row lock (amend #4 / NEW-4 — retryable, never a 500).
+            F-003 (api-spec §5): `UNKNOWN_CAPABILITY` → `{ capabilities }` (the
+            refused keys, sorted) · `ROLE_LIMIT_REACHED` → `{ limit }`.
+            `ROLE_EXCEEDS_ACTOR` carries NO details. F-003 · PATCH role:
+            `ROLE_CHANGED` → `{ currentVersion }` (re-fetch and show the
+            difference — never resubmit with it automatically);
+            `TARGET_NOT_BELOW_ACTOR` / `ROLE_HELD_REQUIRES_MANAGE_MEMBERS` /
+            `ROLE_LOCKED` carry NO details. F-003 · DELETE role:
+            `ROLE_IN_USE` → `{ activeMembers, pendingInvitations }` (counts only —
+            pending includes expired links; never who) ·
+            `ROLE_HISTORY_LIMIT_REACHED` → `{ limit }`.
             A client that does not recognise a key MUST still behave correctly.
         fieldErrors:
           type: object

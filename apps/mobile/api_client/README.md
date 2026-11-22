@@ -95,9 +95,12 @@ Class | Method | HTTP request | Description
 [*OrganizationsApi*](doc/OrganizationsApi.md) | [**putTaxProfile**](doc/OrganizationsApi.md#puttaxprofile) | **PUT** /orgs/{orgId}/tax-profile | Declare (or clear) the shop&#39;s legal tax identity
 [*OrganizationsApi*](doc/OrganizationsApi.md) | [**revealTaxId**](doc/OrganizationsApi.md#revealtaxid) | **POST** /orgs/{orgId}/tax-profile/reveal | Reveal the shop&#39;s full tax id (deliberate, recorded, rate-limited)
 [*OrganizationsApi*](doc/OrganizationsApi.md) | [**updateOrganization**](doc/OrganizationsApi.md#updateorganization) | **PATCH** /orgs/{orgId} | Update the shop&#39;s name / logo / timezone
+[*RolesApi*](doc/RolesApi.md) | [**createOrgRole**](doc/RolesApi.md#createorgrole) | **POST** /orgs/{orgId}/roles | Create a custom role (also how \&quot;clone\&quot; is done)
+[*RolesApi*](doc/RolesApi.md) | [**deleteOrgRole**](doc/RolesApi.md#deleteorgrole) | **DELETE** /orgs/{orgId}/roles/{roleId} | Delete a role (soft)
 [*RolesApi*](doc/RolesApi.md) | [**getOrgCapabilityCatalog**](doc/RolesApi.md#getorgcapabilitycatalog) | **GET** /orgs/{orgId}/capabilities | The capability catalog this shop can see (role checklist)
 [*RolesApi*](doc/RolesApi.md) | [**getOrgRoleDetail**](doc/RolesApi.md#getorgroledetail) | **GET** /orgs/{orgId}/roles/{roleId} | One role of this shop, in full (edit and clone screens)
 [*RolesApi*](doc/RolesApi.md) | [**listOrgRoleDetails**](doc/RolesApi.md#listorgroledetails) | **GET** /orgs/{orgId}/role-details | Every live role of this shop, in full (the role list screen)
+[*RolesApi*](doc/RolesApi.md) | [**updateOrgRole**](doc/RolesApi.md#updateorgrole) | **PATCH** /orgs/{orgId}/roles/{roleId} | Rename a role and/or replace its capabilities
 [*SystemApi*](doc/SystemApi.md) | [**getHealth**](doc/SystemApi.md#gethealth) | **GET** /health | Liveness/readiness probe
 
 

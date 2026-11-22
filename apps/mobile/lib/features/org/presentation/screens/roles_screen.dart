@@ -13,11 +13,19 @@ import '../../domain/role_list_row.dart';
 import '../copy/role_display_copy.dart';
 import '../copy/role_list_copy.dart';
 import '../copy/role_viewer_reason_copy.dart';
+import '../widgets/role_screen_parts.dart';
+import 'role_form_screen.dart';
 import 'role_template_screen.dart';
 
 /// Push R1 — the one way every entry point (ข้อมูลร้าน row, สมาชิก button)
-/// opens it, so they cannot drift apart. T-003-M06 passes [onOpenRole] /
-/// [onCreateNext] here (see [RolesScreen]); until then both are `null`.
+/// opens it, so they cannot drift apart.
+///
+/// T-003-M06: both seams are WIRED here, so every entry point gets R3:
+///  - a row → R3 for that role (`openRoleEditScreen`; the route itself shows
+///    the read-only state when the server's `canEdit` says no);
+///  - R2 "ถัดไป" → R3 create, REPLACING R2 (`replace: true`), so back from the
+///    form — and a successful create — lands on R1, not on the picker.
+/// [onOpenRole] / [onCreateNext] override the wiring (tests only, today).
 Future<void> openRolesScreen(
   BuildContext context, {
   ValueChanged<RoleDetailView>? onOpenRole,
@@ -25,7 +33,11 @@ Future<void> openRolesScreen(
 }) =>
     Navigator.of(context).push(
       MaterialPageRoute<void>(
-        builder: (_) => RolesScreen(onOpenRole: onOpenRole, onCreateNext: onCreateNext),
+        builder: (routeContext) => RolesScreen(
+          onOpenRole: onOpenRole ?? (role) => openRoleEditScreen(routeContext, role.id),
+          onCreateNext: onCreateNext ??
+              (fromRoleId) => openRoleCreateScreen(routeContext, fromRoleId: fromRoleId, replace: true),
+        ),
       ),
     );
 
@@ -45,8 +57,8 @@ Future<void> openRolesScreen(
 /// since a shop always has its Owner role (an empty list means the answer is
 /// wrong, not that there is nothing).
 ///
-/// Seams for the screens that do not exist yet (T-003-M06+), both `null`
-/// until they are built:
+/// Seams (wired by [openRolesScreen] since T-003-M06; still nullable here so
+/// the widget never offers what its caller cannot open):
 ///  - [onOpenRole] — R3/R4. While `null` the rows are NOT tappable and carry no
 ///    "›": an affordance that opens onto nothing is worse than none.
 ///  - [onCreateNext] — R3's create mode, forwarded to R2's "ถัดไป".
@@ -124,7 +136,7 @@ class _RolesBodyState extends ConsumerState<_RolesBody> {
     if (failure is ForbiddenFailure) {
       return Scaffold(
         appBar: AppBar(title: Text(t.rolesListTitle)),
-        body: SafeArea(child: const _ForbiddenPanel()),
+        body: const SafeArea(child: RoleForbiddenPanel()),
       );
     }
 
@@ -149,7 +161,7 @@ class _RolesBodyState extends ConsumerState<_RolesBody> {
             Text(t.rolesListDesc2, style: AppTypography.bodySm.copyWith(color: colors.textMuted)),
             const SizedBox(height: AppSpacing.s3),
             if (writesOff) ...[
-              _InfoBanner(
+              RoleInfoBanner(
                 title: t.roleReasonWritesDisabledTitle,
                 body: t.roleReasonWritesDisabledBody,
               ),
@@ -268,7 +280,7 @@ class _RoleRow extends StatelessWidget {
                     crossAxisAlignment: WrapCrossAlignment.center,
                     children: [
                       Text(roleRowName(t, role), style: AppTypography.bodyMd),
-                      if (badge != null) _Badge(label: badge),
+                      if (badge != null) RoleBadgeChip(label: badge),
                     ],
                   ),
                   Text(roleRowUsageLine(t, role, isMine: isMine), style: muted),
@@ -288,68 +300,6 @@ class _RoleRow extends StatelessWidget {
     );
 
     return onTap == null ? content : InkWell(onTap: onTap, child: content);
-  }
-}
-
-/// Neutral, text always (never colour alone).
-class _Badge extends StatelessWidget {
-  const _Badge({required this.label});
-
-  final String label;
-
-  @override
-  Widget build(BuildContext context) {
-    final colors = context.appColors;
-    return DecoratedBox(
-      decoration: BoxDecoration(
-        color: colors.surfaceMuted,
-        borderRadius: BorderRadius.circular(AppRadius.badge),
-      ),
-      child: Padding(
-        padding: const EdgeInsets.symmetric(horizontal: AppSpacing.s2, vertical: 2),
-        child: Text(label, style: AppTypography.labelSm.copyWith(color: colors.text)),
-      ),
-    );
-  }
-}
-
-class _InfoBanner extends StatelessWidget {
-  const _InfoBanner({required this.title, required this.body});
-
-  final String title;
-  final String body;
-
-  @override
-  Widget build(BuildContext context) {
-    final colors = context.appColors;
-    return Semantics(
-      liveRegion: true,
-      child: Container(
-        width: double.infinity,
-        padding: const EdgeInsets.all(AppSpacing.s4),
-        decoration: BoxDecoration(
-          color: colors.surfaceMuted,
-          border: Border.all(color: colors.borderDefault),
-          borderRadius: BorderRadius.circular(AppRadius.card),
-        ),
-        child: Row(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Icon(Icons.info_outline, size: AppSizes.iconMd, color: colors.text),
-            const SizedBox(width: AppSpacing.s2),
-            Expanded(
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text(title, style: AppTypography.bodySm.copyWith(fontWeight: FontWeight.w700)),
-                  Text(body, style: AppTypography.bodySm),
-                ],
-              ),
-            ),
-          ],
-        ),
-      ),
-    );
   }
 }
 
@@ -381,44 +331,6 @@ class _ErrorPanel extends StatelessWidget {
             ),
             const SizedBox(height: AppSpacing.s3),
             OutlinedButton(onPressed: onRetry, child: Text(t.commonRetry)),
-          ],
-        ),
-      ),
-    );
-  }
-}
-
-/// ux §0 ForbiddenPanel. "Back" leaves R1 for the shop root (the shell, whose
-/// first tab is "ข้อมูลร้าน"); R1 may have been pushed from สมาชิก too, so it
-/// pops to the root rather than one step.
-class _ForbiddenPanel extends StatelessWidget {
-  const _ForbiddenPanel();
-
-  @override
-  Widget build(BuildContext context) {
-    final t = AppLocalizations.of(context);
-    final colors = context.appColors;
-    return Padding(
-      padding: const EdgeInsets.all(AppSpacing.screenPadding),
-      child: Semantics(
-        liveRegion: true,
-        child: Column(
-          mainAxisAlignment: MainAxisAlignment.center,
-          children: [
-            Icon(Icons.lock_outline, size: 32, color: colors.textMuted),
-            const SizedBox(height: AppSpacing.s3),
-            Text(t.rolesForbiddenTitle, style: AppTypography.headingSm, textAlign: TextAlign.center),
-            const SizedBox(height: AppSpacing.s2),
-            Text(
-              t.rolesForbiddenBody,
-              style: AppTypography.bodySm.copyWith(color: colors.textMuted),
-              textAlign: TextAlign.center,
-            ),
-            const SizedBox(height: AppSpacing.s4),
-            OutlinedButton(
-              onPressed: () => Navigator.of(context).popUntil((r) => r.isFirst),
-              child: Text(t.rolesForbiddenBack),
-            ),
           ],
         ),
       ),

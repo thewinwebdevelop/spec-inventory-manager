@@ -528,6 +528,11 @@
   "@roleFormCapabilitiesCounter": {
     "placeholders": { "selected": { "type": "int" }, "total": { "type": "int" } }
   },
+  "roleFormGroupCounter": "เลือก {selected} จาก {total}",
+  "@roleFormGroupCounter": {
+    "description": "ux R3 platform (mobile) — the Disclosure group header counter, so a folded group still says what is ticked. Copy verbatim from ux-wireframe R3 (T-003-M06).",
+    "placeholders": { "selected": { "type": "int" }, "total": { "type": "int" } }
+  },
   "roleFormUpcomingNote": "สิทธิ์ที่มีป้าย \"เร็ว ๆ นี้\" คือฟีเจอร์ที่ยังไม่เปิด ติ๊กไว้ก่อนได้ จะมีผลทันทีเมื่อฟีเจอร์เปิด",
   "@roleFormUpcomingNote": {
     "description": "ux §0.4 D-037 client-side copy. Shown once under the checklist header when catalog has at least one status=upcoming item."
@@ -549,6 +554,10 @@
   "roleFormEmptySelectionError": "เลือกสิทธิ์อย่างน้อย 1 อย่าง",
   "@roleFormEmptySelectionError": {
     "description": "ux R3 client-side guard AND the 422 ROLE_EMPTY server error (ux §E) — same copy for both."
+  },
+  "roleFormOtherActionsHeader": "การจัดการอื่น",
+  "@roleFormOtherActionsHeader": {
+    "description": "ux R3 — the edit-mode section holding ทำสำเนา / ลบ. Copy verbatim from ux-wireframe R3 (T-003-M06)."
   },
   "roleFormCloneCta": "ทำสำเนาเป็นบทบาทใหม่",
   "roleFormDeleteCta": "ลบบทบาทนี้",
@@ -581,6 +590,10 @@
   },
   "roleFormLostOwnManageRolesToast": "บันทึกแล้ว — ตอนนี้คุณไม่มีสิทธิ์จัดการบทบาทแล้ว",
   "roleFormTemplateGoneNotice": "ใช้บทบาทนี้เป็นต้นแบบไม่ได้แล้ว เริ่มจากว่างแทน",
+  "roleFormOtherGroupLabel": "อื่น ๆ",
+  "@roleFormOtherGroupLabel": {
+    "description": "ux §0.4 fallback — the last checklist group, for items whose `group` is null or not in `groups[]`. Copy verbatim from ux-wireframe §0.4 (T-003-M06)."
+  },
 
   "roleFormErrorNameInvalidChars": "ชื่อนี้มีอักขระที่ใช้ไม่ได้ (เช่น อักขระที่มองไม่เห็นซึ่งติดมาจากการคัดลอก) ลองพิมพ์ชื่อใหม่เอง",
   "@roleFormErrorNameInvalidChars": {
@@ -691,6 +704,11 @@
   "@roleDeleteSuccessToast": {
     "placeholders": { "name": { "type": "String" } }
   },
+  "roleDeleteInUseInvitationsCount": "คำเชิญที่ยังไม่ปิด {m} ใบ",
+  "@roleDeleteInUseInvitationsCount": {
+    "description": "ux R5 (ข) count line — the §0.2 'คำเชิญค้าง' text WITHOUT the leading ' · ' (rolePendingInvitationsSuffix), for when it stands alone or is joined after the members part; zero parts are dropped. Same text as web roleDeleteTh.inUse.invitations.",
+    "placeholders": { "m": { "type": "int" } }
+  },
   "roleDeleteInUseSelfNote": "คนที่ใช้บทบาทนี้คือคุณเอง — ให้เจ้าของร้านย้ายคุณไปบทบาทอื่นก่อน",
   "roleDeleteViewMembersCta": "ดูสมาชิกที่ใช้บทบาทนี้ ({count})",
   "@roleDeleteViewMembersCta": {
@@ -742,5 +760,98 @@
   "roleGrantExceedsActorError": "บทบาทนี้มีสิทธิ์ที่คุณไม่มี จึงมอบให้คนอื่นไม่ได้ เลือกบทบาทอื่น หรือให้เจ้าของร้านทำ",
   "@roleGrantExceedsActorError": {
     "description": "ux §E — 403 ROLE_EXCEEDS_ACTOR when granting/inviting a role (R8 change-role / invite; table row 'เปลี่ยนบทบาท / เชิญ'). Client refetches GET /roles."
-  }
+  },
+  "memberRowChangeRoleHint": "แตะเพื่อเปลี่ยนบทบาท",
+  "@memberRowChangeRoleHint": {
+    "description": "ux R10 a11y — hint on a tappable member row."
+  },
+  "memberRoleSheetTitle": "เปลี่ยนบทบาทของ",
+  "@memberRoleSheetTitle": {
+    "description": "ux R10 (ข) — sheet title; the email follows on its own line."
+  },
+  "memberRoleSheetTitleSelf": "เปลี่ยนบทบาทของคุณ",
+  "@memberRoleSheetTitleSelf": {
+    "description": "ux R10 (ข) — own row: no email line."
+  },
+  "memberRoleCurrentSuffix": "{name} (บทบาทปัจจุบัน)",
+  "@memberRoleCurrentSuffix": {
+    "description": "ux R8/R10 — the target member's current role option.",
+    "placeholders": {
+      "name": {
+        "type": "String"
+      }
+    }
+  },
+  "memberRoleSave": "บันทึกบทบาท",
+  "memberRoleSaving": "กำลังบันทึก...",
+  "memberRoleClose": "ปิด",
+  "@memberRoleClose": {
+    "description": "ux R10 (ค) TARGET_NOT_BELOW_ACTOR — the primary button becomes \"ปิด\"."
+  },
+  "memberRoleSuccessToast": "เปลี่ยนบทบาทของ {email} เป็น {role} แล้ว",
+  "@memberRoleSuccessToast": {
+    "placeholders": {
+      "email": {
+        "type": "String"
+      },
+      "role": {
+        "type": "String"
+      }
+    }
+  },
+  "memberRoleSuccessSelfToast": "เปลี่ยนบทบาทของคุณเป็น \"{role}\" แล้ว",
+  "@memberRoleSuccessSelfToast": {
+    "placeholders": {
+      "role": {
+        "type": "String"
+      }
+    }
+  },
+  "memberRoleSuccessSelfLostToast": "เปลี่ยนบทบาทของคุณเป็น \"{role}\" แล้ว — ตอนนี้คุณจัดการสมาชิกไม่ได้แล้ว",
+  "@memberRoleSuccessSelfLostToast": {
+    "placeholders": {
+      "role": {
+        "type": "String"
+      }
+    }
+  },
+  "memberRoleErrorTargetNotBelow": "คุณจัดการสมาชิกคนนี้ไม่ได้ — ให้เจ้าของร้านช่วย",
+  "memberRoleErrorExceedsActor": "บทบาทนี้มีสิทธิ์ที่คุณไม่มี จึงมอบให้คนอื่นไม่ได้ เลือกบทบาทอื่น หรือให้เจ้าของร้านทำ",
+  "memberRoleErrorForbidden": "คุณไม่มีสิทธิ์เปลี่ยนบทบาทนี้ — เฉพาะเจ้าของร้านเท่านั้นที่ตั้งหรือเปลี่ยนบทบาทของเจ้าของร้าน",
+  "memberRoleLostManageMembersToast": "คุณไม่มีสิทธิ์จัดการสมาชิกแล้ว",
+  "memberRoleGoneToast": "สมาชิกคนนี้ไม่ได้อยู่ในร้านแล้ว",
+  "memberRoleErrorLastOwner": "เปลี่ยนไม่ได้ เพราะร้านต้องมีเจ้าของร้านอย่างน้อย 1 คน — ตั้งคนอื่นเป็นเจ้าของร้านก่อน แล้วค่อยเปลี่ยน",
+  "memberRoleErrorBusy": "ร้านนี้กำลังมีการแก้ไขอื่นอยู่ ลองใหม่อีกครั้งในไม่กี่วินาที",
+  "memberRoleErrorRoleInvalid": "บทบาทที่เลือกใช้ไม่ได้แล้ว กรุณาเลือกใหม่อีกครั้ง",
+  "memberRoleErrorThrottled": "ทำรายการกับสมาชิกถี่เกินไป กรุณารอ {mm}:{ss} แล้วลองใหม่",
+  "@memberRoleErrorThrottled": {
+    "description": "ux §E / R10 (ค) 429 memberWrite (UX01) — mm:ss countdown from Retry-After.",
+    "placeholders": {
+      "mm": {
+        "type": "String"
+      },
+      "ss": {
+        "type": "String"
+      }
+    }
+  },
+  "memberRoleErrorGeneric": "เปลี่ยนบทบาทไม่สำเร็จ กรุณาลองใหม่อีกครั้ง",
+  "memberRoleSelfConfirmTitle": "เปลี่ยนบทบาทของตัวเอง?",
+  "memberRoleSelfConfirmBody": "จาก \"{from}\" เป็น \"{to}\" มีผลทันที หลังเปลี่ยน คุณอาจทำบางอย่างไม่ได้อีก และถ้าบทบาทใหม่จัดการสมาชิกไม่ได้ คุณจะเปลี่ยนกลับเองไม่ได้ ต้องให้เจ้าของร้านเปลี่ยนให้",
+  "@memberRoleSelfConfirmBody": {
+    "placeholders": {
+      "from": {
+        "type": "String"
+      },
+      "to": {
+        "type": "String"
+      }
+    }
+  },
+  "memberRoleSelfConfirmOwnerLine": "คุณจะไม่ได้เป็นเจ้าของร้านแล้ว",
+  "@memberRoleSelfConfirmOwnerLine": {
+    "description": "ux R10a — first line when your own row isOwner=true."
+  },
+  "memberRoleSelfConfirmCta": "เปลี่ยนบทบาทของฉัน",
+  "memberRoleSelfConfirmCancel": "ไม่เปลี่ยน"
 }

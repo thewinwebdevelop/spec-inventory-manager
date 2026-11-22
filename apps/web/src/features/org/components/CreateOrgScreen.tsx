@@ -53,7 +53,10 @@ export function CreateOrgScreen() {
   const blocked = create.isPending || throttle.isActive;
 
   return (
-    <main className="mx-auto w-full max-w-[var(--size-dialog-max-w)] p-card-padding">
+    // `flex-col gap-4`: the back link's `self-start` assumed a flex column that
+    // was never set, so the title sat on the field label with 0px between them
+    // (D-038 ③, measured).
+    <main className="mx-auto flex w-full max-w-[var(--size-dialog-max-w)] flex-col gap-4 p-card-padding">
       {/* 18px as a bare inline link — measured. `icon.back` + a 44px control. */}
       <Link
         href={SELECT_ORG_PATH}

@@ -10,19 +10,24 @@
 import { useActiveOrg, useCan } from "../../../lib/org/org-context";
 import { CAPABILITY_MANAGE_ROLES } from "../../../lib/org/capability";
 import { roleCapabilitiesLinkLabel } from "../role-copy";
+import { ButtonLink } from "../../../components/ui/ButtonLink";
 
 export function RoleCapabilitiesLink() {
   const { orgId } = useActiveOrg();
   const canManageRoles = useCan(CAPABILITY_MANAGE_ROLES);
   if (!canManageRoles) return null;
+  // `ButtonLink tertiary`: reads as the text link ui.md asks for, with the 44px
+  // target (D-038 ③ measured the bare <a> at 17px). `self-start` keeps it from
+  // stretching across the dialog's flex column.
   return (
-    <a
+    <ButtonLink
       href={`/o/${orgId}/settings/roles`}
       target="_blank"
       rel="noopener noreferrer"
-      className="text-body-sm text-primary underline"
+      variant="tertiary"
+      className="self-start"
     >
       {roleCapabilitiesLinkLabel} ↗
-    </a>
+    </ButtonLink>
   );
 }

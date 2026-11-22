@@ -160,7 +160,7 @@ describe("InviteScreen — the token leaves the URL", () => {
     const { unmount } = renderScreen();
     await screen.findByText(PREVIEW.organizationName);
 
-    await userEvent.click(screen.getByRole("button", { name: "สมัครบัญชีใหม่" }));
+    await userEvent.click(screen.getByRole("link", { name: "สมัครบัญชีใหม่" }));
     unmount();
 
     // …signup, login — and back on `/invite` with a clean address bar.
@@ -179,7 +179,7 @@ describe("InviteScreen — the token leaves the URL", () => {
     stubFetch(200, PREVIEW);
     renderScreen();
     await screen.findByText(PREVIEW.organizationName);
-    await userEvent.click(screen.getByRole("button", { name: "เข้าสู่ระบบเพื่อรับคำเชิญ" }));
+    await userEvent.click(screen.getByRole("link", { name: "เข้าสู่ระบบเพื่อรับคำเชิญ" }));
     // Non-vacuity (security review): without this, removing the hold would
     // leave nothing to leak and every assertion below would pass on nothing.
     expect(hasPendingInvite(), "the click did not hold the token at all").toBe(true);
@@ -219,12 +219,14 @@ describe("InviteScreen — the token leaves the URL", () => {
     // Told what to do (go back to the chat/email and tap the link again) —
     // not the old, untrue "ลิงก์คำเชิญนี้ใช้ไม่ได้".
     expect(
-      screen.getByText("ลิงก์เดิมที่เจ้าของร้านส่งให้ยังใช้ได้ กลับไปที่แชทหรืออีเมลที่ได้รับลิงก์ แล้วแตะลิงก์นั้นอีกครั้ง"),
+      screen.getByText(
+        "ลิงก์เดิมที่เจ้าของร้านส่งให้ยังใช้ได้ กลับไปที่แชทหรืออีเมลที่ได้รับลิงก์ แล้วแตะลิงก์นั้นอีกครั้ง",
+      ),
     ).toBeInTheDocument();
     expect(screen.queryByText("ลิงก์คำเชิญนี้ใช้ไม่ได้")).toBeNull();
     // The existing `home` next-step, rendered as a SECONDARY button — no new
     // `InviteNextStep` kind, per §11.5.
-    expect(screen.getByRole("button", { name: "กลับหน้าแรก" })).toBeInTheDocument();
+    expect(screen.getByRole("link", { name: "กลับหน้าแรก" })).toHaveAttribute("href", "/");
     // No API call at all: this is a local state, not a request that failed.
     expect(seen).toHaveLength(0);
   });
@@ -236,7 +238,9 @@ describe("InviteScreen — the token leaves the URL", () => {
 
     await screen.findByText("ต้องเปิดจากลิงก์คำเชิญอีกครั้ง");
     expect(
-      screen.getByText("หน้านี้ไม่ได้เก็บลิงก์คำเชิญไว้เพื่อความปลอดภัย จึงต้องเปิดจากลิงก์ทุกครั้ง"),
+      screen.getByText(
+        "หน้านี้ไม่ได้เก็บลิงก์คำเชิญไว้เพื่อความปลอดภัย จึงต้องเปิดจากลิงก์ทุกครั้ง",
+      ),
     ).toBeInTheDocument();
   });
 
@@ -250,7 +254,9 @@ describe("InviteScreen — the token leaves the URL", () => {
     expect(screen.getByText(/ลิงก์อาจถูกคัดลอกมาไม่ครบ/)).toBeInTheDocument();
     expect(screen.queryByText("ต้องเปิดจากลิงก์คำเชิญอีกครั้ง")).toBeNull();
     expect(
-      screen.queryByText("หน้านี้ไม่ได้เก็บลิงก์คำเชิญไว้เพื่อความปลอดภัย จึงต้องเปิดจากลิงก์ทุกครั้ง"),
+      screen.queryByText(
+        "หน้านี้ไม่ได้เก็บลิงก์คำเชิญไว้เพื่อความปลอดภัย จึงต้องเปิดจากลิงก์ทุกครั้ง",
+      ),
     ).toBeNull();
   });
 
@@ -259,8 +265,8 @@ describe("InviteScreen — the token leaves the URL", () => {
     renderScreen();
 
     expect(await screen.findByText("คำเชิญนี้ใช้ไม่ได้แล้ว")).toBeInTheDocument();
-    // I-1's explanation, and a button rather than a dead end.
+    // I-1's explanation, and a way out (a button-shaped LINK) rather than a dead end.
     expect(screen.getByText(/ถูกออกก่อนที่คุณจะถูกถอดออกจากร้าน/)).toBeInTheDocument();
-    expect(screen.getByRole("button")).toBeInTheDocument();
+    expect(screen.getByRole("link")).toBeInTheDocument();
   });
 });

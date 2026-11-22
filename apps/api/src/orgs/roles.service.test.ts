@@ -18,6 +18,19 @@ import { describe, it, expect } from "vitest";
 import { OrgContextStore } from "../tenancy";
 import { RolesService } from "./roles.service";
 
+/**
+ * T-003-B23 — `list()` touches none of the create path's collaborators (events,
+ * Owner guard, decider seam, limits, detail reads); `undefined` makes any
+ * accidental use fail loudly instead of silently working.
+ */
+const LIST_ONLY_COLLABORATORS = [
+  undefined,
+  undefined,
+  undefined,
+  undefined,
+  undefined,
+] as unknown as [never, never, never, never, never];
+
 interface FakeRole {
   id: string;
   name: string;
@@ -43,7 +56,7 @@ function serviceOver(roles: FakeRole[], viewerCapabilities: readonly string[] = 
     },
   };
   const store = new OrgContextStore();
-  const service = new RolesService(prisma as never, store);
+  const service = new RolesService(prisma as never, store, ...LIST_ONLY_COLLABORATORS);
   // The verdict reads the caller from the request's org context (ALS).
   return {
     list: () =>
@@ -201,5 +214,89 @@ describe("RolesService.list — live roles only (F-003 · data-model §2.2 · MU
     };
     const { items } = await serviceOver([OWNER, ADMIN, deleted]).list();
     expect(items.map((r) => r.id)).toEqual([OWNER.id, ADMIN.id]);
+  });
+});
+
+// F-003 · T-003-M09 · D-039 ★ — `inviteTtlHours` (api-spec §4.1 · AC-10.3 · AC-6.4).
+//
+// The value is `invitationTtlHours(role.capabilities)` — the SAME function that
+// sets `expiresAt` — and it is published only where the viewer could learn it
+// anyway by inviting with that role (`viewerCanAssign === true`).
+describe("RolesService.list — inviteTtlHours (D-039)", () => {
+  /** A role the shop built itself: no key, but it can rewrite roles → elevated. */
+  const CUSTOM_ELEVATED: FakeRole = {
+    id: "rol_custom_hi",
+    name: "หัวหน้าทีม",
+    key: null,
+    isSystem: false,
+    capabilities: ["manage_roles", "manage_products"],
+  };
+  const STANDARD: FakeRole = {
+    id: "rol_std",
+    name: "แพ็คของ",
+    key: "staff",
+    isSystem: false,
+    capabilities: ["manage_org_settings"],
+  };
+  const WIDER: FakeRole = {
+    id: "rol_wider",
+    name: "บัญชี",
+    key: null,
+    isSystem: false,
+    capabilities: ["manage_members", "manage_billing"],
+  };
+  const ttlOf = (items: readonly { id: string; inviteTtlHours?: number }[]) =>
+    items.map((r) => [r.id, "inviteTtlHours" in r ? r.inviteTtlHours : "absent"]);
+
+  it("★ Owner viewer: 24 for every elevated role (incl. a CUSTOM key=null one), 168 for a standard role", async () => {
+    const { items } = await serviceOver(
+      [OWNER, ADMIN, CUSTOM_ELEVATED, STANDARD],
+      OWNER.capabilities,
+    ).list();
+    expect(ttlOf(items)).toEqual([
+      ["rol_owner", 24],
+      ["rol_admin", 24],
+      ["rol_custom_hi", 24],
+      ["rol_std", 168],
+    ]);
+  });
+
+  it("★ Admin viewer: present only on assignable rows — ABSENT on the Owner role and on a wider role", async () => {
+    const { items } = await serviceOver([OWNER, ADMIN, WIDER, STANDARD], ADMIN.capabilities).list();
+    expect(items.map((r) => [r.id, r.viewerCanAssign])).toEqual([
+      ["rol_owner", false],
+      ["rol_admin", true],
+      ["rol_wider", false],
+      ["rol_std", true],
+    ]);
+    expect(ttlOf(items)).toEqual([
+      ["rol_owner", "absent"],
+      ["rol_admin", 24],
+      ["rol_wider", "absent"],
+      ["rol_std", 168],
+    ]);
+  });
+
+  it("★ ABSENT on every row for a viewer without manage_members (even with manage_roles)", async () => {
+    for (const viewer of [STAFF_VIEWER, ["manage_roles", "manage_orders"]]) {
+      const { items } = await serviceOver([OWNER, ADMIN, CUSTOM_ELEVATED, STANDARD], viewer).list();
+      for (const row of items)
+        expect(Object.keys(row), String(viewer)).not.toContain("inviteTtlHours");
+    }
+  });
+
+  it("★ derived from CAPABILITIES, never key: key 'admin' on a standard role = 168, key 'staff' on an elevated role = 24", async () => {
+    const fakeAdmin: FakeRole = { ...STANDARD, id: "rol_fake_admin", key: "admin" };
+    const quietAdmin: FakeRole = {
+      ...CUSTOM_ELEVATED,
+      id: "rol_quiet",
+      key: "staff",
+      name: "Staff",
+    };
+    const { items } = await serviceOver([fakeAdmin, quietAdmin], OWNER.capabilities).list();
+    expect(ttlOf(items)).toEqual([
+      ["rol_fake_admin", 168],
+      ["rol_quiet", 24],
+    ]);
   });
 });

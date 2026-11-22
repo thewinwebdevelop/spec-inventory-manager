@@ -1,4 +1,5 @@
-import { expect, test, type Page } from "@playwright/test";
+import { type Page } from "@playwright/test";
+import { expect, test } from "./fixtures";
 import {
   acceptInvite,
   createShop,
@@ -8,7 +9,9 @@ import {
   openMembers,
   readShared,
   resetIpThrottle,
+  ROLE_WRITES_ON,
   signUpAndLogin,
+  shopNav,
 } from "./helpers";
 
 /**
@@ -45,7 +48,7 @@ test.afterAll(async () => {
 });
 
 test("EW3-11 · the Owner reaches the roles list from the menu and reads the three system roles", async () => {
-  const nav = ownerPage.getByRole("navigation", { name: "เมนูของร้าน" });
+  const nav = await shopNav(ownerPage);
   await nav.getByRole("link", { name: "บทบาทและสิทธิ์" }).click();
   await expect(ownerPage).toHaveURL(new RegExp(`/o/${orgId}/settings/roles$`));
   await expect(ownerPage.getByRole("heading", { level: 1, name: "บทบาทและสิทธิ์" })).toBeVisible();
@@ -60,6 +63,7 @@ test("EW3-11 · the Owner reaches the roles list from the menu and reads the thr
 });
 
 test("R1 · role writes are off in this lane: banner on top and the create button disabled by the verdict", async () => {
+  test.skip(ROLE_WRITES_ON, "the API under test has ROLE_WRITES_ENABLED=true (E2E_ROLE_WRITES=on)");
   await expect(ownerPage.getByText("ยังสร้างหรือแก้บทบาทไม่ได้ในตอนนี้")).toBeVisible();
   await expect(ownerPage.getByRole("button", { name: "สร้างบทบาท" })).toBeDisabled();
 });
@@ -75,7 +79,7 @@ test("EW3-11 · a Staff member has no menu entry and the URL gives the forbidden
   await staffPage.getByRole("link", { name: "เริ่มใช้งานร้านนี้" }).click();
   await expect(staffPage).toHaveURL(new RegExp(`/o/${orgId}`), { timeout: 20_000 });
 
-  const nav = staffPage.getByRole("navigation", { name: "เมนูของร้าน" });
+  const nav = await shopNav(staffPage);
   await expect(nav.getByRole("link", { name: "ข้อมูลร้าน" })).toBeVisible();
   await expect(nav.getByRole("link", { name: "บทบาทและสิทธิ์" })).toHaveCount(0);
 
@@ -83,5 +87,5 @@ test("EW3-11 · a Staff member has no menu entry and the URL gives the forbidden
   await expect(
     staffPage.getByRole("heading", { name: "หน้านี้สำหรับคนที่จัดการบทบาทได้" }),
   ).toBeVisible({ timeout: 20_000 });
-  await expect(staffPage.getByRole("button", { name: "กลับไปหน้าข้อมูลร้าน" })).toBeVisible();
+  await expect(staffPage.getByRole("link", { name: "กลับไปหน้าข้อมูลร้าน" })).toBeVisible();
 });

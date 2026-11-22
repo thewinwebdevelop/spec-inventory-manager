@@ -1,0 +1,27 @@
+// G3-04 (T-003-B25) — per-method pins with ONE exact history allowance (the deleted-row cap).
+class RolesService {
+  // RED: the role LOOKUP of a pinned method dodges with a history label.
+  async delete(tx, id) {
+    // role-read: history — "the row might be gone"
+    const role = await tx.role.findFirst({ where: { id } });
+    // role-read: history — deleted-row cap (data-model §2.2)
+    const gone = await tx.role.count({ where: { deletedAt: { not: null } } });
+    return [role, gone];
+  }
+
+  // RED: a non-cap read wearing the cap's label (live lookup present, so only the dodge is red).
+  async update(tx, id) {
+    const role = await tx.role.findFirst({ where: { id, ...LIVE_ROLE_WHERE } });
+    // role-read: history — deleted-row cap
+    const all = await tx.role.count({ where: { organizationId: "o" } });
+    return [role, all];
+  }
+
+  // GREEN twin: live lookup + the exact cap read under its label.
+  async twin(tx, id) {
+    const role = await tx.role.findFirst({ where: { id, ...LIVE_ROLE_WHERE } });
+    // role-read: history — deleted-row cap (data-model §2.2)
+    const gone = await tx.role.count({ where: { deletedAt: { not: null } } });
+    return [role, gone];
+  }
+}

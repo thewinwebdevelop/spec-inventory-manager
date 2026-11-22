@@ -1,0 +1,7 @@
+// G3-02 red fixture (security review B23 L-2) — escape casts that dodge the
+// brand without ever naming it. (`as any` in this comment must NOT count)
+await tx.role.create({ data: roleCreateData({ ...base, capabilities: input.capabilities as never }) });
+await tx.role.create({ data: roleCreateData({ ...base, capabilities: input.capabilities as any }) });
+await tx.role.create({ data: roleCreateData({ ...base, capabilities: raw } as unknown as RoleCreateDataInput) });
+// green — a validated value, no cast:
+await tx.role.create({ data: roleCreateData({ ...base, capabilities: validated.capabilities }) });

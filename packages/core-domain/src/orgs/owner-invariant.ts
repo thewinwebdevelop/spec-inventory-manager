@@ -37,6 +37,10 @@ export interface OwnerMembership {
  *   every membership holding `roleId` is evaluated with `newCapabilities`
  * - `role_delete` — DELETE /orgs/{orgId}/roles/{roleId} (soft, shape 4): every membership
  *   holding `roleId` stops counting as an Owner
+ * - `role_create` — POST /orgs/{orgId}/roles (F-003 · T-003-B23, shape 5): a new role has
+ *   no holder, so it changes nobody — the shape exists so every role write runs the same
+ *   defensive check (architecture §13.2 (ก)), and it still refuses on an org that already
+ *   has 0 active Owners (fail-closed)
  *
  * Shapes 3/4 change NO membership row — the org can still lose its last Owner,
  * which is why they need their own shapes (forward-commitment L283).
@@ -53,7 +57,8 @@ export type OwnerChange =
       readonly roleId: string;
       readonly newCapabilities: readonly string[];
     }
-  | { readonly kind: "role_delete"; readonly roleId: string };
+  | { readonly kind: "role_delete"; readonly roleId: string }
+  | { readonly kind: "role_create" };
 
 export interface OwnerInvariantInput {
   /**
@@ -142,6 +147,8 @@ function capabilitiesAfterChange(
       return membership.roleId === change.roleId ? change.newCapabilities : membership.capabilities;
     case "role_delete":
       return membership.roleId === change.roleId ? null : membership.capabilities;
+    case "role_create":
+      return membership.capabilities;
     default: {
       // Fail loud: an unknown shape must not be read as "changes nothing".
       const unknown: never = change;

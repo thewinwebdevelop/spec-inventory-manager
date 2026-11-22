@@ -50,3 +50,24 @@ export function useCapabilityCatalog(): UseQueryResult<CapabilityCatalog, unknow
       ) as Promise<CapabilityCatalog>,
   });
 }
+
+/**
+ * T-003-W06 — `GET /orgs/{orgId}/roles/{roleId}` (R3/R4). The same `RoleDetail`
+ * as the list item, read on its own so the form gets the CURRENT `version` and
+ * verdicts. `refetchOnWindowFocus: false`: R3 re-reads only when it decides to
+ * (after a save, on `409 ROLE_CHANGED`, after a refusal) — a silent background
+ * refresh must not move the ground under a half-finished edit.
+ */
+export function useRoleDetail(roleId: string): UseQueryResult<RoleDetail, unknown> {
+  const client = useOrgApiClient();
+  const { orgId } = useActiveOrg();
+  return useQuery({
+    queryKey: orgKey(orgId, "role-detail", roleId),
+    staleTime: 0,
+    refetchOnWindowFocus: false,
+    queryFn: () =>
+      unwrap(
+        client.GET("/orgs/{orgId}/roles/{roleId}", { params: { path: { orgId, roleId } } }),
+      ) as Promise<RoleDetail>,
+  });
+}

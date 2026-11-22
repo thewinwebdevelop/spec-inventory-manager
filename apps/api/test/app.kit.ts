@@ -8,10 +8,16 @@
 // `HealthModule` is deliberately left out (it opens a BullMQ queue nothing here
 // asserts on). Everything else mirrors `main.ts` line for line; where it does
 // not, a comment says why.
-import { ValidationPipe, UnprocessableEntityException, type INestApplication } from "@nestjs/common";
+import {
+  ValidationPipe,
+  UnprocessableEntityException,
+  type INestApplication,
+} from "@nestjs/common";
 import { Test, type TestingModuleBuilder } from "@nestjs/testing";
 import cookieParser from "cookie-parser";
+import { loadEnv } from "@omnistock/config";
 import { AuthModule } from "../src/auth/auth.module";
+import { BootEnvModule } from "../src/common/boot-env";
 import { SecurityEventsService } from "../src/auth/security-events.service";
 import { CAPABILITY_EVENT_SINK_OVERRIDE } from "../src/common/authz";
 import {
@@ -58,6 +64,12 @@ export interface TestAppOptions {
    * this kit never opens or closes a socket it did not create.
    */
   readonly rateLimitRedis?: unknown;
+  /**
+   * T-003-B23 — adjust the module before it compiles (e.g. override the
+   * `ROLE_WRITE_DECIDER` seam with a spy). Test seams only — never a way to
+   * swap a production rule for a weaker one in a suite that asserts that rule.
+   */
+  readonly configure?: (builder: TestingModuleBuilder) => TestingModuleBuilder;
 }
 
 export interface TestApp {
@@ -73,6 +85,10 @@ export async function createTestApp(options: TestAppOptions = {}): Promise<TestA
   if (options.fixtures !== false) process.env.ENABLE_TEST_FIXTURES = "1";
 
   const imports: Parameters<typeof Test.createTestingModule>[0]["imports"] = [
+    // T-003-B23 (DV01) — like `main.ts`: ONE env snapshot, taken now ("boot"),
+    // is what every provider reads. A suite that needs a different flag boots
+    // its own app after setting the env (I3-44/I3-45).
+    BootEnvModule.forRoot(loadEnv(process.env)),
     // Same composition as `app.module.ts`: the real `SecurityEventsService` is
     // bound as both global guards' sink, so `collectSecurityEvents()` sees
     // `org.access.capability_denied` (and a rate-limit fail-open) instead of
@@ -110,7 +126,8 @@ export async function createTestApp(options: TestAppOptions = {}): Promise<TestA
   ];
   if (options.fixtures !== false) imports.push(TestFixturesModule.register());
 
-  const builder: TestingModuleBuilder = Test.createTestingModule({ imports });
+  const base: TestingModuleBuilder = Test.createTestingModule({ imports });
+  const builder = options.configure ? options.configure(base) : base;
   const moduleRef = await builder.compile();
   const app = moduleRef.createNestApplication();
 

@@ -68,6 +68,7 @@ export { maskEmail, MaskEmailError, EMAIL_MASK } from "./invitation-email";
 export {
   invitationTtlHours,
   isElevatedRole,
+  clampedInvitationExpiry,
   canAcceptInvitation,
   decideInviterRecheck,
   judgeInviterRecheck,

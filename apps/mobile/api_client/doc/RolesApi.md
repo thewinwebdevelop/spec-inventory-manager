@@ -9,10 +9,107 @@ All URIs are relative to *http://localhost:3000*
 
 Method | HTTP request | Description
 ------------- | ------------- | -------------
+[**createOrgRole**](RolesApi.md#createorgrole) | **POST** /orgs/{orgId}/roles | Create a custom role (also how \&quot;clone\&quot; is done)
+[**deleteOrgRole**](RolesApi.md#deleteorgrole) | **DELETE** /orgs/{orgId}/roles/{roleId} | Delete a role (soft)
 [**getOrgCapabilityCatalog**](RolesApi.md#getorgcapabilitycatalog) | **GET** /orgs/{orgId}/capabilities | The capability catalog this shop can see (role checklist)
 [**getOrgRoleDetail**](RolesApi.md#getorgroledetail) | **GET** /orgs/{orgId}/roles/{roleId} | One role of this shop, in full (edit and clone screens)
 [**listOrgRoleDetails**](RolesApi.md#listorgroledetails) | **GET** /orgs/{orgId}/role-details | Every live role of this shop, in full (the role list screen)
+[**updateOrgRole**](RolesApi.md#updateorgrole) | **PATCH** /orgs/{orgId}/roles/{roleId} | Rename a role and/or replace its capabilities
 
+
+# **createOrgRole**
+> RoleDetail createOrgRole(orgId, createRoleRequest, xOrganizationId)
+
+Create a custom role (also how \"clone\" is done)
+
+F-003 (api-spec §1, §2, AC-3.1..3.7, AC-4.2, AC-5.1). Requires `manage_roles`. There is no clone endpoint: the client pre-fills this request from the source role (`RoleDetail`) and sends it like any create.  The created role always has `key: null` and `isSystem: false`; `key`, `isSystem` and `version` in the body are ignored (AC-1.4). `name` comes back normalised (NFC, trimmed, inner whitespace collapsed) and `capabilities` in canonical form (deduplicated, implied keys removed, sorted).  ⚠️ ROLLOUT FLAG: while `ROLE_WRITES_ENABLED` is off the server answers `503 ROLE_WRITES_DISABLED` to callers who hold `manage_roles` — the same state `viewer.canCreate.reason = \"writes_disabled\"` already reports. A caller WITHOUT `manage_roles` gets `403 FORBIDDEN` either way.  FIXED CHECK ORDER (api-spec §2): `manage_roles` (`403 FORBIDDEN`) → flag (`503`) → rate limit (`429`) → `manage_roles` re-read inside the transaction (`403 FORBIDDEN`) → body shape (`422 VALIDATION_FAILED`) → name (`422 VALIDATION_FAILED` length / invisible characters, then `409 ROLE_NAME_TAKEN` for a reserved system-role label) → `ROLE_EMPTY` → `FULL_ACCESS_RESERVED` → `UNKNOWN_CAPABILITY` → `ROLE_EXCEEDS_ACTOR` → `ROLE_LIMIT_REACHED` → write (a live role with the same name, ignoring case → `409 ROLE_NAME_TAKEN`).  Rate limit `roleWrite`: 60 role writes per hour per shop, shared by create / update / delete. 
+
+### Example
+```dart
+import 'package:omnistock_api_client/api.dart';
+
+final api = OmnistockApiClient().getRolesApi();
+final String orgId = orgId_example; // String | Organization id. On F-002 org-scoped routes this is one of the two accepted sources of org context (the other is the `X-Organization-Id` header, D-025); sending both with different values is `422 ORG_MISMATCH`. 
+final CreateRoleRequest createRoleRequest = ; // CreateRoleRequest | 
+final String xOrganizationId = xOrganizationId_example; // String | Org context (api-spec §1). Optional on routes that already carry `{orgId}` in the path; if both are sent they MUST match, otherwise `422 ORG_MISMATCH`. User-scoped and public routes ignore this header entirely (I-3). 
+
+try {
+    final response = api.createOrgRole(orgId, createRoleRequest, xOrganizationId);
+    print(response);
+} on DioException catch (e) {
+    print('Exception when calling RolesApi->createOrgRole: $e\n');
+}
+```
+
+### Parameters
+
+Name | Type | Description  | Notes
+------------- | ------------- | ------------- | -------------
+ **orgId** | **String**| Organization id. On F-002 org-scoped routes this is one of the two accepted sources of org context (the other is the `X-Organization-Id` header, D-025); sending both with different values is `422 ORG_MISMATCH`.  | 
+ **createRoleRequest** | [**CreateRoleRequest**](CreateRoleRequest.md)|  | 
+ **xOrganizationId** | **String**| Org context (api-spec §1). Optional on routes that already carry `{orgId}` in the path; if both are sent they MUST match, otherwise `422 ORG_MISMATCH`. User-scoped and public routes ignore this header entirely (I-3).  | [optional] 
+
+### Return type
+
+[**RoleDetail**](RoleDetail.md)
+
+### Authorization
+
+[bearerAuth](../README.md#bearerAuth)
+
+### HTTP request headers
+
+ - **Content-Type**: application/json
+ - **Accept**: application/json
+
+[[Back to top]](#) [[Back to API list]](../README.md#documentation-for-api-endpoints) [[Back to Model list]](../README.md#documentation-for-models) [[Back to README]](../README.md)
+
+# **deleteOrgRole**
+> DeletedRole deleteOrgRole(orgId, roleId, xOrganizationId)
+
+Delete a role (soft)
+
+F-003 (api-spec §1, §2, AC-3.8, AC-3.9, AC-3.9b, AC-4.1, AC-5.1, D-034 Addendum + Addendum 2). Requires `manage_roles`. No request body and no `version`.  SOFT delete: the role disappears from every live list (`GET /roles`, `GET /role-details`, `GET /roles/{roleId}` → `404`, invite / change-role choices) and its name becomes free again, but history keeps showing it — revoked members and accepted / cancelled invitations still carry its `roleName`.  A role can be deleted only when nobody uses it: no ACTIVE member holds it (you included) and no PENDING invitation names it — an expired link that was never accepted or cancelled still counts (`409 ROLE_IN_USE`, with the two counts in `details`; `GET /members?roleId=` and `GET /invitations?roleId=` list the same people and links).  A role other ACTIVE members hold is refused BEFORE `ROLE_IN_USE` when the caller could not move them anyway: no `manage_members` (`403 ROLE_HELD_REQUIRES_MANAGE_MEMBERS` — stay on the screen; `viewer.canDelete.reason = \"in_use_requires_manage_members\"`), or the role holds exactly what the caller holds (`403 TARGET_NOT_BELOW_ACTOR`; reason `equal_permissions_in_use`). The Owner passes both and gets `ROLE_IN_USE`.  ⚠️ ROLLOUT FLAG: while `ROLE_WRITES_ENABLED` is off the server answers `503 ROLE_WRITES_DISABLED` to callers who hold `manage_roles` (`viewer.canDelete.reason = \"writes_disabled\"`). A caller WITHOUT `manage_roles` gets `403 FORBIDDEN` either way.  FIXED CHECK ORDER (api-spec §2): `manage_roles` (`403 FORBIDDEN`) → flag (`503`) → rate limit (`429`) → the role exists in this shop and is not deleted (`404`) → `manage_roles` re-read inside the transaction (`403 FORBIDDEN`) → the Owner role (`409 ROLE_LOCKED`) → `ROLE_EXCEEDS_ACTOR` → `ROLE_HELD_REQUIRES_MANAGE_MEMBERS` → `TARGET_NOT_BELOW_ACTOR` → `ROLE_IN_USE` → `ROLE_HISTORY_LIMIT_REACHED` → delete (`200`).  Rate limit `roleWrite`: 60 role writes per hour per shop, shared by create / update / delete. 
+
+### Example
+```dart
+import 'package:omnistock_api_client/api.dart';
+
+final api = OmnistockApiClient().getRolesApi();
+final String orgId = orgId_example; // String | Organization id. On F-002 org-scoped routes this is one of the two accepted sources of org context (the other is the `X-Organization-Id` header, D-025); sending both with different values is `422 ORG_MISMATCH`. 
+final String roleId = roleId_example; // String | Role id (`RoleDetail.id`).
+final String xOrganizationId = xOrganizationId_example; // String | Org context (api-spec §1). Optional on routes that already carry `{orgId}` in the path; if both are sent they MUST match, otherwise `422 ORG_MISMATCH`. User-scoped and public routes ignore this header entirely (I-3). 
+
+try {
+    final response = api.deleteOrgRole(orgId, roleId, xOrganizationId);
+    print(response);
+} on DioException catch (e) {
+    print('Exception when calling RolesApi->deleteOrgRole: $e\n');
+}
+```
+
+### Parameters
+
+Name | Type | Description  | Notes
+------------- | ------------- | ------------- | -------------
+ **orgId** | **String**| Organization id. On F-002 org-scoped routes this is one of the two accepted sources of org context (the other is the `X-Organization-Id` header, D-025); sending both with different values is `422 ORG_MISMATCH`.  | 
+ **roleId** | **String**| Role id (`RoleDetail.id`). | 
+ **xOrganizationId** | **String**| Org context (api-spec §1). Optional on routes that already carry `{orgId}` in the path; if both are sent they MUST match, otherwise `422 ORG_MISMATCH`. User-scoped and public routes ignore this header entirely (I-3).  | [optional] 
+
+### Return type
+
+[**DeletedRole**](DeletedRole.md)
+
+### Authorization
+
+[bearerAuth](../README.md#bearerAuth)
+
+### HTTP request headers
+
+ - **Content-Type**: Not defined
+ - **Accept**: application/json
+
+[[Back to top]](#) [[Back to API list]](../README.md#documentation-for-api-endpoints) [[Back to Model list]](../README.md#documentation-for-models) [[Back to README]](../README.md)
 
 # **getOrgCapabilityCatalog**
 > CapabilityCatalog getOrgCapabilityCatalog(orgId, xOrganizationId)
@@ -147,6 +244,55 @@ Name | Type | Description  | Notes
 ### HTTP request headers
 
  - **Content-Type**: Not defined
+ - **Accept**: application/json
+
+[[Back to top]](#) [[Back to API list]](../README.md#documentation-for-api-endpoints) [[Back to Model list]](../README.md#documentation-for-models) [[Back to README]](../README.md)
+
+# **updateOrgRole**
+> RoleDetail updateOrgRole(orgId, roleId, updateRoleRequest, xOrganizationId)
+
+Rename a role and/or replace its capabilities
+
+F-003 (api-spec §1, §2, AC-3.3, AC-3.10, AC-3.12, AC-4.1, AC-5.1, D-034 Addendum + Addendum 2). Requires `manage_roles`. `version` is required — the `RoleDetail.version` the user was looking at. `capabilities` is the WHOLE new set (replace, not a diff); `name` and `capabilities` are each optional, but at least one must be sent.  NO-OP: when the normalised name and the canonical capability set are what is already stored, the answer is `200` with the CURRENT role — `version` is not compared (a stale one is fine), nothing is written and no event fires. The no-op is decided only AFTER every permission rule, so a no-op on a role you may not edit is still refused.  ⚠️ `409 ROLE_CHANGED`: someone saved the role after you loaded it. The client MUST re-fetch `GET /orgs/{orgId}/roles/{roleId}` and show the difference for the user to decide — it must NEVER resubmit automatically with `details.currentVersion` (that is the last-write-wins AC-3.12 forbids).  A role other ACTIVE members hold (counted on the server, the caller excluded): the caller must also hold `manage_members` (`403 ROLE_HELD_REQUIRES_MANAGE_MEMBERS` — stay on the screen and re-fetch; `viewer.canEdit.reason = \"in_use_requires_manage_members\"`), and the role as it is now must hold strictly less than the caller (`403 TARGET_NOT_BELOW_ACTOR`; reason `equal_permissions_in_use`). This applies to every field, a rename included. The Owner passes both.  Editing your own role is allowed (only within your own capabilities); losing a capability takes effect on your next request (AC-3.10 — the client warns first). Making a role hold `manage_members` / `manage_roles` shortens its pending invitations to 24 hours from issue (never lengthens them).  ⚠️ ROLLOUT FLAG: while `ROLE_WRITES_ENABLED` is off the server answers `503 ROLE_WRITES_DISABLED` to callers who hold `manage_roles` (`viewer.canEdit.reason = \"writes_disabled\"`). A caller WITHOUT `manage_roles` gets `403 FORBIDDEN` either way.  FIXED CHECK ORDER (api-spec §2): `manage_roles` (`403 FORBIDDEN`) → flag (`503`) → rate limit (`429`) → the role exists in this shop and is not deleted (`404`) → `manage_roles` re-read inside the transaction (`403 FORBIDDEN`) → the Owner role (`409 ROLE_LOCKED`) → body shape (`422 VALIDATION_FAILED`) → name (`422 VALIDATION_FAILED`, then `409 ROLE_NAME_TAKEN` for a reserved label) → `ROLE_EMPTY` → `FULL_ACCESS_RESERVED` → `UNKNOWN_CAPABILITY` → `ROLE_EXCEEDS_ACTOR` → `ROLE_HELD_REQUIRES_MANAGE_MEMBERS` → `TARGET_NOT_BELOW_ACTOR` → no-op (`200`) → write (`409 ROLE_CHANGED`; a live role with the same name → `409 ROLE_NAME_TAKEN`).  Rate limit `roleWrite`: 60 role writes per hour per shop, shared by create / update / delete. 
+
+### Example
+```dart
+import 'package:omnistock_api_client/api.dart';
+
+final api = OmnistockApiClient().getRolesApi();
+final String orgId = orgId_example; // String | Organization id. On F-002 org-scoped routes this is one of the two accepted sources of org context (the other is the `X-Organization-Id` header, D-025); sending both with different values is `422 ORG_MISMATCH`. 
+final String roleId = roleId_example; // String | Role id (`RoleDetail.id`).
+final UpdateRoleRequest updateRoleRequest = ; // UpdateRoleRequest | 
+final String xOrganizationId = xOrganizationId_example; // String | Org context (api-spec §1). Optional on routes that already carry `{orgId}` in the path; if both are sent they MUST match, otherwise `422 ORG_MISMATCH`. User-scoped and public routes ignore this header entirely (I-3). 
+
+try {
+    final response = api.updateOrgRole(orgId, roleId, updateRoleRequest, xOrganizationId);
+    print(response);
+} on DioException catch (e) {
+    print('Exception when calling RolesApi->updateOrgRole: $e\n');
+}
+```
+
+### Parameters
+
+Name | Type | Description  | Notes
+------------- | ------------- | ------------- | -------------
+ **orgId** | **String**| Organization id. On F-002 org-scoped routes this is one of the two accepted sources of org context (the other is the `X-Organization-Id` header, D-025); sending both with different values is `422 ORG_MISMATCH`.  | 
+ **roleId** | **String**| Role id (`RoleDetail.id`). | 
+ **updateRoleRequest** | [**UpdateRoleRequest**](UpdateRoleRequest.md)|  | 
+ **xOrganizationId** | **String**| Org context (api-spec §1). Optional on routes that already carry `{orgId}` in the path; if both are sent they MUST match, otherwise `422 ORG_MISMATCH`. User-scoped and public routes ignore this header entirely (I-3).  | [optional] 
+
+### Return type
+
+[**RoleDetail**](RoleDetail.md)
+
+### Authorization
+
+[bearerAuth](../README.md#bearerAuth)
+
+### HTTP request headers
+
+ - **Content-Type**: application/json
  - **Accept**: application/json
 
 [[Back to top]](#) [[Back to API list]](../README.md#documentation-for-api-endpoints) [[Back to Model list]](../README.md#documentation-for-models) [[Back to README]](../README.md)

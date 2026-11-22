@@ -1,5 +1,14 @@
-import { expect, test, type Page } from "@playwright/test";
-import { createShop, freshEmail, invite, login, openMembers, readShared, resetIpThrottle } from "./helpers";
+import { type Page } from "@playwright/test";
+import { expect, test } from "./fixtures";
+import {
+  createShop,
+  freshEmail,
+  invite,
+  login,
+  openMembers,
+  readShared,
+  resetIpThrottle,
+} from "./helpers";
 
 /**
  * One account, one page, in order — see the note in e02: F-001's per-IP
@@ -111,9 +120,15 @@ test("E-03b · the old link is DEAD the moment a new one exists", async ({ brows
 
   const guest = freshEmail("guest");
   const firstUrl = await invite(page, guest, "พนักงาน");
-  await page.getByRole("dialog", { name: "ลิงก์คำเชิญพร้อมแล้ว" }).getByRole("button", { name: "เสร็จแล้ว" }).click();
+  await page
+    .getByRole("dialog", { name: "ลิงก์คำเชิญพร้อมแล้ว" })
+    .getByRole("button", { name: "เสร็จแล้ว" })
+    .click();
 
-  await page.locator("li", { hasText: guest }).getByRole("button", { name: "ออกลิงก์ใหม่" }).click();
+  await page
+    .locator("li", { hasText: guest })
+    .getByRole("button", { name: "ออกลิงก์ใหม่" })
+    .click();
   await page.getByRole("alertdialog").getByRole("button", { name: "ออกลิงก์ใหม่" }).click();
   await expect(page.getByRole("dialog", { name: "ลิงก์คำเชิญพร้อมแล้ว" })).toBeVisible({
     timeout: 20_000,
@@ -134,9 +149,7 @@ test("E-03b · the old link is DEAD the moment a new one exists", async ({ brows
   // this specific is worth asserting by its words. It is what the person
   // holding a dead link actually reads.
   await expect(inviteePage.getByRole("button", { name: "เข้าร่วมร้านนี้" })).toHaveCount(0);
-  await expect(
-    inviteePage.getByRole("heading", { name: "ลิงก์คำเชิญนี้ใช้ไม่ได้" }),
-  ).toBeVisible();
+  await expect(inviteePage.getByRole("heading", { name: "ลิงก์คำเชิญนี้ใช้ไม่ได้" })).toBeVisible();
   // …and it says what to do next, which is the half that keeps it from being
   // a dead end (§11.4).
   await expect(inviteePage.getByText(/ขอลิงก์ใหม่จากเจ้าของร้าน/)).toBeVisible();

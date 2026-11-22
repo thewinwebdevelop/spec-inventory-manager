@@ -16,6 +16,7 @@ import { METHOD_METADATA, PATH_METADATA } from "@nestjs/common/constants";
 import { DiscoveryService, MetadataScanner, Reflector } from "@nestjs/core";
 import { ROUTE_SCOPE_KEY, type RouteScope } from "../../tenancy/route-scope.decorator";
 import { ANY_ACTIVE_MEMBER_KEY, CAPABILITY_KEY } from "./capability.decorator";
+import { ROLE_WRITE_KEY } from "./role-write";
 import { isMutatingMethod, toTemplatePath } from "./route-capabilities";
 
 /** How a route declared its authorization — `none` is the failure I-2 hunts. */
@@ -33,6 +34,8 @@ export interface RouteDeclaration {
   readonly capability?: string;
   /** True for POST/PUT/PATCH/DELETE — lets I-02 count read vs mutating apart. */
   readonly mutating: boolean;
+  /** F-003 · T-003-B23 — carries `@RoleWrite()` (G3-01 compares these with ROLE_WRITE_ROUTES). */
+  readonly roleWrite: boolean;
   /** `Controller.handler` — so a red test names the file to open. */
   readonly source: string;
 }
@@ -63,8 +66,7 @@ export function enumerateRoutes(app: INestApplication): readonly RouteDeclaratio
       const handler = prototype[methodName];
       if (typeof handler !== "function") continue;
       const requestMethod = Reflect.getMetadata(METHOD_METADATA, handler) as
-        | RequestMethod
-        | undefined;
+        RequestMethod | undefined;
       if (requestMethod === undefined) continue; // not a route handler
 
       const handlerScope = reflector.get<RouteScope | undefined>(ROUTE_SCOPE_KEY, handler);
@@ -74,6 +76,9 @@ export function enumerateRoutes(app: INestApplication): readonly RouteDeclaratio
       const declaration =
         handlerDeclaration.declaration === "none" ? classDeclaration : handlerDeclaration;
       const method = RequestMethod[requestMethod] ?? String(requestMethod);
+      const roleWrite =
+        reflector.getAllAndOverride<boolean | undefined>(ROLE_WRITE_KEY, [handler, metatype]) ===
+        true;
 
       for (const controllerPath of controllerPaths) {
         for (const handlerPath of toPaths(Reflect.getMetadata(PATH_METADATA, handler))) {
@@ -84,6 +89,7 @@ export function enumerateRoutes(app: INestApplication): readonly RouteDeclaratio
             scope: declaredScope ?? "org",
             ...declaration,
             mutating: isMutatingMethod(method),
+            roleWrite,
             source: `${metatype.name}.${methodName}`,
           });
         }

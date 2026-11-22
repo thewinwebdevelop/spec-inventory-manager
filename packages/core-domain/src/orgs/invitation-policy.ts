@@ -80,6 +80,28 @@ export function invitationTtlHours(
 }
 
 /**
+ * F-003 · T-003-B24 — architecture §6 layer 1 (AC-10.3/10.4): what a role edit
+ * does to one of that role's PENDING links. When the role goes from not
+ * elevated to elevated, the link may live at most the elevated TTL from when it
+ * was issued: `min(expiresAt, tokenIssuedAt + 24h)`. Returns the new expiry, or
+ * `null` when nothing is to be written — the tier did not rise, or the link is
+ * already at least that short. Shortens only: a demotion never gives time back
+ * (layer 2 at accept still re-computes from the CURRENT caps).
+ */
+export function clampedInvitationExpiry(input: {
+  readonly before: readonly string[];
+  readonly after: readonly string[];
+  readonly invitation: { readonly tokenIssuedAt: Date; readonly expiresAt: Date };
+}): Date | null {
+  if (isElevatedRole(input.before) || !isElevatedRole(input.after)) return null;
+  const capped = invitationExpiryFrom(
+    input.invitation.tokenIssuedAt,
+    INVITATION_TTL_HOURS_ELEVATED,
+  );
+  return capped.getTime() < input.invitation.expiresAt.getTime() ? capped : null;
+}
+
+/**
  * Every answer `canAcceptInvitation` can give. Each maps to one wire result
  * (api-spec §3.15/§4): `ok` → 200 · `expired`/`cancelled`/`already_accepted` →
  * 409 `INVITATION_EXPIRED|INVITATION_CANCELLED|INVITATION_ALREADY_ACCEPTED` ·

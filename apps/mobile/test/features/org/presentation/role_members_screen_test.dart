@@ -134,7 +134,7 @@ void main() {
           builder: (_) => const Scaffold(body: Text('R4 บทบาท')),
         ),
       ),
-      overrides: [orgScopedRepositoryProvider.overrideWithValue(FakeOrgScoped())],
+      overrides: [orgScopedRepositoryProvider.overrideWithValue(FakeOrgScoped(roles: threeRoles))],
       activeOrg: adminOrg,
     );
     navigatorKey.currentState!.push(
@@ -151,6 +151,23 @@ void main() {
     await tester.tap(find.text('กลับไปที่บทบาท "พนักงาน"'));
     await tester.pumpAndSettle();
     expect(find.text('R4 บทบาท'), findsOneWidget);
+  });
+
+  testWidgets('★ M11 L-2 · an unknown roleId is NOT "nobody uses this role"', (tester) async {
+    // `?roleId=` for a role this shop does not have (deleted, another shop's)
+    // answers 200 with empty pages (api §4.2b — not an oracle). Saying
+    // "nobody uses it — go delete it" would be a fact nobody established.
+    await _pump(tester, FakeOrgScoped(roles: threeRoles.where((r) => r.id != 'rol_staff').toList()));
+
+    expect(find.text('ไม่มีใครใช้บทบาทนี้แล้ว — กลับไปลบบทบาทได้เลย'), findsNothing);
+    expect(find.text('ไม่พบบทบาทนี้'), findsOneWidget);
+    expect(find.text('บทบาทนี้อาจถูกลบไปแล้ว'), findsOneWidget);
+  });
+
+  testWidgets('L-2 · while GET /roles is unanswered or failed, no success banner either',
+      (tester) async {
+    await _pump(tester, FakeOrgScoped(rolesFailure: const ServerFailure()));
+    expect(find.text('ไม่มีใครใช้บทบาทนี้แล้ว — กลับไปลบบทบาทได้เลย'), findsNothing);
   });
 
   testWidgets('loading — skeleton per section', (tester) async {

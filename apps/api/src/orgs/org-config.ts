@@ -14,8 +14,15 @@
 // `required` in the zod schema (§6.4), so the process does not boot without it,
 // and `MAX_ORGS_PER_USER` defaults to 50 there rather than here — a default that
 // lived in two places would drift.
-import { loadEnv } from "@omnistock/config";
+//
+// F-003 · T-003-B23 (DV01): "resolved once at boot" now means literally that —
+// every factory below reads the `BOOT_ENV` snapshot main.ts validated, never
+// `process.env` (see common/boot-env.ts).
+import type { Env } from "@omnistock/config";
 import type { Provider } from "@nestjs/common";
+import { BOOT_ENV, ROLE_WRITES_ENABLED } from "../common/boot-env";
+
+export { ROLE_WRITES_ENABLED };
 
 /** `PlanDefinition.key` a brand-new org is bound to (architecture §6.2). */
 export const DEFAULT_ORG_PLAN_KEY = Symbol("DEFAULT_ORG_PLAN_KEY");
@@ -36,13 +43,6 @@ export const INVITATION_PENDING_CAP = Symbol("INVITATION_PENDING_CAP");
 /** Base URL the invite link is built on (architecture §7, `WEB_APP_BASE_URL`). */
 export const WEB_APP_BASE_URL = Symbol("WEB_APP_BASE_URL");
 
-/**
- * F-003 §12 — `ROLE_WRITES_ENABLED` as a boolean, resolved once at boot. Read
- * routes report `writes_disabled` from it (api-spec §3); the write guard (B23)
- * consumes the same token, so a verdict and a 503 cannot disagree.
- */
-export const ROLE_WRITES_ENABLED = Symbol("ROLE_WRITES_ENABLED");
-
 /** F-003 §10 — `{ maxRolesPerOrg, maxDeletedRolesPerOrg }` (packages/config). */
 export const ROLE_CAPACITY_LIMITS = Symbol("ROLE_CAPACITY_LIMITS");
 
@@ -57,7 +57,8 @@ export const INVITATION_PENDING_CAP_DEFAULT = 100;
 export const orgConfigProviders: readonly Provider[] = Object.freeze([
   {
     provide: DEFAULT_ORG_PLAN_KEY,
-    useFactory: (): string => loadEnv(process.env).DEFAULT_ORG_PLAN_KEY,
+    useFactory: (env: Env): string => env.DEFAULT_ORG_PLAN_KEY,
+    inject: [BOOT_ENV],
   },
   {
     provide: INVITATION_PENDING_CAP,
@@ -67,27 +68,26 @@ export const orgConfigProviders: readonly Provider[] = Object.freeze([
     provide: WEB_APP_BASE_URL,
     // Validated at boot (url + https outside test), so by the time a request
     // reaches here the value is known-good and the read is just a lookup.
-    useFactory: (): string => loadEnv(process.env).WEB_APP_BASE_URL,
+    useFactory: (env: Env): string => env.WEB_APP_BASE_URL,
+    inject: [BOOT_ENV],
   },
   {
     provide: MAX_ORGS_PER_USER,
     // `positiveIntEnv` keeps env values as strings (they are validated as digits
     // with a bound); the numeric conversion happens here, once.
-    useFactory: (): number => Number(loadEnv(process.env).MAX_ORGS_PER_USER),
-  },
-  {
-    provide: ROLE_WRITES_ENABLED,
-    // Already a boolean (exact "true" only — `parseRoleWritesEnabled`).
-    useFactory: (): boolean => loadEnv(process.env).ROLE_WRITES_ENABLED,
+    useFactory: (env: Env): number => Number(env.MAX_ORGS_PER_USER),
+    inject: [BOOT_ENV],
   },
   {
     provide: ROLE_CAPACITY_LIMITS,
-    useFactory: (): RoleCapacityLimits => {
-      const env = loadEnv(process.env);
+    // ROLE_WRITES_ENABLED itself is provided by BootEnvModule (common/) — the
+    // global flag guard needs it too, and tenancy/ may not import this module.
+    useFactory: (env: Env): RoleCapacityLimits => {
       return Object.freeze({
         maxRolesPerOrg: Number(env.MAX_ROLES_PER_ORG),
         maxDeletedRolesPerOrg: Number(env.MAX_DELETED_ROLES_PER_ORG),
       });
     },
+    inject: [BOOT_ENV],
   },
 ]);

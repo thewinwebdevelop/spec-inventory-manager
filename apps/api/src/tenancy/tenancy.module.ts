@@ -27,6 +27,7 @@ import { PrismaModule } from "../prisma/prisma.module";
 import { PrismaService } from "../prisma/prisma.service";
 import {
   CapabilityGuard,
+  RoleWritesEnabledGuard,
   CAPABILITY_EVENT_SINK,
   CAPABILITY_EVENT_SINK_OVERRIDE,
   LoggingCapabilityEventSink,
@@ -94,7 +95,14 @@ import { createOrgPrismaProxy } from "./org-prisma.provider";
         override ?? new LoggingCapabilityEventSink(),
       inject: [{ token: CAPABILITY_EVENT_SINK_OVERRIDE, optional: true }],
     },
-    // THIRD — abuse control runs AFTER authorization, deliberately (T-002-14).
+    // THIRD — F-003 · T-003-B23: `ROLE_WRITES_ENABLED` on `@RoleWrite()` handlers
+    // (503 ROLE_WRITES_DISABLED). AFTER the capability layer, so a caller without
+    // `manage_roles` still gets the old `403 FORBIDDEN` and never learns the flag
+    // exists (MUT-11); BEFORE the limiter, so a request refused by the flag does
+    // not burn the shop's `roleWrite` quota (api-spec §2: capability → flag →
+    // rate limit). Reads ROLE_WRITES_ENABLED from the global BootEnvModule.
+    { provide: APP_GUARD, useClass: RoleWritesEnabledGuard },
+    // FOURTH — abuse control runs AFTER authorization, deliberately (T-002-14).
     // Counting a request before we know the caller belongs to the org would let
     // an outsider burn a legitimate org's quota: spam `POST /orgs/{id}/invitations`
     // as a non-member and the real members get 429s. Authorization answers 403

@@ -112,6 +112,31 @@ const PATHS = {
       <path d="m8.9 12.1 2.2 2.2 4-4.1" />
     </>
   ),
+  /** `icon.store` — Phosphor Storefront: the shop itself (menu "ข้อมูลร้าน", S1 `EmptyState`). D-038 ③ D3/D5. */
+  store: (
+    <>
+      <path d="M4.4 4.4h15.2l1.2 5.2H3.2l1.2-5.2Z" />
+      <path d="M4.8 9.6v9.6a.8.8 0 0 0 .8.8h12.8a.8.8 0 0 0 .8-.8V9.6" />
+      <path d="M9.6 20v-5.2h4.8V20" />
+    </>
+  ),
+  /** `icon.security` — Phosphor Key: account security (password, sessions). Not `lock`, which means "locked/forbidden". D5. */
+  security: (
+    <>
+      <circle cx="8" cy="15.2" r="4" />
+      <path d="m10.9 12.3 8.3-8.3" />
+      <path d="m16.4 6.8 2.4 2.4" />
+      <path d="m14 9.2 1.8 1.8" />
+    </>
+  ),
+  /** `icon.sign-out` — Phosphor SignOut: the "ออกจากระบบ" row / button. D5, D1. */
+  "sign-out": (
+    <>
+      <path d="M10 20.4H5a.8.8 0 0 1-.8-.8V4.4a.8.8 0 0 1 .8-.8h5" />
+      <path d="m16 8 4 4-4 4" />
+      <path d="M9.6 12H20" />
+    </>
+  ),
   copy: (
     <>
       <rect x="8.4" y="8.4" width="11.4" height="11.4" rx="2" />
@@ -175,6 +200,9 @@ export function Icon({
       aria-hidden={title ? undefined : true}
       role={title ? "img" : undefined}
       aria-label={title}
+      /* The ROLE (§1.6.2), not the vendor glyph — lets a test say "this banner
+         carries icon.lock" without reading SVG paths. */
+      data-icon={role}
       className={cn("flex-none", SIZE[size], className)}
     >
       {PATHS[role]}

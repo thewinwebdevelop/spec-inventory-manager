@@ -12,11 +12,11 @@ part 'create_role_request.g.dart';
 /// Creates a custom role; \"clone\" is this same request pre-filled from another role. There is no `key`, `isSystem` or `version`: unknown fields are stripped, so a created role always has `key: null` (AC-1.4). 
 ///
 /// Properties:
-/// * [name] - 1–50 code points AFTER the server normalises it (NFC, trim, collapse inner whitespace); invisible/control characters (Unicode Cc/Cf) are refused. The response carries the normalised name. 
+/// * [name] - Raw cap 200 (checked before normalising — security review B23 L-1). 1–50 code points AFTER the server normalises it (NFC, trim, collapse inner whitespace); invisible/control characters (Unicode Cc/Cf) are refused. The response carries the normalised name. 
 /// * [capabilities] - Keys from the capability catalog with `selectable: true`. Stored in canonical form (api-spec §2) — the response may differ from what was sent (duplicates and implied keys removed, sorted). 
 @BuiltValue()
 abstract class CreateRoleRequest implements Built<CreateRoleRequest, CreateRoleRequestBuilder> {
-  /// 1–50 code points AFTER the server normalises it (NFC, trim, collapse inner whitespace); invisible/control characters (Unicode Cc/Cf) are refused. The response carries the normalised name. 
+  /// Raw cap 200 (checked before normalising — security review B23 L-1). 1–50 code points AFTER the server normalises it (NFC, trim, collapse inner whitespace); invisible/control characters (Unicode Cc/Cf) are refused. The response carries the normalised name. 
   @BuiltValueField(wireName: r'name')
   String get name;
 

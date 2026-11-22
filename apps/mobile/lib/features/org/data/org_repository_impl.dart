@@ -131,25 +131,43 @@ class OrgScopedImpl implements OrgScoped {
       final items = body?.items.toList() ?? const <wire.MemberRow>[];
       return PagedResult(
         items: items
-            .map(
-              (m) => MemberRow(
-                userId: m.userId,
-                email: m.email,
-                roleName: m.roleName,
-                roleKey: m.roleKey,
-                status: m.status.name,
-                isMe: m.isMe,
-                isOwner: m.isOwner,
-                // Carried as-is: absent stays null, never defaulted.
-                viewerCanManage: m.viewerCanManage,
-                manageBlockedReason: m.manageBlockedReason,
-              ),
-            )
+            .map(_memberRow)
             .toList(growable: false),
         // Carried, never dropped: an absent `nextCursor` is the only proof a
         // count taken from this list is a count of everybody (ux-wireframe §7).
         nextCursor: body?.nextCursor,
       );
+    } on DioException catch (e) {
+      throw _asFailure(e);
+    }
+  }
+
+  /// One mapping for every route that returns a §3.7 member row (list +
+  /// PATCH), so the two cannot drift apart.
+  static MemberRow _memberRow(wire.MemberRow m) => MemberRow(
+        userId: m.userId,
+        email: m.email,
+        roleId: m.roleId,
+        roleName: m.roleName,
+        roleKey: m.roleKey,
+        roleNameCustomized: m.roleNameCustomized,
+        status: m.status.name,
+        isMe: m.isMe,
+        isOwner: m.isOwner,
+        // Carried as-is: absent stays null, never defaulted.
+        viewerCanManage: m.viewerCanManage,
+        manageBlockedReason: m.manageBlockedReason,
+      );
+
+  @override
+  Future<MemberRow> updateMemberRole({required String userId, required String roleId}) async {
+    try {
+      final res = await _members.updateMemberRole(
+        orgId: _orgId,
+        userId: userId,
+        updateMemberRoleRequest: wire.UpdateMemberRoleRequest((b) => b..roleId = roleId),
+      );
+      return _memberRow(res.data!);
     } on DioException catch (e) {
       throw _asFailure(e);
     }
@@ -213,6 +231,8 @@ class OrgScopedImpl implements OrgScoped {
               nameCustomized: r.nameCustomized,
               viewerCanAssign: r.viewerCanAssign,
               assignBlockedReason: r.assignBlockedReason,
+              // D-039 — carried as-is; absent stays null.
+              inviteTtlHours: r.inviteTtlHours,
             ),
           )
           .toList(growable: false);
@@ -221,47 +241,114 @@ class OrgScopedImpl implements OrgScoped {
     }
   }
 
+  static RoleVerdict _verdict(wire.RoleWriteVerdict v) =>
+      RoleVerdict(allowed: v.allowed, reason: v.reason);
+
+  /// One mapping for every route that returns a `RoleDetail` (list, get,
+  /// create, update) — so the four cannot drift apart.
+  static RoleDetailView _roleDetail(wire.RoleDetail r) => RoleDetailView(
+        id: r.id,
+        name: r.name,
+        roleKey: r.key,
+        nameCustomized: r.nameCustomized,
+        isSystem: r.isSystem,
+        grantsOwnership: r.grantsOwnership,
+        capabilities: r.capabilities.toList(growable: false),
+        usage: RoleUsage(
+          activeMembers: r.usage.activeMembers,
+          pendingInvitations: r.usage.pendingInvitations,
+        ),
+        lastEdited: r.lastEdited == null
+            ? null
+            : RoleLastEditedInfo(
+                at: r.lastEdited!.at,
+                kind: r.lastEdited!.by.kind,
+                byRoleName: r.lastEdited!.by.roleName,
+                byRoleKey: r.lastEdited!.by.roleKey,
+                byRoleNameCustomized: r.lastEdited!.by.roleNameCustomized,
+              ),
+        // Carried verbatim — the screen never recomputes a verdict.
+        canEdit: _verdict(r.viewer.canEdit),
+        canDelete: _verdict(r.viewer.canDelete),
+        canClone: _verdict(r.viewer.canClone),
+        version: r.version,
+      );
+
   @override
   Future<RoleDetailsPage> listRoleDetails() async {
     try {
       final res = await _roles.listOrgRoleDetails(orgId: _orgId);
       final body = res.data;
       if (body == null) throw const ServerFailure();
-      RoleVerdict verdict(wire.RoleWriteVerdict v) =>
-          RoleVerdict(allowed: v.allowed, reason: v.reason);
       return RoleDetailsPage(
-        items: body.items
-            .map(
-              (r) => RoleDetailView(
-                id: r.id,
-                name: r.name,
-                roleKey: r.key,
-                nameCustomized: r.nameCustomized,
-                isSystem: r.isSystem,
-                capabilities: r.capabilities.toList(growable: false),
-                usage: RoleUsage(
-                  activeMembers: r.usage.activeMembers,
-                  pendingInvitations: r.usage.pendingInvitations,
-                ),
-                lastEdited: r.lastEdited == null
-                    ? null
-                    : RoleLastEditedInfo(
-                        at: r.lastEdited!.at,
-                        kind: r.lastEdited!.by.kind,
-                        byRoleName: r.lastEdited!.by.roleName,
-                        byRoleKey: r.lastEdited!.by.roleKey,
-                        byRoleNameCustomized: r.lastEdited!.by.roleNameCustomized,
-                      ),
-                // Carried verbatim — the screen never recomputes a verdict.
-                canEdit: verdict(r.viewer.canEdit),
-                canDelete: verdict(r.viewer.canDelete),
-                canClone: verdict(r.viewer.canClone),
-              ),
-            )
-            .toList(growable: false),
-        canCreate: verdict(body.viewer.canCreate),
+        items: body.items.map(_roleDetail).toList(growable: false),
+        canCreate: _verdict(body.viewer.canCreate),
         limit: body.viewer.limit,
       );
+    } on DioException catch (e) {
+      throw _asFailure(e);
+    }
+  }
+
+  @override
+  Future<RoleDetailView> getRoleDetail(String roleId) async {
+    try {
+      final res = await _roles.getOrgRoleDetail(orgId: _orgId, roleId: roleId);
+      final body = res.data;
+      if (body == null) throw const ServerFailure();
+      return _roleDetail(body);
+    } on DioException catch (e) {
+      throw _asFailure(e);
+    }
+  }
+
+  @override
+  Future<RoleDetailView> createRole({required String name, required List<String> capabilities}) async {
+    try {
+      final res = await _roles.createOrgRole(
+        orgId: _orgId,
+        createRoleRequest: wire.CreateRoleRequest(
+          (b) => b
+            ..name = name
+            ..capabilities.replace(capabilities),
+        ),
+      );
+      final body = res.data;
+      if (body == null) throw const ServerFailure();
+      return _roleDetail(body);
+    } on DioException catch (e) {
+      throw _asFailure(e);
+    }
+  }
+
+  @override
+  Future<RoleDetailView> updateRole(String roleId, RoleUpdate body) async {
+    try {
+      final res = await _roles.updateOrgRole(
+        orgId: _orgId,
+        roleId: roleId,
+        updateRoleRequest: wire.UpdateRoleRequest((b) {
+          b.version = body.version;
+          // Absent, never null-and-present: the server reads "not sent" as
+          // "leave it alone" (ux R3 ⚠️ — never re-send the shown name).
+          if (body.name != null) b.name = body.name;
+          if (body.capabilities != null) b.capabilities.replace(body.capabilities!);
+        }),
+      );
+      final saved = res.data;
+      if (saved == null) throw const ServerFailure();
+      return _roleDetail(saved);
+    } on DioException catch (e) {
+      throw _asFailure(e);
+    }
+  }
+
+  @override
+  Future<void> deleteRole(String roleId) async {
+    try {
+      // `DeletedRole` (id, deletedAt) carries nothing R5 shows — success is
+      // "it is gone"; the caller re-reads R1.
+      await _roles.deleteOrgRole(orgId: _orgId, roleId: roleId);
     } on DioException catch (e) {
       throw _asFailure(e);
     }
@@ -274,8 +361,19 @@ class OrgScopedImpl implements OrgScoped {
       final body = res.data;
       if (body == null) throw const ServerFailure();
       return CapabilityCatalogView(
+        groups: body.groups
+            .map((g) => CapabilityGroupEntry(key: g.key, labelTh: g.labelTh))
+            .toList(growable: false),
         items: body.items
-            .map((e) => CapabilityCatalogEntry(key: e.key, labelTh: e.labelTh, selectable: e.selectable))
+            .map((e) => CapabilityCatalogEntry(
+                  key: e.key,
+                  labelTh: e.labelTh,
+                  selectable: e.selectable,
+                  descriptionTh: e.descriptionTh,
+                  group: e.group,
+                  status: e.status,
+                  implies: e.implies.toList(growable: false),
+                ))
             .toList(growable: false),
       );
     } on DioException catch (e) {

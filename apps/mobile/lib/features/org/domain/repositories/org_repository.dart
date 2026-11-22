@@ -44,6 +44,11 @@ abstract interface class OrgScoped {
     String? cursor,
   });
 
+  /// `PATCH /orgs/{orgId}/members/{userId}` body `{roleId}` (F-003 R10).
+  /// Answers with the member's new row. A refusal arrives as an
+  /// `ApiFailure`; nothing is retried here (one press = one request).
+  Future<MemberRow> updateMemberRole({required String userId, required String roleId});
+
   /// `GET /orgs/{orgId}/roles`.
   Future<List<RoleRow>> listRoles();
 
@@ -55,6 +60,26 @@ abstract interface class OrgScoped {
   /// `GET /orgs/{orgId}/capabilities` (F-003) — the capability catalog whose
   /// labels R2 prints (D-037). Requires `manage_roles`.
   Future<CapabilityCatalogView> getCapabilityCatalog();
+
+  /// `GET /orgs/{orgId}/roles/{roleId}` (F-003 R3) — one role in full, with
+  /// its `version` and the caller's verdicts. A deleted / other-shop role is a
+  /// `NotFoundFailure`.
+  Future<RoleDetailView> getRoleDetail(String roleId);
+
+  /// `POST /orgs/{orgId}/roles` (F-003 R3 create / clone — there is no clone
+  /// endpoint). Returns the created role.
+  Future<RoleDetailView> createRole({required String name, required List<String> capabilities});
+
+  /// `PATCH /orgs/{orgId}/roles/{roleId}` (F-003 R3 edit). [body] carries
+  /// `version` always and `name` / `capabilities` only when they changed.
+  /// ⛔ A `409 ROLE_CHANGED` is surfaced, never retried here (SR-14).
+  Future<RoleDetailView> updateRole(String roleId, RoleUpdate body);
+
+  /// `DELETE /orgs/{orgId}/roles/{roleId}` (F-003 R5) — soft delete, no body,
+  /// no `version`. A refusal (`409 ROLE_IN_USE` with `details` counts,
+  /// `ROLE_HISTORY_LIMIT_REACHED`, 404, …) arrives as an `ApiFailure`; nothing
+  /// is retried here.
+  Future<void> deleteRole(String roleId);
 
   /// `GET /orgs/{orgId}` — the shop's profile, for the tax card (§3.4).
   Future<OrgProfileView> getOrganization();

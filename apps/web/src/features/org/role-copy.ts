@@ -108,6 +108,36 @@ export function lastEditedLine(lastEdited: LastEdited | null): string {
   }
 }
 
+/**
+ * The wire's `RoleLastEdited` (`{ at, by: { kind, roleName?, roleKey?, … } }`)
+ * → {@link lastEditedLine}'s input. Shared by R1 and R3 (moved from
+ * RolesScreen.tsx in T-003-W06). The editor's role name goes through the same
+ * §0.2 display rule as every other role name — the key only TRANSLATES.
+ */
+export function toLastEdited(
+  le: {
+    readonly at: string;
+    readonly by: {
+      readonly kind: string;
+      readonly roleName?: string | null;
+      readonly roleKey?: string | null;
+      readonly roleNameCustomized?: boolean | null;
+    };
+  } | null,
+): LastEdited | null {
+  if (le === null) return null;
+  const { kind, roleName, roleKey, roleNameCustomized } = le.by;
+  return {
+    kind,
+    at: le.at,
+    by: {
+      roleName: roleName
+        ? displayRoleName({ name: roleName, roleKey, nameCustomized: roleNameCustomized })
+        : null,
+    },
+  };
+}
+
 /** ux R1 · Badge (neutral) ของแถวบทบาท — `isSystem` ชนะ, ไม่มี badge อื่นซ้อน */
 export function roleBadgeLabel(params: {
   readonly isSystem: boolean;
@@ -299,6 +329,15 @@ export const ROLE_FORBIDDEN_PANEL_COPY = {
   back: "กลับไปหน้าข้อมูลร้าน",
 } as const;
 
+/**
+ * `404 NOT_FOUND` บน R3/R4 (EmptyState) — หัว + เนื้อแยกกัน (UX01): เดิมเป็นข้อความเดียว
+ * ต่อด้วย " · " ซึ่งวางเป็นหัวข้อ EmptyState ไม่ได้.
+ */
+export const ROLE_NOT_FOUND_COPY = {
+  title: "ไม่พบบทบาทนี้",
+  body: "บทบาทนี้อาจถูกลบไปแล้ว",
+} as const;
+
 /** R3/R4/R5 — ฟอร์มบทบาท (ErrorBanner เว้นแต่ระบุ) */
 export function roleFormErrorMessage(
   code: string,
@@ -334,7 +373,7 @@ export function roleFormErrorMessage(
     case "FORBIDDEN":
       return `${ROLE_FORBIDDEN_PANEL_COPY.title} ${ROLE_FORBIDDEN_PANEL_COPY.body}`;
     case "NOT_FOUND":
-      return "ไม่พบบทบาทนี้ · บทบาทนี้อาจถูกลบไปแล้ว";
+      return `${ROLE_NOT_FOUND_COPY.title} ${ROLE_NOT_FOUND_COPY.body}`;
     case "CONFLICT":
       return "ร้านนี้กำลังมีการแก้ไขอื่นอยู่ ลองใหม่อีกครั้งในไม่กี่วินาที";
     default:
@@ -344,15 +383,25 @@ export function roleFormErrorMessage(
   }
 }
 
+function mmss(remainingSeconds: number): string {
+  const s = Math.max(0, Math.ceil(remainingSeconds));
+  return `${String(Math.floor(s / 60)).padStart(2, "0")}:${String(s % 60).padStart(2, "0")}`;
+}
+
+/**
+ * §E — `429 RATE_LIMITED` (`roleWrite`) บน route บทบาท (UX01 · T-003-W06).
+ * `remainingSeconds` มาจาก `Retry-After` (ปัดขึ้น · ไม่ติดลบ) → mm:ss.
+ */
+export function roleRateLimitedMessage(remainingSeconds: number): string {
+  return `แก้บทบาทถี่เกินไป กรุณารอ ${mmss(remainingSeconds)} แล้วลองใหม่`;
+}
+
 /**
  * §E — `429 RATE_LIMITED` (`memberWrite`) บน route สมาชิก/คำเชิญ (UX01 · T-003-W10).
  * `remainingSeconds` มาจาก `Retry-After` (ปัดขึ้น · ไม่ติดลบ) → mm:ss.
  */
 export function memberRateLimitedMessage(remainingSeconds: number): string {
-  const s = Math.max(0, Math.ceil(remainingSeconds));
-  const mm = String(Math.floor(s / 60)).padStart(2, "0");
-  const ss = String(s % 60).padStart(2, "0");
-  return `ทำรายการกับสมาชิกถี่เกินไป กรุณารอ ${mm}:${ss} แล้วลองใหม่`;
+  return `ทำรายการกับสมาชิกถี่เกินไป กรุณารอ ${mmss(remainingSeconds)} แล้วลองใหม่`;
 }
 
 /** R7/R8/R9 — เปลี่ยนบทบาท / เชิญ / ออกลิงก์ใหม่ / ยกเลิกคำเชิญ (ErrorBanner ใน dialog เดิม) */

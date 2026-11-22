@@ -26,16 +26,32 @@ import { dirname } from "node:path";
 
 export const SHARED_FIXTURE = "e2e/.auth/shared.json";
 
-setup("create the shared Owner and shop", async ({ page }) => {
-  await resetIpThrottle();
-  const email = freshEmail("shared-owner");
-  await signUpAndLogin(page, email);
+/**
+ * D-038 ② runs every journey at several widths (playwright.config projects).
+ * Shop creation is rate-limited PER USER (`@OrgRateLimit("createOrganization")`),
+ * and most files create shops as the shared Owner — so one Owner for three
+ * projects spends three projects' worth of that budget and the third run hits
+ * the limit (the limiter being right). One Owner per project keeps each run's
+ * budget exactly what the single-width lane used to spend.
+ */
+export const VIEWPORT_PROJECTS = ["chromium", "tablet", "phone"] as const;
+export const sharedFixtureFor = (project: string): string => `e2e/.auth/shared-${project}.json`;
 
-  const shopName = `ร้านหลัก ${Date.now()}`;
-  const orgId = await createShop(page, shopName);
-
-  // Written to disk, not exported as module state: each project runs in its
-  // own worker process, so a shared object would be empty everywhere else.
+setup("create the shared Owner and shop (one per viewport project)", async ({ browser }) => {
   mkdirSync(dirname(SHARED_FIXTURE), { recursive: true });
-  writeFileSync(SHARED_FIXTURE, JSON.stringify({ email, orgId, shopName }, null, 2));
+  for (const project of VIEWPORT_PROJECTS) {
+    await resetIpThrottle();
+    const context = await browser.newContext();
+    const page = await context.newPage();
+    const email = freshEmail(`shared-owner-${project}`);
+    await signUpAndLogin(page, email);
+
+    const shopName = `ร้านหลัก ${Date.now()}`;
+    const orgId = await createShop(page, shopName);
+
+    // Written to disk, not exported as module state: each project runs in its
+    // own worker process, so a shared object would be empty everywhere else.
+    writeFileSync(sharedFixtureFor(project), JSON.stringify({ email, orgId, shopName }, null, 2));
+    await context.close();
+  }
 });

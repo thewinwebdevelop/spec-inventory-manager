@@ -68,11 +68,13 @@ export function Checkbox({
           if (disabled) return;
           onChange?.(event.target.checked);
         }}
-        onClick={(event) => {
-          // aria-disabled (not the native attribute) blocks interaction by
-          // hand — see the file header for why it must stay focusable.
-          if (disabled) event.preventDefault();
-        }}
+        // aria-disabled (not the native attribute) blocks interaction by hand —
+        // see the file header for why it must stay focusable. NOT by
+        // `preventDefault` on click: with a controlled checkbox that fights
+        // React's own restore and leaves the input reading "checked" while the
+        // painted box (and the state) say unchecked — a screen reader then
+        // announces the wrong state (found in T-003-W06). Ignoring the change
+        // is enough: React puts `checked` back to the prop after the event.
         onKeyDown={(event) => {
           if (disabled && (event.key === " " || event.key === "Enter")) {
             event.preventDefault();

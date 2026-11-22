@@ -314,6 +314,10 @@ class AppSizes {
   static const checkboxBorderWidth = 2.0; // checkbox.border.w (F-003 ui.md §4)
   static const iconSm = 16.0; // size.icon.sm — inline with text
   static const iconMd = 20.0; // size.icon.md — default (banner/button/row)
+  static const dialogMaxW = 480.0; // size.dialog.max-w
+  // size.dialog.inline-w — the width share when the screen is narrower than
+  // dialogMaxW (5% of backdrop each side, so it reads as a layer, not a page).
+  static const dialogInlineWidthFactor = 0.9;
 }
 
 /// `type.*` (design-system.md §1.2). Font: Sarabun (Thai glyph coverage +

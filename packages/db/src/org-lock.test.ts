@@ -143,9 +143,9 @@ describe("ORG_LOCK_REQUIRED_OPERATIONS (architecture §5 · §12.2 row 6)", () =
         op.pendingTask,
       ]),
     ).toEqual([
-      ["createRole", "RolesService.create", "T-003-B23"],
-      ["updateRole", "RolesService.update", "T-003-B24"],
-      ["deleteRole", "RolesService.delete", "T-003-B25"],
+      ["createRole", "RolesService.create", undefined], // built in T-003-B23,
+      ["updateRole", "RolesService.update", undefined], // built in T-003-B24
+      ["deleteRole", "RolesService.delete", undefined], // built in T-003-B25
     ]);
     // the F-002 seven are built — none may carry a pending marker
     expect(ORG_LOCK_REQUIRED_OPERATIONS.slice(0, 7).filter((op) => op.pendingTask)).toEqual([]);

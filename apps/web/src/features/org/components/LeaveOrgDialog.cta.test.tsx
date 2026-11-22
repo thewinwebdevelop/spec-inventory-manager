@@ -72,9 +72,7 @@ describe("★ M-06 — the last-Owner refusal names a way out that works", () =>
     renderDialog("members");
     await userEvent.click(screen.getByRole("button", { name: "ออกจากร้านนี้" }));
 
-    await waitFor(() =>
-      expect(screen.getByText(membersTh.leaveLastOwnerHere)).toBeInTheDocument(),
-    );
+    await waitFor(() => expect(screen.getByText(membersTh.leaveLastOwnerHere)).toBeInTheDocument());
     // The regression: a link to `/o/org_1/settings/members` rendered here, and
     // pressing it did nothing.
     expect(screen.queryByRole("link")).toBeNull();
@@ -87,6 +85,15 @@ describe("★ M-06 — the last-Owner refusal names a way out that works", () =>
     const link = await screen.findByRole("link", { name: membersTh.leaveLastOwnerCta });
     expect(link).toHaveAttribute("href", "/o/org_1/settings/members");
     expect(screen.queryByText(membersTh.leaveLastOwnerHere)).toBeNull();
+  });
+
+  it("★ the way out is a 44px tap target, not an 18px inline text link (D-038 ②)", async () => {
+    // The E2E responsive check measured this link at 158x18: the ONE thing the
+    // last Owner can do next was the smallest target in the dialog.
+    renderDialog("elsewhere");
+    await userEvent.click(screen.getByRole("button", { name: "ออกจากร้านนี้" }));
+    const link = await screen.findByRole("link", { name: membersTh.leaveLastOwnerCta });
+    expect(link.className).toContain("min-h-[var(--size-tap-target-min)]");
   });
 
   it("defaults to the link — a caller that forgets gets the branch that still helps", async () => {

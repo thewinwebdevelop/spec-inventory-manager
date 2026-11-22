@@ -1,4 +1,5 @@
-import { expect, test, type Page } from "@playwright/test";
+import { type Page } from "@playwright/test";
+import { expect, test } from "./fixtures";
 import {
   acceptInvite,
   createShop,
@@ -10,6 +11,7 @@ import {
   reopenMembers,
   resetIpThrottle,
   signUpAndLogin,
+  shopNav,
 } from "./helpers";
 
 /**
@@ -125,7 +127,9 @@ test("E-07 · removed while inside the shop: refused at once, and sent to the pi
   await expect(confirm).toBeVisible();
   await expect(confirm.getByText("เขาจะเข้าถึงข้อมูลของร้านนี้ไม่ได้ทันที")).toBeVisible();
   await expect(confirm.getByText("ประวัติการทำรายการที่เขาเคยทำไว้ยังอยู่ครบ")).toBeVisible();
-  await expect(confirm.getByText("ถ้ามีคำเชิญของอีเมลนี้ค้างอยู่ ระบบจะยกเลิกให้ด้วย")).toBeVisible();
+  await expect(
+    confirm.getByText("ถ้ามีคำเชิญของอีเมลนี้ค้างอยู่ ระบบจะยกเลิกให้ด้วย"),
+  ).toBeVisible();
   await expect(confirm.getByText("ให้กลับเข้ามาใหม่ได้ด้วยการเชิญใหม่เท่านั้น")).toBeVisible();
 
   await confirm.getByRole("button", { name: "ถอดออกจากร้าน" }).click();
@@ -146,19 +150,15 @@ test("E-07 · removed while inside the shop: refused at once, and sent to the pi
   // this shop's own data, and AC-5.1 asks for the NEXT REQUEST to be refused,
   // which is exactly what happens below. Every write is refused meanwhile,
   // which is the control that actually matters.
-  await staffPage
-    .getByRole("navigation", { name: "เมนูของร้าน" })
-    .getByRole("link", { name: "ข้อมูลร้าน" })
-    .click();
+  await (await shopNav(staffPage)).getByRole("link", { name: "ข้อมูลร้าน" }).click();
 
   // The trigger the AC is actually about: a real request to the API. `403
   // ORG_ACCESS_DENIED` has to arrive and be acted on, not merely be received.
   await staffPage.reload();
 
-  await expect(staffPage, "the removed member was left inside the shop").toHaveURL(
-    /\/select-org/,
-    { timeout: 20_000 },
-  );
+  await expect(staffPage, "the removed member was left inside the shop").toHaveURL(/\/select-org/, {
+    timeout: 20_000,
+  });
 
   // ★ Session intact. `403 ORG_ACCESS_DENIED` is not `401`, and a client that
   // treats them the same logs somebody out of an app they still have an

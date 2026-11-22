@@ -22,6 +22,54 @@ const REPO_ROOT = join(process.cwd(), "..", "..");
 /** §9 registers 41 findings; NEW-5 occupies two rows (ก) and (ข). */
 const EXPECTED_FINDINGS = 41;
 
+/**
+ * F-003 · T-003-QA09 (G3-12 · test-plan §8): SR-F003-01..19 + the three named
+ * regressions (AC-5.4b · AC-5.5b · D-035). Kept apart from the F-002 41 so a
+ * row moving between the two sets is a visible edit, not a net-zero count.
+ */
+const F003_FINDINGS: readonly string[] = Object.freeze([
+  ...Array.from({ length: 19 }, (_, i) => `SR-F003-${String(i + 1).padStart(2, "0")}`),
+  "AC-5.4b",
+  "AC-5.5b",
+  "D-035",
+]);
+const isF003 = (finding: string) => F003_FINDINGS.includes(finding);
+
+/** `| T-003-B24 | … | status | updated_by |` → status, from the F-003 task board. */
+function taskStatuses(): ReadonlyMap<string, string> {
+  const board = readFileSync(join(REPO_ROOT, "docs/features/F-003/tasks.md"), "utf8");
+  const out = new Map<string, string>();
+  for (const line of board.split("\n")) {
+    const cells = line.split("|").map((c) => c.trim());
+    const id = cells[1];
+    if (!id || !/^T-003-[A-Za-z0-9]+$/.test(id)) continue;
+    // A row ends with `| status | updated_by |` → the last two non-empty cells.
+    const filled = cells.filter((c) => c !== "");
+    out.set(id, filled[filled.length - 2] ?? "");
+  }
+  return out;
+}
+
+/** Pending rows whose task is already `done` — they owed a re-pin. */
+export function overduePending(
+  entries: readonly RegressionEntry[],
+  statuses: ReadonlyMap<string, string>,
+): string[] {
+  const problems: string[] = [];
+  for (const entry of entries) {
+    for (const p of entry.pending ?? []) {
+      const status = statuses.get(p.task);
+      if (status === undefined)
+        problems.push(`${entry.finding}: pending task ${p.task} is not on the board`);
+      else if (/^done\b/.test(status))
+        problems.push(
+          `${entry.finding}: ${p.task} is done — pin ${p.tests.join(", ")} and drop the pending entry`,
+        );
+    }
+  }
+  return problems;
+}
+
 function unresolvedPins(entry: RegressionEntry): string[] {
   const problems: string[] = [];
   for (const pin of entry.pins ?? []) {
@@ -42,7 +90,11 @@ function unresolvedPins(entry: RegressionEntry): string[] {
 
 describe("the regression pack is intact (test-plan §9 · §16 permanent pack)", () => {
   it("registers every finding — 41, counting NEW-5's two halves as one", () => {
-    const findings = new Set(REGRESSION_PACK.map((e) => e.finding.replace(/\(.*\)$/, "")));
+    const findings = new Set(
+      REGRESSION_PACK.filter((e) => !isF003(e.finding)).map((e) =>
+        e.finding.replace(/\(.*\)$/, ""),
+      ),
+    );
     expect(
       findings.size,
       `the pack lists ${findings.size} distinct findings; §9 registers ${EXPECTED_FINDINGS}`,
@@ -52,6 +104,68 @@ describe("the regression pack is intact (test-plan §9 · §16 permanent pack)",
     expect(REGRESSION_PACK.map((e) => e.finding)).toHaveLength(
       new Set(REGRESSION_PACK.map((e) => e.finding)).size,
     );
+  });
+
+  it("★ G3-12 · F-003 registers SR-F003-01..19 + AC-5.4b/5.5b/D-035, exactly once each", () => {
+    const f003 = REGRESSION_PACK.filter((e) => isF003(e.finding)).map((e) => e.finding);
+    expect([...f003].sort()).toEqual([...F003_FINDINGS].sort());
+  });
+
+  it("★ G3-12 · NEW-10 left the tripwire (R3-02): pinned on real tests, G-15 is gone", () => {
+    const entry = REGRESSION_PACK.find((e) => e.finding === "NEW-10")!;
+    const files = (entry.pins ?? []).map((p) => p.file);
+    expect(files.some((f) => f.includes("role-capability-write-tripwire"))).toBe(false);
+    expect(
+      entry.partial,
+      "NEW-10 has a rule and a surface now — not a compensating control",
+    ).toBeUndefined();
+    for (const marker of ["U-RB-10", "U-RB-12", "I3-20", "G3-01", "G3-02", "G3-03"]) {
+      expect(
+        (entry.pins ?? []).some((p) => p.must.includes(marker)),
+        `NEW-10 is not pinned to ${marker}`,
+      ).toBe(true);
+    }
+    expect(
+      existsSync(join(REPO_ROOT, "apps/api/src/orgs/role-capability-write-tripwire.test.ts")),
+    ).toBe(false);
+  });
+
+  it("★ G3-12 · SR-15 is the one F-003 noTest row that is not merely pending (test-plan §8)", () => {
+    const noTest = REGRESSION_PACK.filter((e) => isF003(e.finding) && !(e.pins ?? []).length);
+    expect(noTest.map((e) => e.finding).sort()).toEqual(["SR-F003-14", "SR-F003-15"]);
+    expect(REGRESSION_PACK.find((e) => e.finding === "SR-F003-15")!.pending).toBeUndefined();
+    expect(
+      (REGRESSION_PACK.find((e) => e.finding === "SR-F003-14")!.pending ?? []).length,
+    ).toBeGreaterThan(0);
+  });
+
+  it("★ G3-12 · a `pending` entry cannot outlive its task: done on the board ⇒ red until re-pinned", () => {
+    const statuses = taskStatuses();
+    expect(statuses.size, "read no task rows from docs/features/F-003/tasks.md").toBeGreaterThan(
+      40,
+    );
+    expect(statuses.get("T-003-B01")).toMatch(/^done/); // the parser reads the status column
+    expect(overduePending(REGRESSION_PACK, statuses)).toEqual([]);
+  });
+
+  it("SELF-CHECK: overduePending fires on a done task and on an unknown task", () => {
+    const fake: RegressionEntry = {
+      finding: "FAKE-9",
+      title: "pending on a finished task",
+      tier: "full",
+      pins: [{ file: "apps/api/test/regression-pack.ts", must: ["REGRESSION_PACK"] }],
+      pending: [
+        { tests: ["X-1"], task: "T-003-B01" },
+        { tests: ["X-2"], task: "T-003-ZZ99" },
+      ],
+    };
+    expect(overduePending([fake], taskStatuses())).toHaveLength(2);
+    expect(
+      overduePending(
+        [{ ...fake, pending: [{ tests: ["X-3"], task: "T-003-B24" }] }],
+        new Map([["T-003-B24", "todo"]]),
+      ),
+    ).toEqual([]);
   });
 
   it("★ no blank rows: every finding has a pin or a written reason (§17.11(ก))", () => {
@@ -116,6 +230,18 @@ describe("the regression pack is intact (test-plan §9 · §16 permanent pack)",
       "NEW-7",
       "NEW-8",
       "NEW-11",
+      // F-003 (test-plan §8 smoke tier)
+      "NEW-10",
+      "SR-F003-01",
+      "SR-F003-02",
+      "SR-F003-03",
+      "SR-F003-08",
+      "SR-F003-16",
+      "SR-F003-17",
+      "SR-F003-19",
+      "AC-5.4b",
+      "AC-5.5b",
+      "D-035",
     ];
     for (const finding of mustBeSmoke) {
       const entry = REGRESSION_PACK.find((e) => e.finding === finding);
@@ -133,8 +259,14 @@ describe("the regression pack is intact (test-plan §9 · §16 permanent pack)",
     // describes.
     const entry = REGRESSION_PACK.find((e) => e.finding === "NEW-1")!;
     const files = entry.pins!.map((p) => p.file);
-    expect(files.some((f) => f.includes("core-domain")), files.join(",")).toBe(true);
-    expect(files.some((f) => f.includes("int.test")), files.join(",")).toBe(true);
+    expect(
+      files.some((f) => f.includes("core-domain")),
+      files.join(","),
+    ).toBe(true);
+    expect(
+      files.some((f) => f.includes("int.test")),
+      files.join(","),
+    ).toBe(true);
   });
 
   it("SELF-CHECK: the resolver fails on a pin that does not resolve", () => {

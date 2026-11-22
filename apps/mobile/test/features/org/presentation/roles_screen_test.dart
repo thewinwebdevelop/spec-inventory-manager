@@ -50,12 +50,14 @@ RoleDetailView _role(
       roleKey: key,
       nameCustomized: customized,
       isSystem: isSystem,
+      grantsOwnership: isSystem,
       capabilities: caps,
       usage: RoleUsage(activeMembers: members, pendingInvitations: pending),
       lastEdited: lastEdited,
       canEdit: canEdit,
       canDelete: _ok,
       canClone: canClone,
+      version: 1,
     );
 
 final _owner = _role(
@@ -423,8 +425,11 @@ void main() {
       expect(nexts, ['rol_staff', 'rol_admin', null]);
     });
 
-    testWidgets('null callbacks: a row tap does nothing, ถัดไป is disabled and does nothing', (tester) async {
-      await openWith(tester);
+    testWidgets('RolesScreen with null seams: a row tap does nothing, ถัดไป is disabled', (tester) async {
+      // The widget's own contract — still null-safe for a caller that has no
+      // R3 to offer. openRolesScreen no longer passes null (see below).
+      await _pump(tester, page: _page([_owner, _admin, _staff]));
+      await tester.pumpAndSettle();
 
       await tester.tap(find.byKey(const ValueKey('role-row-rol_staff')));
       await tester.pumpAndSettle();
@@ -436,6 +441,79 @@ void main() {
       await tester.tap(find.text('ถัดไป'));
       await tester.pumpAndSettle();
       expect(find.text('เริ่มจากบทบาทที่ใกล้เคียงที่สุด แล้วค่อยปรับสิทธิ์'), findsOneWidget);
+    });
+
+    // ── T-003-M06: the seams are WIRED. These flipped from "does nothing". ──
+    testWidgets('★ M06 openRolesScreen() default: every row is tappable (›) and opens R3 for THAT role',
+        (tester) async {
+      final scoped = FakeOrgScoped(
+        roleDetails: _page([_owner, _admin, _staff]),
+        catalog: _catalog,
+        roleDetailAnswers: [_staff],
+        profile: const OrgProfileView(
+          id: 'org_1', name: 'x', taxProfileComplete: true, capabilities: {'manage_roles'},
+        ),
+      );
+      await pumpScreen(
+        tester,
+        Builder(builder: (c) => ElevatedButton(onPressed: () => openRolesScreen(c), child: const Text('open'))),
+        overrides: [orgScopedRepositoryProvider.overrideWithValue(scoped)],
+        activeOrg: rolesOrg,
+      );
+      await tester.tap(find.text('open'));
+      await tester.pumpAndSettle();
+
+      for (final id in ['rol_owner', 'rol_admin', 'rol_staff']) {
+        expect(
+          find.descendant(of: find.byKey(ValueKey('role-row-$id')), matching: find.byIcon(Icons.chevron_right)),
+          findsOneWidget,
+          reason: id,
+        );
+      }
+      await tester.tap(find.byKey(const ValueKey('role-row-rol_staff')));
+      await tester.pumpAndSettle();
+
+      expect(scoped.roleDetailIdsSeen, ['rol_staff']);
+      expect(find.byKey(const ValueKey('role-form-name')), findsOneWidget);
+      // `pageBack()` finds ← by its English tooltip; this app is Thai-only.
+      await tester.tap(find.byType(BackButton));
+      await tester.pumpAndSettle();
+      expect(find.text('ใช้ไป 3 จาก 30 บทบาท'), findsOneWidget);
+    });
+
+    testWidgets('★ M06 openRolesScreen() default: R2 "ถัดไป" is enabled and opens R3 create IN PLACE of R2',
+        (tester) async {
+      final scoped = FakeOrgScoped(
+        roleDetails: _page([_owner, _admin, _staff]),
+        catalog: _catalog,
+        profile: const OrgProfileView(
+          id: 'org_1', name: 'x', taxProfileComplete: true, capabilities: {'manage_roles'},
+        ),
+      );
+      await pumpScreen(
+        tester,
+        Builder(builder: (c) => ElevatedButton(onPressed: () => openRolesScreen(c), child: const Text('open'))),
+        overrides: [orgScopedRepositoryProvider.overrideWithValue(scoped)],
+        activeOrg: rolesOrg,
+      );
+      await tester.tap(find.text('open'));
+      await tester.pumpAndSettle();
+      await tester.tap(_createButton());
+      await tester.pumpAndSettle();
+
+      final next = find.widgetWithText(ElevatedButton, 'ถัดไป');
+      expect(tester.widget<ElevatedButton>(next).onPressed, isNotNull);
+      await tester.tap(next);
+      await tester.pumpAndSettle();
+
+      // Default template = fewest capabilities = Staff → clone mode.
+      expect(find.text('เริ่มจากสำเนาของ "พนักงาน"'), findsOneWidget);
+      // R2 was replaced: back lands on R1, not on the template picker.
+      // `pageBack()` finds ← by its English tooltip; this app is Thai-only.
+      await tester.tap(find.byType(BackButton));
+      await tester.pumpAndSettle();
+      expect(find.text('ใช้ไป 3 จาก 30 บทบาท'), findsOneWidget);
+      expect(find.text('เริ่มจากบทบาทที่ใกล้เคียงที่สุด แล้วค่อยปรับสิทธิ์'), findsNothing);
     });
   });
 

@@ -1,4 +1,5 @@
-import { expect, request, test, type APIRequestContext, type Page } from "@playwright/test";
+import { request, type APIRequestContext, type Page } from "@playwright/test";
+import { expect, test } from "./fixtures";
 import {
   PASSWORD,
   acceptInvite,
@@ -10,6 +11,7 @@ import {
   readShared,
   resetIpThrottle,
   signUpAndLogin,
+  shopNav,
 } from "./helpers";
 
 /**
@@ -83,10 +85,7 @@ test.afterAll(async () => {
 });
 
 test("E-09 · a wrong checksum is corrected AT THE FIELD, and the fix goes through", async () => {
-  await ownerPage
-    .getByRole("navigation", { name: "เมนูของร้าน" })
-    .getByRole("link", { name: "ข้อมูลร้าน" })
-    .click();
+  await (await shopNav(ownerPage)).getByRole("link", { name: "ข้อมูลร้าน" }).click();
 
   await ownerPage.getByRole("button", { name: "กรอกข้อมูลผู้เสียภาษี" }).click();
   const dialog = ownerPage.getByRole("dialog", { name: "ข้อมูลผู้เสียภาษี" });
@@ -133,7 +132,9 @@ test("E-14 ★ · the number is masked until asked for, and the asking is announ
 
   // §5: "บอกก่อนกด ไม่ใช่แอบเก็บ" — the notice sits next to the button, BEFORE
   // the press, because a warning shown afterwards is not a choice.
-  await expect(ownerPage.getByText("การกดดูเลขเต็มถูกบันทึกไว้เพื่อความปลอดภัยของร้าน")).toBeVisible();
+  await expect(
+    ownerPage.getByText("การกดดูเลขเต็มถูกบันทึกไว้เพื่อความปลอดภัยของร้าน"),
+  ).toBeVisible();
 
   await ownerPage.getByRole("button", { name: "แสดงเลขเต็ม" }).click();
   await expect(ownerPage.getByText(VALID_TAX_ID)).toBeVisible({ timeout: 20_000 });

@@ -20,6 +20,7 @@ import { describe, it, expect, beforeAll, afterAll } from "vitest";
 import request from "supertest";
 import { Redis } from "ioredis";
 import { PrismaClient } from "@omnistock/db";
+import { invitationTtlHours } from "@omnistock/core-domain";
 import { AccessTokenService } from "../src/auth/access-token.service";
 import { THROTTLE_ACCT_PREFIX } from "../src/auth/auth.constants";
 import { INT_LANE_ENABLED, createTestApp, type TestApp } from "./app.kit";
@@ -235,6 +236,107 @@ d("T-003-B22 viewer verdicts on shipped routes (E2E, DB+Redis)", () => {
       await expect(JSON.stringify(golden, null, 2) + "\n").toMatchFileSnapshot(
         "./__golden__/f003-i3-22.viewer-verdicts.json",
       );
+    });
+  });
+
+  // ── D-039 · RoleRow.inviteTtlHours ───────────────────────────────────────
+
+  describe("D-039 ★ RoleRow.inviteTtlHours — the server's TTL, only where the viewer may invite", () => {
+    /** Seeded capabilities of a role in this shop (system or custom). */
+    const capsOf = (shop: PersonaShop, roleId: string): readonly string[] =>
+      [...Object.values(shop.org.roles), ...Object.values(shop.customRoles)].find(
+        (r) => r.id === roleId,
+      )!.capabilities;
+    const ttlMap = async (shop: PersonaShop, p: PersonaKey) =>
+      Object.fromEntries(
+        items(await get(`/orgs/${shop.org.id}/roles`, as(shop, p))).map((r) => [
+          r.id as string,
+          "inviteTtlHours" in r ? r.inviteTtlHours : "absent",
+        ]),
+      );
+
+    it("present iff viewerCanAssign === true, = invitationTtlHours(caps) · absent for MR/STF/Owner-row-as-Admin", async () => {
+      const { shops } = await personas();
+      const A = shops.A;
+      let present = 0;
+      for (const p of ["OWN", "ADM_A", "MM", "MR", "STF"] as const) {
+        for (const row of items(await get(`/orgs/${A.org.id}/roles`, as(A, p)))) {
+          const what = `${p} → ${row.name}`;
+          if (row.viewerCanAssign === true) {
+            expect(row.inviteTtlHours, what).toBe(invitationTtlHours(capsOf(A, row.id as string)));
+            present++;
+          } else {
+            expect(Object.keys(row), what).not.toContain("inviteTtlHours");
+          }
+        }
+      }
+      expect(present).toBeGreaterThan(10); // non-vacuity
+
+      // Pinned values (not only "agrees with the fn"): elevated = 24, standard = 168,
+      // a CUSTOM key=null role holding manage_roles / manage_members = 24.
+      const own = await ttlMap(A, "OWN");
+      expect(own[A.org.roles.Owner.id]).toBe(24);
+      expect(own[A.org.roles.Admin.id]).toBe(24);
+      expect(own[A.org.roles.Staff.id]).toBe(168);
+      expect(own[A.customRoles.R_MR.id]).toBe(24);
+      expect(own[A.customRoles.R_MMS.id]).toBe(24);
+      expect(own[A.customRoles.R_T.id]).toBe(168);
+      expect(A.customRoles.R_MR.key).toBeNull();
+
+      // The Owner role, seen by an Admin (viewerCanAssign false): nothing revealed.
+      const adm = await ttlMap(A, "ADM_A");
+      expect(adm[A.org.roles.Owner.id]).toBe("absent");
+      expect(adm[A.org.roles.Admin.id]).toBe(24);
+      for (const p of ["MR", "STF"] as const) {
+        expect(
+          Object.values(await ttlMap(A, p)).every((v) => v === "absent"),
+          p,
+        ).toBe(true);
+      }
+    });
+
+    it("the advertised value is the expiry a real invite stores (24h custom elevated · 168h standard)", async () => {
+      const { shops } = await personas();
+      const A = shops.A;
+      const own = await ttlMap(A, "OWN");
+      let n = 0;
+      for (const [roleId, hours] of [
+        [A.customRoles.R_MR.id, 24],
+        [A.customRoles.R_T.id, 168],
+      ] as const) {
+        expect(own[roleId], roleId).toBe(hours);
+        const t0 = Date.now();
+        const res = await send("post", `/orgs/${A.org.id}/invitations`, as(A, "OWN"), {
+          email: `d039-ttl-${n++}-${t0}@seed.test`,
+          roleId,
+        });
+        const t1 = Date.now();
+        expect(res.status, JSON.stringify(res.body)).toBe(201);
+        const ttlMs = hours * 3_600_000;
+        const exp = new Date(res.body.invitation.expiresAt as string).getTime();
+        expect(exp, roleId).toBeGreaterThanOrEqual(t0 - 1000 + ttlMs);
+        expect(exp, roleId).toBeLessThanOrEqual(t1 + 1000 + ttlMs);
+      }
+    });
+
+    it("★ comes from capabilities, not key: swap the keys → every value unchanged (control: keys did move)", async () => {
+      const { shops } = await personas();
+      const A = shops.A;
+      const before = await ttlMap(A, "OWN");
+      // Admin (elevated) loses its key, Staff (standard) takes "admin", a standard
+      // custom role takes "staff". A client or server reading `key` would now flip.
+      await kit.setRoleKey(A.org.roles.Admin.id, null);
+      await kit.setRoleKey(A.org.roles.Staff.id, "admin");
+      await kit.setRoleKey(A.customRoles.R_T.id, "staff");
+      const rows = Object.fromEntries(
+        items(await get(`/orgs/${A.org.id}/roles`, as(A, "OWN"))).map((r) => [r.id as string, r]),
+      );
+      expect(rows[A.org.roles.Staff.id]!.key).toBe("admin");
+      expect(rows[A.org.roles.Admin.id]!.key).toBeNull();
+      expect(rows[A.customRoles.R_T.id]!.key).toBe("staff");
+      expect(await ttlMap(A, "OWN")).toEqual(before);
+      expect(before[A.org.roles.Staff.id]).toBe(168);
+      expect(before[A.org.roles.Admin.id]).toBe(24);
     });
   });
 

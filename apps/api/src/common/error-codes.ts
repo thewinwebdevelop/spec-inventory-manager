@@ -333,6 +333,98 @@ export const ERROR_CODES = {
     message: "ระบบยังเปิดร้านใหม่ไม่ได้ในขณะนี้ กรุณาติดต่อทีมงาน",
   },
 
+  // ── F-003 · T-003-B23 — POST /orgs/{orgId}/roles (api-spec §5) ───────────
+  // The codes this route answers that no shipped route did. PATCH/DELETE add
+  // theirs with B24/B25 (the error-code audit refuses a code no response names).
+  // ⚠️ No default message names a capability key (AC-6.4) — the refused keys of
+  // UNKNOWN_CAPABILITY travel in `details.capabilities`, never in the sentence.
+  //
+  // A live role already has this name (normalised, case-insensitive — the DB's
+  // `Role_org_name_ci_live_key`), or the name is reserved for a system role.
+  ROLE_NAME_TAKEN: {
+    code: "ROLE_NAME_TAKEN",
+    status: HttpStatus.CONFLICT,
+    message: "มีบทบาทชื่อนี้อยู่แล้ว กรุณาใช้ชื่ออื่น",
+  },
+  // A role must grant at least one capability (AC-3.6). `fieldErrors.capabilities`.
+  ROLE_EMPTY: {
+    code: "ROLE_EMPTY",
+    status: HttpStatus.UNPROCESSABLE_ENTITY,
+    message: "บทบาทต้องมีสิทธิ์อย่างน้อย 1 อย่าง",
+  },
+  // A key not in the registry, tier `full`, or not selectable. `details.capabilities`.
+  UNKNOWN_CAPABILITY: {
+    code: "UNKNOWN_CAPABILITY",
+    status: HttpStatus.UNPROCESSABLE_ENTITY,
+    message: "มีสิทธิ์ที่เลือกไม่ได้ในรายการ",
+  },
+  // `full_access` is the Owner's alone (AC-4.2) — refused for every caller, the
+  // Owner included, and leaves an `escalation_denied` (reason full_access_reserved).
+  FULL_ACCESS_RESERVED: {
+    code: "FULL_ACCESS_RESERVED",
+    status: HttpStatus.UNPROCESSABLE_ENTITY,
+    message: "สิทธิ์ทั้งหมดของร้านสงวนไว้สำหรับเจ้าของร้านเท่านั้น",
+  },
+  // Live roles (system ones included) at the per-shop cap. `details.limit`.
+  ROLE_LIMIT_REACHED: {
+    code: "ROLE_LIMIT_REACHED",
+    status: HttpStatus.CONFLICT,
+    message: "ร้านนี้มีบทบาทครบจำนวนสูงสุดแล้ว",
+  },
+  // The rollout flag is off (architecture §12). Our configuration, not the
+  // caller's input — a 5xx. Only a `manage_roles` holder ever sees it: the flag
+  // guard runs after the capability guard.
+  ROLE_WRITES_DISABLED: {
+    code: "ROLE_WRITES_DISABLED",
+    status: HttpStatus.SERVICE_UNAVAILABLE,
+    message: "ยังแก้ไขบทบาทไม่ได้ในขณะนี้ กรุณาลองใหม่ภายหลัง",
+  },
+
+  // ── F-003 · T-003-B24 — PATCH /orgs/{orgId}/roles/{roleId} (api-spec §5) ──
+  // `version` in the body is not the role's current one (AC-3.12) — somebody
+  // else saved first. `details.currentVersion`. The client MUST re-fetch and
+  // show the difference; resubmitting with `currentVersion` automatically is
+  // the last-write-wins AC-3.12 forbids (SR-14).
+  ROLE_CHANGED: {
+    code: "ROLE_CHANGED",
+    status: HttpStatus.CONFLICT,
+    message: "บทบาทนี้ถูกแก้ไขไปแล้ว กรุณาโหลดใหม่แล้วตรวจสอบอีกครั้ง",
+  },
+  // The Owner role cannot be renamed, edited or deleted — by anybody, the Owner
+  // included (AC-4.1). A non-Owner trying leaves `escalation_denied` (SR-13).
+  ROLE_LOCKED: {
+    code: "ROLE_LOCKED",
+    status: HttpStatus.CONFLICT,
+    message: "บทบาทเจ้าของร้านแก้ไขไม่ได้",
+  },
+  // D-034 Addendum 2 — the role is held by other active members and the actor
+  // (re-read in the tx) lacks `manage_members`. Not FORBIDDEN: the actor may
+  // still manage other roles, so the client stays on the screen (architecture
+  // §1.3). No details; no security event (a warn log `role_write_refused`).
+  ROLE_HELD_REQUIRES_MANAGE_MEMBERS: {
+    code: "ROLE_HELD_REQUIRES_MANAGE_MEMBERS",
+    status: HttpStatus.FORBIDDEN,
+    message: "บทบาทนี้มีสมาชิกคนอื่นใช้อยู่ — ต้องมีสิทธิ์จัดการสมาชิกจึงจะแก้ได้",
+  },
+
+  // ── F-003 · T-003-B25 — DELETE /orgs/{orgId}/roles/{roleId} (api-spec §5) ──
+  // Active members still hold the role, or a pending invitation (an EXPIRED one
+  // included — AC-3.9) still names it. `details: { activeMembers,
+  // pendingInvitations }` — numbers only, never who (AC-3.8). The DB trigger
+  // `role_soft_delete_guard` refuses the same write if a path ever skips this.
+  ROLE_IN_USE: {
+    code: "ROLE_IN_USE",
+    status: HttpStatus.CONFLICT,
+    message: "ลบบทบาทนี้ไม่ได้ เพราะยังมีสมาชิกหรือคำเชิญที่ใช้บทบาทนี้อยู่",
+  },
+  // The shop already holds MAX_DELETED_ROLES_PER_ORG soft-deleted rows (SR-12 —
+  // default 500). The role stays live; nothing was lost. `details.limit`.
+  ROLE_HISTORY_LIMIT_REACHED: {
+    code: "ROLE_HISTORY_LIMIT_REACHED",
+    status: HttpStatus.CONFLICT,
+    message: "ลบบทบาทเพิ่มไม่ได้ เพราะร้านนี้ลบบทบาทครบจำนวนที่ระบบเก็บประวัติได้แล้ว",
+  },
+
   // ── 500 unknown fallback (filter maps ANY unrecognized error here) ────────
   INTERNAL: {
     code: "INTERNAL",

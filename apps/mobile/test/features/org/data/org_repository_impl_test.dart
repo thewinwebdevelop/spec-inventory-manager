@@ -9,6 +9,7 @@ import 'package:dio/dio.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:mobile/core/error/api_failure.dart';
 import 'package:mobile/features/org/data/org_repository_impl.dart';
+import 'package:mobile/features/org/domain/entities/role_entities.dart' show RoleUpdate;
 import 'package:omnistock_api_client/omnistock_api_client.dart';
 
 /// Answers one canned body, and records what was asked.
@@ -309,6 +310,65 @@ void main() {
       expect(rows[3].viewerCanManage, isNull);
       expect(rows[3].manageBlockedReason, isNull);
     });
+    test('★ T-003-M09 (D-039): GET /roles carries inviteTtlHours verbatim — absent stays null',
+        () async {
+      final adapter = _FakeAdapter(200, {
+        'items': [
+          {'id': 'rol_a', 'name': 'A', 'key': null, 'isSystem': false, 'viewerCanAssign': true, 'inviteTtlHours': 24},
+          {'id': 'rol_b', 'name': 'B', 'key': 'staff', 'isSystem': true, 'viewerCanAssign': true, 'inviteTtlHours': 168},
+          {'id': 'rol_c', 'name': 'C', 'key': 'owner', 'isSystem': true, 'viewerCanAssign': false},
+        ],
+        'nextCursor': null,
+      });
+
+      final roles = await repoOn(adapter).listRoles();
+
+      expect(roles.map((r) => r.inviteTtlHours), [24, 168, null]);
+    });
+
+    test('★ T-003-M11: member rows carry roleId (R10 marks the current role by id, never by name)',
+        () async {
+      final adapter = _FakeAdapter(200, {
+        'items': [memberJson('usr_a', {'roleId': 'rol_pack_9'})],
+        'nextCursor': null,
+      });
+
+      final row = (await repoOn(adapter).listMembers()).items.single;
+
+      expect(row.roleId, 'rol_pack_9');
+    });
+
+    test('★ T-003-M11: PATCH /members/{userId} sends ONLY {roleId} and maps the 200 row', () async {
+      final adapter = _FakeAdapter(200, {
+        ...memberJson('usr_a', {'viewerCanManage': true}),
+        'roleId': 'rol_new',
+        'roleName': 'แพ็คของ',
+        'roleKey': null,
+      });
+
+      final row = await repoOn(adapter).updateMemberRole(userId: 'usr_a', roleId: 'rol_new');
+
+      expect(adapter.seen.single.method, 'PATCH');
+      expect(adapter.seen.single.path, '/orgs/org_1/members/usr_a');
+      expect(adapter.seen.single.data, {'roleId': 'rol_new'});
+      expect(row.roleId, 'rol_new');
+      expect(row.roleName, 'แพ็คของ');
+      expect(row.roleKey, isNull);
+      expect(row.viewerCanManage, isTrue);
+    });
+
+    test('★ T-003-M11: a refused PATCH member surfaces as an ApiFailure, not a DioException',
+        () async {
+      final adapter = _FakeAdapter(403, {
+        'error': {'code': 'TARGET_NOT_BELOW_ACTOR', 'message': 'no'},
+      });
+
+      await expectLater(
+        repoOn(adapter).updateMemberRole(userId: 'usr_a', roleId: 'rol_x'),
+        throwsA(isA<ApiFailure>()),
+      );
+    });
+
     test('★ T-003-M05: role-details carries every server verdict verbatim, open-set reasons included',
         () async {
       Map<String, Object?> role(String id, Map<String, Object?> viewer, {Object? lastEdited}) => {
@@ -401,6 +461,120 @@ void main() {
       final adapter = _FakeAdapter(500, {'error': {'code': 'INTERNAL', 'message': 'x'}});
       expect(repoOn(adapter).listRoleDetails(), throwsA(isA<ApiFailure>()));
       expect(repoOn(adapter).getCapabilityCatalog(), throwsA(isA<ApiFailure>()));
+    });
+
+    Map<String, Object?> roleDetailJson({int version = 4}) => {
+          'id': 'rol_1',
+          'name': 'Admin',
+          'key': 'admin',
+          'nameCustomized': false,
+          'isSystem': false,
+          'grantsOwnership': false,
+          'capabilities': ['manage_members', 'manage_roles'],
+          'version': version,
+          'usage': {'activeMembers': 2, 'pendingInvitations': 0},
+          'lastEdited': null,
+          'viewer': {
+            'canEdit': {'allowed': true, 'reason': null},
+            'canDelete': {'allowed': false, 'reason': 'in_use'},
+            'canClone': {'allowed': true, 'reason': null},
+          },
+          'createdAt': '2026-08-01T00:00:00.000Z',
+        };
+
+    test('★ T-003-M06: GET /roles/{id} carries version + verdicts verbatim', () async {
+      final adapter = _FakeAdapter(200, roleDetailJson(version: 7));
+
+      final role = await repoOn(adapter).getRoleDetail('rol_1');
+
+      expect(adapter.seen.single.method, 'GET');
+      expect(adapter.seen.single.path, '/orgs/org_1/roles/rol_1');
+      expect(role.version, 7);
+      expect(role.canDelete.reason, 'in_use');
+      expect(role.capabilities, ['manage_members', 'manage_roles']);
+    });
+
+    test('★ T-003-M06: POST /roles sends name + capabilities, returns the created role', () async {
+      final adapter = _FakeAdapter(201, roleDetailJson(version: 1));
+
+      final role = await repoOn(adapter).createRole(name: 'แพ็คของ', capabilities: const ['manage_orders']);
+
+      expect(adapter.seen.single.method, 'POST');
+      expect(adapter.seen.single.path, '/orgs/org_1/roles');
+      expect(adapter.seen.single.data, {'name': 'แพ็คของ', 'capabilities': ['manage_orders']});
+      expect(role.version, 1);
+    });
+
+    test('★ T-003-M06: PATCH sends version ALWAYS and name/capabilities ONLY when given', () async {
+      final adapter = _FakeAdapter(200, roleDetailJson(version: 5));
+      final repo = repoOn(adapter);
+
+      await repo.updateRole('rol_1', const RoleUpdate(version: 4, capabilities: ['manage_members']));
+      await repo.updateRole('rol_1', const RoleUpdate(version: 4, name: 'แอดมิน'));
+
+      expect(adapter.seen[0].method, 'PATCH');
+      expect(adapter.seen[0].path, '/orgs/org_1/roles/rol_1');
+      expect(adapter.seen[0].data, {'version': 4, 'capabilities': ['manage_members']});
+      expect(adapter.seen[1].data, {'version': 4, 'name': 'แอดมิน'});
+    });
+
+    test('★ T-003-M08: grantsOwnership is carried from the wire (the R4 Owner card reads it, never `key`)',
+        () async {
+      final owner = {...roleDetailJson(), 'key': 'staff', 'grantsOwnership': true, 'isSystem': true};
+      final notOwner = {...roleDetailJson(), 'key': 'owner', 'grantsOwnership': false};
+
+      expect((await repoOn(_FakeAdapter(200, owner)).getRoleDetail('rol_1')).grantsOwnership, isTrue);
+      expect((await repoOn(_FakeAdapter(200, notOwner)).getRoleDetail('rol_1')).grantsOwnership, isFalse);
+    });
+
+    test('★ T-003-M08: DELETE /roles/{id} — no body, one request', () async {
+      final adapter = _FakeAdapter(200, {'id': 'rol_1', 'deletedAt': '2026-11-22T00:00:00.000Z'});
+
+      await repoOn(adapter).deleteRole('rol_1');
+
+      expect(adapter.seen.single.method, 'DELETE');
+      expect(adapter.seen.single.path, '/orgs/org_1/roles/rol_1');
+      expect(adapter.seen.single.data, isNull);
+    });
+
+    // The code → ConflictFailure(details) mapping is the interceptor's (tested
+    // in core/api); this Dio has none, so all that is claimed here is "an
+    // ApiFailure, never a raw DioException".
+    test('★ T-003-M08: a refused DELETE surfaces as an ApiFailure, not a DioException', () async {
+      final adapter = _FakeAdapter(409, {
+        'error': {'code': 'ROLE_IN_USE', 'message': 'in use'},
+      });
+
+      await expectLater(repoOn(adapter).deleteRole('rol_1'), throwsA(isA<ApiFailure>()));
+    });
+
+    test('★ T-003-M06: catalog carries groups, description, status and implies for R3', () async {
+      final adapter = _FakeAdapter(200, {
+        'groups': [
+          {'key': 'catalog_stock', 'labelTh': 'สินค้าและสต๊อก'},
+        ],
+        'items': [
+          {
+            'key': 'manage_products',
+            'labelTh': 'จัดการสินค้า',
+            'descriptionTh': 'เพิ่ม แก้ และลบสินค้า',
+            'group': 'catalog_stock',
+            'status': 'upcoming',
+            'implies': ['view_products'],
+            'selectable': true,
+          },
+        ],
+      });
+
+      final catalog = await repoOn(adapter).getCapabilityCatalog();
+
+      expect(catalog.groups.single.key, 'catalog_stock');
+      expect(catalog.groups.single.labelTh, 'สินค้าและสต๊อก');
+      final item = catalog.items.single;
+      expect(item.descriptionTh, 'เพิ่ม แก้ และลบสินค้า');
+      expect(item.group, 'catalog_stock');
+      expect(item.status, 'upcoming');
+      expect(item.implies, ['view_products']);
     });
   });
 }

@@ -47,7 +47,7 @@ export function OrgProfileScreen() {
     void queryClient.invalidateQueries({ queryKey: orgKey(org.orgId, "profile") });
 
   return (
-    <main className="flex flex-col gap-4 p-card-padding">
+    <main className="flex flex-col gap-4 p-4 lg:p-card-padding">
       <h1 className="m-0 text-heading-md">{orgProfileTh.title}</h1>
 
       {onboarding && (
@@ -95,9 +95,7 @@ export function OrgProfileScreen() {
           <ul className="m-0 flex list-none flex-col gap-1 p-0">
             {onboarding.inviteTeam && <li>{orgProfileTh.onboarding.inviteTeam.text}</li>}
             {onboarding.declareTax && <li>{orgProfileTh.onboarding.declareTax.text}</li>}
-            {onboarding.inviteBackupOwner && (
-              <li>{orgProfileTh.onboarding.backupOwner.text}</li>
-            )}
+            {onboarding.inviteBackupOwner && <li>{orgProfileTh.onboarding.backupOwner.text}</li>}
           </ul>
         </Banner>
       )}
@@ -117,9 +115,7 @@ export function OrgProfileScreen() {
         </DataRow>
 
         {/* Fixed THB + Asia/Bangkok in Phase 0 (D-013) — displayed, not editable. */}
-        <DataRow label={orgProfileTh.fields.localeLabel}>
-          {orgProfileTh.fields.localeValue}
-        </DataRow>
+        <DataRow label={orgProfileTh.fields.localeLabel}>{orgProfileTh.fields.localeValue}</DataRow>
 
         <DataRow label={orgProfileTh.fields.team}>
           {/* `counts` is a total, never a list — a Staff member seeing "4 คน"

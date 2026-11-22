@@ -13,8 +13,7 @@
  * their own title/body/back target; the look and structure stay this
  * component's. The defaults are F-002's members copy, unchanged.
  */
-import Link from "next/link";
-import { Button } from "./Button";
+import { ButtonLink } from "./ButtonLink";
 import { Icon } from "./Icon";
 
 export interface ForbiddenPanelCopy {
@@ -44,9 +43,9 @@ export function ForbiddenPanel({
       <Icon role="lock" size="xl" className="mx-auto text-text-muted" />
       <h2 className="text-heading-sm">{copy.title}</h2>
       <p className="text-body-sm">{copy.body}</p>
-      <Link href={backHref ?? `/o/${orgId}`}>
-        <Button variant="secondary">{copy.back}</Button>
-      </Link>
+      <ButtonLink href={backHref ?? `/o/${orgId}`} variant="secondary">
+        {copy.back}
+      </ButtonLink>
     </section>
   );
 }

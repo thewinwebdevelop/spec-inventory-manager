@@ -21,7 +21,9 @@ async function bootstrap(): Promise<void> {
   const { DomainExceptionFilter } = await import("./common/domain-exception.filter");
   const cookieParser = (await import("cookie-parser")).default;
 
-  const app = await NestFactory.create(AppModule, {
+  // DV01 (T-003-B23): the SAME validated snapshot goes into the DI graph — no
+  // provider re-reads process.env.
+  const app = await NestFactory.create(AppModule.forRoot(env), {
     logger: ["log", "warn", "error"],
   });
 

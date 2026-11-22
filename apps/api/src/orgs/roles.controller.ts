@@ -14,13 +14,25 @@
 // of their own role.
 //
 // READ-ONLY in F-002. F-003 adds create/update/delete and per-role capability
-// editing; publishing a write path now would put a shape on the wire that F-003
-// has to change.
-import { Controller, Get, Inject, Param, Res } from "@nestjs/common";
+// editing — T-003-B23 lands `POST` (create, incl. clone), T-003-B24 `PATCH`,
+// T-003-B25 `DELETE` (soft).
+import {
+  Body,
+  Controller,
+  Delete,
+  Get,
+  Inject,
+  Param,
+  Patch,
+  Post,
+  Res,
+  UseGuards,
+} from "@nestjs/common";
 import type { Response } from "express";
 import { CAPABILITY_MANAGE_ROLES, type CapabilityCatalogView } from "@omnistock/core-domain";
-import { AnyActiveMember, RequireCapability } from "../common/authz";
-import { RolesService, type RoleListPage } from "./roles.service";
+import { AnyActiveMember, RequireCapability, RoleWrite } from "../common/authz";
+import { JsonOnlyGuard } from "../auth";
+import { RolesService, type DeletedRole, type RoleListPage } from "./roles.service";
 import { RoleReadService, type RoleDetail, type RoleDetailListPage } from "./role-read.service";
 import { ORG_PROFILE_RESPONSE_HEADERS, applyResponseHeaders } from "./response-headers";
 
@@ -44,6 +56,69 @@ export class RolesController {
   async list(@Res({ passthrough: true }) res: Response): Promise<RoleListPage> {
     applyResponseHeaders(res, ORG_PROFILE_RESPONSE_HEADERS);
     return this.roles.list();
+  }
+
+  /**
+   * F-003 · T-003-B23 ★ — create a custom role (api-spec §1/§2). `201` + the
+   * same `RoleDetail` `GET /roles/{id}` serves.
+   *
+   * Guard chain (api-spec §2, fixed): `manage_roles` (CapabilityGuard, 403
+   * FORBIDDEN) → `ROLE_WRITES_ENABLED` (RoleWritesEnabledGuard, 503) → the
+   * shared `roleWrite` quota (429) — all three from `@RequireCapability` +
+   * `@RoleWrite()`. Everything after that is decided in the service, under the
+   * org lock, on facts re-read there.
+   *
+   * The body is handed over RAW: its shape is checked after the in-tx
+   * `manage_roles` floor (api-spec §2), and the handler never picks fields off
+   * it — `key`/`isSystem`/`version` cannot reach the write (AC-1.4).
+   */
+  @RequireCapability(CAPABILITY_MANAGE_ROLES)
+  @RoleWrite()
+  @Post()
+  @UseGuards(JsonOnlyGuard)
+  async create(
+    @Body() body: unknown,
+    @Res({ passthrough: true }) res: Response,
+  ): Promise<RoleDetail> {
+    applyResponseHeaders(res, ORG_PROFILE_RESPONSE_HEADERS);
+    return this.roles.create(body);
+  }
+
+  /**
+   * F-003 · T-003-B24 ★ — rename and/or replace the capabilities of a role
+   * (api-spec §1/§2). `200` + the role's `RoleDetail` (the current one on a
+   * no-op). Same guard chain as `create` (`manage_roles` → flag → `roleWrite`);
+   * the body goes to the service RAW for the same reason — its shape is checked
+   * after the in-tx floor and `ROLE_LOCKED`.
+   */
+  @RequireCapability(CAPABILITY_MANAGE_ROLES)
+  @RoleWrite()
+  @Patch(":roleId")
+  @UseGuards(JsonOnlyGuard)
+  async update(
+    @Param("roleId") roleId: string,
+    @Body() body: unknown,
+    @Res({ passthrough: true }) res: Response,
+  ): Promise<RoleDetail> {
+    applyResponseHeaders(res, ORG_PROFILE_RESPONSE_HEADERS);
+    return this.roles.update(roleId, body);
+  }
+
+  /**
+   * F-003 · T-003-B25 ★ — soft-delete a role (api-spec §1/§2 · data-model §2.2).
+   * `200` + `DeletedRole { id, deletedAt }`. Same guard chain as create/update
+   * (`manage_roles` → flag → `roleWrite`). No body and no `version` (api-spec §2),
+   * so no JsonOnlyGuard: a client that sends no Content-Type is not a 415.
+   */
+  @RequireCapability(CAPABILITY_MANAGE_ROLES)
+  @RoleWrite()
+  @Delete(":roleId")
+  async remove(
+    @Param("roleId") roleId: string,
+    @Res({ passthrough: true }) res: Response,
+  ): Promise<DeletedRole> {
+    applyResponseHeaders(res, ORG_PROFILE_RESPONSE_HEADERS);
+    return this.roles.delete(roleId);
   }
 
   /**

@@ -19,6 +19,7 @@ part 'role_row.g.dart';
 /// * [nameCustomized] - F-003 (AC-1.5) — the shop renamed this role (always `true` for a role with `key: null`). When `true`, show `name` as-is instead of translating `key`. Absent (older server) = `false`. 
 /// * [viewerCanAssign] - F-003 (AC-2.2) — may the CALLER hand out this role (invite with it, or change a member to it)? The same rule the write applies: the role must not grant ownership unless you are an Owner, and must not hold a permission you lack. Show a `false` option DISABLED with the reason — never hide it. A UX input, never enforcement.  Present only when the caller holds `manage_members`. 
 /// * [assignBlockedReason] - Present with `viewerCanAssign`; `null` when it is `true`. OPEN SET: `owner_only` · `exceeds_your_permissions`. Never names the missing permission (`capabilities` stays unpublished here). Any other value → generic copy. 
+/// * [inviteTtlHours] - F-003 (D-039 · AC-10.3) — how many hours an invitation with this role would stay valid, computed from the role's CAPABILITIES by the same rule that sets `Invitation.expiresAt` (today `24` for a role holding `full_access`, `manage_members` or `manage_roles`; `168` otherwise — treat it as a number, not an enum). Never derived from `key` or `name`.  Present ONLY on rows where `viewerCanAssign` is `true` — the caller holds `manage_members` AND may invite with this role, so the number reveals nothing they could not learn by inviting (AC-6.4). Absent everywhere else (no `manage_members`, a role the caller may not assign, the Owner role for a non-Owner) and on older servers.  The client decides the \"short-lived link\" warning from this field ONLY — never from `key`, `name` or `grantsOwnership`. Absent = show no warning. A UX input, never enforcement: the server sets the real expiry regardless. 
 @BuiltValue()
 abstract class RoleRow implements Built<RoleRow, RoleRowBuilder> {
   @BuiltValueField(wireName: r'id')
@@ -51,6 +52,10 @@ abstract class RoleRow implements Built<RoleRow, RoleRowBuilder> {
   /// Present with `viewerCanAssign`; `null` when it is `true`. OPEN SET: `owner_only` · `exceeds_your_permissions`. Never names the missing permission (`capabilities` stays unpublished here). Any other value → generic copy. 
   @BuiltValueField(wireName: r'assignBlockedReason')
   String? get assignBlockedReason;
+
+  /// F-003 (D-039 · AC-10.3) — how many hours an invitation with this role would stay valid, computed from the role's CAPABILITIES by the same rule that sets `Invitation.expiresAt` (today `24` for a role holding `full_access`, `manage_members` or `manage_roles`; `168` otherwise — treat it as a number, not an enum). Never derived from `key` or `name`.  Present ONLY on rows where `viewerCanAssign` is `true` — the caller holds `manage_members` AND may invite with this role, so the number reveals nothing they could not learn by inviting (AC-6.4). Absent everywhere else (no `manage_members`, a role the caller may not assign, the Owner role for a non-Owner) and on older servers.  The client decides the \"short-lived link\" warning from this field ONLY — never from `key`, `name` or `grantsOwnership`. Absent = show no warning. A UX input, never enforcement: the server sets the real expiry regardless. 
+  @BuiltValueField(wireName: r'inviteTtlHours')
+  int? get inviteTtlHours;
 
   RoleRow._();
 
@@ -121,6 +126,13 @@ class _$RoleRowSerializer implements PrimitiveSerializer<RoleRow> {
       yield serializers.serialize(
         object.assignBlockedReason,
         specifiedType: const FullType.nullable(String),
+      );
+    }
+    if (object.inviteTtlHours != null) {
+      yield r'inviteTtlHours';
+      yield serializers.serialize(
+        object.inviteTtlHours,
+        specifiedType: const FullType(int),
       );
     }
   }
@@ -203,6 +215,13 @@ class _$RoleRowSerializer implements PrimitiveSerializer<RoleRow> {
           ) as String?;
           if (valueDes == null) continue;
           result.assignBlockedReason = valueDes;
+          break;
+        case r'inviteTtlHours':
+          final valueDes = serializers.deserialize(
+            value,
+            specifiedType: const FullType(int),
+          ) as int;
+          result.inviteTtlHours = valueDes;
           break;
         default:
           unhandled.add(key);

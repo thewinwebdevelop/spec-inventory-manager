@@ -192,4 +192,37 @@ void main() {
     expect(signedOut, isFalse);
     expect(find.text('ออกจากระบบไม่สำเร็จ ลองใหม่อีกครั้ง'), findsOneWidget);
   });
+
+  testWidgets('★ T-003-M11 · losing manage_members while on the members tab lands on "ข้อมูลร้าน"',
+      (tester) async {
+    // ux R10a: after changing your own role to one that cannot manage
+    // members, the members tab vanishes — and the person lands on the shop
+    // tab, never on whatever tab happens to slide into the same index.
+    final active = ValueNotifier<ActiveOrg>(_ownerWildcardOnly);
+    addTearDown(active.dispose);
+    await pumpScreen(
+      tester,
+      ValueListenableBuilder<ActiveOrg>(
+        valueListenable: active,
+        builder: (_, org, __) => ShopShell(active: org, onSignedOut: () {}),
+      ),
+      overrides: [
+        orgScopedRepositoryProvider.overrideWithValue(
+          FakeOrgScoped(memberPages: [PagedResult(items: [member(id: 'usr_1', isMe: true)])]),
+        ),
+        authRepositoryProvider.overrideWithValue(_FakeAuth()),
+      ],
+      activeOrg: _ownerWildcardOnly,
+    );
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('สมาชิก'));
+    await tester.pumpAndSettle();
+    expect(find.byType(MembersScreen), findsOneWidget);
+
+    active.value = _staffOrg;
+    await tester.pumpAndSettle();
+
+    expect(find.byType(MembersScreen), findsNothing);
+    expect(find.byType(OrgProfileScreen), findsOneWidget);
+  });
 }

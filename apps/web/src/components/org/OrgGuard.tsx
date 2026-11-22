@@ -70,12 +70,42 @@ export function OrgGuard({ orgId, children }: { orgId: string; children: ReactNo
   return <OrgShellSkeleton />;
 }
 
+/**
+ * D9 (D-038 ③) — the SHAPE of `AppShell` with none of its content: the 56px top
+ * bar below lg, the 240px sidebar at ≥lg, and skeleton rows where the page
+ * goes. It was three bars in a `p-6` box, so on resolve the chrome appeared
+ * from nowhere and the page jumped down (tablet) or right (desktop).
+ *
+ * ★ Shape only. No shop name, no nav, no links: those are built from a profile
+ * nobody has verified yet — which is why the real shell is inside this guard.
+ */
 function OrgShellSkeleton() {
   return (
-    <div className="p-6" role="status" aria-label="กำลังโหลด">
-      <SkeletonRow />
-      <SkeletonRow />
-      <SkeletonRow />
+    <div
+      className="flex min-h-screen flex-col bg-bg lg:flex-row"
+      role="status"
+      aria-label="กำลังโหลด"
+    >
+      <div
+        data-skeleton="top-bar"
+        className="flex h-14 items-center gap-2 border-b border-border-default bg-surface px-4 lg:hidden"
+      >
+        <div className="h-5 w-40 animate-shimmer rounded-button bg-surface-muted" />
+      </div>
+      <div
+        data-skeleton="sidebar"
+        className="hidden flex-col gap-3 border-border-default bg-surface p-card-padding lg:flex lg:w-[var(--size-sidebar-w)] lg:border-r"
+      >
+        <p className="m-0 mb-2 text-heading-sm">OmniStock</p>
+        {[0, 1, 2, 3].map((i) => (
+          <div key={i} className="h-9 animate-shimmer rounded-button bg-surface-muted" />
+        ))}
+      </div>
+      <div className="min-w-0 flex-1 p-4 lg:p-card-padding">
+        <SkeletonRow />
+        <SkeletonRow />
+        <SkeletonRow />
+      </div>
     </div>
   );
 }

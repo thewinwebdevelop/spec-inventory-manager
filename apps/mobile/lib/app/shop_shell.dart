@@ -51,8 +51,12 @@ class ShopShell extends ConsumerStatefulWidget {
   ConsumerState<ShopShell> createState() => _ShopShellState();
 }
 
+/// Which destination is selected — by identity, not by position, so a tab
+/// that disappears cannot hand its slot to whichever tab slides into it.
+enum _Tab { shop, members, security }
+
 class _ShopShellState extends ConsumerState<ShopShell> {
-  var _index = 0;
+  var _selected = _Tab.shop;
   var _signingOut = false;
 
   /// Ends THIS session only — `logoutDevice()` with no `familyId`.
@@ -101,8 +105,9 @@ class _ShopShellState extends ConsumerState<ShopShell> {
     // who may do anything (B-1, on both clients).
     final canManageMembers = widget.active.can(manageMembersCapability);
 
-    final destinations = <(Widget screen, NavigationDestination tab)>[
+    final destinations = <(_Tab id, Widget screen, NavigationDestination tab)>[
       (
+        _Tab.shop,
         OrgProfileScreen(onCreateOrganization: _createOrganization),
         NavigationDestination(
           icon: const Icon(Icons.storefront_outlined),
@@ -112,6 +117,7 @@ class _ShopShellState extends ConsumerState<ShopShell> {
       ),
       if (canManageMembers)
         (
+          _Tab.members,
           const MembersScreen(),
           NavigationDestination(
             icon: const Icon(Icons.group_outlined),
@@ -120,6 +126,7 @@ class _ShopShellState extends ConsumerState<ShopShell> {
           ),
         ),
       (
+        _Tab.security,
         SecurityScreen(
           onSessionExpired: widget.onSignedOut,
           appBarActions: [
@@ -141,20 +148,23 @@ class _ShopShellState extends ConsumerState<ShopShell> {
     ];
 
     // The members tab appears and disappears as capabilities are learned
-    // (`enterOrganization` fetches them AFTER entering, on purpose), so the
-    // selected index can outlive the tab it pointed at.
-    final index = _index.clamp(0, destinations.length - 1);
+    // (`enterOrganization` fetches them AFTER entering, on purpose) or lost
+    // (T-003-M11: changing your own role away from manage_members). A tab
+    // that is gone lands on "ข้อมูลร้าน" (ux R10a) — never on whatever tab
+    // now sits at the same index, which used to be the security tab.
+    final found = destinations.indexWhere((d) => d.$1 == _selected);
+    final index = found < 0 ? 0 : found;
 
     return Scaffold(
       // No AppBar of its own: every screen below already owns a `Scaffold`
       // with the AppBar ux-wireframe §13 specifies for it (the shop switcher
       // lives in the shop screen's AppBar title, "แตะชื่อร้านบน AppBar →
       // bottom sheet"). A shell AppBar would stack a second bar on top of it.
-      body: destinations[index].$1,
+      body: destinations[index].$2,
       bottomNavigationBar: NavigationBar(
         selectedIndex: index,
-        onDestinationSelected: (next) => setState(() => _index = next),
-        destinations: [for (final d in destinations) d.$2],
+        onDestinationSelected: (next) => setState(() => _selected = destinations[next].$1),
+        destinations: [for (final d in destinations) d.$3],
       ),
     );
   }

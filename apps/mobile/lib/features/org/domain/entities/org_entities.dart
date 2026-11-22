@@ -55,19 +55,28 @@ class MemberRow {
   const MemberRow({
     required this.userId,
     required this.email,
+    required this.roleId,
     required this.roleName,
     required this.roleKey,
     required this.status,
     required this.isMe,
     required this.isOwner,
+    this.roleNameCustomized,
     this.viewerCanManage,
     this.manageBlockedReason,
   });
 
   final String userId;
   final String email;
+
+  /// The member's current role — R10 marks "(บทบาทปัจจุบัน)" by id
+  /// (`RoleRow.id == MemberRow.roleId`, ux R10 (ข)), never by name.
+  final String roleId;
   final String roleName;
   final String? roleKey;
+
+  /// AC-1.5 — the shop renamed this role; show [roleName] verbatim (ux §0.2).
+  final bool? roleNameCustomized;
 
   /// `active` | `invited` | `revoked`.
   final String status;
@@ -163,10 +172,18 @@ class RoleRow {
     this.nameCustomized,
     this.viewerCanAssign,
     this.assignBlockedReason,
+    this.inviteTtlHours,
   });
 
   final String id;
   final String name;
+
+  /// D-039 — how long an invitation for this role lives, in hours, as the
+  /// SERVER computes it (`invitationTtlHours(role.capabilities)`, the same
+  /// function that sets `expiresAt`). Sent only on rows the viewer may hand
+  /// out (`viewerCanAssign = true`); `null` = the server did not say. Read
+  /// ONLY to decide the short-link warning — never printed (ux Q14).
+  final int? inviteTtlHours;
 
   /// AC-1.5 — the shop renamed this role; show [name] verbatim. Absent = false.
   final bool? nameCustomized;

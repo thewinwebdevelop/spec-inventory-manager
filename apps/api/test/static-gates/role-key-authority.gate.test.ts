@@ -94,17 +94,15 @@ const PRESENTATION_ALLOWLIST: readonly PresentationAllowance[] = Object.freeze([
   {
     file: "apps/mobile/lib/features/org/presentation/screens/invite_member_screen.dart",
     reason:
-      "Invite screen display choices: default radio selection (`staff` / preset key), the Owner-" +
+      "Invite screen display choices: default radio selection (`staff` / preset key) and the Owner-" +
       "only description sentence (T-003-M04 — ux-wireframe §0.1 dropped admin/staff descriptions " +
-      "as no longer honest once a shop can edit a role), and which TTL warning sentence to show " +
-      "(`_isElevated`). The server decides the role and the expiry; none of these gate a request. " +
-      "The TTL `key == 'admin'` check stays pinned until the TTL decision lands (QA03 F1, waiting on a user decision). QA03 finding F1: " +
-      "`_isElevated` drifts from the server's isElevatedRole once custom roles exist (display " +
-      "defect, not authority).",
+      "as no longer honest once a shop can edit a role). The server decides the role and the " +
+      "expiry; none of these gate a request. The TTL `key == 'admin'` check (QA03 F1) is GONE " +
+      "since T-003-M09 / D-039 — the short-link warning reads only the server's " +
+      "`RoleRow.inviteTtlHours` (domain/invite_ttl_warning.dart).",
     lines: [
       "final preset = widget.initialRoleKey;",
       "final staff = roles.where((r) => r.key == 'staff').firstOrNull;",
-      "return selected.grantsOwnership || selected.key == 'admin';",
       "final description = role.key == 'owner' ? t.inviteRoleOwnerDesc : null;",
     ],
   },
@@ -112,18 +110,13 @@ const PRESENTATION_ALLOWLIST: readonly PresentationAllowance[] = Object.freeze([
     file: "apps/web/src/features/org/role-copy.ts",
     reason:
       "`displayRoleName()` (ux §0.2, T-003-W03): translates a system roleKey to its label unless " +
-      "the shop renamed the role (`nameCustomized`); unknown key falls back to name. Display only.",
+      "the shop renamed the role (`nameCustomized`); unknown key falls back to name. " +
+      "`toLastEdited()` (T-003-W05, moved here from RolesScreen.tsx in T-003-W06 so R1 and R3 share " +
+      "it): adapts the wire `RoleLastEdited.by` to `lastEditedLine` and passes the editor's roleKey " +
+      "straight into `displayRoleName()` for the label. Display only.",
     lines: [
       "const { name, roleKey, nameCustomized } = params;",
       "if (roleKey && roleKey in ROLE_KEY_LABEL) return ROLE_KEY_LABEL[roleKey];",
-    ],
-  },
-  {
-    file: "apps/web/src/features/org/roles/RolesScreen.tsx",
-    reason:
-      "`toLastEdited()` (T-003-W05): adapts the wire `RoleLastEdited.by` to W03's `lastEditedLine` " +
-      "and passes the editor's roleKey straight into `displayRoleName()` for the label. Display only.",
-    lines: [
       "const { kind, roleName, roleKey, roleNameCustomized } = le.by;",
       "? displayRoleName({ name: roleName, roleKey, nameCustomized: roleNameCustomized })",
     ],
@@ -147,6 +140,14 @@ const PRESENTATION_ALLOWLIST: readonly PresentationAllowance[] = Object.freeze([
       'if (role.key === "admin" || role.key === "staff") {',
       "out.add(roleNameComparisonKey(labels[role.key]));",
     ],
+  },
+  {
+    file: "apps/api/src/orgs/roles.service.ts",
+    reason:
+      "`RolesService.update` (T-003-B24) hands the edited role's key to `validateRoleName` as " +
+      "`selfKey` — the reserved-label policy above (a system role may take its own translation back). " +
+      "Naming only: the write is decided by decideRoleWrite on capabilities.",
+    lines: [": await this.validateNameInTx(tx, shape.name, role.key);"],
   },
   // ── display call sites: a role key handed to `roleLabel` to render a label.
   // Exempt ONLY here, line by line; the helper's result used as a condition

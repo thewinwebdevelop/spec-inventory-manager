@@ -1,0 +1,7 @@
+// G3-03 red fixture — `apps/api/src/orgs/role-templates.service.ts` (hypothetical):
+// a second Role writer that is not on the allowlist and copies caps off the body.
+export class RoleTemplatesService {
+  async apply(tx: Tx, dto: { name: string; capabilities: string[] }) {
+    await tx.role.create({ data: { name: dto.name, capabilities: dto.capabilities } });
+  }
+}

@@ -20,6 +20,19 @@ import { MembersService } from "./members.service";
 import { OrgOwnershipGuard } from "./org-ownership.guard";
 import { RolesService } from "./roles.service";
 
+/**
+ * T-003-B23 — `list()` touches none of the create path's collaborators (events,
+ * Owner guard, decider seam, limits, detail reads); `undefined` makes any
+ * accidental use fail loudly instead of silently working.
+ */
+const LIST_ONLY_COLLABORATORS = [
+  undefined,
+  undefined,
+  undefined,
+  undefined,
+  undefined,
+] as unknown as [never, never, never, never, never];
+
 /** Fixture roles: equal / superset / subset / incomparable pairs all occur. */
 const ROLE_CAPS: Readonly<Record<string, readonly string[]>> = {
   owner: ["full_access"],
@@ -139,7 +152,7 @@ describe("U-API3-16 · RoleRow.viewerCanAssign = invite create grant axis", () =
       },
     };
     const store = new OrgContextStore();
-    const service = new RolesService(prisma as never, store);
+    const service = new RolesService(prisma as never, store, ...LIST_ONLY_COLLABORATORS);
     let checked = 0;
     for (const viewerRole of ROLE_IDS) {
       const viewerCaps = ROLE_CAPS[viewerRole]!;
