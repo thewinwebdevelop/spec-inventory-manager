@@ -44,6 +44,11 @@ abstract interface class OrgScoped {
     String? cursor,
   });
 
+  /// `PATCH /orgs/{orgId}/members/{userId}` body `{roleId}` (F-003 R10).
+  /// Answers with the member's new row. A refusal arrives as an
+  /// `ApiFailure`; nothing is retried here (one press = one request).
+  Future<MemberRow> updateMemberRole({required String userId, required String roleId});
+
   /// `GET /orgs/{orgId}/roles`.
   Future<List<RoleRow>> listRoles();
 

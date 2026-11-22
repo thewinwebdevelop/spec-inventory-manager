@@ -310,6 +310,65 @@ void main() {
       expect(rows[3].viewerCanManage, isNull);
       expect(rows[3].manageBlockedReason, isNull);
     });
+    test('★ T-003-M09 (D-039): GET /roles carries inviteTtlHours verbatim — absent stays null',
+        () async {
+      final adapter = _FakeAdapter(200, {
+        'items': [
+          {'id': 'rol_a', 'name': 'A', 'key': null, 'isSystem': false, 'viewerCanAssign': true, 'inviteTtlHours': 24},
+          {'id': 'rol_b', 'name': 'B', 'key': 'staff', 'isSystem': true, 'viewerCanAssign': true, 'inviteTtlHours': 168},
+          {'id': 'rol_c', 'name': 'C', 'key': 'owner', 'isSystem': true, 'viewerCanAssign': false},
+        ],
+        'nextCursor': null,
+      });
+
+      final roles = await repoOn(adapter).listRoles();
+
+      expect(roles.map((r) => r.inviteTtlHours), [24, 168, null]);
+    });
+
+    test('★ T-003-M11: member rows carry roleId (R10 marks the current role by id, never by name)',
+        () async {
+      final adapter = _FakeAdapter(200, {
+        'items': [memberJson('usr_a', {'roleId': 'rol_pack_9'})],
+        'nextCursor': null,
+      });
+
+      final row = (await repoOn(adapter).listMembers()).items.single;
+
+      expect(row.roleId, 'rol_pack_9');
+    });
+
+    test('★ T-003-M11: PATCH /members/{userId} sends ONLY {roleId} and maps the 200 row', () async {
+      final adapter = _FakeAdapter(200, {
+        ...memberJson('usr_a', {'viewerCanManage': true}),
+        'roleId': 'rol_new',
+        'roleName': 'แพ็คของ',
+        'roleKey': null,
+      });
+
+      final row = await repoOn(adapter).updateMemberRole(userId: 'usr_a', roleId: 'rol_new');
+
+      expect(adapter.seen.single.method, 'PATCH');
+      expect(adapter.seen.single.path, '/orgs/org_1/members/usr_a');
+      expect(adapter.seen.single.data, {'roleId': 'rol_new'});
+      expect(row.roleId, 'rol_new');
+      expect(row.roleName, 'แพ็คของ');
+      expect(row.roleKey, isNull);
+      expect(row.viewerCanManage, isTrue);
+    });
+
+    test('★ T-003-M11: a refused PATCH member surfaces as an ApiFailure, not a DioException',
+        () async {
+      final adapter = _FakeAdapter(403, {
+        'error': {'code': 'TARGET_NOT_BELOW_ACTOR', 'message': 'no'},
+      });
+
+      await expectLater(
+        repoOn(adapter).updateMemberRole(userId: 'usr_a', roleId: 'rol_x'),
+        throwsA(isA<ApiFailure>()),
+      );
+    });
+
     test('★ T-003-M05: role-details carries every server verdict verbatim, open-set reasons included',
         () async {
       Map<String, Object?> role(String id, Map<String, Object?> viewer, {Object? lastEdited}) => {

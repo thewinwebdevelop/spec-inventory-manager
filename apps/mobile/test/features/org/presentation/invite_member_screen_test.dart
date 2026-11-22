@@ -107,20 +107,41 @@ void main() {
     expect(ownerTile.enabled, isTrue);
   });
 
-  testWidgets('★ the short-TTL note appears for an elevated role, with no number in it',
+  testWidgets('★ M09/D-039 · the short-TTL note follows inviteTtlHours, with no number in it',
       (tester) async {
     // ux Q14: the real duration only ever arrives with the link's
-    // `expiresAt`.
-    await _pump(tester, FakeOrgScoped(roles: threeRoles));
+    // `expiresAt` — the note is comparative and never prints hours.
+    const roles = [
+      RoleRow(id: 'rol_owner', name: 'Owner', key: 'owner', grantsOwnership: true, inviteTtlHours: 24),
+      RoleRow(id: 'rol_admin', name: 'Admin', key: 'admin', inviteTtlHours: 24),
+      RoleRow(id: 'rol_pack', name: 'แพ็คของพิเศษ', key: null, nameCustomized: true, inviteTtlHours: 24),
+      RoleRow(id: 'rol_staff', name: 'Staff', key: 'staff', inviteTtlHours: 168),
+    ];
+    await _pump(tester, FakeOrgScoped(roles: roles));
     expect(find.textContaining('อายุสั้นกว่าปกติ'), findsNothing);
 
-    await tester.tap(find.text('ผู้ดูแล'));
+    // A CUSTOM role with no key at all — `key == 'admin'` could never warn here.
+    await tester.tap(find.text('แพ็คของพิเศษ'));
     await tester.pumpAndSettle();
-
     expect(
         find.text('บทบาทนี้มีสิทธิ์สูง ลิงก์คำเชิญจึงมีอายุสั้นกว่าปกติเพื่อความปลอดภัย'),
         findsOneWidget);
-    expect(find.textContaining('24 ชั่วโมง'), findsNothing);
+    expect(find.textContaining('24'), findsNothing);
+    expect(find.textContaining('ชั่วโมง'), findsNothing);
+
+    await tester.tap(find.text('พนักงาน'));
+    await tester.pumpAndSettle();
+    expect(find.textContaining('อายุสั้นกว่าปกติ'), findsNothing);
+  });
+
+  testWidgets('★ M09 · admin key without inviteTtlHours → no note (the slug is not a fact)',
+      (tester) async {
+    // threeRoles carries no inviteTtlHours (an older server / no verdict):
+    // the old `key == 'admin'` rule would warn here; the server said nothing.
+    await _pump(tester, FakeOrgScoped(roles: threeRoles));
+    await tester.tap(find.text('ผู้ดูแล'));
+    await tester.pumpAndSettle();
+    expect(find.textContaining('อายุสั้นกว่าปกติ'), findsNothing);
   });
 
   RadioListTile<String> tileFor(WidgetTester tester, String label) =>
@@ -226,9 +247,16 @@ void main() {
   });
 
   testWidgets('the nudge opens this screen with Owner already chosen', (tester) async {
-    await _pump(tester, FakeOrgScoped(roles: threeRoles), initialRoleKey: 'owner');
+    const roles = [
+      RoleRow(id: 'rol_owner', name: 'Owner', key: 'owner', grantsOwnership: true, inviteTtlHours: 24),
+      RoleRow(id: 'rol_admin', name: 'Admin', key: 'admin', inviteTtlHours: 24),
+      RoleRow(id: 'rol_staff', name: 'Staff', key: 'staff', inviteTtlHours: 168),
+    ];
+    await _pump(tester, FakeOrgScoped(roles: roles), initialRoleKey: 'owner');
 
-    // An Owner-level invitation is elevated, so its note is showing.
+    expect(tester.widget<RadioGroup<String>>(find.byType(RadioGroup<String>)).groupValue, 'rol_owner');
+    // The server gives an Owner invitation the shorter TTL (D-039), so its
+    // note is showing.
     expect(find.textContaining('อายุสั้นกว่าปกติ'), findsOneWidget);
   });
 

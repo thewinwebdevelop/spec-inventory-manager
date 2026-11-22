@@ -20,6 +20,7 @@ Future<bool> showConfirmDialog(
   required String cancelLabel,
   required String confirmLabel,
   bool destructive = false,
+  bool stacked = false,
 }) async {
   final result = await showModalBottomSheet<bool>(
     context: context,
@@ -34,6 +35,7 @@ Future<bool> showConfirmDialog(
       cancelLabel: cancelLabel,
       confirmLabel: confirmLabel,
       destructive: destructive,
+      stacked: stacked,
     ),
   );
   return result ?? false;
@@ -46,6 +48,7 @@ class _ConfirmSheet extends StatefulWidget {
     required this.cancelLabel,
     required this.confirmLabel,
     required this.destructive,
+    required this.stacked,
   });
 
   final String title;
@@ -53,6 +56,10 @@ class _ConfirmSheet extends StatefulWidget {
   final String cancelLabel;
   final String confirmLabel;
   final bool destructive;
+
+  /// Buttons one above the other, full width, the action first (ux R10a on
+  /// mobile: long Thai labels). Default focus stays on cancel either way.
+  final bool stacked;
 
   @override
   State<_ConfirmSheet> createState() => _ConfirmSheetState();
@@ -89,43 +96,42 @@ class _ConfirmSheetState extends State<_ConfirmSheet> {
             const SizedBox(height: AppSpacing.s3),
             Text(widget.body, style: Theme.of(context).textTheme.bodyLarge),
             const SizedBox(height: AppSpacing.s6),
-            Row(
-              children: [
-                Expanded(
-                  child: OutlinedButton(
-                    focusNode: _cancelFocusNode,
-                    onPressed: () => Navigator.of(context).pop(false),
-                    style: OutlinedButton.styleFrom(
-                      minimumSize: const Size.fromHeight(AppSizes.tapTargetMin),
-                      shape: RoundedRectangleBorder(
-                        borderRadius: BorderRadius.circular(AppRadius.button),
-                      ),
-                    ),
-                    child: Text(widget.cancelLabel),
-                  ),
-                ),
-                const SizedBox(width: AppSpacing.s3),
-                Expanded(
-                  child: ElevatedButton(
-                    onPressed: () => Navigator.of(context).pop(true),
-                    style: ElevatedButton.styleFrom(
-                      backgroundColor: widget.destructive
-                          ? context.appColors.btnDangerBg
-                          : context.appColors.btnBg,
-                      foregroundColor: context.appColors.btnFg,
-                      minimumSize: const Size.fromHeight(AppSizes.tapTargetMin),
-                      shape: RoundedRectangleBorder(
-                        borderRadius: BorderRadius.circular(AppRadius.button),
-                      ),
-                    ),
-                    child: Text(widget.confirmLabel),
-                  ),
-                ),
-              ],
-            ),
+            if (widget.stacked) ...[
+              SizedBox(width: double.infinity, child: _confirm(context)),
+              const SizedBox(height: AppSpacing.s3),
+              SizedBox(width: double.infinity, child: _cancel(context)),
+            ] else
+              Row(
+                children: [
+                  Expanded(child: _cancel(context)),
+                  const SizedBox(width: AppSpacing.s3),
+                  Expanded(child: _confirm(context)),
+                ],
+              ),
           ],
         ),
       ),
     );
   }
+
+  Widget _cancel(BuildContext context) => OutlinedButton(
+        focusNode: _cancelFocusNode,
+        onPressed: () => Navigator.of(context).pop(false),
+        style: OutlinedButton.styleFrom(
+          minimumSize: const Size.fromHeight(AppSizes.tapTargetMin),
+          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(AppRadius.button)),
+        ),
+        child: Text(widget.cancelLabel),
+      );
+
+  Widget _confirm(BuildContext context) => ElevatedButton(
+        onPressed: () => Navigator.of(context).pop(true),
+        style: ElevatedButton.styleFrom(
+          backgroundColor: widget.destructive ? context.appColors.btnDangerBg : context.appColors.btnBg,
+          foregroundColor: context.appColors.btnFg,
+          minimumSize: const Size.fromHeight(AppSizes.tapTargetMin),
+          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(AppRadius.button)),
+        ),
+        child: Text(widget.confirmLabel),
+      );
 }

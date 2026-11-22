@@ -17,6 +17,7 @@ MemberRow _member({
   return MemberRow(
     userId: id,
     email: '$id@shop.com',
+    roleId: 'rol_1',
     roleName: 'Role',
     roleKey: roleKey,
     status: status,

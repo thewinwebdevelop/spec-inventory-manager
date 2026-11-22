@@ -249,6 +249,103 @@ void main() {
     expect(scoped.memberRoleIdsSeen, [null]);
     expect(scoped.invitationRoleIdsSeen, [null]);
   });
+
+  group('★ T-003-M11 L-1 — switching shops clears the rows', () {
+    ProviderContainer twoShops(FakeOrgScoped a, FakeOrgScoped b) {
+      final container = ProviderContainer(
+        overrides: [
+          // The app's real wiring rebuilds the repository on a shop switch
+          // (bootstrap.dart watches activeOrgIdProvider); mirror that here.
+          orgScopedRepositoryProvider.overrideWith(
+            (ref) => ref.watch(activeOrgIdProvider) == 'org_b' ? b : a,
+          ),
+        ],
+      );
+      addTearDown(container.dispose);
+      container.read(sessionControllerProvider.notifier).signedIn(
+            orgs: const [],
+            active: const ActiveOrg(orgId: 'org_a', name: 'ร้าน A', capabilities: {'manage_members'}),
+          );
+      return container;
+    }
+
+    void switchTo(ProviderContainer c, String id) => c
+        .read(sessionControllerProvider.notifier)
+        .switchOrg(ActiveOrg(orgId: id, name: id, capabilities: const {'manage_members'}));
+
+    test("shop A's rows are gone the moment shop B is entered, and B's arrive", () async {
+      final a = FakeOrgScoped(memberPages: [PagedResult(items: [member(id: 'usr_a')])]);
+      final b = FakeOrgScoped(
+        memberPages: [PagedResult(items: [member(id: 'usr_b')])],
+        delay: const Duration(milliseconds: 20),
+      );
+      final container = twoShops(a, b);
+      _keep(container, membersControllerProvider('active'));
+      await _settle();
+      expect(container.read(membersControllerProvider('active')).items.single.userId, 'usr_a');
+
+      switchTo(container, 'org_b');
+      final during = container.read(membersControllerProvider('active'));
+      expect(during.items, isEmpty, reason: "A's rows must not be painted under B's name");
+      expect(during.loading, isTrue);
+
+      await Future<void>.delayed(const Duration(milliseconds: 40));
+      await _settle();
+      expect(container.read(membersControllerProvider('active')).items.single.userId, 'usr_b');
+      expect(b.memberCalls, 1);
+    });
+
+    test("a page from shop A that lands AFTER the switch is dropped", () async {
+      final a = FakeOrgScoped(
+        memberPages: [PagedResult(items: [member(id: 'usr_a')])],
+        delay: const Duration(milliseconds: 30),
+      );
+      final b = FakeOrgScoped(
+        memberPages: [PagedResult(items: [member(id: 'usr_b')])],
+        delay: const Duration(milliseconds: 60),
+      );
+      final container = twoShops(a, b);
+      _keep(container, membersControllerProvider('active'));
+      await _settle(); // A's fetch is in flight
+
+      switchTo(container, 'org_b');
+      await Future<void>.delayed(const Duration(milliseconds: 40));
+      await _settle(); // A's answer has landed by now — B's has not
+      final mid = container.read(membersControllerProvider('active'));
+      expect(mid.items, isEmpty);
+      expect(mid.loading, isTrue);
+
+      await Future<void>.delayed(const Duration(milliseconds: 60));
+      await _settle();
+      expect(container.read(membersControllerProvider('active')).items.single.userId, 'usr_b');
+    });
+  });
+
+  test('★ M11 L-4 — refresh keeps the rows on screen while it re-reads, then replaces them',
+      () async {
+    final scoped = FakeOrgScoped(
+      memberPages: [
+        PagedResult(items: [member(id: 'usr_1', roleName: 'Staff')]),
+        PagedResult(items: [member(id: 'usr_1', roleName: 'แพ็คของ')]),
+      ],
+      delay: const Duration(milliseconds: 10),
+    );
+    final container = _container(scoped);
+    _keep(container, membersControllerProvider('active'));
+    await Future<void>.delayed(const Duration(milliseconds: 20));
+    await _settle();
+
+    final notifier = container.read(membersControllerProvider('active').notifier);
+    notifier.replaceWhere((m) => m.userId == 'usr_1', member(id: 'usr_1', roleName: 'จาก 200'));
+    expect(container.read(membersControllerProvider('active')).items.single.roleName, 'จาก 200');
+
+    final pending = notifier.refresh();
+    final during = container.read(membersControllerProvider('active'));
+    expect(during.loading, isTrue);
+    expect(during.items.single.roleName, 'จาก 200');
+    await pending;
+    expect(container.read(membersControllerProvider('active')).items.single.roleName, 'แพ็คของ');
+  });
 }
 
 /// PagedResult 1 succeeds, page 2 fails — a shape the shared fake cannot express

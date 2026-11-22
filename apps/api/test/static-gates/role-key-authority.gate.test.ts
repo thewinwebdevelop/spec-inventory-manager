@@ -94,17 +94,15 @@ const PRESENTATION_ALLOWLIST: readonly PresentationAllowance[] = Object.freeze([
   {
     file: "apps/mobile/lib/features/org/presentation/screens/invite_member_screen.dart",
     reason:
-      "Invite screen display choices: default radio selection (`staff` / preset key), the Owner-" +
+      "Invite screen display choices: default radio selection (`staff` / preset key) and the Owner-" +
       "only description sentence (T-003-M04 — ux-wireframe §0.1 dropped admin/staff descriptions " +
-      "as no longer honest once a shop can edit a role), and which TTL warning sentence to show " +
-      "(`_isElevated`). The server decides the role and the expiry; none of these gate a request. " +
-      "The TTL `key == 'admin'` check stays pinned until the TTL decision lands (QA03 F1, waiting on a user decision). QA03 finding F1: " +
-      "`_isElevated` drifts from the server's isElevatedRole once custom roles exist (display " +
-      "defect, not authority).",
+      "as no longer honest once a shop can edit a role). The server decides the role and the " +
+      "expiry; none of these gate a request. The TTL `key == 'admin'` check (QA03 F1) is GONE " +
+      "since T-003-M09 / D-039 — the short-link warning reads only the server's " +
+      "`RoleRow.inviteTtlHours` (domain/invite_ttl_warning.dart).",
     lines: [
       "final preset = widget.initialRoleKey;",
       "final staff = roles.where((r) => r.key == 'staff').firstOrNull;",
-      "return selected.grantsOwnership || selected.key == 'admin';",
       "final description = role.key == 'owner' ? t.inviteRoleOwnerDesc : null;",
     ],
   },

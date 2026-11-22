@@ -61,6 +61,8 @@ const _equal = 'คนนี้มีสิทธิ์เท่ากับค�
 const _exceeds = 'คนนี้มีสิทธิ์บางอย่างที่คุณไม่มี — ให้เจ้าของร้านเปลี่ยนบทบาทหรือถอดออก';
 const _unknown = 'คุณจัดการสมาชิกคนนี้ไม่ได้ — ให้เจ้าของร้านช่วย';
 
+const _footer = 'ถอดสมาชิกออกจากร้าน หรือยกเลิกคำเชิญ ทำได้ที่เว็บ';
+
 void main() {
   testWidgets('★ viewerCanManage=true → chevron, and a tap hands over THAT row once', (tester) async {
     final tapped = await _pump(tester, [
@@ -118,23 +120,60 @@ void main() {
     });
   }
 
-  testWidgets('★ verdict ABSENT → no chevron, no reason, no tap — whatever the device holds',
+  testWidgets('★ M11 · verdict ABSENT is not fail-closed: active rows + own row open, Owner row locked',
       (tester) async {
-    final tapped = await _pump(tester, [
-      member(id: 'usr_2', email: 'mai@shop.com'),
-      member(id: 'usr_1', email: 'me@shop.com', isMe: true),
-    ]);
+    // adminOrg = manage_members only → the server sends no verdict (api §3.1).
+    final tapped = await _pump(
+      tester,
+      [
+        member(id: 'usr_2', email: 'mai@shop.com'),
+        member(id: 'usr_1', email: 'me@shop.com', isMe: true),
+        member(id: 'usr_0', email: 'owner@shop.com', isOwner: true, roleKey: 'owner'),
+      ],
+      org: adminOrg,
+    );
 
     for (final email in ['mai@shop.com', 'me@shop.com']) {
-      expect(_chevronIn(email), findsNothing);
-      expect(_lockIn(email), findsNothing);
-      expect(_tileOf(tester, email).onTap, isNull);
+      expect(_chevronIn(email), findsOneWidget, reason: email);
+      expect(_lockIn(email), findsNothing, reason: email);
     }
-    for (final copy in [_ownerOnly, _equal, _exceeds, _unknown]) {
-      expect(find.text(copy), findsNothing);
-    }
+    expect(_chevronIn('owner@shop.com'), findsNothing);
+    expect(_lockIn('owner@shop.com'), findsOneWidget);
+    expect(find.text(_ownerOnly), findsOneWidget);
+    expect(_tileOf(tester, 'owner@shop.com').onTap, isNull);
+
     await tester.tap(find.text('mai@shop.com'));
-    expect(tapped, isEmpty);
+    await tester.tap(find.text('me@shop.com'));
+    await tester.tap(find.text('owner@shop.com'));
+    expect(tapped.map((m) => m.userId), ['usr_2', 'usr_1']);
+  });
+
+  testWidgets('verdict ABSENT + an Owner viewer (older server) → the Owner row opens too',
+      (tester) async {
+    final tapped = await _pump(
+      tester,
+      [member(id: 'usr_0', email: 'owner2@shop.com', isOwner: true, roleKey: 'owner')],
+      org: ownerOrg,
+    );
+    expect(_chevronIn('owner2@shop.com'), findsOneWidget);
+    await tester.tap(find.text('owner2@shop.com'));
+    expect(tapped, hasLength(1));
+  });
+
+  testWidgets('a tappable row says what a tap does (semantics hint); a locked one does not',
+      (tester) async {
+    await _pump(tester, [
+      member(id: 'usr_2', email: 'mai@shop.com', viewerCanManage: true),
+      member(id: 'usr_3', email: 'nok@shop.com', viewerCanManage: false, manageBlockedReason: 'equal_permissions'),
+    ]);
+    Finder hinted(String email) => find.ancestor(
+          of: find.text(email),
+          matching: find.byWidgetPredicate(
+            (w) => w is Semantics && w.properties.hint == 'แตะเพื่อเปลี่ยนบทบาท',
+          ),
+        );
+    expect(hinted('mai@shop.com'), findsOneWidget);
+    expect(hinted('nok@shop.com'), findsNothing);
   });
 
   testWidgets('revoked rows: no chevron, no reason, even if a verdict came along', (tester) async {
@@ -157,22 +196,21 @@ void main() {
     expect(tapped, isEmpty);
   });
 
-  testWidgets('no change-role handler wired → an allowed row offers nothing; locked rows still explain',
-      (tester) async {
-    // Until R10's sheet lands (T-003-M11) the screen has nothing to open, and
-    // a chevron that opens nothing is worse than no affordance.
+  testWidgets('★ M11 · with no seam override the row opens the REAL R10 sheet', (tester) async {
     await _pump(
       tester,
-      [
-        member(id: 'usr_2', email: 'mai@shop.com', viewerCanManage: true),
-        member(id: 'usr_3', email: 'nok@shop.com', viewerCanManage: false, manageBlockedReason: 'equal_permissions'),
-      ],
+      [member(id: 'usr_2', email: 'mai@shop.com', viewerCanManage: true)],
       wired: false,
     );
+    expect(_chevronIn('mai@shop.com'), findsOneWidget);
+    await tester.tap(find.text('mai@shop.com'));
+    await tester.pumpAndSettle();
+    expect(find.byType(BottomSheet), findsOneWidget);
+  });
 
-    expect(_chevronIn('mai@shop.com'), findsNothing);
-    expect(_tileOf(tester, 'mai@shop.com').onTap, isNull);
-    expect(find.text(_equal), findsOneWidget);
+  testWidgets('members section footer says where removal / invitation actions live', (tester) async {
+    await _pump(tester, [member(id: 'usr_2', email: 'mai@shop.com', viewerCanManage: true)]);
+    expect(find.text('ถอดสมาชิกออกจากร้าน หรือยกเลิกคำเชิญ ทำได้ที่เว็บ'), findsOneWidget);
   });
 
   testWidgets('no remove / reset-password / cancel-invitation action anywhere (F-002b)', (tester) async {
@@ -181,7 +219,15 @@ void main() {
     ]);
 
     for (final word in ['ถอดออกจากร้าน', 'ตั้งรหัสผ่านใหม่', 'ยกเลิกคำเชิญ', 'รีเซ็ต']) {
-      expect(find.textContaining(word), findsNothing, reason: word);
+      // The footer (ux R10 (ก)) NAMES these to say they live on the web —
+      // that sentence is the only place the words may appear.
+      expect(
+        find.byWidgetPredicate(
+          (w) => w is Text && (w.data ?? '').contains(word) && w.data != _footer,
+        ),
+        findsNothing,
+        reason: word,
+      );
     }
   });
 }

@@ -70,7 +70,11 @@ class FakeOrgScoped implements OrgScoped {
     List<Object>? createRoleAnswers,
     List<Object>? updateRoleAnswers,
     List<Object>? deleteRoleAnswers,
-  })  : roleDetailAnswers = roleDetailAnswers ?? <Object>[],
+    List<Object>? updateMemberAnswers,
+    List<List<RoleRow>>? roleAnswers,
+  })  : updateMemberAnswers = updateMemberAnswers ?? <Object>[],
+        roleAnswers = roleAnswers ?? <List<RoleRow>>[],
+        roleDetailAnswers = roleDetailAnswers ?? <Object>[],
         createRoleAnswers = createRoleAnswers ?? <Object>[],
         updateRoleAnswers = updateRoleAnswers ?? <Object>[],
         deleteRoleAnswers = deleteRoleAnswers ?? <Object>[];
@@ -79,6 +83,18 @@ class FakeOrgScoped implements OrgScoped {
   final List<PagedResult<MemberRow>> memberPages;
   final List<PagedResult<InvitationRow>> invitationPages;
   final List<RoleRow> roles;
+
+  /// T-003-M11 — successive `GET /roles` answers (the LAST repeats); empty =
+  /// always [roles]. Lets a test say "after ROLE_EXCEEDS_ACTOR the re-read
+  /// shows the role disabled".
+  final List<List<RoleRow>> roleAnswers;
+  int rolesCalls = 0;
+
+  /// T-003-M11 R10 — one answer per `PATCH /members/{userId}`: a [MemberRow]
+  /// or the `ApiFailure` to throw (the LAST one repeats). Every call is
+  /// recorded, so a test can say "PATCH was sent exactly once".
+  final List<Object> updateMemberAnswers;
+  final List<({String userId, String roleId})> memberRoleUpdates = [];
 
   final ApiFailure? membersFailure;
   final ApiFailure? invitationsFailure;
@@ -170,9 +186,22 @@ class FakeOrgScoped implements OrgScoped {
 
   @override
   Future<List<RoleRow>> listRoles() async {
+    final call = rolesCalls++;
     await Future<void>.delayed(delay);
     if (rolesFailure != null) throw rolesFailure!;
-    return roles;
+    if (roleAnswers.isEmpty) return roles;
+    return roleAnswers[call < roleAnswers.length ? call : roleAnswers.length - 1];
+  }
+
+  @override
+  Future<MemberRow> updateMemberRole({required String userId, required String roleId}) async {
+    final call = memberRoleUpdates.length;
+    memberRoleUpdates.add((userId: userId, roleId: roleId));
+    if (writeGate != null) await writeGate!.future;
+    await Future<void>.delayed(delay);
+    final answer = _answer(updateMemberAnswers, call);
+    if (answer is ApiFailure) throw answer;
+    return answer as MemberRow;
   }
 
   @override
@@ -299,12 +328,16 @@ MemberRow member({
   String status = 'active',
   String? roleKey = 'staff',
   String roleName = 'Staff',
+  String roleId = 'rol_staff',
+  bool? roleNameCustomized,
   bool? viewerCanManage,
   String? manageBlockedReason,
 }) {
   return MemberRow(
     userId: id,
     email: email ?? '$id@shop.com',
+    roleId: roleId,
+    roleNameCustomized: roleNameCustomized,
     roleName: roleName,
     roleKey: roleKey,
     status: status,

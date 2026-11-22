@@ -12,11 +12,23 @@ void showAppToast(
   String message, {
   AppToastVariant variant = AppToastVariant.success,
 }) {
+  showAppToastOn(ScaffoldMessenger.of(context), context.appColors, message, variant: variant);
+}
+
+/// The same toast, for a caller whose own context may be gone by the time
+/// it has something to say (a sheet that closed itself on the answer — T-003-M11):
+/// capture the messenger and the colours BEFORE the await, then call this.
+void showAppToastOn(
+  ScaffoldMessengerState messenger,
+  AppColorsX appColors,
+  String message, {
+  AppToastVariant variant = AppToastVariant.success,
+}) {
   final colors = switch (variant) {
-    AppToastVariant.success => (bg: context.appColors.successBg, fg: context.appColors.successText),
-    AppToastVariant.danger => (bg: context.appColors.dangerBg, fg: context.appColors.dangerText),
+    AppToastVariant.success => (bg: appColors.successBg, fg: appColors.successText),
+    AppToastVariant.danger => (bg: appColors.dangerBg, fg: appColors.dangerText),
   };
-  ScaffoldMessenger.of(context)
+  messenger
     ..hideCurrentSnackBar()
     ..showSnackBar(
       SnackBar(

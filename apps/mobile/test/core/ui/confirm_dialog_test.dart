@@ -87,4 +87,39 @@ void main() {
     final cancelButton = tester.widget<OutlinedButton>(find.widgetWithText(OutlinedButton, 'ยกเลิก'));
     expect(cancelButton.focusNode?.hasFocus, isTrue);
   });
+
+  testWidgets('stacked: full-width buttons, the action ABOVE cancel, focus still on cancel',
+      (tester) async {
+    // ux R10a (mobile): "ปุ่มเรียงแนวตั้งเต็มกว้าง" — long Thai labels.
+    late Future<bool> resultFuture;
+    await tester.pumpWidget(wrap((context) {
+      return ElevatedButton(
+        onPressed: () {
+          resultFuture = showConfirmDialog(
+            context,
+            title: 'เปลี่ยนบทบาทของตัวเอง?',
+            body: 'body',
+            cancelLabel: 'ไม่เปลี่ยน',
+            confirmLabel: 'เปลี่ยนบทบาทของฉัน',
+            destructive: true,
+            stacked: true,
+          );
+        },
+        child: const Text('open'),
+      );
+    }));
+    await tester.tap(find.text('open'));
+    await tester.pumpAndSettle();
+
+    final confirm = tester.getRect(find.widgetWithText(ElevatedButton, 'เปลี่ยนบทบาทของฉัน'));
+    final cancel = tester.getRect(find.widgetWithText(OutlinedButton, 'ไม่เปลี่ยน'));
+    expect(confirm.bottom, lessThanOrEqualTo(cancel.top));
+    expect(confirm.width, cancel.width);
+    final cancelButton = tester.widget<OutlinedButton>(find.widgetWithText(OutlinedButton, 'ไม่เปลี่ยน'));
+    expect(cancelButton.focusNode!.hasFocus, isTrue);
+
+    await tester.tap(find.text('ไม่เปลี่ยน'));
+    await tester.pumpAndSettle();
+    expect(await resultFuture, isFalse);
+  });
 }

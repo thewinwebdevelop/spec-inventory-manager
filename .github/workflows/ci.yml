@@ -880,6 +880,20 @@ jobs:
             # backslash continuation above.) If a step needs shell state, it
             # has to be one command.
             passed=$(grep -oE '\+[0-9]+' /tmp/mobile-e2e.log | tail -1 | tr -d '+'); echo "mobile integration: ${passed:-0} passing case(s) (floor 7)"; [ "${passed:-0}" -ge 7 ] || { echo "::error::the mobile lane passed ${passed:-0} case(s), floor is 7 — a case was deleted, renamed or skipped"; exit 1; }
+            # ── second file: F-003 role/member journeys (T-003-M11) ──────────────
+            # F-001 allows 20 pre-auth requests per IP per 5 min (fixed window)
+            # and the file above spends 19, so EM3-08..11 live in their own file
+            # and the per-IP counter is cleared first — the same `throttle:ip:*`
+            # keys the web lane's `resetIpThrottle` clears (apps/web/e2e/helpers.ts).
+            # `redis-cli` is in the redis:7 service image (its health check uses
+            # it), so this execs into the service container rather than relying
+            # on the runner having a client. Fails loudly: a silent no-op here
+            # turns into a 429 at the second file's first signup.
+            docker exec ${{ job.services.redis.id }} sh -c "redis-cli --scan --pattern 'throttle:ip:*' | xargs -r redis-cli del; echo throttle:ip keys left: \$(redis-cli --scan --pattern 'throttle:ip:*' | wc -l)" || { echo "::error::could not clear the per-IP pre-auth throttle before the second mobile file"; exit 1; }
+            flutter test integration_test/org_roles_flow_test.dart --dart-define=API_BASE_URL=http://10.0.2.2:3000 --dart-define=E2E_ROLE_WRITES=on --reporter expanded 2>&1 | tee /tmp/mobile-e2e-roles.log || true
+            grep -q "All tests passed" /tmp/mobile-e2e-roles.log || { echo "::error::the second mobile integration file (org_roles_flow_test) did not report a pass"; exit 1; }
+            # Floor = the file's case count (1 with T-003-M11's EM3-08..11 case).
+            passed=$(grep -oE '\+[0-9]+' /tmp/mobile-e2e-roles.log | tail -1 | tr -d '+'); echo "mobile roles integration: ${passed:-0} passing case(s) (floor 1)"; [ "${passed:-0}" -ge 1 ] || { echo "::error::org_roles_flow_test passed ${passed:-0} case(s), floor is 1 — a case was deleted, renamed or skipped"; exit 1; }
       # ⚠️ Collected BEFORE the emulator is torn down (the lines above run
       # inside the action's script), because the question these answer cannot
       # be asked afterwards: two runs ended with three tests reporting "did not

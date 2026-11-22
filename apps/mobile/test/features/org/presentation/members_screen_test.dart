@@ -166,17 +166,26 @@ void main() {
     });
   });
 
-  testWidgets('★ rows are not tappable while the actions do not exist', (tester) async {
-    // An action sheet that opens onto nothing is worse than no affordance.
-    await _pump(tester, FakeOrgScoped(memberPages: [
-      PagedResult(items: [member(id: 'usr_1', email: 'somchai@shop.com', isMe: true)]),
-    ]));
+  testWidgets('★ T-003-M11: an active row opens the R10 sheet (F-002\'s "no action yet" is over)',
+      (tester) async {
+    // The F-002 version of this test pinned "not tappable while the actions
+    // do not exist". R10 exists now; a row whose verdict is absent is NOT
+    // fail-closed (own row → D-040).
+    await _pump(tester, FakeOrgScoped(
+      memberPages: [
+        PagedResult(items: [member(id: 'usr_1', email: 'somchai@shop.com', isMe: true)]),
+      ],
+      roles: threeRoles,
+    ));
     await tester.pumpAndSettle();
 
     final tile = tester.widget<ListTile>(
       find.ancestor(of: find.text('somchai@shop.com'), matching: find.byType(ListTile)),
     );
-    expect(tile.onTap, isNull);
+    expect(tile.onTap, isNotNull);
+    await tester.tap(find.text('somchai@shop.com'));
+    await tester.pumpAndSettle();
+    expect(find.text('เปลี่ยนบทบาทของคุณ'), findsOneWidget);
   });
 
   testWidgets('more pages than one — "โหลดเพิ่ม" appends', (tester) async {

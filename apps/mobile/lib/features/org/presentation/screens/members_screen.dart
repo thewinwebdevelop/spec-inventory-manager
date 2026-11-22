@@ -14,6 +14,7 @@ import '../../domain/entities/org_entities.dart';
 import '../../domain/expiry.dart';
 import '../copy/role_action_blocked_copy.dart';
 import '../widgets/expiry_text.dart';
+import '../widgets/member_role_sheet.dart';
 import '../widgets/role_label.dart';
 import 'invite_member_screen.dart';
 import 'roles_screen.dart';
@@ -26,13 +27,14 @@ import 'roles_screen.dart';
 /// fails must not take the invitations with it, because the two are separate
 /// jobs and only one of them is broken.
 ///
-/// F-003 R7 (T-003-M10): a member row follows the SERVER's verdict
-/// ([memberRowAffordance]) — locked rows explain why; allowed rows open the
-/// change-role flow through [onChangeRole]. Nothing else (remove member,
-/// invitation actions, reset password) exists on mobile — F-002b.
+/// F-003 R7/R10 (T-003-M10/M11): a member row follows [memberRowAffordance]
+/// — the server's verdict when it sent one, F-002's rule when it did not
+/// (never fail-closed) — locked rows explain why; open rows open the R10
+/// sheet ([showMemberRoleSheet]). Nothing else (remove member, invitation
+/// actions, reset password) exists on mobile — F-002b.
 ///
-/// [onChangeRole] is R10's seam (T-003-M11). While it is `null` no row is
-/// tappable: an action that opens onto nothing is worse than no affordance.
+/// [onChangeRole] overrides what a tap opens (tests only); `null` = the real
+/// R10 sheet.
 class MembersScreen extends ConsumerStatefulWidget {
   const MembersScreen({super.key, this.onChangeRole});
 
@@ -50,6 +52,26 @@ class _MembersScreenState extends ConsumerState<MembersScreen> {
   /// builds a separate controller rather than mutating a list mid-flight.
   String get _memberStatus => _showRevoked ? 'all' : 'active';
   String get _inviteStatus => _showArchivedInvites ? 'all' : 'pending';
+
+  /// R10 — the sheet, then L-4: paint the `200` row at once and re-read the
+  /// list (new verdicts; a moved row may now be locked).
+  void _changeRole(MemberRow member) {
+    final provider = membersControllerProvider(_memberStatus);
+    showMemberRoleSheet(
+      context,
+      member: member,
+      onMembersStale: (updated) {
+        final list = ref.read(provider.notifier);
+        if (updated != null) list.replaceWhere((m) => m.userId == updated.userId, updated);
+        list.refresh();
+      },
+      // ux R10a: the members tab disappears with the capability (the shell
+      // lands on "ข้อมูลร้าน"); close anything pushed above it too.
+      onLostManageMembers: () {
+        if (mounted) Navigator.of(context).popUntil((route) => route.isFirst);
+      },
+    );
+  }
 
   Future<void> _openInvite({String? presetRoleKey}) async {
     await Navigator.of(context).push(
@@ -116,7 +138,7 @@ class _MembersScreenState extends ConsumerState<MembersScreen> {
             onRetry: () => ref.read(membersControllerProvider(_memberStatus).notifier).refresh(),
             onLoadMore: () => ref.read(membersControllerProvider(_memberStatus).notifier).loadMore(),
             onInvite: () => _openInvite(),
-            onChangeRole: widget.onChangeRole,
+            onChangeRole: widget.onChangeRole ?? _changeRole,
           ),
         ],
       ),
@@ -330,7 +352,9 @@ class _MembersSection extends StatelessWidget {
   Widget build(BuildContext context) {
     final t = AppLocalizations.of(context);
 
-    if (state.loading) return const SessionListSkeleton(rowCount: 3);
+    // A re-read after a role change keeps the rows on screen (L-4); the
+    // skeleton is for a list that has nothing to show yet.
+    if (state.loading && state.items.isEmpty) return const SessionListSkeleton(rowCount: 3);
     if (state.failure != null) {
       return _SectionError(message: t.membersLoadError, onRetry: onRetry);
     }
@@ -359,23 +383,36 @@ class _MembersSection extends StatelessWidget {
           onPressed: onToggleRevoked,
           child: Text(showRevoked ? t.membersHideRevoked : t.membersShowRevoked),
         ),
+        // ux R10 (ก): changing a role is on mobile now; these two are not
+        // (F-002b) — say where they are. Removed when F-002b ships.
+        Padding(
+          padding: const EdgeInsets.only(top: AppSpacing.s2),
+          child: Text(
+            t.roleFilteredMobileFooterNote,
+            style: AppTypography.bodySm.copyWith(color: context.appColors.textMuted),
+          ),
+        ),
       ],
     );
   }
 }
 
-class _MemberTile extends StatelessWidget {
+class _MemberTile extends ConsumerWidget {
   const _MemberTile({required this.member, required this.onChangeRole});
 
   final MemberRow member;
   final ValueChanged<MemberRow>? onChangeRole;
 
   @override
-  Widget build(BuildContext context) {
+  Widget build(BuildContext context, WidgetRef ref) {
     final t = AppLocalizations.of(context);
     final revoked = !member.isActive;
     final colors = context.appColors;
-    final affordance = memberRowAffordance(member);
+    final affordance = memberRowAffordance(
+      member,
+      // Read only when the server sent no verdict (F-002's Owner-only rule).
+      viewerIsOwner: ref.watch(activeOrgProvider)?.isOwner ?? false,
+    );
     final handler = onChangeRole;
     final tappable = affordance is MemberRowManageable && handler != null;
     final lockedReason = switch (affordance) {
@@ -383,7 +420,7 @@ class _MemberTile extends StatelessWidget {
       _ => null,
     };
 
-    return Opacity(
+    final tile = Opacity(
       // Revoked rows are dimmed AND labelled — the dimming is the hint, the
       // label is the information (§14).
       opacity: revoked ? 0.6 : 1,
@@ -432,9 +469,13 @@ class _MemberTile extends StatelessWidget {
           ],
         ),
         trailing: tappable ? const Icon(Icons.chevron_right) : null,
+        // ★ A locked row has NO handler — not a disabled one (CM3-08): there
+        // is no path from it to the sheet.
         onTap: tappable ? () => handler(member) : null,
       ),
     );
+    // ux R10 a11y: "แตะเพื่อเปลี่ยนบทบาท" on the rows that do something.
+    return tappable ? Semantics(hint: t.memberRowChangeRoleHint, child: tile) : tile;
   }
 }
 
@@ -481,18 +522,39 @@ class RoleMembersScreen extends ConsumerWidget {
   final String roleId;
   final String roleName;
 
-  /// R10's seam (T-003-M11) — see [MembersScreen.onChangeRole].
+  /// Overrides what a row tap opens (tests only) — see
+  /// [MembersScreen.onChangeRole]; `null` = the real R10 sheet.
   final ValueChanged<MemberRow>? onChangeRole;
+
+  void _changeRole(BuildContext context, WidgetRef ref, MemberRow member) {
+    showMemberRoleSheet(
+      context,
+      member: member,
+      // L-4: re-read — a member moved to another role leaves this list.
+      onMembersStale: (_) => ref.read(roleMembersControllerProvider(roleId).notifier).refresh(),
+      onLostManageMembers: () => Navigator.of(context).popUntil((route) => route.isFirst),
+    );
+  }
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final t = AppLocalizations.of(context);
     final members = ref.watch(roleMembersControllerProvider(roleId));
     final invitations = ref.watch(roleInvitationsControllerProvider(roleId));
+    // ★ L-2 — is this role one of THIS shop's? `?roleId=` for a role the
+    // shop does not have answers 200 with empty pages (api-spec §4.2b, not
+    // an oracle), so "nobody uses it — go delete it" needs the role to be
+    // known first. Unknown → "ไม่พบบทบาทนี้"; not answered yet / failed →
+    // no banner at all.
+    final known = ref.watch(rolesProvider).whenOrNull(
+          data: (roles) => roles.any((r) => r.id == roleId),
+        );
 
     bool settledEmpty(PagedState<Object?> s) =>
         !s.loading && s.failure == null && s.items.isEmpty && !s.hasMore;
-    final nobody = settledEmpty(members) && settledEmpty(invitations);
+    final empty = settledEmpty(members) && settledEmpty(invitations);
+    final nobody = empty && known == true;
+    final unknownRole = empty && known == false;
     final anyRows = members.items.isNotEmpty || invitations.items.isNotEmpty;
 
     return Scaffold(
@@ -501,7 +563,9 @@ class RoleMembersScreen extends ConsumerWidget {
         padding: const EdgeInsets.all(AppSpacing.s4),
         children: nobody
             ? [_NobodyLeft(roleName: roleName)]
-            : [
+            : unknownRole
+                ? [const _RoleNotFound()]
+                : [
                 _RoleSection<InvitationRow>(
                   state: invitations,
                   header: t.roleFilteredInvitationsHeader(invitations.items.length),
@@ -525,7 +589,10 @@ class RoleMembersScreen extends ConsumerWidget {
                       ref.read(roleMembersControllerProvider(roleId).notifier).refresh(),
                   onLoadMore: () =>
                       ref.read(roleMembersControllerProvider(roleId).notifier).loadMore(),
-                  row: (m) => _MemberTile(member: m, onChangeRole: onChangeRole),
+                  row: (m) => _MemberTile(
+                    member: m,
+                    onChangeRole: onChangeRole ?? (picked) => _changeRole(context, ref, picked),
+                  ),
                 ),
                 if (anyRows)
                   Padding(
@@ -537,6 +604,25 @@ class RoleMembersScreen extends ConsumerWidget {
                   ),
               ],
       ),
+    );
+  }
+}
+
+/// L-2 — the filtered role is not one of this shop's live roles (deleted,
+/// or never this shop's). The same words R3 uses for a role `404`.
+class _RoleNotFound extends StatelessWidget {
+  const _RoleNotFound();
+
+  @override
+  Widget build(BuildContext context) {
+    final t = AppLocalizations.of(context);
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Text(t.roleFormNotFoundTitle, style: Theme.of(context).textTheme.titleMedium),
+        const SizedBox(height: AppSpacing.s2),
+        Text(t.roleFormNotFoundBody, style: AppTypography.bodySm.copyWith(color: context.appColors.textMuted)),
+      ],
     );
   }
 }

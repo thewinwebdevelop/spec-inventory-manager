@@ -11,9 +11,10 @@ import '../../application/invite_controller.dart';
 import '../../application/invite_error.dart';
 import '../../application/org_providers.dart';
 import '../../domain/entities/org_entities.dart';
+import '../../domain/invite_ttl_warning.dart';
+import '../../domain/role_assignability.dart';
 import '../widgets/expiry_text.dart';
-import '../copy/role_action_blocked_copy.dart';
-import '../copy/role_display_copy.dart';
+import '../widgets/role_radio_option.dart';
 import 'invite_link_screen.dart';
 
 /// S7 — เชิญสมาชิก, mobile (ux-wireframe §8 + §13: full screen, so the
@@ -72,13 +73,19 @@ class _InviteMemberScreenState extends ConsumerState<InviteMemberScreen> {
     _roleId = pick?.id;
   }
 
-  /// R8 — enabled/disabled comes from the server's `viewerCanAssign`. Only
-  /// when the server does not say (field absent) does the F-002 rule apply:
-  /// the ownership-granting role is closed to a non-Owner.
-  bool _isDisabled(RoleRow r) => switch (r.viewerCanAssign) {
-        final bool can => !can,
-        null => r.grantsOwnership && !_iAmOwner,
-      };
+  /// R8 — the shared rule ([roleOptionDisabled]): the server's
+  /// `viewerCanAssign`, or F-002's Owner-only default when it is absent.
+  bool _isDisabled(RoleRow r) => roleOptionDisabled(r, viewerIsOwner: _iAmOwner);
+
+  RoleRadioOption _option(AppLocalizations t, RoleRow role) {
+    // Only the Owner description stays — it is server-locked, always true.
+    // Admin/staff descriptions were dropped (ux-wireframe §0.1): now that a
+    // store can edit what a role can do (F-003), a fixed sentence tied to
+    // the `key` would lie about what the role actually grants, and
+    // `GET /roles` does not send capabilities to check it against.
+    final description = role.key == 'owner' ? t.inviteRoleOwnerDesc : null;
+    return RoleRadioOption.fromRole(t, role, viewerIsOwner: _iAmOwner, description: description);
+  }
 
   Future<void> _submit() async {
     final issued = await ref
@@ -174,21 +181,22 @@ class _InviteMemberScreenState extends ConsumerState<InviteMemberScreen> {
                     child: Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
-                        for (final role in items)
-                          _RoleOption(
-                            role: role,
-                            // R8: `viewerCanAssign` from the server;
-                            // disabled and explained, never hidden.
-                            disabled: _isDisabled(role),
-                          ),
+                        // R8: `viewerCanAssign` from the server; disabled and
+                        // explained, never hidden. The same widget the R10
+                        // sheet uses (CM3-08).
+                        for (final role in items) _option(t, role),
                       ],
                     ),
                   ),
-                  if (_isElevated(items)) ...[
+                  if (showsShortLinkWarning(
+                    items.where((r) => r.id == _roleId).firstOrNull,
+                    items,
+                  )) ...[
                     const SizedBox(height: AppSpacing.s4),
-                    // No number in this sentence, on purpose: the real TTL
-                    // arrives with the link's `expiresAt` and nowhere else
-                    // (ux Q14).
+                    // D-039: decided ONLY from the server's `inviteTtlHours`
+                    // (see `domain/invite_ttl_warning.dart`). No number in
+                    // the sentence, on purpose: the real deadline arrives
+                    // with the link's `expiresAt` and nowhere else (ux Q14).
                     _Note(icon: Icons.hourglass_bottom, text: t.inviteShortTtlNote),
                   ],
                   const SizedBox(height: AppSpacing.s4),
@@ -209,66 +217,6 @@ class _InviteMemberScreenState extends ConsumerState<InviteMemberScreen> {
           },
         ),
       ),
-    );
-  }
-
-  /// Does the chosen role deserve the shorter-TTL warning (§8)?
-  ///
-  /// ★ B-9 for the ownership half — that is `grantsOwnership`, from the server.
-  /// The `admin` half stays on `key`, and deliberately: the contract publishes
-  /// no "is this an admin" bit, so a slug is all there is. It is display-only
-  /// (which sentence to show), never a permission decision, and the deadline
-  /// the screen prints always comes from the server's `expiresAt`.
-  bool _isElevated(List<RoleRow> roles) {
-    final selected = roles.where((r) => r.id == _roleId).firstOrNull;
-    if (selected == null) return false;
-    return selected.grantsOwnership || selected.key == 'admin';
-  }
-}
-
-class _RoleOption extends StatelessWidget {
-  const _RoleOption({required this.role, required this.disabled});
-
-  final RoleRow role;
-  final bool disabled;
-
-  @override
-  Widget build(BuildContext context) {
-    final t = AppLocalizations.of(context);
-    // Only the Owner description stays — it is server-locked, always true.
-    // Admin/staff descriptions were dropped (ux-wireframe §0.1): now that a
-    // store can edit what a role can do (F-003), a fixed sentence tied to
-    // the `key` would lie about what the role actually grants, and
-    // `GET /roles` does not send capabilities to check it against.
-    final description = role.key == 'owner' ? t.inviteRoleOwnerDesc : null;
-    final reason = disabled
-        ? roleAssignBlockedCopy(
-            t,
-            // Absent reason on a disabled row = F-002's owner-only rule.
-            role.assignBlockedReason ??
-                (role.viewerCanAssign == null ? 'owner_only' : ''),
-          )
-        : null;
-
-    return RadioListTile<String>(
-      value: role.id,
-      enabled: !disabled,
-      title: Text(roleDisplayName(
-        t,
-        roleKey: role.key,
-        name: role.name,
-        nameCustomized: role.nameCustomized,
-      )),
-      subtitle: (description == null && reason == null)
-          ? null
-          : Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                if (description != null) Text(description),
-                if (reason != null) Text(reason),
-              ],
-            ),
-      contentPadding: EdgeInsets.zero,
     );
   }
 }

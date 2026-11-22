@@ -131,25 +131,43 @@ class OrgScopedImpl implements OrgScoped {
       final items = body?.items.toList() ?? const <wire.MemberRow>[];
       return PagedResult(
         items: items
-            .map(
-              (m) => MemberRow(
-                userId: m.userId,
-                email: m.email,
-                roleName: m.roleName,
-                roleKey: m.roleKey,
-                status: m.status.name,
-                isMe: m.isMe,
-                isOwner: m.isOwner,
-                // Carried as-is: absent stays null, never defaulted.
-                viewerCanManage: m.viewerCanManage,
-                manageBlockedReason: m.manageBlockedReason,
-              ),
-            )
+            .map(_memberRow)
             .toList(growable: false),
         // Carried, never dropped: an absent `nextCursor` is the only proof a
         // count taken from this list is a count of everybody (ux-wireframe §7).
         nextCursor: body?.nextCursor,
       );
+    } on DioException catch (e) {
+      throw _asFailure(e);
+    }
+  }
+
+  /// One mapping for every route that returns a §3.7 member row (list +
+  /// PATCH), so the two cannot drift apart.
+  static MemberRow _memberRow(wire.MemberRow m) => MemberRow(
+        userId: m.userId,
+        email: m.email,
+        roleId: m.roleId,
+        roleName: m.roleName,
+        roleKey: m.roleKey,
+        roleNameCustomized: m.roleNameCustomized,
+        status: m.status.name,
+        isMe: m.isMe,
+        isOwner: m.isOwner,
+        // Carried as-is: absent stays null, never defaulted.
+        viewerCanManage: m.viewerCanManage,
+        manageBlockedReason: m.manageBlockedReason,
+      );
+
+  @override
+  Future<MemberRow> updateMemberRole({required String userId, required String roleId}) async {
+    try {
+      final res = await _members.updateMemberRole(
+        orgId: _orgId,
+        userId: userId,
+        updateMemberRoleRequest: wire.UpdateMemberRoleRequest((b) => b..roleId = roleId),
+      );
+      return _memberRow(res.data!);
     } on DioException catch (e) {
       throw _asFailure(e);
     }
@@ -213,6 +231,8 @@ class OrgScopedImpl implements OrgScoped {
               nameCustomized: r.nameCustomized,
               viewerCanAssign: r.viewerCanAssign,
               assignBlockedReason: r.assignBlockedReason,
+              // D-039 — carried as-is; absent stays null.
+              inviteTtlHours: r.inviteTtlHours,
             ),
           )
           .toList(growable: false);
